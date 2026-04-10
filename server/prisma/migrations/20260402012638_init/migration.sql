@@ -6,18 +6,18 @@ CREATE TABLE "users" (
     "passwordHash" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'MEMBER',
     "avatarColor" TEXT NOT NULL DEFAULT '#7c6ff7',
-    "joinedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "streak" INTEGER NOT NULL DEFAULT 0,
     "longestStreak" INTEGER NOT NULL DEFAULT 0,
-    "lastActiveDate" DATETIME,
+    "lastActiveDate" TIMESTAMP(3),
     "targetCompanies" TEXT NOT NULL DEFAULT '[]',
     "targetRole" TEXT,
-    "targetDate" DATETIME,
+    "targetDate" TIMESTAMP(3),
     "currentLevel" TEXT NOT NULL DEFAULT 'BEGINNER',
     "preferences" TEXT NOT NULL DEFAULT '{}',
     "aiConversations" TEXT NOT NULL DEFAULT '[]',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
@@ -32,17 +32,17 @@ CREATE TABLE "problems" (
     "isPinned" BOOLEAN NOT NULL DEFAULT false,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "isBlindChallenge" BOOLEAN NOT NULL DEFAULT false,
-    "blindRevealAt" DATETIME,
+    "blindRevealAt" TIMESTAMP(3),
     "realWorldContext" TEXT,
     "useCases" TEXT NOT NULL DEFAULT '[]',
     "adminNotes" TEXT,
     "relatedProblems" TEXT NOT NULL DEFAULT '[]',
-    "addedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "addedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "addedById" TEXT NOT NULL,
     "aiHints" TEXT NOT NULL DEFAULT '[]',
     "aiRealWorldSuggestions" TEXT NOT NULL DEFAULT '[]',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "problems_addedById_fkey" FOREIGN KEY ("addedById") REFERENCES "users" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
@@ -54,7 +54,7 @@ CREATE TABLE "follow_up_questions" (
     "difficulty" TEXT NOT NULL,
     "hint" TEXT,
     "order" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "follow_up_questions_problemId_fkey" FOREIGN KEY ("problemId") REFERENCES "problems" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -63,8 +63,8 @@ CREATE TABLE "solutions" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "problemId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "solvedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "solvedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     "patternIdentified" TEXT,
     "firstInstinct" TEXT,
     "whyThisPattern" TEXT,
@@ -104,7 +104,7 @@ CREATE TABLE "clarity_ratings" (
     "fromUserId" TEXT NOT NULL,
     "score" INTEGER NOT NULL,
     "comment" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "clarity_ratings_solutionId_fkey" FOREIGN KEY ("solutionId") REFERENCES "solutions" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "clarity_ratings_fromUserId_fkey" FOREIGN KEY ("fromUserId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -114,7 +114,7 @@ CREATE TABLE "sim_sessions" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "problemId" TEXT NOT NULL,
-    "simulatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "simulatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "timeLimitSecs" INTEGER NOT NULL DEFAULT 2700,
     "timeUsedSecs" INTEGER,
     "hintUsed" BOOLEAN NOT NULL DEFAULT false,
