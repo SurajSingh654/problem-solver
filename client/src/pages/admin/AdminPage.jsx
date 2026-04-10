@@ -15,7 +15,6 @@ import { SOURCE_LABELS } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
-const { user: currentUser } = useAuthStore()
 
 // ── Stat card ──────────────────────────────────────────
 function AdminStat({ icon, label, value, color }) {
@@ -244,6 +243,7 @@ function MembersTable({ users, currentUserId }) {
     const deleteUser = useDeleteUser()
     const updateRole = useUpdateUserRole()
     const [confirmDelete, setConfirmDelete] = useState(null)
+    
 
     if (!users?.length) return null
 
@@ -458,6 +458,7 @@ export default function AdminPage() {
     const [tab, setTab] = useState('problems') // 'problems' | 'members'
     const [deleting, setDeleting] = useState(null)
     const [search, setSearch] = useState('')
+    const { user: currentUser } = useAuthStore()  // ← called outside a component!
 
     const { data: problemsData, isLoading: problemsLoading } =
         useProblems({ limit: '200' })
