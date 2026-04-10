@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProblems, useDeleteProblem, useUpdateProblem } from '@hooks/useProblems'
-import { useUsers } from '@hooks/useUsers'
+import { useUsers, useDeleteUser, useUpdateUserRole } from '@hooks/useUsers'
+import { useAuthStore } from '@store/useAuthStore'
 import { useTeamStats } from '@hooks/useReport'
 import { Avatar } from '@components/ui/Avatar'
 import { Badge } from '@components/ui/Badge'
@@ -13,6 +14,8 @@ import { formatShortDate, formatRelativeDate } from '@utils/formatters'
 import { SOURCE_LABELS } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
+
+const { user: currentUser } = useAuthStore()
 
 // ── Stat card ──────────────────────────────────────────
 function AdminStat({ icon, label, value, color }) {
@@ -236,82 +239,217 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
 }
 
 // ── Members table ──────────────────────────────────────
-function MembersTable({ users }) {
+function MembersTable({ users, currentUserId }) {
     const navigate = useNavigate()
+    const deleteUser = useDeleteUser()
+    const updateRole = useUpdateUserRole()
+    const [confirmDelete, setConfirmDelete] = useState(null)
 
     if (!users?.length) return null
 
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px]">
-                <thead>
-                    <tr className="border-b border-border-default">
-                        {['Member', 'Role', 'Solved', 'Streak', 'Sims', 'Joined'].map(h => (
-                            <th key={h} className="py-3 px-4 text-left">
-                                <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
-                                    {h}
-                                </span>
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-border-subtle">
-                    {users.map((u, i) => (
-                        <motion.tr
-                            key={u.id}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: i * 0.03 }}
-                            onClick={() => navigate(`/profile/${u.username}`)}
-                            className="hover:bg-surface-2 transition-colors cursor-pointer"
-                        >
-                            <td className="py-3 px-4">
-                                <div className="flex items-center gap-3">
-                                    <Avatar name={u.username} color={u.avatarColor} size="sm" />
-                                    <span className="text-sm font-semibold text-text-primary">
-                                        {u.username}
+        <>
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px]">
+                    <thead>
+                        <tr className="border-b border-border-default">
+                            {['Member', 'Role', 'Solved', 'Streak', 'Sims', 'Joined', ''].map(h => (
+                                <th key={h} className="py-3 px-4 text-left">
+                                    <span className="text-[10px] font-bold text-text-disabled
+                                   uppercase tracking-widest">
+                                        {h}
                                     </span>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle">
+                        {users.map((u, i) => {
+                            const isYou = u.id === currentUserId
+                            const isAdmin = u.role === 'ADMIN'
+                            return (
+                                <motion.tr
+                                    key={u.id}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: i * 0.03 }}
+                                    className="hover:bg-surface-2 transition-colors group"
+                                >
+                                    {/* Member */}
+                                    <td className="py-3 px-4 cursor-pointer"
+                                        onClick={() => navigate(`/profile/${u.username}`)}>
+                                        <div className="flex items-center gap-3">
+                                            <Avatar name={u.username} color={u.avatarColor} size="sm" />
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-bold text-text-primary">
+                                                        {u.username}
+                                                    </span>
+                                                    {isYou && (
+                                                        <span className="text-[10px] px-1.5 py-px rounded-full
+                                             bg-brand-400/15 text-brand-300
+                                             border border-brand-400/25">
+                                                            you
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="text-xs text-text-disabled">{u.email}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    {/* Role */}
+                                    <td className="py-3 px-4">
+                                        <span className={cn(
+                                            'text-[10px] font-bold px-2 py-px rounded-full border',
+                                            isAdmin
+                                                ? 'bg-warning/12 text-warning border-warning/25'
+                                                : 'bg-surface-3 text-text-secondary border-border-default'
+                                        )}>
+                                            {isAdmin ? '⚡ Admin' : 'Member'}
+                                        </span>
+                                    </td>
+
+                                    {/* Solved */}
+                                    <td className="py-3 px-4">
+                                        <span className="text-sm font-bold font-mono text-text-primary">
+                                            {u.solutionCount}
+                                        </span>
+                                    </td>
+
+                                    {/* Streak */}
+                                    <td className="py-3 px-4">
+                                        <span className={cn(
+                                            'text-sm font-bold',
+                                            u.streak > 0 ? 'text-warning' : 'text-text-disabled'
+                                        )}>
+                                            {u.streak > 0 ? `${u.streak} 🔥` : '—'}
+                                        </span>
+                                    </td>
+
+                                    {/* Sims */}
+                                    <td className="py-3 px-4">
+                                        <span className="text-sm text-text-tertiary">{u.simCount}</span>
+                                    </td>
+
+                                    {/* Joined */}
+                                    <td className="py-3 px-4">
+                                        <span className="text-xs text-text-tertiary font-mono">
+                                            {formatShortDate(u.joinedAt)}
+                                        </span>
+                                    </td>
+
+                                    {/* Actions */}
+                                    <td className="py-3 px-4">
+                                        {!isYou && (
+                                            <div className="flex items-center gap-1
+                                      opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {/* Promote / Demote */}
+                                                <button
+                                                    onClick={() => updateRole.mutate({
+                                                        id: u.id,
+                                                        role: isAdmin ? 'MEMBER' : 'ADMIN',
+                                                    })}
+                                                    title={isAdmin ? 'Demote to Member' : 'Promote to Admin'}
+                                                    className={cn(
+                                                        'px-2 py-1 rounded-lg text-[10px] font-bold border transition-all',
+                                                        isAdmin
+                                                            ? 'text-text-tertiary border-border-default hover:border-danger/40 hover:text-danger hover:bg-danger/8'
+                                                            : 'text-text-tertiary border-border-default hover:border-warning/40 hover:text-warning hover:bg-warning/8'
+                                                    )}
+                                                >
+                                                    {isAdmin ? 'Demote' : 'Promote'}
+                                                </button>
+
+                                                {/* Delete */}
+                                                {!isAdmin && (
+                                                    <button
+                                                        onClick={() => setConfirmDelete(u)}
+                                                        title="Remove member"
+                                                        className="p-1.5 rounded-lg hover:bg-danger/10 transition-colors
+                                       text-text-disabled hover:text-danger"
+                                                    >
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                            stroke="currentColor" strokeWidth="2"
+                                                            strokeLinecap="round" strokeLinejoin="round">
+                                                            <polyline points="3 6 5 6 21 6" />
+                                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                                            <path d="M10 11v6M14 11v6" />
+                                                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </td>
+                                </motion.tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Delete confirm modal */}
+            <AnimatePresence>
+                {confirmDelete && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-overlay bg-black/65 backdrop-blur-sm"
+                            onClick={() => setConfirmDelete(null)}
+                        />
+                        <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -12 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="bg-surface-2 border border-border-strong rounded-2xl p-6
+                           w-full max-w-sm shadow-xl"
+                            >
+                                <div className="flex items-center gap-3 mb-4">
+                                    <Avatar
+                                        name={confirmDelete.username}
+                                        color={confirmDelete.avatarColor}
+                                        size="md"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-bold text-text-primary">
+                                            {confirmDelete.username}
+                                        </p>
+                                        <p className="text-xs text-text-tertiary">
+                                            {confirmDelete.solutionCount} solutions · joined {formatShortDate(confirmDelete.joinedAt)}
+                                        </p>
+                                    </div>
                                 </div>
-                            </td>
-                            <td className="py-3 px-4">
-                                <span className={cn(
-                                    'text-[10px] font-bold px-2 py-px rounded-full border',
-                                    u.role === 'ADMIN'
-                                        ? 'bg-warning/12 text-warning border-warning/25'
-                                        : 'bg-surface-3 text-text-secondary border-border-default'
-                                )}>
-                                    {u.role === 'ADMIN' ? '⚡ Admin' : 'Member'}
-                                </span>
-                            </td>
-                            <td className="py-3 px-4">
-                                <span className="text-sm font-bold font-mono text-text-primary">
-                                    {u.solutionCount}
-                                </span>
-                            </td>
-                            <td className="py-3 px-4">
-                                <span className={cn(
-                                    'text-sm font-bold',
-                                    u.streak > 0 ? 'text-warning' : 'text-text-disabled'
-                                )}>
-                                    {u.streak > 0 ? `${u.streak} 🔥` : '—'}
-                                </span>
-                            </td>
-                            <td className="py-3 px-4">
-                                <span className="text-sm text-text-tertiary">{u.simCount}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                                <span className="text-xs text-text-tertiary font-mono">
-                                    {formatShortDate(u.joinedAt)}
-                                </span>
-                            </td>
-                        </motion.tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+                                <p className="text-sm text-text-secondary mb-2">
+                                    Remove this member from ProbSolver?
+                                </p>
+                                <p className="text-xs text-text-tertiary mb-5">
+                                    This permanently deletes their account, all solutions, sim sessions,
+                                    and clarity ratings. This cannot be undone.
+                                </p>
+                                <div className="flex gap-3">
+                                    <Button variant="ghost" size="md" fullWidth
+                                        onClick={() => setConfirmDelete(null)}>
+                                        Cancel
+                                    </Button>
+                                    <Button variant="danger" size="md" fullWidth
+                                        loading={deleteUser.isPending}
+                                        onClick={async () => {
+                                            await deleteUser.mutateAsync(confirmDelete.id)
+                                            setConfirmDelete(null)
+                                        }}>
+                                        Remove Member
+                                    </Button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </>
+                )}
+            </AnimatePresence>
+        </>
     )
 }
-
 // ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
@@ -494,7 +632,7 @@ export default function AdminPage() {
                                 <Spinner size="lg" />
                             </div>
                         ) : (
-                            <MembersTable users={users} />
+                            <MembersTable users={users} currentUserId={currentUser?.id} />
                         )}
                     </>
                 )}

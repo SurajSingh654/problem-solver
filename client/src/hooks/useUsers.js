@@ -25,3 +25,32 @@ export function useUser(username) {
     staleTime: 60 * 1000,
   });
 }
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => usersApi.deleteUser(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+      toast.success('Member removed')
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || 'Failed to remove member')
+    },
+  })
+}
+
+export function useUpdateUserRole() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, role }) => usersApi.updateRole(id, role),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS })
+      toast.success(res.data.message || 'Role updated')
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || 'Failed to update role')
+    },
+  })
+}

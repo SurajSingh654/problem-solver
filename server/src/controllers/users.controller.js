@@ -1,83 +1,146 @@
-import prisma from '../lib/prisma.js'
-import { successResponse, notFoundResponse } from '../utils/response.js'
+import prisma from "../lib/prisma.js";
+import {
+  successResponse,
+  notFoundResponse,
+  errorResponse,
+} from "../utils/response.js";
 
 function sanitizeUser(u) {
-  const { passwordHash, ...safe } = u
+  const { passwordHash, ...safe } = u;
   return {
     ...safe,
-    targetCompanies: JSON.parse(safe.targetCompanies || '[]'),
-    preferences    : JSON.parse(safe.preferences     || '{}'),
-  }
+    targetCompanies: JSON.parse(safe.targetCompanies || "[]"),
+    preferences: JSON.parse(safe.preferences || "{}"),
+  };
 }
 
 // ── GET /api/users ─────────────────────────────────────
 export async function getUsers(req, res) {
   const users = await prisma.user.findMany({
     select: {
-      id          : true,
-      username    : true,
-      avatarColor : true,
-      role        : true,
-      streak      : true,
+      id: true,
+      username: true,
+      avatarColor: true,
+      role: true,
+      streak: true,
       longestStreak: true,
-      joinedAt    : true,
+      joinedAt: true,
       currentLevel: true,
       targetCompanies: true,
       _count: {
         select: { solutions: true, simSessions: true },
       },
     },
-    orderBy: { joinedAt: 'asc' },
-  })
+    orderBy: { joinedAt: "asc" },
+  });
 
-  return successResponse(res, users.map(u => ({
-    ...u,
-    targetCompanies: JSON.parse(u.targetCompanies || '[]'),
-    solutionCount  : u._count.solutions,
-    simCount       : u._count.simSessions,
-  })))
+  return successResponse(
+    res,
+    users.map((u) => ({
+      ...u,
+      targetCompanies: JSON.parse(u.targetCompanies || "[]"),
+      solutionCount: u._count.solutions,
+      simCount: u._count.simSessions,
+    })),
+  );
 }
-
 
 // ── GET /api/users/:username ───────────────────────────
 export async function getUserByUsername(req, res) {
-  const { username } = req.params
+  const { username } = req.params;
 
   const user = await prisma.user.findUnique({
-    where  : { username },
+    where: { username },
     include: {
       solutions: {
         include: {
           problem: {
             select: {
-              id: true, title: true,
-              difficulty: true, tags: true,
+              id: true,
+              title: true,
+              difficulty: true,
+              tags: true,
             },
           },
         },
-        orderBy: { solvedAt: 'desc' },
+        orderBy: { solvedAt: "desc" },
       },
       _count: {
         select: { solutions: true, simSessions: true },
       },
     },
-  })
+  });
 
-  if (!user) return notFoundResponse(res, 'User')
+  if (!user) return notFoundResponse(res, "User");
 
-  const sanitized = sanitizeUser(user)
+  const sanitized = sanitizeUser(user);
   return successResponse(res, {
     ...sanitized,
-    solutions: sanitized.solutions?.map(s => ({
+    solutions: sanitized.solutions?.map((s) => ({
       ...s,
-      followUpAnswers: JSON.parse(s.followUpAnswers || '[]'),
-      reviewDates    : JSON.parse(s.reviewDates     || '[]'),
-      problem        : {
+      followUpAnswers: JSON.parse(s.followUpAnswers || "[]"),
+      reviewDates: JSON.parse(s.reviewDates || "[]"),
+      problem: {
         ...s.problem,
-        tags: JSON.parse(s.problem.tags || '[]'),
+        tags: JSON.parse(s.problem.tags || "[]"),
       },
     })),
     solutionCount: user._count.solutions,
-    simCount     : user._count.simSessions,
-  })
+    simCount: user._count.simSessions,
+  });
+}
+
+// ── DELETE /api/users/:id ──────────────────────────────
+export async function deleteUser(req, res) {
+  const { id } = req.params;
+  const requestingUser = req.user;
+
+  // Can't delete yourself
+  if (id === requestingUser.id) {
+    return errorResponse(res, "You cannot delete your own account", 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return notFoundResponse(res, "User");
+
+  // Can't delete another admin
+  if (user.role === "ADMIN") {
+    return errorResponse(res, "Cannot delete an admin account", 400);
+  }
+
+  await prisma.user.delete({ where: { id } });
+  return successResponse(res, { id }, "User deleted");
+}
+
+// ── PATCH /api/users/:id/role ──────────────────────────
+export async function updateUserRole(req, res) {
+  const { id } = req.params;
+  const { role } = req.body;
+
+  if (!["ADMIN", "MEMBER"].includes(role)) {
+    return errorResponse(res, "Invalid role", 400);
+  }
+
+  // Can't change your own role
+  if (id === req.user.id) {
+    return errorResponse(res, "Use Settings to change your own role", 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return notFoundResponse(res, "User");
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { role },
+  });
+
+  return successResponse(
+    res,
+    {
+      id: updated.id,
+      username: updated.username,
+      role: updated.role,
+    },
+    `Role updated to ${role}`,
+  );
 }
