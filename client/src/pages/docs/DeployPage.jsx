@@ -685,22 +685,34 @@ Admin login (keep private):
                                 error: 'Seed fails: A record with this value already exists',
                                 fix: 'Database already has data from a previous seed attempt. The seed script clears data first — if it\'s crashing before that, reset the Railway database via the PostgreSQL service Data tab and redeploy.',
                             },
+                            {
+                                error: 'Login fails with HTML response instead of JSON (VITE_API_URL not baked in)',
+                                fix: 'VITE_API_URL is a Vite build-time variable — Railway does not pass env vars to Docker builds automatically. You must declare it as a build ARG in client/Dockerfile. Add these two lines before RUN npm run build:\n\nARG VITE_API_URL\nENV VITE_API_URL=$VITE_API_URL\n\nWithout this, the built JS bundle has no API URL and all requests go to the frontend server instead of the backend, returning HTML instead of JSON.',
+                                code: `ARG VITE_API_URL\nENV VITE_API_URL=$VITE_API_URL`,
+                            },
                         ].map((item, i) => (
                             <div key={i}
                                 className="bg-surface-2 border border-border-default rounded-xl p-4">
                                 <div className="flex items-start gap-2.5 mb-2">
                                     <span className="bg-danger/12 text-danger border border-danger/25
-                                   rounded px-2 py-0.5 text-[11px] font-extrabold
-                                   flex-shrink-0 mt-0.5">
+                       rounded px-2 py-0.5 text-[11px] font-extrabold
+                       flex-shrink-0 mt-0.5">
                                         ERROR
                                     </span>
                                     <code className="text-sm font-mono text-text-primary leading-snug">
                                         {item.error}
                                     </code>
                                 </div>
-                                <p className="text-sm text-text-tertiary leading-relaxed pl-16">
-                                    {item.fix}
-                                </p>
+                                <div className="text-sm text-text-tertiary leading-relaxed pl-16 space-y-2">
+                                    {item.fix.split('\n\n').map((para, pi) => (
+                                        <p key={pi}>{para}</p>
+                                    ))}
+                                    {item.code && (
+                                        <CodeBlock label="client/Dockerfile" color="#7c6ff7" copyText={item.code}>
+                                            {item.code}
+                                        </CodeBlock>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
