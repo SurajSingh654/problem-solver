@@ -596,6 +596,13 @@ reviewDates        JSON array`}
                     <Link to="/docs/setup" className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
                         Setup Guide →
                     </Link>
+                    <Link to="/docs/deploy"
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
+                 text-xs font-medium text-text-tertiary
+                 hover:bg-surface-3 hover:text-text-primary transition-all">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success/50" />
+                        Deploy Guide →
+                    </Link>
                     <Link to="/" className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
                         ← Back to App
                     </Link>
