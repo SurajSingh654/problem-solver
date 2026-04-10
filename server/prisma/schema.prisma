@@ -1,0 +1,269 @@
+// ─────────────────────────────────────────────────────────
+// PRISMA SCHEMA
+// Phase 1: SQLite (zero setup, file-based)
+// Phase 2: Switch provider to "postgresql" and update
+//          DATABASE_URL — all queries stay identical.
+// ─────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"   // was "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+
+// ─────────────────────────────────────────────────────────
+// ENUMS
+// SQLite does not support native enums — stored as strings.
+// Validated at the application layer via Zod.
+// ─────────────────────────────────────────────────────────
+
+// Role: "ADMIN" | "MEMBER"
+// Difficulty: "EASY" | "MEDIUM" | "HARD"
+// Source: "LEETCODE" | "GFG" | "CODECHEF" | "INTERVIEWBIT"
+//         | "HACKERRANK" | "CODEFORCES" | "OTHER"
+// Language: "PYTHON" | "JAVASCRIPT" | "JAVA" | "CPP"
+//           | "C" | "GO" | "RUST" | "TYPESCRIPT"
+//           | "SWIFT" | "KOTLIN" | "OTHER"
+// Level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
+
+
+// ─────────────────────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────────────────────
+model User {
+  id             String    @id @default(cuid())
+  username       String    @unique
+  email          String    @unique
+  passwordHash   String
+
+  // Role — "ADMIN" | "MEMBER"
+  role           String    @default("MEMBER")
+
+  // Profile
+  avatarColor    String    @default("#7c6ff7")
+  joinedAt       DateTime  @default(now())
+
+  // Streak tracking
+  streak         Int       @default(0)
+  longestStreak  Int       @default(0)
+  lastActiveDate DateTime?
+
+  // Interview goals
+  targetCompanies String   @default("[]")   // JSON array
+  targetRole      String?
+  targetDate      DateTime?
+
+  // Skill level — "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
+  currentLevel   String    @default("BEGINNER")
+
+  // Preferences stored as JSON string
+  preferences    String    @default("{}")
+
+  // AI interaction history (for context — Phase 2)
+  aiConversations String   @default("[]")   // JSON array
+
+  // Relations
+  solutions      Solution[]
+  clarityRatings ClarityRating[]
+  simSessions    SimSession[]
+  addedProblems  Problem[]       @relation("AddedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+
+// ─────────────────────────────────────────────────────────
+// PROBLEM
+// ─────────────────────────────────────────────────────────
+model Problem {
+  id          String  @id @default(cuid())
+  title       String
+
+  // Source — "LEETCODE" | "GFG" | etc
+  source      String
+  sourceUrl   String
+
+  // Difficulty — "EASY" | "MEDIUM" | "HARD"
+  difficulty  String
+
+  // Arrays stored as JSON strings (SQLite limitation)
+  // Switch to native arrays when migrating to PostgreSQL
+  tags         String @default("[]")   // algorithm patterns
+  companyTags  String @default("[]")   // companies that ask this
+
+  // Status
+  isPinned         Boolean @default(false)
+  isActive         Boolean @default(true)
+  isBlindChallenge Boolean @default(false)
+  blindRevealAt    DateTime?
+
+  // Admin-curated learning content
+  realWorldContext String?
+  useCases         String  @default("[]")   // JSON array
+  adminNotes       String?
+  relatedProblems  String  @default("[]")   // JSON array of Problem ids
+
+  // Metadata
+  addedAt  DateTime @default(now())
+  addedById String
+  addedBy  User     @relation("AddedBy", fields: [addedById], references: [id])
+
+  // AI-generated content (Phase 2)
+  aiHints        String @default("[]")   // JSON array
+  aiRealWorldSuggestions String @default("[]")
+
+  // Relations
+  solutions     Solution[]
+  followUps     FollowUpQuestion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("problems")
+}
+
+
+// ─────────────────────────────────────────────────────────
+// FOLLOW UP QUESTION
+// ─────────────────────────────────────────────────────────
+model FollowUpQuestion {
+  id         String @id @default(cuid())
+  problemId  String
+  problem    Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  question   String
+  difficulty String  // "EASY" | "MEDIUM" | "HARD"
+  hint       String?
+  order      Int     @default(0)
+
+  createdAt  DateTime @default(now())
+
+  @@map("follow_up_questions")
+}
+
+
+// ─────────────────────────────────────────────────────────
+// SOLUTION
+// The richest model — captures the full learning journey
+// ─────────────────────────────────────────────────────────
+model Solution {
+  id        String @id @default(cuid())
+  problemId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  solvedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── STEP 1: Pattern identification (before code) ──
+  patternIdentified  String?  // which pattern did you identify?
+  firstInstinct      String?  // what was your first thought?
+  whyThisPattern     String?  // why does this pattern apply?
+  timeToPatternSecs  Int?     // seconds taken to identify pattern
+
+  // ── STEP 2: Brute force ──
+  bruteForceApproach String?
+  bruteForceTime     String?   // e.g. "O(n²)"
+  bruteForceSpace    String?
+
+  // ── STEP 3: Optimized solution ──
+  optimizedApproach  String?
+  optimizedTime      String?
+  optimizedSpace     String?
+  predictedTime      String?   // what you predicted BEFORE writing
+  predictedSpace     String?   // accuracy tracked as a signal
+  code               String?
+  language           String    @default("PYTHON")
+
+  // ── STEP 4: Depth ──
+  keyInsight          String?  // one-sentence core realization
+  feynmanExplanation  String?  // explain to a non-programmer
+  realWorldConnection String?  // your own real-world analogy
+  followUpAnswers     String   @default("[]")  // JSON array
+
+  // ── STEP 5: Self-assessment ──
+  confidenceLevel Int     @default(0)   // 0-5
+  difficultyFelt  String?               // perceived difficulty
+  stuckPoints     String?               // where did you get stuck?
+  hintsUsed       Boolean @default(false)
+
+  // ── Performance signals ──
+  isInterviewMode  Boolean @default(false)
+  timeLimitSecs    Int?
+  timeUsedSecs     Int?
+
+  // ── Review schedule (spaced repetition) ──
+  reviewDates String @default("[]")   // JSON array of ISO date strings
+
+  // ── Peer feedback ──
+  clarityRatings ClarityRating[]
+
+  // ── AI feedback (Phase 2) ──
+  aiFeedback      String?   // AI-generated feedback on approach
+  aiSuggestedImprovements String @default("[]")
+
+  // Constraint: one solution per user per problem
+  @@unique([problemId, userId])
+  @@map("solutions")
+}
+
+
+// ─────────────────────────────────────────────────────────
+// CLARITY RATING
+// Peer-to-peer rating of solution explanation quality
+// ─────────────────────────────────────────────────────────
+model ClarityRating {
+  id         String @id @default(cuid())
+  solutionId String
+  solution   Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+  fromUserId String
+  fromUser   User     @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  score     Int      // 1-5
+  comment   String?
+
+  createdAt DateTime @default(now())
+
+  // One rating per user per solution
+  @@unique([solutionId, fromUserId])
+  @@map("clarity_ratings")
+}
+
+
+// ─────────────────────────────────────────────────────────
+// SIMULATION SESSION
+// Records of interview simulation attempts
+// ─────────────────────────────────────────────────────────
+model SimSession {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problemId String
+
+  simulatedAt    DateTime @default(now())
+  timeLimitSecs  Int      @default(2700)   // 45 minutes default
+  timeUsedSecs   Int?
+  hintUsed       Boolean  @default(false)
+  hintUsedAtSecs Int?
+  completed      Boolean  @default(false)
+
+  // Post-sim self-assessment
+  approachScore     Int?    // 1-5
+  communicationScore Int?   // 1-5
+  overallScore      Int?    // 1-5
+  whatWentWell      String?
+  whatToImprove     String?
+
+  // AI debrief (Phase 2)
+  aiDebriefNotes String?
+
+  @@map("sim_sessions")
+}

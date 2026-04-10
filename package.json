@@ -1,0 +1,19 @@
+{
+  "name": "problem-solver",
+  "version": "2.0.0",
+  "description": "Team interview preparation intelligence platform",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --prefix-colors \"blue,green\" --names \"CLIENT,SERVER\" \"npm run dev --prefix client\" \"npm run dev --prefix server\"",
+    "build": "npm run build --prefix client",
+    "install:all": "npm install && npm install --prefix client && npm install --prefix server",
+    "lint": "npm run lint --prefix client",
+    "db:migrate": "npm run db:migrate --prefix server",
+    "db:seed": "npm run db:seed --prefix server",
+    "db:studio": "npm run db:studio --prefix server",
+    "db:reset": "npm run db:reset --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

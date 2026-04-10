@@ -1,0 +1,27 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usersApi } from "@services/users.api.js";
+import { QUERY_KEYS } from "@utils/constants.js";
+import { toast } from "@store/useUIStore.js";
+
+export function useUsers() {
+  return useQuery({
+    queryKey: QUERY_KEYS.USERS,
+    queryFn: async () => {
+      const res = await usersApi.getAll();
+      return res.data.data;
+    },
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useUser(username) {
+  return useQuery({
+    queryKey: QUERY_KEYS.USER(username),
+    queryFn: async () => {
+      const res = await usersApi.getByUsername(username);
+      return res.data.data;
+    },
+    enabled: !!username,
+    staleTime: 60 * 1000,
+  });
+}

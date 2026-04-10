@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Team interview preparation intelligence platform" />
+    <meta name="theme-color" content="#0c0c14" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet" />
+
+    <!-- Prevent flash of wrong theme -->
+    <script>
+        (function () {
+            const stored = localStorage.getItem('ps_theme')
+            const theme = stored || 'dark'
+            if (theme === 'light') {
+                document.documentElement.classList.remove('dark')
+                document.body && document.body.classList.add('light')
+            } else {
+                document.documentElement.classList.add('dark')
+            }
+        })()
+    </script>
+
+    <title>ProbSolver — Team Edition</title>
+
+    <style>
+        /* ── Docs top navbar ── */
+        #docs-navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 36px;
+            background: #0c0c14;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 9999;
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 12px;
+            transition: opacity 0.2s ease;
+        }
+
+        /* Hidden state — applied by JS when on non-docs pages */
+        #docs-navbar.hidden {
+            display: none !important;
+        }
+
+        #docs-navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #docs-navbar-left span {
+            color: rgba(255, 255, 255, 0.25);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        #docs-navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .docs-nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.45);
+            text-decoration: none;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .docs-nav-link:hover {
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .docs-nav-link.primary {
+            color: #9d93f9;
+            background: rgba(124, 111, 247, 0.1);
+            border-color: rgba(124, 111, 247, 0.2);
+        }
+
+        .docs-nav-link.primary:hover {
+            color: #c4beff;
+            background: rgba(124, 111, 247, 0.18);
+            border-color: rgba(124, 111, 247, 0.35);
+        }
+
+        .docs-nav-divider {
+            width: 1px;
+            height: 14px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0 4px;
+        }
+
+        .docs-nav-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+            animation: docs-pulse 2s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+
+        .docs-nav-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 6px;
+            border-radius: 99px;
+            font-size: 10px;
+            font-weight: 700;
+            background: rgba(34, 197, 94, 0.12);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            letter-spacing: 0.04em;
+        }
+
+        @keyframes docs-pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(1.3);
+            }
+        }
+
+        /* NO margin-top on #root — the React app manages its own spacing */
+        /* The docs navbar only shows on /docs/* routes */
+
+        /* Light mode */
+        html.light #docs-navbar,
+        body.light #docs-navbar {
+            background: #f4f4f8;
+            border-color: rgba(0, 0, 0, 0.08);
+        }
+
+        html.light .docs-nav-link,
+        body.light .docs-nav-link {
+            color: rgba(0, 0, 0, 0.4);
+        }
+
+        html.light .docs-nav-link:hover,
+        body.light .docs-nav-link:hover {
+            color: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.05);
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+
+        html.light .docs-nav-divider,
+        body.light .docs-nav-divider {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 640px) {
+            .docs-nav-label {
+                display: none;
+            }
+
+            #docs-navbar-left span {
+                display: none;
+            }
+
+            .docs-nav-link {
+                padding: 4px 8px;
+            }
+        }
+    </style>
+</head>
+
+<body class="dark">
+
+    <!-- ── Docs top navbar ── -->
+    <!-- ── Docs navbar ── -->
+    <!-- Only visible on /docs/* routes, hidden on all app pages -->
+    <div id="docs-navbar">
+
+        <div id="docs-navbar-left">
+            <div class="docs-nav-dot"></div>
+            <span>ProbSolver v2.0</span>
+            <div class="docs-nav-badge">DEV</div>
+        </div>
+
+        <div id="docs-navbar-right">
+
+            <a class="docs-nav-link" href="http://localhost:5000/health" target="_blank" title="API Health Check">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                </svg>
+                <span class="docs-nav-label">API</span>
+            </a>
+
+            <div class="docs-nav-divider"></div>
+
+            <a class="docs-nav-link" href="/docs/setup" title="Setup Guide">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+                </svg>
+                <span class="docs-nav-label">Setup Guide</span>
+            </a>
+
+            <a class="docs-nav-link primary" href="/docs/readme" title="README">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span class="docs-nav-label">README</span>
+            </a>
+
+        </div>
+    </div>
+
+
+    <!-- ── React app mounts here ── -->
+    <div id="root"></div>
+
+    <script type="module" src="/src/main.jsx"></script>
+
+    <script>
+        // Show docs navbar ONLY on /docs/* routes
+        // Hide it on all app pages so it doesn't interfere with the app shell
+        function updateDocsNavbar() {
+            const navbar = document.getElementById('docs-navbar')
+            if (!navbar) return
+            const isDocsPage = window.location.pathname.startsWith('/docs/')
+            navbar.classList.toggle('hidden', !isDocsPage)
+        }
+
+        // Run on load
+        updateDocsNavbar()
+
+        // Watch for React Router navigation (popstate + pushState override)
+        window.addEventListener('popstate', updateDocsNavbar)
+
+        // Override pushState and replaceState to catch React Router navigations
+        const _pushState = history.pushState.bind(history)
+        const _replaceState = history.replaceState.bind(history)
+
+        history.pushState = function (...args) {
+            _pushState(...args)
+            updateDocsNavbar()
+        }
+
+        history.replaceState = function (...args) {
+            _replaceState(...args)
+            updateDocsNavbar()
+        }
+
+        // Theme sync
+        const observer = new MutationObserver(() => {
+            const isDark = document.documentElement.classList.contains('dark')
+                || document.body.classList.contains('dark')
+            const navbar = document.getElementById('docs-navbar')
+            if (navbar) {
+                navbar.style.background = isDark ? '#0c0c14' : '#f4f4f8'
+            }
+        })
+
+        observer.observe(document.documentElement, {
+            attributes: true, attributeFilter: ['class']
+        })
+        observer.observe(document.body, {
+            attributes: true, attributeFilter: ['class']
+        })
+    </script>
+
+</body>
+
+</html>
