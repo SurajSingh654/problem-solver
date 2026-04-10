@@ -1,22 +1,20 @@
-FROM node:20-alpine
+# Use Debian-based Node image — has OpenSSL built in
+FROM node:20-slim
+
+# Install OpenSSL — required by Prisma
+RUN apt-get update -y && apt-get install -y openssl
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
 RUN npm install
 
-# Copy source
 COPY . .
 
-# Generate Prisma client
 RUN npx prisma generate
 
-# Expose port
 EXPOSE 5000
 
-# Start command
 CMD ["npm", "run", "start:prod"]
