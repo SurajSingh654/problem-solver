@@ -487,16 +487,7 @@ git push`}
                     <StepCard num="5b" numColor="#3b82f6" numBg="rgba(59,130,246,0.12)"
                         title="Set environment variables"
                         sub="Backend service → Variables → Raw Editor">
-                        <CodeBlock label="Backend Variables — Raw Editor" color="#3b82f6"
-                            copyText={`NODE_ENV=production\nDATABASE_URL=${{ Postgres.DATABASE_URL }}\nJWT_SECRET=generate-with-command-below\nJWT_EXPIRES_IN=7d\nADMIN_PASSWORD=YourStrongPassword123\nCLIENT_URL=https://placeholder.up.railway.app\nAI_ENABLED=false`}>
-                            {`NODE_ENV=production
-DATABASE_URL=${{ Postgres.DATABASE_URL }}
-JWT_SECRET=generate-with-command-below
-JWT_EXPIRES_IN=7d
-ADMIN_PASSWORD=YourStrongPassword123
-CLIENT_URL=https://placeholder.up.railway.app
-AI_ENABLED=false`}
-                        </CodeBlock>
+                        <CodeBlock />
                         <p className="text-xs text-text-tertiary mb-2 mt-3">
                             Generate JWT_SECRET:
                         </p>
