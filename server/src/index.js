@@ -17,6 +17,7 @@ import solutionRoutes from "./routes/solutions.routes.js";
 import userRoutes from "./routes/users.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
 import simRoutes from "./routes/sim.routes.js";
+import prisma from './lib/prisma.js'
 
 const app = express();
 
@@ -24,6 +25,24 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 chdir(resolve(__dirname, "../"));
+
+// ── Auto-seed if database is empty ────────────────────
+async function autoSeedIfEmpty() {
+  try {
+    const userCount = await prisma.user.count();
+    if (userCount === 0) {
+      console.log("  📦 Database empty — running seed...");
+      const { execSync } = await import("child_process");
+      execSync("node prisma/seed.js", {
+        cwd: process.cwd(),
+        stdio: "inherit",
+        env: process.env,
+      });
+    }
+  } catch (e) {
+    console.log("  ⚠️  Auto-seed skipped:", e.message);
+  }
+}
 
 // ── Security ──────────────────────────────────────────
 app.use(
@@ -96,18 +115,16 @@ app.use("*", (req, res) => {
 app.use(errorHandler);
 
 // ── Start ─────────────────────────────────────────────
-app.listen(env.PORT, () => {
+app.listen(env.PORT, async () => {
   console.log("");
   console.log("  ⚡ ProbSolver API");
   console.log(`  🚀 Running on   http://localhost:${env.PORT}`);
   console.log(`  🌍 Environment: ${env.NODE_ENV}`);
   console.log(`  🤖 AI features: ${env.AI_ENABLED ? "enabled" : "disabled"}`);
-  console.log(
-    `  📄 README:      http://localhost:${env.PORT}/docs/README.html`,
-  );
-  console.log(`  📄 Setup:       http://localhost:${env.PORT}/docs/SETUP.html`);
-  console.log(`  ❤️  Health:      http://localhost:${env.PORT}/health`);
   console.log("");
+
+  // Auto-seed on first deploy
+  await autoSeedIfEmpty();
 });
 
 export default app;
