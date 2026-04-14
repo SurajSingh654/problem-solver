@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { CommandPalette } from '@components/ui/CommandPalette'
 import { useUIStore } from '@store/useUIStore'
+import { useAuthStore } from '@store/useAuthStore'
 import { useMe } from '@hooks/useAuth'
 import { cn } from '@utils/cn'
 
