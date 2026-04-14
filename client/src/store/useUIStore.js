@@ -27,18 +27,13 @@ export const useUIStore = create(
         set({ theme: newTheme });
 
         const html = document.documentElement;
-        const body = document.body;
 
         if (newTheme === "light") {
           html.classList.remove("dark");
           html.classList.add("light");
-          body.classList.remove("dark");
-          body.classList.add("light");
         } else {
           html.classList.remove("light");
           html.classList.add("dark");
-          body.classList.remove("light");
-          body.classList.add("dark");
         }
 
         localStorage.setItem("ps_theme", newTheme);

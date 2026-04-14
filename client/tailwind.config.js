@@ -1,54 +1,45 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: "class",
-
   content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
-
   theme: {
     extend: {
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
         mono: ["JetBrains Mono", "Cascadia Code", "Consolas", "monospace"],
       },
-
       colors: {
-        // Surface layers
-        "surface-0": "#09090f",
-        "surface-1": "#111118",
-        "surface-2": "#18181f",
-        "surface-3": "#202028",
-        "surface-4": "#282832",
-        "surface-5": "#2f2f3a",
-
+        // Surface layers — now use CSS variables
+        "surface-0": "var(--surface-0)",
+        "surface-1": "var(--surface-1)",
+        "surface-2": "var(--surface-2)",
+        "surface-3": "var(--surface-3)",
+        "surface-4": "var(--surface-4)",
+        "surface-5": "var(--surface-5)",
         // Text
-        "text-primary": "#eeeef5",
-        "text-secondary": "#9999bb",
-        "text-tertiary": "#55556e",
-        "text-disabled": "#35354a",
-
+        "text-primary": "var(--text-primary)",
+        "text-secondary": "var(--text-secondary)",
+        "text-tertiary": "var(--text-tertiary)",
+        "text-disabled": "var(--text-disabled)",
         // Borders
-        "border-subtle": "rgba(255,255,255,0.05)",
-        "border-default": "rgba(255,255,255,0.09)",
-        "border-strong": "rgba(255,255,255,0.15)",
-
-        // Brand
+        "border-subtle": "var(--border-subtle)",
+        "border-default": "var(--border-default)",
+        "border-strong": "var(--border-strong)",
+        // Brand — stays fixed
         "brand-300": "#9d93f9",
         "brand-400": "#7c6ff7",
         "brand-500": "#6358d4",
         "brand-600": "#4e44b0",
-
-        // Semantic
+        // Semantic — stays fixed
         success: "#22c55e",
         warning: "#eab308",
         danger: "#ef4444",
         info: "#3b82f6",
-
         // Difficulty
         easy: "#22c55e",
         medium: "#eab308",
         hard: "#ef4444",
       },
-
       borderRadius: {
         sm: "4px",
         md: "8px",
@@ -57,7 +48,6 @@ export default {
         "2xl": "24px",
         full: "9999px",
       },
-
       boxShadow: {
         xs: "0 1px 2px rgba(0,0,0,0.4)",
         sm: "0 2px 8px rgba(0,0,0,0.45)",
@@ -68,12 +58,8 @@ export default {
         "glow-sm": "0 0 12px rgba(124,111,247,0.3)",
         "glow-md": "0 0 24px rgba(124,111,247,0.35)",
       },
-
       keyframes: {
-        "fade-in": {
-          from: { opacity: "0" },
-          to: { opacity: "1" },
-        },
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
         "fade-in-up": {
           from: { opacity: "0", transform: "translateY(12px)" },
           to: { opacity: "1", transform: "translateY(0)" },
@@ -90,15 +76,12 @@ export default {
           "0%, 100%": { transform: "scale(1)", opacity: "1" },
           "50%": { transform: "scale(1.35)", opacity: "0.6" },
         },
-        spin: {
-          to: { transform: "rotate(360deg)" },
-        },
+        spin: { to: { transform: "rotate(360deg)" } },
         float: {
           "0%, 100%": { transform: "translateY(0px)" },
           "50%": { transform: "translateY(-6px)" },
         },
       },
-
       animation: {
         "fade-in": "fade-in 200ms ease-out both",
         "fade-in-up": "fade-in-up 300ms ease-out both",
@@ -106,9 +89,8 @@ export default {
         shimmer: "shimmer 1.6s ease-in-out infinite",
         "pulse-dot": "pulse-dot 2s ease-in-out infinite",
         spin: "spin 0.75s linear infinite",
-        'float': 'float 3s ease-in-out infinite',
+        float: "float 3s ease-in-out infinite",
       },
-
       zIndex: {
         toast: "500",
         modal: "400",
@@ -118,6 +100,5 @@ export default {
       },
     },
   },
-
   plugins: [require("@tailwindcss/forms")({ strategy: "class" })],
 };

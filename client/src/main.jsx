@@ -34,8 +34,8 @@ const savedTheme = localStorage.getItem('ps_theme') || 'dark'
 if (savedTheme === 'light') {
   document.documentElement.classList.remove('dark')
   document.documentElement.classList.add('light')
-  document.body.classList.add('light')
 } else {
+  document.documentElement.classList.remove('light')
   document.documentElement.classList.add('dark')
 }
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8" />
@@ -18,12 +18,12 @@
     <!-- Prevent flash of wrong theme -->
     <script>
         (function () {
-            const stored = localStorage.getItem('ps_theme')
-            const theme = stored || 'dark'
+            const theme = localStorage.getItem('ps_theme') || 'dark'
             if (theme === 'light') {
                 document.documentElement.classList.remove('dark')
-                document.body && document.body.classList.add('light')
+                document.documentElement.classList.add('light')
             } else {
+                document.documentElement.classList.remove('light')
                 document.documentElement.classList.add('dark')
             }
         })()
