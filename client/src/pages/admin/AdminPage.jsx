@@ -12,6 +12,7 @@ import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatShortDate, formatRelativeDate } from '@utils/formatters'
 import { SOURCE_LABELS } from '@utils/constants'
+import { useResetUserPassword } from '@hooks/useAuth'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -243,7 +244,11 @@ function MembersTable({ users, currentUserId }) {
     const deleteUser = useDeleteUser()
     const updateRole = useUpdateUserRole()
     const [confirmDelete, setConfirmDelete] = useState(null)
-    
+    const resetPassword = useResetUserPassword()
+    const [resetTarget, setResetTarget] = useState(null)
+    const [tempPassword, setTempPassword] = useState('')
+    const [showTempPass, setShowTempPass] = useState(false)
+
 
     if (!users?.length) return null
 
@@ -379,6 +384,23 @@ function MembersTable({ users, currentUserId }) {
                                                         </svg>
                                                     </button>
                                                 )}
+
+                                                {/* Reset Password */}
+                                                {!isAdmin && (
+                                                    <button
+                                                        onClick={() => { setResetTarget(u); setTempPassword('') }}
+                                                        title="Reset password"
+                                                        className="p-1.5 rounded-lg hover:bg-warning/10 transition-colors
+               text-text-disabled hover:text-warning"
+                                                    >
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                            stroke="currentColor" strokeWidth="2"
+                                                            strokeLinecap="round" strokeLinejoin="round">
+                                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                                        </svg>
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
                                     </td>
@@ -440,6 +462,141 @@ function MembersTable({ users, currentUserId }) {
                                             setConfirmDelete(null)
                                         }}>
                                         Remove Member
+                                    </Button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </>
+                )}
+            </AnimatePresence>
+            {/* Reset password modal */}
+            <AnimatePresence>
+                {resetTarget && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-overlay bg-black/65 backdrop-blur-sm"
+                            onClick={() => { setResetTarget(null); setShowTempPass(false) }}
+                        />
+                        <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -12 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="bg-surface-2 border border-border-strong rounded-2xl p-6
+                     w-full max-w-sm shadow-xl"
+                            >
+                                <div className="flex items-center gap-3 mb-5">
+                                    <Avatar
+                                        name={resetTarget.username}
+                                        color={resetTarget.avatarColor}
+                                        size="md"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-bold text-text-primary">
+                                            Reset password for {resetTarget.username}
+                                        </p>
+                                        <p className="text-xs text-text-tertiary mt-0.5">
+                                            They will be required to change it on next login
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 mb-5">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-text-primary mb-1.5">
+                                            Temporary Password
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type={showTempPass ? 'text' : 'password'}
+                                                value={tempPassword}
+                                                onChange={e => setTempPassword(e.target.value)}
+                                                placeholder="Set a temporary password"
+                                                className="w-full bg-surface-3 border border-border-strong rounded-xl
+                             text-sm text-text-primary placeholder:text-text-tertiary
+                             px-3.5 py-2.5 pr-10 outline-none
+                             focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowTempPass(v => !v)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2
+                             text-text-tertiary hover:text-text-primary transition-colors"
+                                            >
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" strokeWidth="2"
+                                                    strokeLinecap="round" strokeLinejoin="round">
+                                                    {showTempPass ? (
+                                                        <>
+                                                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                                            <line x1="1" y1="1" x2="23" y2="23" />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                            <circle cx="12" cy="12" r="3" />
+                                                        </>
+                                                    )}
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {['temp1234', 'reset123', 'change me'].map(s => (
+                                            <button
+                                                key={s}
+                                                type="button"
+                                                onClick={() => setTempPassword(s)}
+                                                className="text-[11px] px-2 py-1 rounded-lg border
+                             bg-surface-3 border-border-default text-text-tertiary
+                             hover:border-brand-400/40 hover:text-brand-300
+                             transition-all font-mono"
+                                            >
+                                                {s}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="bg-warning/8 border border-warning/25 rounded-xl p-3 mb-5">
+                                    <p className="text-xs text-warning font-semibold mb-1">
+                                        📋 Share this with {resetTarget.username}:
+                                    </p>
+                                    <p className="text-xs text-text-secondary">
+                                        Temporary password:{' '}
+                                        <code className="text-warning bg-warning/10 px-1.5 py-0.5 rounded font-mono">
+                                            {tempPassword || '—'}
+                                        </code>
+                                    </p>
+                                    <p className="text-xs text-text-tertiary mt-1">
+                                        They must change it after logging in.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <Button
+                                        variant="ghost" size="md" fullWidth
+                                        onClick={() => { setResetTarget(null); setShowTempPass(false) }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        variant="primary" size="md" fullWidth
+                                        disabled={!tempPassword || tempPassword.length < 4}
+                                        loading={resetPassword.isPending}
+                                        onClick={async () => {
+                                            await resetPassword.mutateAsync({
+                                                userId: resetTarget.id,
+                                                temporaryPassword: tempPassword,
+                                            })
+                                            setResetTarget(null)
+                                            setTempPassword('')
+                                            setShowTempPass(false)
+                                        }}
+                                    >
+                                        Set Temporary Password
                                     </Button>
                                 </div>
                             </motion.div>

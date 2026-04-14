@@ -135,3 +135,37 @@ export function useClaimAdmin() {
     },
   });
 }
+
+// ── Change password ────────────────────────────────────
+export function useChangePassword() {
+  const { updateUser } = useAuthStore();
+  return useMutation({
+    mutationFn: (data) => authApi.changePassword(data),
+    onSuccess: (res) => {
+      // Clear mustChangePassword flag in store
+      updateUser({ mustChangePassword: false });
+      toast.success("Password changed successfully");
+    },
+    onError: (err) => {
+      const code = err.response?.data?.code;
+      if (code === "WRONG_PASSWORD") {
+        toast.error("Current password is incorrect");
+      } else {
+        toast.error(err.response?.data?.error || "Failed to change password");
+      }
+    },
+  });
+}
+
+// ── Admin reset password ───────────────────────────────
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: (data) => authApi.resetPassword(data),
+    onSuccess: (res) => {
+      toast.success(res.data.message || "Temporary password set");
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || "Failed to reset password");
+    },
+  });
+}

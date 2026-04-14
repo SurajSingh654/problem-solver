@@ -21,6 +21,7 @@ import AdminPage from '@pages/admin/AdminPage'
 import AddProblemPage from '@pages/admin/AddProblemPage'
 import EditProblemPage from '@pages/admin/EditProblemPage'
 import DeployPage from '@pages/docs/DeployPage'
+import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
 
 function ComingSoon({ name, step }) {
   return (
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/docs/readme" element={<ReadmePage />} />
           <Route path="/docs/setup" element={<SetupPage />} />
           <Route path="/docs/deploy" element={<DeployPage />} />
+          <Route path="/change-password" element={<ChangePasswordPage />} />
 
           {/* Admin */}
           <Route path="/admin" element={

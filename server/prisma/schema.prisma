@@ -39,6 +39,7 @@ model User {
   username       String    @unique
   email          String    @unique
   passwordHash   String
+  mustChangePassword Boolean   @default(false)
 
   // Role — "ADMIN" | "MEMBER"
   role           String    @default("MEMBER")

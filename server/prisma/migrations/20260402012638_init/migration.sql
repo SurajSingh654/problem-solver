@@ -140,3 +140,5 @@ CREATE UNIQUE INDEX "solutions_problemId_userId_key" ON "solutions"("problemId",
 
 -- CreateIndex
 CREATE UNIQUE INDEX "clarity_ratings_solutionId_fromUserId_key" ON "clarity_ratings"("solutionId", "fromUserId");
+
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "mustChangePassword" BOOLEAN NOT NULL DEFAULT false;

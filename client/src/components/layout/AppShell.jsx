@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
@@ -37,6 +37,20 @@ export function AppShell() {
     const { sidebarCollapsed } = useUIStore()
 
     useMe()
+
+    // Force password change if required
+    const { user } = useAuthStore()
+    const navigate = useNavigate()
+    const location = useLocation()
+
+    useEffect(() => {
+        if (
+            user?.mustChangePassword &&
+            location.pathname !== '/change-password'
+        ) {
+            navigate('/change-password', { replace: true })
+        }
+    }, [user?.mustChangePassword, location.pathname])
     useKeyboardShortcuts()
 
     return (

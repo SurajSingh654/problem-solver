@@ -253,34 +253,19 @@ export default function Login() {
                     </form>
 
                 </div>
-
-                {/* Demo credentials hint */}
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
+                {/* Forgot password hint */}
+                <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="mt-4 p-3 bg-surface-2/60 border border-border-subtle rounded-xl backdrop-blur-sm"
+                    className="text-center text-xs text-text-tertiary mt-4"
                 >
-                    <p className="text-xs text-text-tertiary text-center font-medium mb-2">
-                        Demo Credentials
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                        <DemoCred label="Admin" email="admin@probsolver.dev" password="admin123" />
-                        <DemoCred label="Member" email="alex@example.com" password="member123" />
-                    </div>
-                </motion.div>
-
+                    Forgot your password?{' '}
+                    <span className="text-brand-300 font-semibold">
+                        Contact your admin to reset it.
+                    </span>
+                </motion.p>
             </motion.div>
-        </div>
-    )
-}
-
-function DemoCred({ label, email, password }) {
-    return (
-        <div className="bg-surface-3/60 rounded-lg px-3 py-2">
-            <p className="text-xs font-semibold text-text-primary mb-1">{label}</p>
-            <p className="text-[11px] text-text-tertiary font-mono truncate">{email}</p>
-            <p className="text-[11px] text-text-tertiary font-mono">{password}</p>
         </div>
     )
 }

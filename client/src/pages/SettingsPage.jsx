@@ -11,6 +11,8 @@ import { Avatar } from '@components/ui/Avatar'
 import { Badge } from '@components/ui/Badge'
 import { cn } from '@utils/cn'
 import { COMPANIES, LEVEL } from '@utils/constants'
+import { useUpdateProfile, useClaimAdmin, useChangePassword } from '@hooks/useAuth'
+import { toast } from '@store/useUIStore'
 
 // ── Avatar color picker ────────────────────────────────
 const AVATAR_COLORS = [
@@ -150,6 +152,7 @@ export default function SettingsPage() {
     const { user } = useAuthStore()
     const { theme, toggleTheme } = useUIStore()
     const updateProfile = useUpdateProfile()
+    const changePassword = useChangePassword()
     const claimAdmin = useClaimAdmin()
 
     const [avatarColor, setAvatarColor] = useState(user?.avatarColor || '#7c6ff7')
@@ -266,6 +269,62 @@ export default function SettingsPage() {
                             </label>
                             <ColorPicker value={avatarColor} onChange={setAvatarColor} />
                         </div>
+                    </div>
+                </Section>
+
+                {/* ── Change Password ───────────────────────── */}
+                <Section title="Change Password" icon="🔑">
+                    <div className="space-y-4">
+                        <Input
+                            label="Current Password"
+                            type="password"
+                            placeholder="Enter current password"
+                            {...register('currentPassword')}
+                        />
+                        <Input
+                            label="New Password"
+                            type="password"
+                            placeholder="Minimum 6 characters"
+                            error={errors.newPassword?.message}
+                            {...register('newPassword', {
+                                minLength: { value: 6, message: 'At least 6 characters' },
+                            })}
+                        />
+                        <Input
+                            label="Confirm New Password"
+                            type="password"
+                            placeholder="Repeat new password"
+                            error={errors.confirmNewPassword?.message}
+                            {...register('confirmNewPassword')}
+                        />
+                        {watch('currentPassword') && watch('newPassword') && (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="md"
+                                loading={changePassword.isPending}
+                                onClick={handleSubmit(async (data) => {
+                                    if (data.newPassword !== data.confirmNewPassword) {
+                                        toast.error('Passwords do not match')
+                                        return
+                                    }
+                                    await changePassword.mutateAsync({
+                                        currentPassword: data.currentPassword,
+                                        newPassword: data.newPassword,
+                                    })
+                                    setValue('currentPassword', '')
+                                    setValue('newPassword', '')
+                                    setValue('confirmNewPassword', '')
+                                })}
+                            >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2.5"
+                                    strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                Update Password
+                            </Button>
+                        )}
                     </div>
                 </Section>
 
