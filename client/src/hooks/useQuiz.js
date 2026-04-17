@@ -20,7 +20,19 @@ export function useGenerateQuiz() {
       const msg = err.response?.data?.error;
 
       console.error("[Quiz] Generation failed:", { status, code, msg });
-      console.error("[Quiz] Full error:", err.response?.data);
+      console.error("[Quiz] Full error:", err.message, err.code);
+
+      if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        toast.error(
+          "Quiz generation timed out. AI is taking too long — try fewer questions or a simpler subject.",
+        );
+        return;
+      }
+
+      if (!err.response) {
+        toast.error("Network error — check your connection and try again.");
+        return;
+      }
 
       if (code === "AI_RATE_LIMITED") {
         toast.warning("Daily AI limit reached. Try again tomorrow.");
@@ -32,11 +44,6 @@ export function useGenerateQuiz() {
         );
       } else if (code === "AI_VALIDATION_ERROR") {
         toast.error("AI generated an invalid response. Try again.");
-      } else if (status === 500) {
-        toast.error(
-          msg ||
-            "Server error during quiz generation. Check console for details.",
-        );
       } else {
         toast.error(msg || "Failed to generate quiz. Try again.");
       }

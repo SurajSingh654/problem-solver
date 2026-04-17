@@ -77,7 +77,6 @@ export async function generateQuiz(req, res) {
     );
   } catch (error) {
     console.error("[AI Quiz] Error:", error.code || error.name, error.message);
-
     if (error.name === "AIError") {
       return errorResponse(
         res,
@@ -86,7 +85,6 @@ export async function generateQuiz(req, res) {
         error.code,
       );
     }
-
     return errorResponse(
       res,
       `Quiz generation failed: ${error.message}`,

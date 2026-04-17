@@ -1,13 +1,6 @@
-/**
- * GLOBAL ERROR HANDLER
- * Catches all unhandled errors and returns consistent JSON.
- * Must be registered LAST in Express middleware chain.
- */
 import { env } from "../config/env.js";
 
-// eslint-disable-next-line no-unused-vars
 export function errorHandler(err, req, res, next) {
-  // ── Detailed logging ─────────────────────────────
   console.error("─── Error Handler ───");
   console.error(`  Route:   ${req.method} ${req.originalUrl}`);
   console.error(`  Name:    ${err.name}`);
@@ -20,7 +13,6 @@ export function errorHandler(err, req, res, next) {
   }
   console.error("─────────────────────");
 
-  // ── AI errors ────────────────────────────────────
   if (err.name === "AIError") {
     const statusMap = {
       RATE_LIMITED: 429,
@@ -31,15 +23,13 @@ export function errorHandler(err, req, res, next) {
       PARSE_ERROR: 500,
       AI_ERROR: 500,
     };
-    const status = statusMap[err.code] || 500;
-    return res.status(status).json({
+    return res.status(statusMap[err.code] || 500).json({
       success: false,
       error: err.message,
       code: err.code || "AI_ERROR",
     });
   }
 
-  // ── Prisma errors ────────────────────────────────
   if (err.code === "P2002") {
     return res.status(409).json({
       success: false,
@@ -56,7 +46,6 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
-  // ── JWT errors ───────────────────────────────────
   if (err.name === "JsonWebTokenError") {
     return res.status(401).json({
       success: false,
@@ -68,12 +57,11 @@ export function errorHandler(err, req, res, next) {
   if (err.name === "TokenExpiredError") {
     return res.status(401).json({
       success: false,
-      error: "Token expired — please log in again",
+      error: "Token expired",
       code: "TOKEN_EXPIRED",
     });
   }
 
-  // ── Zod validation errors ────────────────────────
   if (err.name === "ZodError") {
     return res.status(422).json({
       success: false,
@@ -86,31 +74,11 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
-  // ── Timeout / network errors ─────────────────────
-  if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {
-    return res.status(503).json({
-      success: false,
-      error: "External service unavailable",
-      code: "SERVICE_UNAVAILABLE",
-    });
-  }
-
-  if (err.code === "ETIMEDOUT" || err.name === "AbortError") {
-    return res.status(504).json({
-      success: false,
-      error: "Request timed out — try again",
-      code: "TIMEOUT",
-    });
-  }
-
-  // ── Default ──────────────────────────────────────
   const status = err.statusCode || err.status || 500;
-  const message =
-    env.IS_PROD && status === 500 ? "Internal server error" : err.message;
-
   return res.status(status).json({
     success: false,
-    error: message,
+    error:
+      env.IS_PROD && status === 500 ? "Internal server error" : err.message,
     code: err.code || "SERVER_ERROR",
   });
 }
