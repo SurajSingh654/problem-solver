@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useMyStats } from '@hooks/useReport'
@@ -12,6 +12,7 @@ import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { Avatar } from '@components/ui/Avatar'
 import { cn } from '@utils/cn'
+import { useAIWeeklyPlan, useAIStatus } from '@hooks/useAI'
 import { formatCountdown, formatShortDate } from '@utils/formatters'
 import { DIMENSIONS, CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
 import {
@@ -181,6 +182,10 @@ export default function ReportPage() {
     const { user } = useAuthStore()
     const { data: stats, isLoading } = useMyStats()
     const { data: solutions } = useMySolutions()
+    const aiWeeklyPlan = useAIWeeklyPlan()
+    const { data: aiStatus } = useAIStatus()
+    const aiEnabled = aiStatus?.enabled
+    const [weeklyPlan, setWeeklyPlan] = useState(null)
 
     const countdown = formatCountdown(stats?.targetDate)
     const dims = stats?.dimensions || {}
@@ -331,6 +336,175 @@ export default function ReportPage() {
                     ))}
                 </div>
             </SectionCard>
+            {/* ── AI Weekly Plan ────────────────────────── */}
+            {aiEnabled && (
+                <SectionCard
+                    title="AI Weekly Coach"
+                    icon="🤖"
+                    className="mb-6"
+                >
+                    {!weeklyPlan ? (
+                        <div className="flex items-center justify-between p-4
+                      bg-brand-400/5 border border-brand-400/20 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-400/15 flex items-center
+                          justify-center text-xl flex-shrink-0">
+                                    📅
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-text-primary">
+                                        Get your personalized 7-day plan
+                                    </p>
+                                    <p className="text-xs text-text-tertiary">
+                                        AI analyzes your 6D scores and generates specific daily tasks
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                loading={aiWeeklyPlan.isPending}
+                                onClick={async () => {
+                                    try {
+                                        const res = await aiWeeklyPlan.mutateAsync({
+                                            dimensions: dims,
+                                        })
+                                        setWeeklyPlan(res.data.data)
+                                    } catch {
+                                        // error handled by hook
+                                    }
+                                }}
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2"
+                                    strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                                    <path d="M2 17l10 5 10-5" />
+                                    <path d="M2 12l10 5 10-5" />
+                                </svg>
+                                {aiWeeklyPlan.isPending ? 'Generating...' : 'Generate Plan'}
+                            </Button>
+                        </div>
+                    ) : (
+                        <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="space-y-5"
+                        >
+                            {/* Summary */}
+                            <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                                <p className="text-sm text-text-secondary leading-relaxed">
+                                    {weeklyPlan.summary}
+                                </p>
+                            </div>
+
+                            {/* Focus areas */}
+                            {weeklyPlan.focusAreas?.length > 0 && (
+                                <div className="flex gap-2 flex-wrap">
+                                    {weeklyPlan.focusAreas.map((area, i) => (
+                                        <span key={i}
+                                            className="px-3 py-1.5 rounded-full text-xs font-semibold
+                               bg-brand-400/12 text-brand-300 border border-brand-400/25">
+                                            🎯 {area}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Daily plan */}
+                            <div className="space-y-2">
+                                {weeklyPlan.dailyPlan?.map((day, i) => {
+                                    const typeColors = {
+                                        solve: 'bg-brand-400/10 border-brand-400/25 text-brand-300',
+                                        review: 'bg-warning/10 border-warning/25 text-warning',
+                                        simulate: 'bg-danger/10 border-danger/25 text-danger',
+                                        study: 'bg-info/10 border-info/25 text-info',
+                                    }
+                                    const typeIcons = {
+                                        solve: '💻',
+                                        review: '🧠',
+                                        simulate: '⏱',
+                                        study: '📖',
+                                    }
+                                    return (
+                                        <motion.div
+                                            key={day.day}
+                                            initial={{ opacity: 0, x: -8 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: i * 0.06 }}
+                                            className="flex items-center gap-3 p-3.5 rounded-xl border
+                           bg-surface-1 border-border-default"
+                                        >
+                                            {/* Day */}
+                                            <div className="w-20 flex-shrink-0">
+                                                <span className="text-xs font-bold text-text-primary">
+                                                    {day.day}
+                                                </span>
+                                            </div>
+
+                                            {/* Type badge */}
+                                            <span className={cn(
+                                                'text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0',
+                                                typeColors[day.type] || typeColors.study
+                                            )}>
+                                                {typeIcons[day.type] || '📖'} {day.type}
+                                            </span>
+
+                                            {/* Task */}
+                                            <p className="text-sm text-text-secondary flex-1">
+                                                {day.task}
+                                            </p>
+                                        </motion.div>
+                                    )
+                                })}
+                            </div>
+
+                            {/* Weekly goal */}
+                            {weeklyPlan.weeklyGoal && (
+                                <div className="bg-success/5 border border-success/20 rounded-xl p-4
+                          flex items-start gap-3">
+                                    <span className="text-xl flex-shrink-0">🏁</span>
+                                    <div>
+                                        <p className="text-xs font-bold text-success uppercase tracking-widest mb-1">
+                                            Weekly Goal
+                                        </p>
+                                        <p className="text-sm text-text-secondary">
+                                            {weeklyPlan.weeklyGoal}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Regenerate button */}
+                            <div className="flex justify-end">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    loading={aiWeeklyPlan.isPending}
+                                    onClick={async () => {
+                                        try {
+                                            const res = await aiWeeklyPlan.mutateAsync({
+                                                dimensions: dims,
+                                            })
+                                            setWeeklyPlan(res.data.data)
+                                        } catch {
+                                            // error handled
+                                        }
+                                    }}
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="1 4 1 10 7 10" />
+                                        <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
+                                    </svg>
+                                    Regenerate Plan
+                                </Button>
+                            </div>
+                        </motion.div>
+                    )}
+                </SectionCard>
+            )}
 
             {/* ── Radar + Strengths / Weaknesses ─────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

@@ -6,6 +6,7 @@ import {
     useMySessions, useStartSim, useUseHint,
     useCompleteSession, useAbandonSession
 } from '@hooks/useSim'
+import { useAIGenerateHint, useAIStatus } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
@@ -430,8 +431,17 @@ function ActiveSimScreen({ session, problem, onComplete, onAbandon }) {
     const [hintRevealed, setHintRevealed] = useState(false)
     const [showAbandon, setShowAbandon] = useState(false)
 
+    // Add these new state variables
+    const [aiHints, setAiHints] = useState([])
+    const [hintLevel, setHintLevel] = useState(0)
+
     const useHintMutation = useUseHint()
     const abandonMutation = useAbandonSession()
+
+    // Add AI hooks
+    const aiHintMutation = useAIGenerateHint()
+    const { data: aiStatus } = useAIStatus()
+    const aiEnabled = aiStatus?.enabled
 
     const { remaining, elapsed, formatted, pct, isLow, isCritical } =
         useCountdown(session.timeLimitSecs, timerRunning)
@@ -567,43 +577,188 @@ function ActiveSimScreen({ session, problem, onComplete, onAbandon }) {
                     )}
 
                     {/* Hint */}
-                    {!hintRevealed ? (
-                        <button
-                            onClick={handleUseHint}
-                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
-                         border border-dashed border-warning/30 text-warning/70
-                         hover:border-warning/60 hover:text-warning
-                         text-sm font-semibold transition-all"
-                        >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="10" />
-                                <line x1="12" y1="8" x2="12" y2="12" />
-                                <line x1="12" y1="16" x2="12.01" y2="16" />
-                            </svg>
-                            Use a hint (will be recorded)
-                        </button>
-                    ) : (
-                        <div className="bg-warning/5 border border-warning/25 rounded-2xl p-4">
-                            <p className="text-xs font-bold text-warning mb-3 flex items-center gap-1.5">
-                                💡 Hints — used at {formatDuration(elapsed)}
-                            </p>
-                            {problem.followUps?.filter(fq => fq.hint).length > 0 ? (
-                                problem.followUps.filter(fq => fq.hint).map(fq => (
-                                    <div key={fq.id} className="bg-surface-2 rounded-xl p-3 mb-2">
-                                        <p className="text-xs font-semibold text-text-secondary mb-1">
-                                            {fq.question}
-                                        </p>
-                                        <p className="text-xs text-text-tertiary">{fq.hint}</p>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="text-sm text-text-secondary">
-                                    No hints available. Try breaking it down step by step.
+                    {/* AI Hints Section */}
+                    {aiEnabled ? (
+                        <div className="space-y-2">
+                            {/* Hint buttons — progressive levels */}
+                            {hintLevel < 3 && (
+                                <button
+                                    onClick={async () => {
+                                        const newLevel = hintLevel + 1
+                                        setHintLevel(newLevel)
+
+                                        // Record hint usage on first hint
+                                        if (newLevel === 1) {
+                                            setHintRevealed(true)
+                                            useHintMutation.mutate({
+                                                id: session.id,
+                                                hintUsedAtSecs: elapsed,
+                                            })
+                                        }
+
+                                        try {
+                                            const res = await aiHintMutation.mutateAsync({
+                                                problemId: session.problemId,
+                                                timeElapsed: elapsed,
+                                                timeLimit: session.timeLimitSecs,
+                                                hintLevel: newLevel,
+                                            })
+                                            setAiHints(prev => [...prev, {
+                                                level: newLevel,
+                                                ...res.data.data,
+                                                time: elapsed,
+                                            }])
+                                        } catch {
+                                            // error handled by hook
+                                        }
+                                    }}
+                                    disabled={aiHintMutation.isPending}
+                                    className={cn(
+                                        'w-full flex items-center justify-center gap-2 py-3 rounded-xl',
+                                        'border text-sm font-semibold transition-all',
+                                        hintLevel === 0
+                                            ? 'border-dashed border-warning/30 text-warning/70 hover:border-warning/60 hover:text-warning'
+                                            : 'border-brand-400/30 text-brand-300/70 hover:border-brand-400/50 hover:text-brand-300'
+                                    )}
+                                >
+                                    {aiHintMutation.isPending ? (
+                                        <>
+                                            <div className="w-4 h-4 rounded-full border-2 border-current
+                            border-t-transparent animate-spin" />
+                                            AI is thinking...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" strokeWidth="2"
+                                                strokeLinecap="round" strokeLinejoin="round">
+                                                <circle cx="12" cy="12" r="10" />
+                                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                                            </svg>
+                                            {hintLevel === 0
+                                                ? 'Get AI Hint (will be recorded)'
+                                                : hintLevel === 1
+                                                    ? 'Get Stronger Hint'
+                                                    : 'Get Direct Hint (final)'
+                                            }
+                                            <span className="text-xs opacity-60">
+                                                ({hintLevel}/3 used)
+                                            </span>
+                                        </>
+                                    )}
+                                </button>
+                            )}
+
+                            {/* Display hints */}
+                            {aiHints.length > 0 && (
+                                <div className="space-y-2">
+                                    {aiHints.map((hint, i) => (
+                                        <motion.div
+                                            key={i}
+                                            initial={{ opacity: 0, y: 8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className={cn(
+                                                'rounded-xl p-4 border',
+                                                hint.level === 1
+                                                    ? 'bg-warning/5 border-warning/20'
+                                                    : hint.level === 2
+                                                        ? 'bg-brand-400/5 border-brand-400/20'
+                                                        : 'bg-danger/5 border-danger/20'
+                                            )}
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm">
+                                                        {hint.level === 1 ? '💡' : hint.level === 2 ? '🔍' : '🎯'}
+                                                    </span>
+                                                    <span className={cn(
+                                                        'text-xs font-bold uppercase tracking-widest',
+                                                        hint.level === 1
+                                                            ? 'text-warning'
+                                                            : hint.level === 2
+                                                                ? 'text-brand-300'
+                                                                : 'text-danger'
+                                                    )}>
+                                                        {hint.level === 1
+                                                            ? 'Nudge'
+                                                            : hint.level === 2
+                                                                ? 'Approach Hint'
+                                                                : 'Direct Hint'
+                                                        }
+                                                    </span>
+                                                </div>
+                                                <span className="text-[11px] text-text-disabled font-mono">
+                                                    at {Math.floor(hint.time / 60)}:{(hint.time % 60).toString().padStart(2, '0')}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-text-secondary leading-relaxed">
+                                                {hint.hint}
+                                            </p>
+                                            {hint.encouragement && (
+                                                <p className="text-xs text-text-tertiary mt-2 italic">
+                                                    {hint.encouragement}
+                                                </p>
+                                            )}
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {hintLevel >= 3 && (
+                                <p className="text-xs text-text-disabled text-center py-2">
+                                    All 3 hint levels used. You've got this! 💪
                                 </p>
                             )}
                         </div>
+                    ) : (
+                        /* Fallback to static hints when AI is disabled */
+                        <>
+                            {!hintRevealed ? (
+                                <button
+                                    onClick={() => {
+                                        setHintRevealed(true)
+                                        useHintMutation.mutate({
+                                            id: session.id,
+                                            hintUsedAtSecs: elapsed,
+                                        })
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
+                   border border-dashed border-warning/30 text-warning/70
+                   hover:border-warning/60 hover:text-warning
+                   text-sm font-semibold transition-all"
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                    </svg>
+                                    Use a hint (will be recorded)
+                                </button>
+                            ) : (
+                                <div className="bg-warning/5 border border-warning/25 rounded-2xl p-4">
+                                    <p className="text-xs font-bold text-warning mb-3 flex items-center gap-1.5">
+                                        💡 Hints — used at {formatDuration(elapsed)}
+                                    </p>
+                                    {problem.followUps?.filter(fq => fq.hint).length > 0 ? (
+                                        problem.followUps.filter(fq => fq.hint).map(fq => (
+                                            <div key={fq.id} className="bg-surface-2 rounded-xl p-3 mb-2">
+                                                <p className="text-xs font-semibold text-text-secondary mb-1">
+                                                    {fq.question}
+                                                </p>
+                                                <p className="text-xs text-text-tertiary">{fq.hint}</p>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-sm text-text-secondary">
+                                            No hints available. Try breaking it down step by step.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
 
