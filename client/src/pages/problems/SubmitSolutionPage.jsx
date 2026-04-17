@@ -5,11 +5,13 @@ import { useProblem } from '@hooks/useProblems'
 import { useCreateSolution } from '@hooks/useSolutions'
 import { SolutionTabs } from '@components/features/solutions/SolutionTabs'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
+import { CodeEditor } from '@components/ui/CodeEditor'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
-import { PATTERNS, CONFIDENCE_LEVELS } from '@utils/constants'
+import { PATTERNS, CONFIDENCE_LEVELS, PROBLEM_CATEGORIES } from '@utils/constants'
+import { getCategoryForm } from '@utils/categoryForms'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const SOURCE_LABELS = {
@@ -17,12 +19,6 @@ const SOURCE_LABELS = {
     INTERVIEWBIT: 'InterviewBit', HACKERRANK: 'HackerRank',
     CODEFORCES: 'Codeforces', OTHER: 'Other',
 }
-
-const STEPS = [
-    { id: 1, label: 'Pattern', icon: '🧩', desc: 'Identify the algorithm pattern' },
-    { id: 2, label: 'Solutions', icon: '💻', desc: 'Your approaches with code and complexity' },
-    { id: 3, label: 'Reflection', icon: '🔬', desc: 'Insights, explanations, and self-assessment' },
-]
 
 // ── Step indicator ─────────────────────────────────────
 function StepIndicator({ current, steps, onStepClick, completedSteps }) {
@@ -33,7 +29,6 @@ function StepIndicator({ current, steps, onStepClick, completedSteps }) {
                 const isCompleted = completedSteps.has(step.id)
                 const isPast = step.id < current
                 const isClickable = isPast || isCompleted
-
                 return (
                     <div key={step.id} className="flex items-center flex-1">
                         <button
@@ -85,73 +80,204 @@ function StepIndicator({ current, steps, onStepClick, completedSteps }) {
     )
 }
 
-// ── Step 1: Pattern ────────────────────────────────────
-function StepPattern({ data, onChange }) {
-    const selectedPattern = data.patternIdentified || ''
-
-    function setPattern(val) {
-        onChange({ ...data, patternIdentified: val })
-    }
+// ── Pattern / Topic selector ───────────────────────────
+function PatternSelector({ config, value, onChange }) {
+    const hasSuggestions = config.suggestions?.length > 0
+    const suggestions = hasSuggestions ? config.suggestions : PATTERNS.map(p => p.label)
 
     return (
-        <div className="space-y-6">
-            {/* Pattern grid */}
-            <div>
-                <label className="block text-sm font-semibold text-text-primary mb-1.5">
-                    Pattern Identified
-                </label>
-                <p className="text-xs text-text-tertiary mb-3">
-                    What algorithm pattern does this problem use?
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {PATTERNS.map(p => (
-                        <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => setPattern(selectedPattern === p.label ? '' : p.label)}
-                            className={cn(
-                                'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold',
-                                'transition-all duration-150',
-                                selectedPattern === p.label
-                                    ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                    : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30 hover:text-text-primary'
-                            )}
-                        >
-                            {p.label}
-                        </button>
-                    ))}
-                </div>
-                <div className="mt-3">
-                    <input
-                        type="text"
-                        placeholder="Or type a custom pattern…"
-                        value={!PATTERNS.some(p => p.label === selectedPattern) ? selectedPattern : ''}
-                        onChange={e => setPattern(e.target.value)}
-                        className="w-full bg-surface-3 border border-border-strong rounded-xl
-                       text-sm text-text-primary placeholder:text-text-tertiary
-                       px-3.5 py-2.5 outline-none
-                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                       transition-all duration-150"
-                    />
-                </div>
+        <div>
+            <label className="block text-sm font-semibold text-text-primary mb-1.5">
+                {config.label}
+            </label>
+            <p className="text-xs text-text-tertiary mb-3">
+                {config.placeholder}
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {suggestions.map(s => (
+                    <button
+                        key={s}
+                        type="button"
+                        onClick={() => onChange(value === s ? '' : s)}
+                        className={cn(
+                            'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold',
+                            'transition-all duration-150',
+                            value === s
+                                ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
+                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30 hover:text-text-primary'
+                        )}
+                    >
+                        {s}
+                    </button>
+                ))}
             </div>
-
-            {/* How did you identify this pattern */}
-            <RichTextEditor
-                label="How did you identify this pattern?"
-                optional
-                hint="What clues in the problem pointed you to this approach? What was your first instinct?"
-                placeholder="e.g. The problem asks for a subarray sum — I immediately thought sliding window because..."
-                content={data.patternReasoning || ''}
-                onChange={val => onChange({ ...data, patternReasoning: val })}
-                minHeight="120px"
+            <input
+                type="text"
+                placeholder="Or type custom..."
+                value={!suggestions.includes(value) ? value : ''}
+                onChange={e => onChange(e.target.value)}
+                className="w-full mt-3 bg-surface-3 border border-border-strong rounded-xl
+                   text-sm text-text-primary placeholder:text-text-tertiary
+                   px-3.5 py-2.5 outline-none
+                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                   transition-all duration-150"
             />
         </div>
     )
 }
 
+// ── Rich field with icon header ────────────────────────
+function RichField({ icon, label, hint, placeholder, content, onChange, minHeight = '100px' }) {
+    return (
+        <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
+            <div className="flex items-start gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
+                        justify-center text-base flex-shrink-0 mt-0.5">
+                    {icon}
+                </div>
+                <div>
+                    <h3 className="text-sm font-bold text-text-primary mb-0.5">{label}</h3>
+                    {hint && <p className="text-xs text-text-tertiary leading-relaxed">{hint}</p>}
+                </div>
+            </div>
+            <RichTextEditor
+                placeholder={placeholder}
+                content={content}
+                onChange={onChange}
+                minHeight={minHeight}
+            />
+        </div>
+    )
+}
+
+// ── Step 1: Category-aware first step ──────────────────
+function StepOne({ formConfig, data, onChange, category }) {
+    const fields = formConfig.fields
+    return (
+        <div className="space-y-6">
+            {fields.patternIdentified?.show && (
+                <PatternSelector
+                    config={fields.patternIdentified}
+                    value={data.patternIdentified || ''}
+                    onChange={val => onChange({ ...data, patternIdentified: val })}
+                />
+            )}
+            {fields.patternReasoning?.show && (
+                <RichTextEditor
+                    label={fields.patternReasoning.label}
+                    hint={fields.patternReasoning.hint}
+                    placeholder={fields.patternReasoning.placeholder}
+                    content={data.patternReasoning || ''}
+                    onChange={val => onChange({ ...data, patternReasoning: val })}
+                    minHeight="120px"
+                    optional
+                />
+            )}
+        </div>
+    )
+}
+
+// ── Step 2: Solutions or Action or Detail ──────────────
+function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNotes, setCommonNotes, category }) {
+    // For categories with SolutionTabs (CODING, SYSTEM_DESIGN, SQL)
+    if (formConfig.showSolutionTabs) {
+        return (
+            <SolutionTabs
+                solutions={solutions}
+                onChange={setSolutions}
+                commonNotes={commonNotes}
+                onNotesChange={setCommonNotes}
+                config={formConfig.solutionTabConfig}
+            />
+        )
+    }
+
+    // For BEHAVIORAL — show the Action field
+    if (formConfig.showActionSection) {
+        const actionConfig = formConfig.actionField
+        return (
+            <div className="space-y-5">
+                <RichField
+                    icon="🎯"
+                    label={actionConfig.label}
+                    hint={actionConfig.hint}
+                    placeholder={actionConfig.placeholder}
+                    content={data.actionContent || ''}
+                    onChange={val => onChange({ ...data, actionContent: val })}
+                    minHeight="200px"
+                />
+                {/* Common notes */}
+                <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
+                    <RichTextEditor
+                        label="Additional Notes"
+                        optional
+                        placeholder="Any extra context, links, or thoughts..."
+                        content={commonNotes || ''}
+                        onChange={setCommonNotes}
+                        minHeight="80px"
+                    />
+                </div>
+            </div>
+        )
+    }
+
+    // For CS_FUNDAMENTALS — show the Detail field
+    if (formConfig.showDetailSection) {
+        const detailConfig = formConfig.detailField
+        return (
+            <div className="space-y-5">
+                <RichField
+                    icon="🔍"
+                    label={detailConfig.label}
+                    hint={detailConfig.hint}
+                    placeholder={detailConfig.placeholder}
+                    content={data.detailContent || ''}
+                    onChange={val => onChange({ ...data, detailContent: val })}
+                    minHeight="200px"
+                />
+                <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
+                    <RichTextEditor
+                        label="Additional Notes"
+                        optional
+                        placeholder="Any extra context, references, or thoughts..."
+                        content={commonNotes || ''}
+                        onChange={setCommonNotes}
+                        minHeight="80px"
+                    />
+                </div>
+            </div>
+        )
+    }
+
+    // For HR — show the response field
+    return (
+        <div className="space-y-5">
+            <RichField
+                icon="💬"
+                label="Your Response"
+                hint="Write your complete, polished answer. Be authentic and specific."
+                placeholder="Write your answer here..."
+                content={data.actionContent || ''}
+                onChange={val => onChange({ ...data, actionContent: val })}
+                minHeight="200px"
+            />
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
+                <RichTextEditor
+                    label="Preparation Notes"
+                    optional
+                    placeholder="Research notes, key points to remember..."
+                    content={commonNotes || ''}
+                    onChange={setCommonNotes}
+                    minHeight="80px"
+                />
+            </div>
+        </div>
+    )
+}
+
 // ── Step 3: Reflection ─────────────────────────────────
-function StepReflection({ data, onChange, followUps }) {
+function StepThree({ formConfig, data, onChange, followUps }) {
+    const fields = formConfig.fields
     const followUpAnswers = data.followUpAnswers || []
 
     function setAnswer(i, val) {
@@ -162,87 +288,59 @@ function StepReflection({ data, onChange, followUps }) {
 
     return (
         <div className="space-y-6">
-
-            {/* Key Insight */}
-            <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
-                <div className="flex items-start gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
-                          justify-center text-base flex-shrink-0 mt-0.5">
-                        💡
+            {/* Key Insight / Trade-off / Learning */}
+            {fields.keyInsight?.show && (
+                <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
+                    <div className="flex items-start gap-3 mb-3">
+                        <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
+                            justify-center text-base flex-shrink-0 mt-0.5">
+                            💡
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-text-primary mb-0.5">
+                                {fields.keyInsight.label}
+                            </h3>
+                            <p className="text-xs text-text-tertiary leading-relaxed">
+                                {fields.keyInsight.hint}
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <h3 className="text-sm font-bold text-text-primary mb-0.5">
-                            Key Insight
-                        </h3>
-                        <p className="text-xs text-text-tertiary leading-relaxed">
-                            In one sentence — what's the single thing that makes this problem click?
-                            The "aha!" moment that unlocks the solution.
-                        </p>
-                    </div>
+                    <textarea
+                        rows={2}
+                        value={data.keyInsight || ''}
+                        onChange={e => onChange({ ...data, keyInsight: e.target.value })}
+                        placeholder={fields.keyInsight.placeholder}
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl
+                       text-sm text-text-primary placeholder:text-text-tertiary
+                       px-3.5 py-2.5 outline-none resize-none
+                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                       transition-all duration-150"
+                    />
                 </div>
-                <textarea
-                    rows={2}
-                    value={data.keyInsight || ''}
-                    onChange={e => onChange({ ...data, keyInsight: e.target.value })}
-                    placeholder="e.g. The trick is realizing you only need to track the running max from the left..."
-                    className="w-full bg-surface-3 border border-border-strong rounded-xl
-                     text-sm text-text-primary placeholder:text-text-tertiary
-                     px-3.5 py-2.5 outline-none resize-none
-                     focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                     transition-all duration-150"
-                />
-            </div>
+            )}
 
-            {/* Explain it simply */}
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
-                <div className="flex items-start gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-info/15 flex items-center
-                          justify-center text-base flex-shrink-0 mt-0.5">
-                        🗣
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-bold text-text-primary mb-0.5">
-                            Explain It Simply
-                        </h3>
-                        <p className="text-xs text-text-tertiary leading-relaxed">
-                            Explain to someone with no programming background. Where does this
-                            pattern appear in real software?
-                        </p>
-                    </div>
-                </div>
-                <RichTextEditor
-                    placeholder="e.g. Imagine you're looking for two people in a room whose heights add up to 10 feet. Instead of comparing everyone with everyone..."
+            {/* Simple explanation / Scaling / Result */}
+            {fields.simpleExplanation?.show && (
+                <RichField
+                    icon="🗣"
+                    label={fields.simpleExplanation.label}
+                    placeholder={fields.simpleExplanation.placeholder}
                     content={data.simpleExplanation || ''}
                     onChange={val => onChange({ ...data, simpleExplanation: val })}
-                    minHeight="100px"
                 />
-            </div>
+            )}
 
-            {/* What was challenging */}
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
-                <div className="flex items-start gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-warning/15 flex items-center
-                          justify-center text-base flex-shrink-0 mt-0.5">
-                        🤔
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-bold text-text-primary mb-0.5">
-                            What Was Challenging?
-                        </h3>
-                        <p className="text-xs text-text-tertiary leading-relaxed">
-                            Where did you get stuck? What made this harder than expected?
-                            These are your best learning opportunities.
-                        </p>
-                    </div>
-                </div>
-                <RichTextEditor
-                    placeholder="e.g. I struggled with the off-by-one error in the window boundary. The edge case where..."
+            {/* Challenges / Bottlenecks / What differently */}
+            {fields.challenges?.show && (
+                <RichField
+                    icon="🤔"
+                    label={fields.challenges.label}
+                    placeholder={fields.challenges.placeholder}
                     content={data.challenges || ''}
                     onChange={val => onChange({ ...data, challenges: val })}
                     minHeight="80px"
-                    optional
                 />
-            </div>
+            )}
 
             {/* Confidence */}
             <div>
@@ -250,7 +348,7 @@ function StepReflection({ data, onChange, followUps }) {
                     Confidence Level
                 </label>
                 <p className="text-xs text-text-tertiary mb-3">
-                    How well do you understand this solution right now?
+                    How well do you understand this right now?
                 </p>
                 <div className="flex gap-3 flex-wrap">
                     {CONFIDENCE_LEVELS.map(c => (
@@ -279,7 +377,7 @@ function StepReflection({ data, onChange, followUps }) {
             </div>
 
             {/* Follow-up questions */}
-            {followUps?.length > 0 && (
+            {formConfig.showFollowUps && followUps?.length > 0 && (
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-semibold text-text-primary mb-0.5">
@@ -308,7 +406,7 @@ function StepReflection({ data, onChange, followUps }) {
                                             size="xs"
                                             className="flex-shrink-0"
                                         >
-                                            {fq.difficulty.charAt(0) + fq.difficulty.slice(1).toLowerCase()}
+                                            {fq.difficulty?.charAt(0) + fq.difficulty?.slice(1).toLowerCase()}
                                         </Badge>
                                     </div>
                                     {fq.hint && (
@@ -356,18 +454,22 @@ export default function SubmitSolutionPage() {
     const { data: problem, isLoading } = useProblem(id)
     const createSolution = useCreateSolution()
 
+    // Get the category-specific form config
+    const category = problem?.category || 'CODING'
+    const formConfig = getCategoryForm(category)
+    const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
+
     // ── Form state ─────────────────────────────────────
     const [formData, setFormData] = useState({
-        // Step 1
         patternIdentified: '',
         patternReasoning: '',
-        // Step 2 — managed by SolutionTabs
-        // Step 3
         keyInsight: '',
         simpleExplanation: '',
         challenges: '',
         confidenceLevel: 0,
         followUpAnswers: [],
+        actionContent: '',   // for BEHAVIORAL
+        detailContent: '',   // for CS_FUNDAMENTALS
     })
 
     const [solutions, setSolutions] = useState([{
@@ -390,7 +492,7 @@ export default function SubmitSolutionPage() {
 
     function goNext() {
         markComplete(step)
-        if (step < STEPS.length) {
+        if (step < formConfig.steps.length) {
             setStep(s => s + 1)
             window.scrollTo({ top: 0, behavior: 'smooth' })
         }
@@ -404,36 +506,27 @@ export default function SubmitSolutionPage() {
     }
 
     async function onSubmit() {
-        // Find the best solution (optimized > alternative > brute force)
-        const optimized = solutions.find(s => s.type === 'OPTIMIZED')
-        const brute = solutions.find(s => s.type === 'BRUTE_FORCE')
+        const optimized = solutions.find(s => s.type === 'OPTIMIZED' || s.type === 'DEEP_DIVE')
+        const brute = solutions.find(s => s.type === 'BRUTE_FORCE' || s.type === 'HIGH_LEVEL')
         const bestSol = optimized || solutions[0]
         const language = bestSol?.language || 'PYTHON'
 
-        // Save preferred language
         localStorage.setItem('ps_last_language', language)
 
+        // Map form data to existing Solution fields based on category
         const payload = {
             problemId: id,
             patternIdentified: formData.patternIdentified || null,
-            firstInstinct: null,
+            firstInstinct: formData.patternReasoning || formData.actionContent || formData.detailContent || null,
             whyThisPattern: null,
-            // Map patternReasoning to firstInstinct for backward compat
-            ...(formData.patternReasoning && {
-                firstInstinct: formData.patternReasoning,
-            }),
-            // Brute force
-            bruteForceApproach: brute?.approach || null,
+            bruteForceApproach: brute?.approach || formData.actionContent || formData.detailContent || null,
             bruteForceTime: brute?.timeComplexity || null,
             bruteForceSpace: brute?.spaceComplexity || null,
-            // Optimized
             optimizedApproach: optimized?.approach || bestSol?.approach || null,
             optimizedTime: optimized?.timeComplexity || bestSol?.timeComplexity || null,
             optimizedSpace: optimized?.spaceComplexity || bestSol?.spaceComplexity || null,
-            // Code from best solution
             code: bestSol?.code || null,
             language,
-            // Reflection
             keyInsight: formData.keyInsight || null,
             feynmanExplanation: formData.simpleExplanation || null,
             realWorldConnection: commonNotes || null,
@@ -464,8 +557,8 @@ export default function SubmitSolutionPage() {
         )
     }
 
-    const isLastStep = step === STEPS.length
-    const currentStepMeta = STEPS[step - 1]
+    const isLastStep = step === formConfig.steps.length
+    const currentStepMeta = formConfig.steps[step - 1]
 
     return (
         <div className="p-6 max-w-[800px] mx-auto">
@@ -493,6 +586,14 @@ export default function SubmitSolutionPage() {
                             <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
                                 {problem.difficulty.charAt(0) + problem.difficulty.slice(1).toLowerCase()}
                             </Badge>
+                            {catInfo && (
+                                <span className={cn(
+                                    'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                                    catInfo.bg
+                                )}>
+                                    {catInfo.icon} {catInfo.label}
+                                </span>
+                            )}
                             <span className="text-xs text-text-tertiary">
                                 {SOURCE_LABELS[problem.source] || problem.source}
                             </span>
@@ -521,10 +622,10 @@ export default function SubmitSolutionPage() {
 
             {/* Form card */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-6">
-                {/* Step indicator */}
+                {/* Step indicator — uses category-specific steps */}
                 <StepIndicator
                     current={step}
-                    steps={STEPS}
+                    steps={formConfig.steps}
                     onStepClick={setStep}
                     completedSteps={completedSteps}
                 />
@@ -540,24 +641,31 @@ export default function SubmitSolutionPage() {
                     </p>
                 </div>
 
-                {/* Step content */}
+                {/* Dynamic step content */}
                 <div className="relative">
                     {step === 1 && (
-                        <StepPattern
+                        <StepOne
+                            formConfig={formConfig}
                             data={formData}
                             onChange={updateFormData}
+                            category={category}
                         />
                     )}
                     {step === 2 && (
-                        <SolutionTabs
+                        <StepTwo
+                            formConfig={formConfig}
+                            data={formData}
+                            onChange={updateFormData}
                             solutions={solutions}
-                            onChange={setSolutions}
+                            setSolutions={setSolutions}
                             commonNotes={commonNotes}
-                            onNotesChange={setCommonNotes}
+                            setCommonNotes={setCommonNotes}
+                            category={category}
                         />
                     )}
                     {step === 3 && (
-                        <StepReflection
+                        <StepThree
+                            formConfig={formConfig}
                             data={formData}
                             onChange={updateFormData}
                             followUps={problem.followUps}
@@ -585,7 +693,7 @@ export default function SubmitSolutionPage() {
                     </Button>
 
                     <div className="flex items-center gap-2">
-                        {STEPS.map(s => (
+                        {formConfig.steps.map(s => (
                             <div key={s.id} className={cn(
                                 'rounded-full transition-all duration-200',
                                 s.id === step
