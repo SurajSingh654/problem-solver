@@ -66,6 +66,9 @@ model User {
 
   // AI interaction history (for context — Phase 2)
   aiConversations String   @default("[]")   // JSON array
+ 
+  // Quiz
+  quizAttempts   QuizAttempt[] @relation("QuizAttempts")
 
   // Relations
   solutions      Solution[]
@@ -267,4 +270,37 @@ model SimSession {
   aiDebriefNotes String?
 
   @@map("sim_sessions")
+}
+
+// ─────────────────────────────────────────────────────
+// QUIZ ATTEMPT — stores completed quiz results
+// Questions are AI-generated live, not pre-stored
+// ─────────────────────────────────────────────────────
+model QuizAttempt {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation("QuizAttempts", fields: [userId], references: [id], onDelete: Cascade)
+
+  // What was the quiz about
+  subject      String           // free text: "TCP/IP", "React Hooks", "Physics"
+  difficulty   String           // EASY | MEDIUM | HARD
+  questionCount Int             // how many questions were generated
+
+  // Results
+  score        Int              // correct count
+  total        Int              // total questions
+  percentage   Float
+  timeUsedSecs Int?
+
+  // Full quiz data stored as JSON
+  questions    String  @default("[]")   // JSON array of generated questions with user answers
+  // Each question: { question, options[], correctIndex, selected, correct, explanation }
+
+  // AI analysis of performance
+  aiAnalysis   String?
+  aiSuggestions String @default("[]")   // JSON array of study suggestions
+
+  completedAt  DateTime @default(now())
+
+  @@map("quiz_attempts")
 }

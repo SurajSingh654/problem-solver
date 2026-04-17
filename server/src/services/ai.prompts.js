@@ -164,31 +164,52 @@ Create a specific, actionable 7-day plan that addresses their weakest areas whil
 }
 
 // ── Quiz Question Generation ───────────────────────────
+// ── Live Quiz Generation ───────────────────────────────
 export function quizGenerationPrompt(data) {
-  const system = `You are an expert computer science educator creating multiple-choice quiz questions for interview preparation.
+  const system = `You are an expert educator and quiz creator. You generate high-quality multiple-choice questions on ANY subject — from computer science to physics to history to mathematics to anything the user requests.
 
-Each question must have exactly 4 options with only one correct answer. The explanation should explain why the correct answer is right AND why each wrong option is wrong.
+Rules:
+1. Every question must test genuine understanding, not just memorization
+2. Each question has exactly 4 options with only ONE correct answer
+3. Wrong options should be plausible — common misconceptions, not obviously wrong
+4. Explanations must explain WHY the correct answer is right AND briefly why key wrong options are wrong
+5. Questions should progress from foundational to advanced within the set
+6. If the subject is technical, include practical/applied questions not just theory
+7. Each question must be self-contained — no references to other questions
 
 ALWAYS respond in this exact JSON format:
 {
+  "title": "<string — a short title for this quiz, e.g. 'TCP/IP Fundamentals'>",
   "questions": [
     {
-      "question": <string>,
-      "options": [<string>, <string>, <string>, <string>],
+      "question": "<string — the question text>",
+      "options": ["<option A>", "<option B>", "<option C>", "<option D>"],
       "correctIndex": <number 0-3>,
-      "explanation": <string — explain correct answer + why others are wrong>,
+      "explanation": "<string — detailed explanation>",
       "difficulty": "EASY" | "MEDIUM" | "HARD"
     }
   ]
 }`;
 
-  const user = `Generate ${data.count || 5} multiple-choice questions.
+  const user = `Generate exactly ${data.count} multiple-choice questions.
 
-**Category:** ${data.category}
+**Subject:** ${data.subject}
 **Difficulty:** ${data.difficulty}
-**Specific topics:** ${data.topics || "General"}
+**Additional context:** ${data.context || "General knowledge of this subject"}
 
-Make questions that test deep understanding, not just memorization. Include tricky but fair options.`;
+Requirements:
+- Mix conceptual and practical questions
+- Make questions worth solving — they should teach something even if the user gets them wrong
+- For ${data.difficulty} difficulty:
+  ${
+    data.difficulty === "EASY"
+      ? "→ Test fundamental concepts. A beginner studying this subject should be able to answer with basic knowledge."
+      : data.difficulty === "MEDIUM"
+        ? "→ Test applied understanding. Requires connecting concepts and handling edge cases."
+        : "→ Test deep expertise. Tricky questions that require thorough understanding. Include subtle distinctions."
+  }
+
+Generate high-quality questions that would appear in a real interview or exam.`;
 
   return { system, user };
 }

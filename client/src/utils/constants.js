@@ -253,3 +253,31 @@ export const QUERY_KEYS = {
   USERS: ["users"],
   USER: (username) => ["users", username],
 };
+
+// ── Quiz suggested subjects ────────────────────────
+export const QUIZ_SUGGESTED_SUBJECTS = [
+  { label: "Data Structures", icon: "🧩" },
+  { label: "Algorithms", icon: "⚙️" },
+  { label: "System Design", icon: "🏗️" },
+  { label: "Operating Systems", icon: "🖥️" },
+  { label: "Computer Networks", icon: "🌐" },
+  { label: "DBMS & SQL", icon: "🗄️" },
+  { label: "OOP Concepts", icon: "📦" },
+  { label: "JavaScript", icon: "💛" },
+  { label: "Python", icon: "🐍" },
+  { label: "Java", icon: "☕" },
+  { label: "React", icon: "⚛️" },
+  { label: "Node.js", icon: "🟢" },
+  { label: "AI / Machine Learning", icon: "🤖" },
+  { label: "Cloud Computing", icon: "☁️" },
+  { label: "Docker & Kubernetes", icon: "🐳" },
+  { label: "Git & Version Control", icon: "🔀" },
+  { label: "REST APIs", icon: "🔌" },
+  { label: "GraphQL", icon: "📊" },
+  { label: "Cybersecurity", icon: "🔒" },
+  { label: "Mathematics", icon: "📐" },
+  { label: "Probability & Statistics", icon: "🎲" },
+  { label: "Physics", icon: "⚡" },
+  { label: "Aptitude & Reasoning", icon: "🧠" },
+  { label: "Behavioral Interview", icon: "🗣️" },
+];
