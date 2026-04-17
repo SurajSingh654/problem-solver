@@ -17,11 +17,23 @@ const schema = z.object({
     title: z.string().min(2, 'Title is required').max(200),
     source: z.enum(['LEETCODE', 'GFG', 'CODECHEF', 'INTERVIEWBIT',
         'HACKERRANK', 'CODEFORCES', 'OTHER']),
-    sourceUrl: z.string().url('Enter a valid URL'),
+    sourceUrl: z.string().url('Enter a valid URL').optional().or(z.literal('')).default(''),
     difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
     category: z.enum(['CODING', 'SYSTEM_DESIGN', 'BEHAVIORAL',
         'CS_FUNDAMENTALS', 'HR', 'SQL']).default('CODING'),
+    realWorldContext: z.string().optional().default(''),
+    adminNotes: z.string().optional().default(''),
 })
+
+// Fields to show/hide per category
+const CATEGORY_FIELD_CONFIG = {
+    CODING: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true },
+    SYSTEM_DESIGN: { showUrl: false, showDifficulty: true, showCompanyTags: true, showUseCases: true },
+    BEHAVIORAL: { showUrl: false, showDifficulty: false, showCompanyTags: true, showUseCases: false },
+    CS_FUNDAMENTALS: { showUrl: false, showDifficulty: true, showCompanyTags: false, showUseCases: true },
+    HR: { showUrl: false, showDifficulty: false, showCompanyTags: false, showUseCases: false },
+    SQL: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true },
+}
 
 const DIFF_COLORS = {
     EASY: 'bg-success/12  border-success/30  text-success',
@@ -117,35 +129,42 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
             sourceUrl: initialData?.sourceUrl || '',
             difficulty: initialData?.difficulty || 'MEDIUM',
             category: initialData?.category || 'CODING',
-            realWorldContext: initialData?.realWorldContext || '',   // ← add this
-            adminNotes: initialData?.adminNotes || '',   // ← add this
+            realWorldContext: initialData?.realWorldContext || '',
+            adminNotes: initialData?.adminNotes || '',
         },
     })
 
-    // Uncontrolled state (not in RHF)
+    // Uncontrolled state
     const [tags, setTags] = useState(initialData?.tags || [])
     const [companyTags, setCompanyTags] = useState(initialData?.companyTags || [])
     const [useCases, setUseCases] = useState(initialData?.useCases || [])
     const [followUps, setFollowUps] = useState(initialData?.followUps || [])
     const [isPinned, setIsPinned] = useState(initialData?.isPinned || false)
     const [isBlindChallenge, setIsBlindChallenge] = useState(initialData?.isBlindChallenge || false)
+
     const aiGenerate = useAIGenerateProblemContent()
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
 
+    // Watch values — declare these FIRST
     const selectedSource = watch('source')
     const selectedDifficulty = watch('difficulty')
     const selectedCategory = watch('category')
 
-    // Pattern suggestions from PATTERNS constant
+    // Then use selectedCategory — declare AFTER
+    const fieldConfig = CATEGORY_FIELD_CONFIG[selectedCategory] || CATEGORY_FIELD_CONFIG.CODING
+
     const patternSuggestions = PATTERNS.map(p => p.label)
+
+
 
     function onFormSubmit(data) {
         onSubmit({
             ...data,
+            sourceUrl: data.sourceUrl || `https://probsolver.app/${(data.category || 'coding').toLowerCase()}`,
             tags,
-            companyTags,
-            useCases,
+            companyTags: fieldConfig.showCompanyTags ? companyTags : [],
+            useCases: fieldConfig.showUseCases ? useCases : [],
             followUps: followUps.map((fq, i) => ({ ...fq, order: i })),
             isPinned,
             isBlindChallenge,
@@ -233,48 +252,51 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         ))}
                     </div>
                 </div>
-
-                <Input
-                    label="Problem URL"
-                    placeholder="https://leetcode.com/problems/two-sum/"
-                    error={errors.sourceUrl?.message}
-                    leftIcon={
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                        </svg>
-                    }
-                    {...register('sourceUrl')}
-                />
-
+                {/* Problem URL — only for categories with external links */}
+                {fieldConfig.showUrl && (
+                    <Input
+                        label="Problem URL"
+                        placeholder="https://leetcode.com/problems/two-sum/"
+                        error={errors.sourceUrl?.message}
+                        leftIcon={
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            </svg>
+                        }
+                        {...register('sourceUrl')}
+                    />
+                )}
                 {/* Difficulty */}
-                <div>
-                    <label className="block text-sm font-semibold text-text-primary mb-2">
-                        Difficulty
-                    </label>
-                    <div className="flex gap-2">
-                        {['EASY', 'MEDIUM', 'HARD'].map(d => (
-                            <button
-                                key={d}
-                                type="button"
-                                onClick={() => setValue('difficulty', d)}
-                                className={cn(
-                                    'flex-1 py-2 rounded-xl border text-xs font-bold transition-all',
-                                    selectedDifficulty === d
-                                        ? DIFF_COLORS[d]
-                                        : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
-                                )}
-                            >
-                                {d}
-                            </button>
-                        ))}
+                {fieldConfig.showDifficulty && (
+                    <div>
+                        <label className="block text-sm font-semibold text-text-primary mb-2">
+                            Difficulty
+                        </label>
+                        <div className="flex gap-2">
+                            {['EASY', 'MEDIUM', 'HARD'].map(d => (
+                                <button
+                                    key={d}
+                                    type="button"
+                                    onClick={() => setValue('difficulty', d)}
+                                    className={cn(
+                                        'flex-1 py-2 rounded-xl border text-xs font-bold transition-all',
+                                        selectedDifficulty === d
+                                            ? DIFF_COLORS[d]
+                                            : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
+                                    )}
+                                >
+                                    {d}
+                                </button>
+                            ))}
+                        </div>
+                        {errors.difficulty && (
+                            <p className="text-xs text-danger mt-1">{errors.difficulty.message}</p>
+                        )}
                     </div>
-                    {errors.difficulty && (
-                        <p className="text-xs text-danger mt-1">{errors.difficulty.message}</p>
-                    )}
-                </div>
+                )}
             </FormSection>
 
             {/* ── Tags ──────────────────────────────────── */}
@@ -288,14 +310,17 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     placeholder="Type a tag or pick from suggestions…"
                 />
 
-                <ChipInput
-                    label="Company Tags"
-                    hint="Which companies ask this problem?"
-                    value={companyTags}
-                    onChange={setCompanyTags}
-                    suggestions={COMPANIES}
-                    placeholder="Type a company or pick from suggestions…"
-                />
+                {/* Company Tags — conditional */}
+                {fieldConfig.showCompanyTags && (
+                    <ChipInput
+                        label="Company Tags"
+                        hint="Which companies ask this problem?"
+                        value={companyTags}
+                        onChange={setCompanyTags}
+                        suggestions={COMPANIES}
+                        placeholder="Type a company or pick from suggestions…"
+                    />
+                )}
             </FormSection>
 
             {/* ── Learning content ───────────────────────── */}
@@ -353,7 +378,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                     try {
                                         const res = await aiGenerate.mutateAsync({
                                             title, source, sourceUrl, difficulty, tags,
-                                            category: watch('category'),  
+                                            category: watch('category'),
                                         })
                                         const content = res.data.data
 
@@ -401,14 +426,17 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     {...register('realWorldContext')}   // ← add this
                 />
 
-                <ChipInput
-                    label="Use Cases"
-                    optional
-                    hint="Specific real-world use cases (press Enter to add)"
-                    value={useCases}
-                    onChange={setUseCases}
-                    placeholder="e.g. DNS lookup caching…"
-                />
+                {/* Use Cases — conditional */}
+                {fieldConfig.showUseCases && (
+                    <ChipInput
+                        label="Use Cases"
+                        optional
+                        hint="Specific real-world use cases (press Enter to add)"
+                        value={useCases}
+                        onChange={setUseCases}
+                        placeholder="e.g. DNS lookup caching…"
+                    />
+                )}
 
                 <Textarea
                     label="Admin Notes"

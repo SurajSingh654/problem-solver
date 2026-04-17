@@ -107,148 +107,143 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
-                    {problems.map((p, i) => (
-                        <motion.tr
-                            key={p.id}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.02 }}
-                            className="hover:bg-surface-2 transition-colors group"
-                        >
-                            {/* Title */}
-                            <td className="py-3 px-4 max-w-[260px]">
-                                <div className="flex items-center gap-2">
-                                    {p.isPinned && <span className="text-warning text-sm">📌</span>}
-                                    {p.isBlindChallenge && <span className="text-brand-300 text-sm">🎯</span>}
-                                    <span
-                                        onClick={() => onEdit(p.id)}
-                                        className="text-sm font-semibold text-text-primary truncate
-                               cursor-pointer hover:text-brand-300 transition-colors"
-                                    >
-                                        {p.title}
-                                    </span>
-                                </div>
-                                {p.tags?.slice(0, 2).map(t => (
-                                    <span key={t}
-                                        className="inline-block mr-1 mt-0.5 text-[10px] text-text-disabled
-                                   bg-surface-3 border border-border-subtle rounded px-1 py-px">
-                                        {t}
-                                    </span>
-                                ))}
-                            </td>
+                    {problems.map((p, i) => {
+                        const cat = PROBLEM_CATEGORIES.find(c => c.id === p.category)
+                        return (
+                            <motion.tr
+                                key={p.id}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.02 }}
+                                className="hover:bg-surface-2 transition-colors group"
+                            >
+                                {/* Title */}
+                                <td className="py-3 px-4 max-w-[260px]">
+                                    <div className="flex items-center gap-2">
+                                        {p.isPinned && <span className="text-warning text-sm">📌</span>}
+                                        {p.isBlindChallenge && <span className="text-brand-300 text-sm">🎯</span>}
+                                        <span
+                                            onClick={() => onEdit(p.id)}
+                                            className="text-sm font-semibold text-text-primary truncate
+                                                       cursor-pointer hover:text-brand-300 transition-colors"
+                                        >
+                                            {p.title}
+                                        </span>
+                                    </div>
+                                    {p.tags?.slice(0, 2).map(t => (
+                                        <span key={t}
+                                            className="inline-block mr-1 mt-0.5 text-[10px] text-text-disabled
+                                                       bg-surface-3 border border-border-subtle rounded px-1 py-px">
+                                            {t}
+                                        </span>
+                                    ))}
+                                </td>
 
-                            {/* Difficulty */}
-                            <td className="py-3 px-4">
-                                <Badge variant={DIFF_VARIANT[p.difficulty] || 'brand'} size="xs">
-                                    {p.difficulty.charAt(0) + p.difficulty.slice(1).toLowerCase()}
-                                </Badge>
-                            </td>
-
-                            {/* Source */}
-                            <td className="py-3 px-4">
-                                <span className="text-xs text-text-tertiary">
-                                    {SOURCE_LABELS[p.source] || p.source}
-                                </span>
-                            </td>
-
-                            {/* Solutions */}
-                            <td className="py-3 px-4 text-center">
-                                <span className="text-sm font-bold font-mono text-text-primary">
-                                    {p.totalSolutions ?? p._count?.solutions ?? 0}
-                                </span>
-                            </td>
-
-                            {/* Added */}
-                            <td className="py-3 px-4">
-                                <span className="text-xs text-text-tertiary font-mono">
-                                    {formatShortDate(p.addedAt)}
-                                </span>
-                            </td>
-
-                            {/* Status */}
-                            <td className="py-3 px-4">
-                                <button
-                                    onClick={() => onToggleActive(p)}
-                                    className={cn(
-                                        'text-[10px] font-bold px-2 py-1 rounded-full border transition-all',
-                                        p.isActive
-                                            ? 'bg-success/10 border-success/25 text-success hover:bg-success/20'
-                                            : 'bg-surface-3 border-border-default text-text-disabled hover:border-border-strong'
+                                {/* Category */}
+                                <td className="py-3 px-4">
+                                    {cat ? (
+                                        <span className={cn(
+                                            'text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap',
+                                            cat.bg
+                                        )}>
+                                            {cat.icon} {cat.label}
+                                        </span>
+                                    ) : (
+                                        <span className="text-[10px] text-text-disabled">Coding</span>
                                     )}
-                                >
-                                    {p.isActive ? 'Active' : 'Hidden'}
-                                </button>
-                            </td>
+                                </td>
 
-                            {/* Actions */}
-                            <td className="py-3 px-4">
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100
-                                transition-opacity">
-                                    {/* Pin toggle */}
+                                {/* Difficulty */}
+                                <td className="py-3 px-4">
+                                    <Badge variant={DIFF_VARIANT[p.difficulty] || 'brand'} size="xs">
+                                        {p.difficulty.charAt(0) + p.difficulty.slice(1).toLowerCase()}
+                                    </Badge>
+                                </td>
+
+                                {/* Source */}
+                                <td className="py-3 px-4">
+                                    <span className="text-xs text-text-tertiary">
+                                        {SOURCE_LABELS[p.source] || p.source}
+                                    </span>
+                                </td>
+
+                                {/* Solutions */}
+                                <td className="py-3 px-4 text-center">
+                                    <span className="text-sm font-bold font-mono text-text-primary">
+                                        {p.totalSolutions ?? p._count?.solutions ?? 0}
+                                    </span>
+                                </td>
+
+                                {/* Added */}
+                                <td className="py-3 px-4">
+                                    <span className="text-xs text-text-tertiary font-mono">
+                                        {formatShortDate(p.addedAt)}
+                                    </span>
+                                </td>
+
+                                {/* Status */}
+                                <td className="py-3 px-4">
                                     <button
-                                        onClick={() => onTogglePin(p)}
-                                        title={p.isPinned ? 'Unpin' : 'Pin'}
-                                        className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
-                               text-text-tertiary hover:text-warning"
+                                        onClick={() => onToggleActive(p)}
+                                        className={cn(
+                                            'text-[10px] font-bold px-2 py-1 rounded-full border transition-all',
+                                            p.isActive
+                                                ? 'bg-success/10 border-success/25 text-success hover:bg-success/20'
+                                                : 'bg-surface-3 border-border-default text-text-disabled hover:border-border-strong'
+                                        )}
                                     >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" strokeWidth="2"
-                                            strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                            <circle cx="12" cy="10" r="3" />
-                                        </svg>
+                                        {p.isActive ? 'Active' : 'Hidden'}
                                     </button>
+                                </td>
 
-                                    {/* Edit */}
-                                    <button
-                                        onClick={() => onEdit(p.id)}
-                                        title="Edit"
-                                        className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
-                               text-text-tertiary hover:text-brand-300"
-                                    >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" strokeWidth="2"
-                                            strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                        </svg>
-                                    </button>
-
-                                    {/* Delete */}
-                                    <button
-                                        onClick={() => onDelete(p)}
-                                        title="Delete"
-                                        className="p-1.5 rounded-lg hover:bg-danger/10 transition-colors
-                               text-text-tertiary hover:text-danger"
-                                    >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" strokeWidth="2"
-                                            strokeLinecap="round" strokeLinejoin="round">
-                                            <polyline points="3 6 5 6 21 6" />
-                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </motion.tr>
-                    ))}
-
-                    {/* Category  */}
-                    <td className="py-3 px-4">
-                        {(() => {
-                            const cat = PROBLEM_CATEGORIES.find(c => c.id === p.category)
-                            return cat ? (
-                                <span className={cn(
-                                    'text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap',
-                                    cat.bg
-                                )}>
-                                    {cat.icon} {cat.label}
-                                </span>
-                            ) : (
-                                <span className="text-[10px] text-text-disabled">Coding</span>
-                            )
-                        })()}
-                    </td>
+                                {/* Actions */}
+                                <td className="py-3 px-4">
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100
+                                                    transition-opacity">
+                                        <button
+                                            onClick={() => onTogglePin(p)}
+                                            title={p.isPinned ? 'Unpin' : 'Pin'}
+                                            className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
+                                                       text-text-tertiary hover:text-warning"
+                                        >
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" strokeWidth="2"
+                                                strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                                <circle cx="12" cy="10" r="3" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onClick={() => onEdit(p.id)}
+                                            title="Edit"
+                                            className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
+                                                       text-text-tertiary hover:text-brand-300"
+                                        >
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" strokeWidth="2"
+                                                strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onClick={() => onDelete(p)}
+                                            title="Delete"
+                                            className="p-1.5 rounded-lg hover:bg-danger/10 transition-colors
+                                                       text-text-tertiary hover:text-danger"
+                                        >
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" strokeWidth="2"
+                                                strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="3 6 5 6 21 6" />
+                                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </motion.tr>
+                        )
+                    })}
                 </tbody>
             </table>
         </div>
