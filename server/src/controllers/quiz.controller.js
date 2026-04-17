@@ -28,40 +28,72 @@ export async function generateQuiz(req, res) {
 
   const questionCount = Math.min(Math.max(parseInt(count) || 5, 3), 25);
 
-  const { system, user } = quizGenerationPrompt({
-    subject: subject.trim(),
-    difficulty: difficulty || "MEDIUM",
-    count: questionCount,
-    context: context || "",
-  });
+  try {
+    const { system, user } = quizGenerationPrompt({
+      subject: subject.trim(),
+      difficulty: difficulty || "MEDIUM",
+      count: questionCount,
+      context: context || "",
+    });
 
-  const raw = await aiComplete({
-    systemPrompt: system,
-    userPrompt: user,
-    userId,
-    maxTokens: 4000,
-    temperature: 0.8,
-  });
+    console.log(
+      `[AI Quiz] Generating ${questionCount} questions on "${subject}" (${difficulty})`,
+    );
 
-  const validation = validateAIResponse(quizQuestionsSchema, raw);
-  if (!validation.valid) {
+    const raw = await aiComplete({
+      systemPrompt: system,
+      userPrompt: user,
+      userId,
+      maxTokens: 4000,
+      temperature: 0.8,
+    });
+
+    console.log("[AI Quiz] Response keys:", Object.keys(raw || {}));
+    console.log("[AI Quiz] Questions count:", raw?.questions?.length || 0);
+
+    const validation = validateAIResponse(quizQuestionsSchema, raw);
+    if (!validation.valid) {
+      console.error(
+        "[AI Quiz] Validation failed:",
+        JSON.stringify(validation.error),
+      );
+      return errorResponse(
+        res,
+        "AI returned invalid format. Try again.",
+        500,
+        "AI_VALIDATION_ERROR",
+      );
+    }
+
+    return successResponse(
+      res,
+      {
+        title: raw.title || `${subject} Quiz`,
+        subject,
+        difficulty,
+        questions: validation.data.questions,
+      },
+      "Quiz generated",
+    );
+  } catch (error) {
+    console.error("[AI Quiz] Error:", error.code || error.name, error.message);
+
+    if (error.name === "AIError") {
+      return errorResponse(
+        res,
+        error.message,
+        error.code === "RATE_LIMITED" ? 429 : 500,
+        error.code,
+      );
+    }
+
     return errorResponse(
       res,
-      "AI returned invalid quiz format. Try again.",
+      `Quiz generation failed: ${error.message}`,
       500,
+      "AI_ERROR",
     );
   }
-
-  return successResponse(
-    res,
-    {
-      title: raw.title || `${subject} Quiz`,
-      subject,
-      difficulty,
-      questions: validation.data.questions,
-    },
-    "Quiz generated",
-  );
 }
 
 // ── POST /api/quizzes/submit ───────────────────────────

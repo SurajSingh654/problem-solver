@@ -51,15 +51,21 @@ export const weeklyPlanSchema = z.object({
 });
 
 export const quizQuestionsSchema = z.object({
-  questions: z.array(
-    z.object({
-      question: z.string(),
-      options: z.array(z.string()).length(4),
-      correctIndex: z.number().min(0).max(3),
-      explanation: z.string(),
-      difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
-    }),
-  ),
+  title: z.string().optional(),
+  questions: z
+    .array(
+      z.object({
+        question: z.string(),
+        options: z.array(z.string()).min(2).max(6),
+        correctIndex: z.number().min(0).max(5),
+        explanation: z.string().optional().default(""),
+        difficulty: z
+          .enum(["EASY", "MEDIUM", "HARD"])
+          .optional()
+          .default("MEDIUM"),
+      }),
+    )
+    .min(1),
 });
 
 export const quizAnalysisSchema = z.object({

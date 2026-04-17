@@ -4,13 +4,41 @@ import { toast } from "@store/useUIStore.js";
 
 export function useGenerateQuiz() {
   return useMutation({
-    mutationFn: (data) => quizApi.generate(data),
+    mutationFn: async (data) => {
+      console.log("[Quiz] Generating with params:", data);
+      const res = await quizApi.generate(data);
+      console.log(
+        "[Quiz] Generation successful:",
+        res.data.data?.questions?.length,
+        "questions",
+      );
+      return res;
+    },
     onError: (err) => {
+      const status = err.response?.status;
       const code = err.response?.data?.code;
+      const msg = err.response?.data?.error;
+
+      console.error("[Quiz] Generation failed:", { status, code, msg });
+      console.error("[Quiz] Full error:", err.response?.data);
+
       if (code === "AI_RATE_LIMITED") {
         toast.warning("Daily AI limit reached. Try again tomorrow.");
+      } else if (code === "AI_DISABLED") {
+        toast.info("AI features are not enabled.");
+      } else if (code === "AI_UNAVAILABLE") {
+        toast.warning(
+          "AI service temporarily unavailable. Try again in a moment.",
+        );
+      } else if (code === "AI_VALIDATION_ERROR") {
+        toast.error("AI generated an invalid response. Try again.");
+      } else if (status === 500) {
+        toast.error(
+          msg ||
+            "Server error during quiz generation. Check console for details.",
+        );
       } else {
-        toast.error(err.response?.data?.error || "Failed to generate quiz");
+        toast.error(msg || "Failed to generate quiz. Try again.");
       }
     },
   });

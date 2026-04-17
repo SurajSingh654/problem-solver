@@ -72,14 +72,19 @@ export async function aiComplete({
   maxTokens = 2000,
   jsonMode = true,
 }) {
-  // Check rate limit
   const rateCheck = checkRateLimit(userId);
   if (!rateCheck.allowed) {
     throw new AIError(
       "RATE_LIMITED",
-      `Daily AI limit reached (${RATE_LIMIT}/day). Try again tomorrow.`,
+      `Daily AI limit reached (${RATE_LIMIT}/day).`,
     );
   }
+
+  console.log(
+    `[AI] Request: model=${model}, maxTokens=${maxTokens}, jsonMode=${jsonMode}`,
+  );
+  console.log(`[AI] System prompt length: ${systemPrompt.length} chars`);
+  console.log(`[AI] User prompt length: ${userPrompt.length} chars`);
 
   try {
     const client = getClient();
@@ -95,19 +100,26 @@ export async function aiComplete({
       ],
     });
 
-    // Increment rate limit on success
     incrementRateLimit(userId);
 
     const content = response.choices[0]?.message?.content;
+    console.log(`[AI] Response received: ${content?.length || 0} chars`);
+    console.log(`[AI] Usage: ${response.usage?.total_tokens || "?"} tokens`);
+
     if (!content) {
       throw new AIError("EMPTY_RESPONSE", "AI returned an empty response");
     }
 
-    // Parse JSON if json mode
     if (jsonMode) {
       try {
-        return JSON.parse(content);
-      } catch {
+        const parsed = JSON.parse(content);
+        console.log(`[AI] Parsed JSON keys: ${Object.keys(parsed).join(", ")}`);
+        return parsed;
+      } catch (e) {
+        console.error(
+          `[AI] JSON parse failed. Raw content:`,
+          content.slice(0, 300),
+        );
         throw new AIError("PARSE_ERROR", "AI response was not valid JSON");
       }
     }
@@ -116,24 +128,23 @@ export async function aiComplete({
   } catch (error) {
     if (error instanceof AIError) throw error;
 
-    // Handle OpenAI-specific errors
+    console.error(
+      `[AI] OpenAI error: status=${error?.status}, message=${error?.message}`,
+    );
+
     if (error?.status === 429) {
       throw new AIError(
         "OPENAI_RATE_LIMITED",
-        "OpenAI rate limit hit. Wait a moment and retry.",
+        "OpenAI rate limit hit. Wait and retry.",
       );
     }
     if (error?.status === 401) {
       throw new AIError("INVALID_API_KEY", "OpenAI API key is invalid.");
     }
     if (error?.status === 500 || error?.status === 503) {
-      throw new AIError(
-        "OPENAI_DOWN",
-        "OpenAI is temporarily unavailable. Try again shortly.",
-      );
+      throw new AIError("OPENAI_DOWN", "OpenAI is temporarily unavailable.");
     }
 
-    console.error("AI Service Error:", error.message);
     throw new AIError("AI_ERROR", `AI request failed: ${error.message}`);
   }
 }
