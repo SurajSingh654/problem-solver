@@ -56,21 +56,20 @@ function ComplexityField({ label, icon, value, onChange }) {
 }
 
 // ── Single solution tab content ────────────────────────
-function SolutionPanel({ solution, index, onChange, onRemove, canRemove }) {
-
+function SolutionPanel({ solution, index, onChange, onRemove, canRemove, solutionTypes, labels }) {
     function update(field, value) {
         onChange(index, { ...solution, [field]: value })
     }
 
     return (
         <div className="space-y-5">
-            {/* Solution type selector */}
+            {/* Solution type selector — uses solutionTypes from config */}
             <div>
                 <span className="text-xs font-semibold text-text-secondary block mb-2">
                     Solution Type
                 </span>
                 <div className="flex gap-2">
-                    {SOLUTION_TYPES.map(type => (
+                    {solutionTypes.map(type => (
                         <button
                             key={type.id}
                             type="button"
@@ -80,7 +79,7 @@ function SolutionPanel({ solution, index, onChange, onRemove, canRemove }) {
                                 'text-xs font-semibold transition-all duration-150',
                                 solution.type === type.id
                                     ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                    : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong hover:text-text-secondary'
+                                    : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
                             )}
                         >
                             <span>{type.icon}</span>
@@ -90,37 +89,36 @@ function SolutionPanel({ solution, index, onChange, onRemove, canRemove }) {
                 </div>
             </div>
 
-            {/* Approach description */}
+            {/* Approach — uses config label */}
             <RichTextEditor
-                label="Approach"
-                hint="Describe your approach — what data structures, what algorithm, what trade-offs?"
-                placeholder="Explain your approach step by step..."
+                label={labels.approach}
+                hint={labels.approachHint || 'Describe your approach...'}
+                placeholder={labels.approachPlaceholder}
                 content={solution.approach || ''}
                 onChange={val => update('approach', val)}
                 minHeight="100px"
             />
 
-            {/* Complexity */}
+            {/* Complexity — uses config labels */}
             <div className="grid grid-cols-2 gap-4 p-4 bg-surface-2 border border-border-default rounded-xl">
                 <ComplexityField
-                    label="Time Complexity"
+                    label={labels.time}
                     icon="⏱"
                     value={solution.timeComplexity || ''}
                     onChange={val => update('timeComplexity', val)}
                 />
                 <ComplexityField
-                    label="Space Complexity"
+                    label={labels.space}
                     icon="💾"
                     value={solution.spaceComplexity || ''}
                     onChange={val => update('spaceComplexity', val)}
                 />
             </div>
 
-            {/* Code editor */}
+            {/* Code editor — uses config label */}
             <CodeEditor
-                label="Code"
+                label={labels.code}
                 optional
-                hint="Paste your accepted solution code"
                 code={solution.code || ''}
                 onChange={val => update('code', val)}
                 language={solution.language || 'PYTHON'}
@@ -155,17 +153,29 @@ function SolutionPanel({ solution, index, onChange, onRemove, canRemove }) {
 }
 
 // ── Main SolutionTabs component ────────────────────────
-export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesChange }) {
+export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesChange, config }) {
     const [activeTab, setActiveTab] = useState(0)
 
+    // Use config types if provided, otherwise default coding types
+    const solutionTypes = config?.types || SOLUTION_TYPES
+    const approachLabel = config?.approachLabel || 'Approach'
+    const approachPlaceholder = config?.approachPlaceholder || 'Describe your approach step by step...'
+    const timeLabel = config?.complexityLabels?.time || 'Time Complexity'
+    const spaceLabel = config?.complexityLabels?.space || 'Space Complexity'
+    const codeLabel = config?.codeLabel || 'Code'
+    const codePlaceholder = config?.codePlaceholder || ''
+    const notesLabel = config?.notesLabel || 'Notes'
+    const defaultLanguage = config?.defaultLanguage || null
+
     function addSolution() {
+        const firstType = solutionTypes[0]?.id || 'BRUTE_FORCE'
         const newSol = {
-            type: 'OPTIMIZED',
+            type: firstType,
             approach: '',
             timeComplexity: '',
             spaceComplexity: '',
             code: '',
-            language: localStorage.getItem('ps_last_language') || 'PYTHON',
+            language: defaultLanguage || localStorage.getItem('ps_last_language') || 'PYTHON',
         }
         onChange([...solutions, newSol])
         setActiveTab(solutions.length)
@@ -186,13 +196,14 @@ export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesCha
 
     // Ensure at least one solution
     if (solutions.length === 0) {
+        const firstType = solutionTypes[0]?.id || 'BRUTE_FORCE'
         const defaultSol = [{
-            type: 'BRUTE_FORCE',
+            type: firstType,
             approach: '',
             timeComplexity: '',
             spaceComplexity: '',
             code: '',
-            language: localStorage.getItem('ps_last_language') || 'PYTHON',
+            language: defaultLanguage || localStorage.getItem('ps_last_language') || 'PYTHON',
         }]
         onChange(defaultSol)
         return null
@@ -205,7 +216,7 @@ export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesCha
             {/* Tab bar */}
             <div className="flex items-center gap-2 flex-wrap">
                 {solutions.map((sol, i) => {
-                    const type = SOLUTION_TYPES.find(t => t.id === sol.type) || SOLUTION_TYPES[1]
+                    const type = solutionTypes.find(t => t.id === sol.type) || solutionTypes[0]
                     return (
                         <button
                             key={i}
@@ -278,16 +289,23 @@ export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesCha
                     onChange={updateSolution}
                     onRemove={removeSolution}
                     canRemove={solutions.length > 1}
+                    solutionTypes={solutionTypes}
+                    labels={{
+                        approach: approachLabel,
+                        approachPlaceholder,
+                        time: timeLabel,
+                        space: spaceLabel,
+                        code: codeLabel,
+                    }}
                 />
             </div>
 
             {/* Common notes */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
                 <RichTextEditor
-                    label="Notes"
+                    label={notesLabel}
                     optional
-                    hint="General notes, observations, things to remember — shared across all solutions"
-                    placeholder="Any additional notes about this problem..."
+                    placeholder="General notes, observations, things to remember..."
                     content={commonNotes || ''}
                     onChange={onNotesChange}
                     minHeight="100px"

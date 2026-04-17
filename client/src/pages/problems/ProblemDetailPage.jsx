@@ -218,13 +218,14 @@ export default function ProblemDetailPage() {
                 )}
 
                 {/* Source link */}
+                {/* Source link — hide placeholder URLs */}
                 {sourceUrl && !sourceUrl.includes('probsolver.app') && (
                     <a
                         href={sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-brand-300
-                       hover:text-brand-200 transition-colors mt-1"
+                   hover:text-brand-200 transition-colors mt-1"
                     >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" strokeWidth="2"
@@ -245,13 +246,12 @@ export default function ProblemDetailPage() {
                             size="md"
                             onClick={() => navigate(`/problems/${id}/submit`)}
                         >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2.5"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 20h9" />
-                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                            </svg>
-                            Submit Solution
+                            {problem.category === 'SYSTEM_DESIGN' ? 'Submit My Design' :
+                                problem.category === 'BEHAVIORAL' ? 'Submit My Response' :
+                                    problem.category === 'CS_FUNDAMENTALS' ? 'Submit My Explanation' :
+                                        problem.category === 'HR' ? 'Submit My Answer' :
+                                            problem.category === 'SQL' ? 'Submit My Query' :
+                                                'Submit Solution'}
                         </Button>
                     ) : (
                         <Button
