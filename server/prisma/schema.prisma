@@ -98,6 +98,8 @@ model Problem {
   difficulty  String
 
   category    String  @default("CODING")
+  description  String?                    // Rich text problem statement
+  categoryData String  @default("{}")     // JSON — category-specific structured data
 
   // Arrays stored as JSON strings (SQLite limitation)
   // Switch to native arrays when migrating to PostgreSQL

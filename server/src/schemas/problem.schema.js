@@ -41,6 +41,8 @@ export const createProblemSchema = z.object({
     adminNotes: z.string().optional(),
     relatedProblems: z.array(z.string()).default([]),
     followUps: z.array(followUpSchema).default([]),
+    description: z.string().optional(),
+    categoryData: z.string().optional(), // JSON string
   }),
 });
 
