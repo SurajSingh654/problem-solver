@@ -22,6 +22,7 @@ import AddProblemPage from '@pages/admin/AddProblemPage'
 import EditProblemPage from '@pages/admin/EditProblemPage'
 import DeployPage from '@pages/docs/DeployPage'
 import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
+import QuizPage from '@pages/QuizPage'
 
 function ComingSoon({ name, step }) {
   return (
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="/docs/setup" element={<SetupPage />} />
           <Route path="/docs/deploy" element={<DeployPage />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
+          <Route path="/quizzes" element={<QuizPage />} />
 
           {/* Admin */}
           <Route path="/admin" element={
