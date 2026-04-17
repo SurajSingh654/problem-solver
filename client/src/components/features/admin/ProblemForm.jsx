@@ -364,14 +364,11 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
 
             {/* ── Tags ──────────────────────────────────── */}
             <FormSection title="Tags & Companies" icon="🏷️">
-                <ChipInput
-                    label="Algorithm Tags"
-                    hint="Select from suggestions or type a custom tag"
-                    value={tags}
-                    onChange={setTags}
-                    suggestions={patternSuggestions}
-                    placeholder="Type a tag or pick from suggestions…"
-                />
+                {fieldConfig.showAlgoTags && (
+                    <ChipInput label={fieldConfig.tagLabel} hint="Select from suggestions or type custom"
+                        value={tags} onChange={setTags} suggestions={patternSuggestions}
+                        placeholder={fieldConfig.tagPlaceholder} />
+                )}
 
                 {/* Company Tags — conditional */}
                 {fieldConfig.showCompanyTags && (
@@ -480,14 +477,16 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         </div>
                     </div>
                 )}
-                <Textarea
-                    label="Real World Context"
-                    optional
-                    hint="Where does this problem pattern appear in real software?"
-                    placeholder="e.g. Hash maps are used in database indexing to achieve O(1) lookups…"
-                    rows={3}
-                    {...register('realWorldContext')}   // ← add this
-                />
+                {fieldConfig.showRealWorld && (
+                    <Textarea
+                        label="Real World Context"
+                        optional
+                        hint="Where does this problem pattern appear in real software?"
+                        placeholder="e.g. Hash maps are used in database indexing to achieve O(1) lookups…"
+                        rows={3}
+                        {...register('realWorldContext')}   // ← add this
+                    />
+                )}
 
                 {/* Use Cases — conditional */}
                 {fieldConfig.showUseCases && (
@@ -528,12 +527,14 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
             </FormSection>
 
             {/* ── Follow-up questions ────────────────────── */}
-            <FormSection title="Follow-up Questions" icon="🧠">
-                <p className="text-xs text-text-tertiary">
-                    Follow-ups deepen understanding. Members answer these when submitting solutions.
-                </p>
-                <FollowUpBuilder value={followUps} onChange={setFollowUps} />
-            </FormSection>
+            {fieldConfig.showFollowUps && (
+                <FormSection title="Follow-up Questions" icon="🧠">
+                    <p className="text-xs text-text-tertiary">
+                        Follow-ups deepen understanding. Members answer these when submitting solutions.
+                    </p>
+                    <FollowUpBuilder value={followUps} onChange={setFollowUps} />
+                </FormSection>
+            )}
 
             {/* Submit */}
             <div className="flex items-center gap-3 pt-2">
