@@ -21,6 +21,7 @@ const schema = z.object({
     difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
     category: z.enum(['CODING', 'SYSTEM_DESIGN', 'BEHAVIORAL',
         'CS_FUNDAMENTALS', 'HR', 'SQL']).default('CODING'),
+    description: z.string().optional().default(''),
     realWorldContext: z.string().optional().default(''),
     adminNotes: z.string().optional().default(''),
 })
@@ -33,6 +34,51 @@ const CATEGORY_FIELD_CONFIG = {
     CS_FUNDAMENTALS: { showUrl: false, showDifficulty: true, showCompanyTags: false, showUseCases: true },
     HR: { showUrl: false, showDifficulty: false, showCompanyTags: false, showUseCases: false },
     SQL: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true },
+}
+
+const CATEGORY_DESCRIPTION_CONFIG = {
+    CODING: {
+        label: 'Problem Description',
+        placeholder: 'Optional — the external link is the primary resource for coding problems.',
+        hint: 'Add extra context if the external problem statement needs clarification.',
+        required: false,
+        rows: 3,
+    },
+    SYSTEM_DESIGN: {
+        label: 'Problem Statement',
+        placeholder: 'Describe what to design:\n• What the system does\n• Expected scale (users, QPS, storage)\n• Core features vs nice-to-have\n• Specific constraints',
+        hint: 'This IS the problem — members will read this and design the system.',
+        required: true,
+        rows: 8,
+    },
+    BEHAVIORAL: {
+        label: 'Question & Context',
+        placeholder: 'Write the behavioral question and add context:\n• What is the interviewer really assessing?\n• What makes a strong answer?\n• Example scenarios to consider',
+        hint: 'Help members understand what a great answer looks like.',
+        required: true,
+        rows: 6,
+    },
+    CS_FUNDAMENTALS: {
+        label: 'Topic Description',
+        placeholder: 'Describe the topic and expected depth:\n• Core concept to explain\n• Sub-topics to cover\n• Common misconceptions to address',
+        hint: 'Guide members on how deep they should go.',
+        required: true,
+        rows: 6,
+    },
+    HR: {
+        label: 'Question & Guidance',
+        placeholder: 'Write the HR question and add guidance:\n• What is the interviewer really asking?\n• Tips for an authentic answer\n• What to research about the company',
+        hint: 'Help members prepare thoughtful, specific responses.',
+        required: true,
+        rows: 6,
+    },
+    SQL: {
+        label: 'Problem Statement & Schema',
+        placeholder: 'Describe the SQL problem:\n• Table schemas (column names, types)\n• What the query should return\n• Sample data if helpful\n• Any constraints',
+        hint: 'Describe the schema and requirements. External link is optional.',
+        required: false,
+        rows: 8,
+    },
 }
 
 const DIFF_COLORS = {
@@ -116,11 +162,7 @@ function Textarea({ label, optional, hint, rows = 3, ...props }) {
 // ── Main form ──────────────────────────────────────────
 export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }) {
     const {
-        register,
-        handleSubmit,
-        formState: { errors },
-        setValue,
-        watch,
+        register, handleSubmit, formState: { errors }, setValue, watch,
     } = useForm({
         resolver: zodResolver(schema),
         defaultValues: {
@@ -129,6 +171,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
             sourceUrl: initialData?.sourceUrl || '',
             difficulty: initialData?.difficulty || 'MEDIUM',
             category: initialData?.category || 'CODING',
+            description: initialData?.description || '',
             realWorldContext: initialData?.realWorldContext || '',
             adminNotes: initialData?.adminNotes || '',
         },
@@ -146,17 +189,15 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
 
-    // Watch values — declare these FIRST
+    // THESE MUST COME FIRST — watch values
     const selectedSource = watch('source')
     const selectedDifficulty = watch('difficulty')
     const selectedCategory = watch('category')
 
-    // Then use selectedCategory — declare AFTER
+    // THEN use selectedCategory
     const fieldConfig = CATEGORY_FIELD_CONFIG[selectedCategory] || CATEGORY_FIELD_CONFIG.CODING
-
+    const descConfig = CATEGORY_DESCRIPTION_CONFIG[selectedCategory] || CATEGORY_DESCRIPTION_CONFIG.CODING
     const patternSuggestions = PATTERNS.map(p => p.label)
-
-
 
     function onFormSubmit(data) {
         onSubmit({
@@ -224,6 +265,28 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     error={errors.title?.message}
                     {...register('title')}
                 />
+
+                {/* Problem Description — category-aware */}
+                <div>
+                    <label className="block text-sm font-semibold text-text-primary mb-1.5">
+                        {descConfig.label}
+                        {descConfig.required && <span className="ml-1 text-danger text-xs">*</span>}
+                        {!descConfig.required && (
+                            <span className="ml-1.5 text-xs font-normal text-text-disabled">optional</span>
+                        )}
+                    </label>
+                    <p className="text-xs text-text-tertiary mb-2">{descConfig.hint}</p>
+                    <textarea
+                        rows={descConfig.rows}
+                        placeholder={descConfig.placeholder}
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl
+                   text-sm text-text-primary placeholder:text-text-tertiary
+                   px-3.5 py-2.5 outline-none resize-y
+                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                   transition-all duration-150"
+                        {...register('description')}
+                    />
+                </div>
 
                 {/* Source */}
                 <div>
