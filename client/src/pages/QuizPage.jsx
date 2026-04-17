@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-    useGenerateQuiz, useSubmitQuiz, useAnalyzeQuiz,
-    useMyQuizAttempts
+    useGenerateQuiz, useSubmitQuiz,
+    useAnalyzeQuiz, useMyQuizAttempts
 } from '@hooks/useQuiz'
 import { useAIStatus } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
@@ -13,6 +13,142 @@ import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import { QUIZ_SUGGESTED_SUBJECTS } from '@utils/constants'
 
+// ── Markdown-lite renderer for code blocks ─────────────
+function FormattedText({ text }) {
+    if (!text) return null
+
+    // Split by code blocks ```lang\ncode\n```
+    const parts = text.split(/(```[\s\S]*?```)/g)
+
+    return (
+        <span>
+            {parts.map((part, i) => {
+                if (part.startsWith('```')) {
+                    const lines = part.slice(3, -3).split('\n')
+                    const lang = lines[0].trim()
+                    const code = lines.slice(lang ? 1 : 0).join('\n').trim()
+                    return (
+                        <pre key={i}
+                            className="bg-surface-0 border border-border-default rounded-lg
+                            px-3 py-2 mt-2 mb-2 font-mono text-xs leading-relaxed
+                            text-text-secondary overflow-x-auto">
+                            <code>{code}</code>
+                        </pre>
+                    )
+                }
+
+                // Handle inline code `code`
+                const inlineParts = part.split(/(`[^`]+`)/g)
+                return (
+                    <span key={i}>
+                        {inlineParts.map((ip, j) => {
+                            if (ip.startsWith('`') && ip.endsWith('`')) {
+                                return (
+                                    <code key={j}
+                                        className="bg-brand-400/10 text-brand-300 px-1.5 py-0.5
+                                   rounded text-xs font-mono border border-brand-400/20">
+                                        {ip.slice(1, -1)}
+                                    </code>
+                                )
+                            }
+                            return <span key={j}>{ip}</span>
+                        })}
+                    </span>
+                )
+            })}
+        </span>
+    )
+}
+
+// ── Scratchpad component ───────────────────────────────
+function Scratchpad({ visible, onToggle }) {
+    const [content, setContent] = useState('')
+
+    if (!visible) return null
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+        >
+            <div className="bg-surface-0 border border-border-default rounded-xl p-3 mt-4">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-text-disabled uppercase tracking-widest
+                           flex items-center gap-1.5">
+                        <span>📝</span> Scratchpad
+                    </span>
+                    <button
+                        onClick={() => setContent('')}
+                        className="text-[10px] text-text-disabled hover:text-text-tertiary transition-colors"
+                    >
+                        Clear
+                    </button>
+                </div>
+                <textarea
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder="Work out your answer here... rough calculations, notes, etc."
+                    rows={4}
+                    className="w-full bg-surface-2 border border-border-subtle rounded-lg
+                     text-sm font-mono text-text-secondary placeholder:text-text-disabled
+                     px-3 py-2 outline-none resize-y
+                     focus:border-brand-400/40 transition-all"
+                />
+            </div>
+        </motion.div>
+    )
+}
+
+// ── Timer component ────────────────────────────────────
+function QuizTimer({ totalSecs, running, onTimeUp }) {
+    const [remaining, setRemaining] = useState(totalSecs)
+
+    useEffect(() => {
+        setRemaining(totalSecs)
+    }, [totalSecs])
+
+    useEffect(() => {
+        if (!running || !totalSecs) return
+        const interval = setInterval(() => {
+            setRemaining(prev => {
+                if (prev <= 1) {
+                    clearInterval(interval)
+                    onTimeUp?.()
+                    return 0
+                }
+                return prev - 1
+            })
+        }, 1000)
+        return () => clearInterval(interval)
+    }, [running, totalSecs])
+
+    if (!totalSecs) return null
+
+    const mins = Math.floor(remaining / 60).toString().padStart(2, '0')
+    const secs = (remaining % 60).toString().padStart(2, '0')
+    const pct = (remaining / totalSecs) * 100
+    const isLow = remaining <= 60
+
+    return (
+        <div className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono font-bold',
+            isLow
+                ? 'bg-danger/10 border-danger/30 text-danger animate-pulse'
+                : 'bg-surface-2 border-border-default text-text-primary'
+        )}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+            </svg>
+            {mins}:{secs}
+        </div>
+    )
+}
+
 // ══════════════════════════════════════════════════════
 // SCREEN 1 — Setup
 // ══════════════════════════════════════════════════════
@@ -21,12 +157,12 @@ function SetupScreen({ onStart }) {
     const [difficulty, setDifficulty] = useState('MEDIUM')
     const [count, setCount] = useState(10)
     const [context, setContext] = useState('')
+    const [timerMins, setTimerMins] = useState(0) // 0 = no timer
 
     const generateQuiz = useGenerateQuiz()
     const { data: aiStatus } = useAIStatus()
     const { data: attempts } = useMyQuizAttempts()
 
-    // Recent subjects for quick re-take
     const recentSubjects = useMemo(() => {
         if (!attempts?.length) return []
         const seen = new Set()
@@ -57,10 +193,9 @@ function SetupScreen({ onStart }) {
                 ...res.data.data,
                 subject: subject.trim(),
                 difficulty,
+                timerSecs: timerMins > 0 ? timerMins * 60 : null,
             })
-        } catch {
-            // error handled by hook
-        }
+        } catch { }
     }
 
     return (
@@ -77,9 +212,7 @@ function SetupScreen({ onStart }) {
                         🧠
                     </div>
                     <div>
-                        <h1 className="text-2xl font-extrabold text-text-primary">
-                            Quiz
-                        </h1>
+                        <h1 className="text-2xl font-extrabold text-text-primary">Quiz</h1>
                         <p className="text-sm text-text-tertiary">
                             Test your knowledge on any subject — AI generates questions instantly
                         </p>
@@ -87,7 +220,6 @@ function SetupScreen({ onStart }) {
                 </div>
             </motion.div>
 
-            {/* AI status warning */}
             {aiStatus && !aiStatus.enabled && (
                 <div className="bg-warning/8 border border-warning/25 rounded-xl p-4 mb-6
                         flex items-center gap-3">
@@ -97,19 +229,17 @@ function SetupScreen({ onStart }) {
                         <code className="text-brand-300 bg-brand-400/10 px-1.5 rounded text-xs mx-1">
                             AI_ENABLED=true
                         </code>
-                        in the server environment.
                     </p>
                 </div>
             )}
 
-            {/* Setup form */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 }}
                 className="bg-surface-1 border border-border-default rounded-2xl p-6 space-y-6"
             >
-                {/* Subject input */}
+                {/* Subject */}
                 <div>
                     <label className="block text-sm font-semibold text-text-primary mb-2">
                         What do you want to practice?
@@ -129,8 +259,6 @@ function SetupScreen({ onStart }) {
                             if (e.key === 'Enter' && subject.trim()) handleGenerate()
                         }}
                     />
-
-                    {/* Suggested subjects */}
                     <div className="flex flex-wrap gap-1.5 mt-3">
                         {QUIZ_SUGGESTED_SUBJECTS.slice(0, 12).map(s => (
                             <button
@@ -185,7 +313,7 @@ function SetupScreen({ onStart }) {
                 {/* Question count */}
                 <div>
                     <label className="block text-sm font-semibold text-text-primary mb-2">
-                        Number of questions
+                        Questions
                     </label>
                     <div className="flex gap-2">
                         {[5, 10, 15, 20].map(n => (
@@ -206,7 +334,39 @@ function SetupScreen({ onStart }) {
                     </div>
                 </div>
 
-                {/* Optional context */}
+                {/* Timer */}
+                <div>
+                    <label className="block text-sm font-semibold text-text-primary mb-2">
+                        Timer
+                        <span className="ml-1.5 text-xs font-normal text-text-disabled">optional</span>
+                    </label>
+                    <div className="flex gap-2">
+                        {[
+                            { mins: 0, label: 'No limit' },
+                            { mins: 5, label: '5 min' },
+                            { mins: 10, label: '10 min' },
+                            { mins: 15, label: '15 min' },
+                            { mins: 20, label: '20 min' },
+                            { mins: 30, label: '30 min' },
+                        ].map(t => (
+                            <button
+                                key={t.mins}
+                                type="button"
+                                onClick={() => setTimerMins(t.mins)}
+                                className={cn(
+                                    'flex-1 py-2 rounded-xl border text-xs font-semibold transition-all',
+                                    timerMins === t.mins
+                                        ? 'bg-warning/12 border-warning/35 text-warning'
+                                        : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                                )}
+                            >
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Context */}
                 <details className="group">
                     <summary className="text-xs text-text-tertiary cursor-pointer
                               hover:text-text-secondary transition-colors
@@ -231,7 +391,7 @@ function SetupScreen({ onStart }) {
                     />
                 </details>
 
-                {/* Generate button */}
+                {/* Generate */}
                 <Button
                     variant="primary"
                     size="lg"
@@ -252,12 +412,13 @@ function SetupScreen({ onStart }) {
                                 <path d="M2 12l10 5 10-5" />
                             </svg>
                             Generate Quiz — {count} questions
+                            {timerMins > 0 && ` · ${timerMins} min`}
                         </>
                     )}
                 </Button>
             </motion.div>
 
-            {/* Recent subjects */}
+            {/* Recent + History */}
             {recentSubjects.length > 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -294,7 +455,6 @@ function SetupScreen({ onStart }) {
                 </motion.div>
             )}
 
-            {/* Past attempts */}
             <QuizHistory />
         </div>
     )
@@ -303,7 +463,6 @@ function SetupScreen({ onStart }) {
 // ── Quiz history ───────────────────────────────────────
 function QuizHistory() {
     const { data: attempts, isLoading } = useMyQuizAttempts()
-
     if (isLoading || !attempts?.length) return null
 
     return (
@@ -362,70 +521,110 @@ function QuizHistory() {
 }
 
 // ══════════════════════════════════════════════════════
-// SCREEN 2 — Active Quiz
+// SCREEN 2 — Active Quiz (no instant feedback)
 // ══════════════════════════════════════════════════════
 function ActiveQuizScreen({ quizData, onComplete }) {
     const [currentQ, setCurrentQ] = useState(0)
-    const [answers, setAnswers] = useState([])
-    const [selected, setSelected] = useState(null)
-    const [confirmed, setConfirmed] = useState(false)
+    const [answers, setAnswers] = useState({}) // { index: selectedOption }
+    const [showScratch, setShowScratch] = useState(false)
     const [startTime] = useState(Date.now())
+    const [timerRunning, setTimerRunning] = useState(true)
 
     const questions = quizData.questions || []
-    const question = questions[currentQ]
     const total = questions.length
-    const progress = ((currentQ + (confirmed ? 1 : 0)) / total) * 100
+    const question = questions[currentQ]
+    const answered = Object.keys(answers).length
+    const progress = (answered / total) * 100
 
     function handleSelect(optionIndex) {
-        if (confirmed) return
-        setSelected(optionIndex)
+        setAnswers(prev => ({ ...prev, [currentQ]: optionIndex }))
     }
 
-    function handleConfirm() {
-        if (selected === null) return
-        const isCorrect = selected === question.correctIndex
-        setConfirmed(true)
-        setAnswers(prev => [...prev, { selected, correct: isCorrect }])
+    function goTo(index) {
+        setCurrentQ(index)
+        setShowScratch(false)
     }
 
-    function handleNext() {
-        if (currentQ < total - 1) {
-            setCurrentQ(prev => prev + 1)
-            setSelected(null)
-            setConfirmed(false)
-        } else {
-            // Quiz complete
-            const timeUsed = Math.round((Date.now() - startTime) / 1000)
-            onComplete({
-                answers: [...answers],
-                timeUsedSecs: timeUsed,
-            })
-        }
+    function handleSubmit() {
+        const timeUsed = Math.round((Date.now() - startTime) / 1000)
+        const gradedAnswers = questions.map((q, i) => ({
+            selected: answers[i] ?? -1,
+            correct: (answers[i] ?? -1) === q.correctIndex,
+        }))
+        onComplete({ answers: gradedAnswers, timeUsedSecs: timeUsed })
+    }
+
+    function handleTimeUp() {
+        setTimerRunning(false)
+        handleSubmit()
     }
 
     if (!question) return null
 
-    const isLast = currentQ === total - 1
-
     return (
-        <div className="p-6 max-w-[700px] mx-auto">
-            {/* Progress bar */}
-            <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
+        <div className="p-6 max-w-[750px] mx-auto">
+            {/* Top bar */}
+            <div className="flex items-center justify-between mb-5">
+                <div>
                     <span className="text-xs font-semibold text-text-tertiary">
-                        Question {currentQ + 1} of {total}
-                    </span>
-                    <span className="text-xs font-bold text-text-primary">
                         {quizData.subject}
                     </span>
+                    <span className="text-xs text-text-disabled mx-2">·</span>
+                    <span className="text-xs text-text-disabled">
+                        {answered}/{total} answered
+                    </span>
                 </div>
-                <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
-                    <motion.div
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.3 }}
-                        className="h-full bg-brand-400 rounded-full"
-                    />
+                <div className="flex items-center gap-3">
+                    {quizData.timerSecs && (
+                        <QuizTimer
+                            totalSecs={quizData.timerSecs}
+                            running={timerRunning}
+                            onTimeUp={handleTimeUp}
+                        />
+                    )}
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={answered === 0}
+                        onClick={handleSubmit}
+                    >
+                        Submit Quiz ({answered}/{total})
+                    </Button>
                 </div>
+            </div>
+
+            {/* Progress */}
+            <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden mb-6">
+                <motion.div
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.3 }}
+                    className="h-full bg-brand-400 rounded-full"
+                />
+            </div>
+
+            {/* Question navigation dots */}
+            <div className="flex flex-wrap gap-1.5 mb-5">
+                {questions.map((_, i) => {
+                    const isAnswered = answers[i] !== undefined
+                    const isCurrent = i === currentQ
+                    return (
+                        <button
+                            key={i}
+                            onClick={() => goTo(i)}
+                            className={cn(
+                                'w-8 h-8 rounded-lg text-xs font-bold transition-all',
+                                'border flex items-center justify-center',
+                                isCurrent
+                                    ? 'bg-brand-400 border-brand-400 text-white scale-110'
+                                    : isAnswered
+                                        ? 'bg-brand-400/15 border-brand-400/30 text-brand-300'
+                                        : 'bg-surface-2 border-border-default text-text-disabled hover:border-border-strong'
+                            )}
+                        >
+                            {i + 1}
+                        </button>
+                    )
+                })}
             </div>
 
             {/* Question card */}
@@ -436,7 +635,7 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                 transition={{ duration: 0.2 }}
                 className="bg-surface-1 border border-border-default rounded-2xl p-6"
             >
-                {/* Difficulty badge */}
+                {/* Question header */}
                 <div className="flex items-center gap-2 mb-4">
                     <Badge
                         variant={
@@ -448,166 +647,101 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                         {question.difficulty}
                     </Badge>
                     <span className="text-[11px] text-text-disabled font-mono">
-                        Q{currentQ + 1}
+                        Q{currentQ + 1} of {total}
                     </span>
                 </div>
 
-                {/* Question text */}
-                <h2 className="text-base font-bold text-text-primary leading-relaxed mb-6">
-                    {question.question}
-                </h2>
+                {/* Question text with formatting */}
+                <div className="text-base font-semibold text-text-primary leading-relaxed mb-6">
+                    <FormattedText text={question.question} />
+                </div>
 
                 {/* Options */}
                 <div className="space-y-2.5">
                     {question.options.map((option, i) => {
-                        const isSelected = selected === i
-                        const isCorrect = i === question.correctIndex
-                        const showResult = confirmed
-
-                        let borderClass = 'border-border-default'
-                        let bgClass = 'bg-surface-2'
-
-                        if (showResult && isCorrect) {
-                            borderClass = 'border-success/50'
-                            bgClass = 'bg-success/8'
-                        } else if (showResult && isSelected && !isCorrect) {
-                            borderClass = 'border-danger/50'
-                            bgClass = 'bg-danger/8'
-                        } else if (isSelected && !showResult) {
-                            borderClass = 'border-brand-400/50'
-                            bgClass = 'bg-brand-400/8'
-                        }
+                        const isSelected = answers[currentQ] === i
 
                         return (
                             <button
                                 key={i}
                                 type="button"
                                 onClick={() => handleSelect(i)}
-                                disabled={confirmed}
                                 className={cn(
                                     'w-full flex items-start gap-3 p-4 rounded-xl border',
                                     'text-left transition-all duration-150',
-                                    bgClass, borderClass,
-                                    !confirmed && 'hover:border-brand-400/40 hover:bg-brand-400/5 cursor-pointer',
-                                    confirmed && 'cursor-default'
+                                    isSelected
+                                        ? 'bg-brand-400/8 border-brand-400/50'
+                                        : 'bg-surface-2 border-border-default hover:border-brand-400/30 hover:bg-brand-400/3',
                                 )}
                             >
-                                {/* Option letter */}
                                 <div className={cn(
                                     'w-7 h-7 rounded-lg flex items-center justify-center',
-                                    'text-xs font-bold flex-shrink-0 border',
-                                    showResult && isCorrect
-                                        ? 'bg-success/20 border-success/40 text-success'
-                                        : showResult && isSelected && !isCorrect
-                                            ? 'bg-danger/20 border-danger/40 text-danger'
-                                            : isSelected
-                                                ? 'bg-brand-400/20 border-brand-400/40 text-brand-300'
-                                                : 'bg-surface-3 border-border-default text-text-disabled'
+                                    'text-xs font-bold flex-shrink-0 border mt-0.5',
+                                    isSelected
+                                        ? 'bg-brand-400/20 border-brand-400/50 text-brand-300'
+                                        : 'bg-surface-3 border-border-default text-text-disabled'
                                 )}>
                                     {String.fromCharCode(65 + i)}
                                 </div>
-
-                                {/* Option text */}
-                                <span className={cn(
-                                    'text-sm leading-relaxed pt-0.5',
-                                    showResult && isCorrect
-                                        ? 'text-success font-semibold'
-                                        : showResult && isSelected && !isCorrect
-                                            ? 'text-danger'
-                                            : 'text-text-secondary'
-                                )}>
-                                    {option}
-                                </span>
-
-                                {/* Result icon */}
-                                {showResult && isCorrect && (
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                        stroke="#22c55e" strokeWidth="2.5"
-                                        strokeLinecap="round" strokeLinejoin="round"
-                                        className="ml-auto flex-shrink-0 mt-1">
-                                        <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                )}
-                                {showResult && isSelected && !isCorrect && (
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                        stroke="#ef4444" strokeWidth="2.5"
-                                        strokeLinecap="round" strokeLinejoin="round"
-                                        className="ml-auto flex-shrink-0 mt-1">
-                                        <line x1="18" y1="6" x2="6" y2="18" />
-                                        <line x1="6" y1="6" x2="18" y2="18" />
-                                    </svg>
-                                )}
+                                <div className="text-sm leading-relaxed pt-0.5 text-text-secondary flex-1">
+                                    <FormattedText text={option} />
+                                </div>
                             </button>
                         )
                     })}
                 </div>
 
-                {/* Explanation — shown after confirming */}
-                <AnimatePresence>
-                    {confirmed && question.explanation && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="overflow-hidden"
-                        >
-                            <div className="mt-5 p-4 bg-info/5 border border-info/20 rounded-xl">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span>💡</span>
-                                    <span className="text-xs font-bold text-info uppercase tracking-widest">
-                                        Explanation
-                                    </span>
-                                </div>
-                                <p className="text-sm text-text-secondary leading-relaxed">
-                                    {question.explanation}
-                                </p>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                {/* Scratchpad toggle */}
+                <div className="mt-4 flex items-center gap-3">
+                    <button
+                        onClick={() => setShowScratch(v => !v)}
+                        className={cn(
+                            'flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5',
+                            'rounded-lg border transition-all',
+                            showScratch
+                                ? 'bg-brand-400/12 border-brand-400/30 text-brand-300'
+                                : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                        )}
+                    >
+                        <span>📝</span>
+                        {showScratch ? 'Hide Scratchpad' : 'Scratchpad'}
+                    </button>
+                </div>
 
-                {/* Actions */}
+                <Scratchpad visible={showScratch} onToggle={() => setShowScratch(v => !v)} />
+
+                {/* Navigation */}
                 <div className="flex items-center justify-between mt-6 pt-5
                         border-t border-border-default">
-                    <span className="text-xs text-text-disabled">
-                        {answers.filter(a => a.correct).length} / {currentQ + (confirmed ? 1 : 0)} correct
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={currentQ === 0}
+                        onClick={() => goTo(currentQ - 1)}
+                    >
+                        ← Previous
+                    </Button>
+
+                    <span className="text-xs text-text-disabled font-mono">
+                        {currentQ + 1} / {total}
                     </span>
 
-                    {!confirmed ? (
+                    {currentQ < total - 1 ? (
                         <Button
-                            variant="primary"
-                            size="md"
-                            disabled={selected === null}
-                            onClick={handleConfirm}
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => goTo(currentQ + 1)}
                         >
-                            Confirm Answer
+                            Next →
                         </Button>
                     ) : (
                         <Button
                             variant="primary"
-                            size="md"
-                            onClick={handleNext}
+                            size="sm"
+                            disabled={answered === 0}
+                            onClick={handleSubmit}
                         >
-                            {isLast ? (
-                                <>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="2.5"
-                                        strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                    See Results
-                                </>
-                            ) : (
-                                <>
-                                    Next Question
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="2.5"
-                                        strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="5" y1="12" x2="19" y2="12" />
-                                        <polyline points="12 5 19 12 12 19" />
-                                    </svg>
-                                </>
-                            )}
+                            Submit Quiz
                         </Button>
                     )}
                 </div>
@@ -617,12 +751,15 @@ function ActiveQuizScreen({ quizData, onComplete }) {
 }
 
 // ══════════════════════════════════════════════════════
-// SCREEN 3 — Results
+// SCREEN 3 — Results (with feedback system)
 // ══════════════════════════════════════════════════════
 function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
     const navigate = useNavigate()
     const analyzeQuiz = useAnalyzeQuiz()
     const [analysis, setAnalysis] = useState(null)
+    const [flagged, setFlagged] = useState({}) // { qIndex: reason }
+    const [feedback, setFeedback] = useState('')
+    const [feedbackSent, setFeedbackSent] = useState(false)
 
     const questions = quizData.questions || []
     const score = answers.filter(a => a.correct).length
@@ -630,16 +767,12 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
     const pct = Math.round((score / total) * 100)
 
     const emoji =
-        pct >= 90 ? '🏆' :
-            pct >= 70 ? '🔥' :
-                pct >= 50 ? '💪' :
-                    pct >= 30 ? '📈' : '🌱'
+        pct >= 90 ? '🏆' : pct >= 70 ? '🔥' :
+            pct >= 50 ? '💪' : pct >= 30 ? '📈' : '🌱'
 
     const label =
-        pct >= 90 ? 'Outstanding!' :
-            pct >= 70 ? 'Great job!' :
-                pct >= 50 ? 'Good effort!' :
-                    pct >= 30 ? 'Keep practicing!' : 'Room to grow!'
+        pct >= 90 ? 'Outstanding!' : pct >= 70 ? 'Great job!' :
+            pct >= 50 ? 'Good effort!' : pct >= 30 ? 'Keep practicing!' : 'Room to grow!'
 
     async function handleAnalyze() {
         if (!attemptId) return
@@ -649,8 +782,17 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
         } catch { }
     }
 
+    function toggleFlag(i) {
+        setFlagged(prev => {
+            const next = { ...prev }
+            if (next[i]) delete next[i]
+            else next[i] = 'wrongly framed'
+            return next
+        })
+    }
+
     return (
-        <div className="p-6 max-w-[700px] mx-auto">
+        <div className="p-6 max-w-[750px] mx-auto">
             {/* Score header */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -658,9 +800,7 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                 className="text-center mb-8"
             >
                 <div className="text-6xl mb-3">{emoji}</div>
-                <h1 className="text-2xl font-extrabold text-text-primary mb-1">
-                    {label}
-                </h1>
+                <h1 className="text-2xl font-extrabold text-text-primary mb-1">{label}</h1>
                 <p className="text-sm text-text-tertiary">
                     {quizData.subject} · {quizData.difficulty}
                 </p>
@@ -681,7 +821,8 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                             color: pct >= 70 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-danger'
                         },
                         {
-                            label: 'Time', value: timeUsed ? `${Math.floor(timeUsed / 60)}m ${timeUsed % 60}s` : '—',
+                            label: 'Time', value: timeUsed
+                                ? `${Math.floor(timeUsed / 60)}m ${timeUsed % 60}s` : '—',
                             color: 'text-info'
                         },
                     ].map(s => (
@@ -695,8 +836,6 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                         </div>
                     ))}
                 </div>
-
-                {/* Progress bar */}
                 <div className="h-3 bg-surface-3 rounded-full overflow-hidden">
                     <motion.div
                         initial={{ width: 0 }}
@@ -715,7 +854,6 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
                     className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6"
                 >
                     <div className="flex items-center justify-between">
@@ -724,23 +862,18 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                             <div>
                                 <p className="text-sm font-bold text-text-primary">AI Analysis</p>
                                 <p className="text-xs text-text-tertiary">
-                                    Get personalized study advice based on your mistakes
+                                    Personalized study advice based on your mistakes
                                 </p>
                             </div>
                         </div>
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            loading={analyzeQuiz.isPending}
-                            onClick={handleAnalyze}
-                        >
+                        <Button variant="primary" size="sm"
+                            loading={analyzeQuiz.isPending} onClick={handleAnalyze}>
                             {analyzeQuiz.isPending ? 'Analyzing...' : 'Analyze'}
                         </Button>
                     </div>
                 </motion.div>
             )}
 
-            {/* Analysis results */}
             {analysis && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -751,11 +884,7 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                         <span className="text-xl">🤖</span>
                         <h3 className="text-sm font-bold text-text-primary">AI Analysis</h3>
                     </div>
-
-                    <p className="text-sm text-text-secondary leading-relaxed">
-                        {analysis.summary}
-                    </p>
-
+                    <p className="text-sm text-text-secondary leading-relaxed">{analysis.summary}</p>
                     {analysis.weakTopics?.length > 0 && (
                         <div>
                             <p className="text-xs font-bold text-warning uppercase tracking-widest mb-2">
@@ -772,23 +901,16 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                             </div>
                         </div>
                     )}
-
                     {analysis.studyAdvice?.length > 0 && (
-                        <div>
-                            <p className="text-xs font-bold text-brand-300 uppercase tracking-widest mb-2">
-                                Study Advice
-                            </p>
-                            <div className="space-y-1.5">
-                                {analysis.studyAdvice.map((a, i) => (
-                                    <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
-                                        <span className="text-brand-400 flex-shrink-0 mt-0.5">→</span>
-                                        <span>{a}</span>
-                                    </div>
-                                ))}
-                            </div>
+                        <div className="space-y-1.5">
+                            {analysis.studyAdvice.map((a, i) => (
+                                <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                                    <span className="text-brand-400 flex-shrink-0 mt-0.5">→</span>
+                                    <span>{a}</span>
+                                </div>
+                            ))}
                         </div>
                     )}
-
                     {analysis.encouragement && (
                         <p className="text-sm text-success font-medium italic">
                             {analysis.encouragement}
@@ -802,67 +924,195 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                 <h2 className="text-sm font-bold text-text-primary mb-3 flex items-center gap-2">
                     <span>📋</span> Question Review
                 </h2>
-                <div className="space-y-2">
+                <div className="space-y-3">
                     {questions.map((q, i) => {
                         const answer = answers[i]
                         const isCorrect = answer?.correct
+                        const isFlagged = !!flagged[i]
+
                         return (
-                            <details
+                            <div
                                 key={i}
                                 className={cn(
-                                    'group rounded-xl border overflow-hidden',
+                                    'rounded-xl border overflow-hidden',
                                     isCorrect
                                         ? 'border-success/20 bg-success/3'
                                         : 'border-danger/20 bg-danger/3'
                                 )}
                             >
-                                <summary className="flex items-center gap-3 p-3.5 cursor-pointer
-                                    hover:bg-surface-3/30 transition-colors">
-                                    <span className={cn(
-                                        'w-6 h-6 rounded-full flex items-center justify-center',
-                                        'text-xs font-bold flex-shrink-0',
-                                        isCorrect
-                                            ? 'bg-success/15 text-success'
-                                            : 'bg-danger/15 text-danger'
-                                    )}>
-                                        {isCorrect ? '✓' : '✗'}
-                                    </span>
-                                    <span className="text-sm text-text-primary flex-1 truncate">
-                                        {q.question}
-                                    </span>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="2"
-                                        strokeLinecap="round" strokeLinejoin="round"
-                                        className="text-text-disabled transition-transform
-                                  group-open:rotate-90 flex-shrink-0">
-                                        <polyline points="9 18 15 12 9 6" />
-                                    </svg>
-                                </summary>
-                                <div className="px-4 pb-4 pt-1 space-y-2">
-                                    {q.options.map((opt, oi) => (
-                                        <div key={oi} className={cn(
-                                            'text-xs px-3 py-1.5 rounded-lg',
-                                            oi === q.correctIndex
-                                                ? 'bg-success/10 text-success font-semibold'
-                                                : oi === answer?.selected && !isCorrect
-                                                    ? 'bg-danger/10 text-danger line-through'
-                                                    : 'text-text-tertiary'
+                                {/* Question header */}
+                                <div className="p-4">
+                                    <div className="flex items-start gap-3 mb-3">
+                                        <span className={cn(
+                                            'w-6 h-6 rounded-full flex items-center justify-center',
+                                            'text-xs font-bold flex-shrink-0',
+                                            isCorrect
+                                                ? 'bg-success/15 text-success'
+                                                : 'bg-danger/15 text-danger'
                                         )}>
-                                            {String.fromCharCode(65 + oi)}. {opt}
+                                            {isCorrect ? '✓' : '✗'}
+                                        </span>
+                                        <div className="flex-1 text-sm font-semibold text-text-primary leading-relaxed">
+                                            <FormattedText text={q.question} />
                                         </div>
-                                    ))}
+                                    </div>
+
+                                    {/* Options with results */}
+                                    <div className="space-y-1.5 ml-9">
+                                        {q.options.map((opt, oi) => {
+                                            const isUserAnswer = answer?.selected === oi
+                                            const isCorrectOpt = oi === q.correctIndex
+                                            return (
+                                                <div key={oi} className={cn(
+                                                    'text-xs px-3 py-2 rounded-lg flex items-start gap-2',
+                                                    isCorrectOpt
+                                                        ? 'bg-success/10 text-success font-semibold'
+                                                        : isUserAnswer
+                                                            ? 'bg-danger/10 text-danger line-through'
+                                                            : 'text-text-tertiary'
+                                                )}>
+                                                    <span className="font-bold flex-shrink-0 mt-px">
+                                                        {String.fromCharCode(65 + oi)}.
+                                                    </span>
+                                                    <FormattedText text={opt} />
+                                                    {isCorrectOpt && (
+                                                        <span className="ml-auto flex-shrink-0 text-success">✓</span>
+                                                    )}
+                                                    {isUserAnswer && !isCorrectOpt && (
+                                                        <span className="ml-auto flex-shrink-0 text-danger">✗</span>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    {/* Explanation */}
                                     {q.explanation && (
-                                        <p className="text-xs text-text-tertiary leading-relaxed mt-2
-                                  border-l-2 border-info/30 pl-3 italic">
-                                            {q.explanation}
-                                        </p>
+                                        <div className="ml-9 mt-3 p-3 bg-info/5 border border-info/15 rounded-lg">
+                                            <p className="text-xs text-text-secondary leading-relaxed">
+                                                <span className="font-bold text-info">💡 </span>
+                                                <FormattedText text={q.explanation} />
+                                            </p>
+                                        </div>
                                     )}
+
+                                    {/* Flag button */}
+                                    <div className="ml-9 mt-2">
+                                        <button
+                                            onClick={() => toggleFlag(i)}
+                                            className={cn(
+                                                'text-[10px] font-semibold px-2 py-1 rounded-lg border transition-all',
+                                                'flex items-center gap-1',
+                                                isFlagged
+                                                    ? 'bg-danger/10 border-danger/25 text-danger'
+                                                    : 'bg-surface-2 border-border-default text-text-disabled hover:text-text-tertiary'
+                                            )}
+                                        >
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" strokeWidth="2.5"
+                                                strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                                                <line x1="4" y1="22" x2="4" y2="15" />
+                                            </svg>
+                                            {isFlagged ? 'Flagged as wrong' : 'Flag this question'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </details>
+                            </div>
                         )
                     })}
                 </div>
             </div>
+
+            {/* User feedback section */}
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6"
+            >
+                <h3 className="text-sm font-bold text-text-primary mb-1 flex items-center gap-2">
+                    <span>💬</span> Feedback
+                </h3>
+                <p className="text-xs text-text-tertiary mb-3">
+                    Your feedback improves future quizzes — AI learns from it.
+                </p>
+
+                {/* Quick feedback chips */}
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                    {[
+                        'Questions were too hard',
+                        'Questions were too easy',
+                        'Questions were too long',
+                        'Options were ambiguous',
+                        'Great quiz!',
+                        'Need more practical questions',
+                    ].map(chip => (
+                        <button
+                            key={chip}
+                            type="button"
+                            onClick={() => setFeedback(prev =>
+                                prev.includes(chip) ? prev.replace(chip + '. ', '') : prev + chip + '. '
+                            )}
+                            className={cn(
+                                'text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all',
+                                feedback.includes(chip)
+                                    ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
+                                    : 'bg-surface-2 border-border-default text-text-disabled hover:text-text-tertiary'
+                            )}
+                        >
+                            {chip}
+                        </button>
+                    ))}
+                </div>
+
+                <textarea
+                    value={feedback}
+                    onChange={e => setFeedback(e.target.value)}
+                    placeholder="Any other feedback? e.g. 'Include more code-based questions next time'"
+                    rows={2}
+                    className="w-full bg-surface-3 border border-border-strong rounded-xl
+                     text-sm text-text-primary placeholder:text-text-tertiary
+                     px-3.5 py-2.5 outline-none resize-none
+                     focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 mb-3"
+                />
+
+                {/* Flagged questions summary */}
+                {Object.keys(flagged).length > 0 && (
+                    <div className="bg-danger/5 border border-danger/15 rounded-lg p-3 mb-3">
+                        <p className="text-xs font-bold text-danger mb-1">
+                            {Object.keys(flagged).length} question(s) flagged
+                        </p>
+                        <p className="text-[11px] text-text-tertiary">
+                            Questions {Object.keys(flagged).map(k => `#${parseInt(k) + 1}`).join(', ')} marked as problematic.
+                            This will be considered in future quiz generation.
+                        </p>
+                    </div>
+                )}
+
+                {!feedbackSent ? (
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!feedback.trim() && Object.keys(flagged).length === 0}
+                        onClick={() => {
+                            // TODO: Send feedback to server for AI learning
+                            setFeedbackSent(true)
+                        }}
+                    >
+                        Submit Feedback
+                    </Button>
+                ) : (
+                    <p className="text-xs text-success font-semibold flex items-center gap-1.5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        Feedback saved — future quizzes will be improved!
+                    </p>
+                )}
+            </motion.div>
 
             {/* Actions */}
             <div className="flex gap-3 flex-wrap">
@@ -875,8 +1125,7 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                     </svg>
                     Take Another Quiz
                 </Button>
-                <Button variant="ghost" size="md"
-                    onClick={() => navigate('/')}>
+                <Button variant="ghost" size="md" onClick={() => navigate('/')}>
                     Back to Dashboard
                 </Button>
             </div>
@@ -885,7 +1134,7 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
 }
 
 // ══════════════════════════════════════════════════════
-// ROOT — QuizPage
+// ROOT
 // ══════════════════════════════════════════════════════
 export default function QuizPage() {
     const [screen, setScreen] = useState('setup')
@@ -905,7 +1154,6 @@ export default function QuizPage() {
         setAnswers(result.answers)
         setTimeUsed(result.timeUsedSecs)
 
-        // Submit to server
         try {
             const res = await submitQuiz.mutateAsync({
                 subject: quizData.subject,

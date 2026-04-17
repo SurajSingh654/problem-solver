@@ -166,26 +166,35 @@ Create a specific, actionable 7-day plan that addresses their weakest areas whil
 // ── Quiz Question Generation ───────────────────────────
 // ── Live Quiz Generation ───────────────────────────────
 export function quizGenerationPrompt(data) {
-  const system = `You are an expert educator and quiz creator. You generate high-quality multiple-choice questions on ANY subject — from computer science to physics to history to mathematics to anything the user requests.
+  const system = `You are an expert educator creating multiple-choice questions. You generate challenging, high-quality questions on ANY subject.
 
-Rules:
-1. Every question must test genuine understanding, not just memorization
-2. Each question has exactly 4 options with only ONE correct answer
-3. Wrong options should be plausible — common misconceptions, not obviously wrong
-4. Explanations must explain WHY the correct answer is right AND briefly why key wrong options are wrong
-5. Questions should progress from foundational to advanced within the set
-6. If the subject is technical, include practical/applied questions not just theory
-7. Each question must be self-contained — no references to other questions
+CRITICAL RULES FOR OPTIONS:
+1. ALL four options must be EQUALLY PLAUSIBLE to someone who doesn't deeply understand the concept
+2. Wrong options should be common misconceptions, subtle errors, or partially correct answers
+3. NEVER include obviously wrong or joke options — every option should look like it could be correct
+4. If options involve code, numbers, or formulas — make wrong options differ by small, tricky details
+5. The correct answer should NOT stand out by being longer, more detailed, or differently formatted
+
+FORMATTING RULES:
+6. If a question involves code, wrap it in triple backticks with the language: \`\`\`python\\ncode here\\n\`\`\`
+7. If a question involves math formulas, use clear notation: O(n log n), 2^n, n!, √n, Σ, etc.
+8. If options contain code snippets, format each option with backticks: \`code here\`
+9. Keep questions precise and unambiguous — no "all of the above" or "none of the above"
+
+EXPLANATION RULES:
+10. Explain WHY the correct answer is right
+11. Explain WHY each wrong option is wrong — what misconception does it represent?
+12. If applicable, mention the edge case or subtle detail that distinguishes the correct answer
 
 ALWAYS respond in this exact JSON format:
 {
-  "title": "<string — a short title for this quiz, e.g. 'TCP/IP Fundamentals'>",
+  "title": "<string — short quiz title>",
   "questions": [
     {
-      "question": "<string — the question text>",
-      "options": ["<option A>", "<option B>", "<option C>", "<option D>"],
+      "question": "<string — may contain markdown code blocks and formatting>",
+      "options": ["<string>", "<string>", "<string>", "<string>"],
       "correctIndex": <number 0-3>,
-      "explanation": "<string — detailed explanation>",
+      "explanation": "<string — detailed explanation with WHY for each option>",
       "difficulty": "EASY" | "MEDIUM" | "HARD"
     }
   ]
@@ -196,20 +205,24 @@ ALWAYS respond in this exact JSON format:
 **Subject:** ${data.subject}
 **Difficulty:** ${data.difficulty}
 **Additional context:** ${data.context || "General knowledge of this subject"}
+${data.feedback ? `**User feedback from previous quizzes:** ${data.feedback}` : ""}
+${data.flaggedPatterns ? `**Avoid these patterns (user flagged as problematic):** ${data.flaggedPatterns}` : ""}
 
 Requirements:
-- Mix conceptual and practical questions
-- Make questions worth solving — they should teach something even if the user gets them wrong
+- Every wrong option must be a common misconception or subtle trap
+- A student who hasn't deeply studied this should find ALL options equally plausible
 - For ${data.difficulty} difficulty:
   ${
     data.difficulty === "EASY"
-      ? "→ Test fundamental concepts. A beginner studying this subject should be able to answer with basic knowledge."
+      ? "→ Test fundamentals but make wrong options represent common beginner mistakes."
       : data.difficulty === "MEDIUM"
-        ? "→ Test applied understanding. Requires connecting concepts and handling edge cases."
-        : "→ Test deep expertise. Tricky questions that require thorough understanding. Include subtle distinctions."
+        ? "→ Test applied knowledge. Wrong options should be things that work in SOME cases but not this one."
+        : "→ Test deep expertise. Options should differ by subtle edge cases, off-by-one errors, or rarely-known details."
   }
+- Format code examples properly with markdown code blocks
+- Format math expressions clearly (O(n²), 2^n, log₂n, etc.)
 
-Generate high-quality questions that would appear in a real interview or exam.`;
+Generate questions that genuinely test understanding, not memorization.`;
 
   return { system, user };
 }
