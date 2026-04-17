@@ -11,7 +11,7 @@ import { Badge } from '@components/ui/Badge'
 import { useAIGenerateProblemContent, useAIStatus } from '@hooks/useAI'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
-import { COMPANIES, PATTERNS, SOURCE_LABELS } from '@utils/constants'
+import { COMPANIES, PATTERNS, SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
 
 const schema = z.object({
     title: z.string().min(2, 'Title is required').max(200),
@@ -19,6 +19,8 @@ const schema = z.object({
         'HACKERRANK', 'CODEFORCES', 'OTHER']),
     sourceUrl: z.string().url('Enter a valid URL'),
     difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
+    category: z.enum(['CODING', 'SYSTEM_DESIGN', 'BEHAVIORAL',
+        'CS_FUNDAMENTALS', 'HR', 'SQL']).default('CODING'),
 })
 
 const DIFF_COLORS = {
@@ -114,6 +116,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
             source: initialData?.source || 'LEETCODE',
             sourceUrl: initialData?.sourceUrl || '',
             difficulty: initialData?.difficulty || 'MEDIUM',
+            category: initialData?.category || 'CODING',
             realWorldContext: initialData?.realWorldContext || '',   // ← add this
             adminNotes: initialData?.adminNotes || '',   // ← add this
         },
@@ -132,6 +135,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
 
     const selectedSource = watch('source')
     const selectedDifficulty = watch('difficulty')
+    const selectedCategory = watch('category')
 
     // Pattern suggestions from PATTERNS constant
     const patternSuggestions = PATTERNS.map(p => p.label)
@@ -152,6 +156,49 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
         <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-5">
             {/* ── Core info ─────────────────────────────── */}
             <FormSection title="Problem Info" icon="📋">
+
+                {/* Category selector — ADD THIS */}
+                <div>
+                    <label className="block text-sm font-semibold text-text-primary mb-2">
+                        Category
+                    </label>
+                    <p className="text-xs text-text-tertiary mb-3">
+                        Determines the submission form members will see
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {PROBLEM_CATEGORIES.map(cat => (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => {
+                                    setValue('category', cat.id)
+                                    // Auto-set source to OTHER for non-coding categories
+                                    if (!cat.sources.includes(selectedSource)) {
+                                        setValue('source', 'OTHER')
+                                    }
+                                }}
+                                className={cn(
+                                    'flex items-center gap-2.5 px-3 py-3 rounded-xl border',
+                                    'text-left transition-all duration-150',
+                                    selectedCategory === cat.id
+                                        ? `${cat.bg} ${cat.color} font-bold`
+                                        : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong hover:text-text-secondary'
+                                )}
+                            >
+                                <span className="text-lg flex-shrink-0">{cat.icon}</span>
+                                <div>
+                                    <span className="text-xs font-semibold block">{cat.label}</span>
+                                    <span className="text-[10px] opacity-60 block leading-tight">
+                                        {cat.desc}
+                                    </span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Title  */}
+
                 <Input
                     label="Title"
                     placeholder="e.g. Two Sum"
@@ -165,7 +212,11 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         Source Platform
                     </label>
                     <div className="flex flex-wrap gap-2">
-                        {SOURCES.map(s => (
+                        {SOURCES.filter(s => {
+                            // Show only sources valid for the selected category
+                            const cat = PROBLEM_CATEGORIES.find(c => c.id === selectedCategory)
+                            return cat ? cat.sources.includes(s) : true
+                        }).map(s => (
                             <button
                                 key={s}
                                 type="button"
@@ -181,9 +232,6 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                             </button>
                         ))}
                     </div>
-                    {errors.source && (
-                        <p className="text-xs text-danger mt-1">{errors.source.message}</p>
-                    )}
                 </div>
 
                 <Input
@@ -305,6 +353,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                     try {
                                         const res = await aiGenerate.mutateAsync({
                                             title, source, sourceUrl, difficulty, tags,
+                                            category: watch('category'),  
                                         })
                                         const content = res.data.data
 

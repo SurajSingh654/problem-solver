@@ -1,34 +1,35 @@
-import { useNavigate }  from 'react-router-dom'
-import { motion }       from 'framer-motion'
-import { Badge }        from '@components/ui/Badge'
-import { Avatar }       from '@components/ui/Avatar'
-import { cn }           from '@utils/cn'
+import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { Badge } from '@components/ui/Badge'
+import { Avatar } from '@components/ui/Avatar'
+import { cn } from '@utils/cn'
 import { formatCompactDate } from '@utils/formatters'
+import { PROBLEM_CATEGORIES } from '@utils/constants'
 
 const DIFF_VARIANT = {
-  EASY  : 'easy',
+  EASY: 'easy',
   MEDIUM: 'medium',
-  HARD  : 'hard',
+  HARD: 'hard',
 }
 
 const SOURCE_COLORS = {
-  LEETCODE    : 'text-orange-400',
-  GFG         : 'text-green-500',
-  CODECHEF    : 'text-amber-600',
+  LEETCODE: 'text-orange-400',
+  GFG: 'text-green-500',
+  CODECHEF: 'text-amber-600',
   INTERVIEWBIT: 'text-blue-500',
-  HACKERRANK  : 'text-emerald-500',
-  CODEFORCES  : 'text-red-500',
-  OTHER       : 'text-text-tertiary',
+  HACKERRANK: 'text-emerald-500',
+  CODEFORCES: 'text-red-500',
+  OTHER: 'text-text-tertiary',
 }
 
 const SOURCE_LABELS = {
-  LEETCODE    : 'LeetCode',
-  GFG         : 'GFG',
-  CODECHEF    : 'CodeChef',
+  LEETCODE: 'LeetCode',
+  GFG: 'GFG',
+  CODECHEF: 'CodeChef',
   INTERVIEWBIT: 'InterviewBit',
-  HACKERRANK  : 'HackerRank',
-  CODEFORCES  : 'Codeforces',
-  OTHER       : 'Other',
+  HACKERRANK: 'HackerRank',
+  CODEFORCES: 'Codeforces',
+  OTHER: 'Other',
 }
 
 export function ProblemCard({ problem, index = 0 }) {
@@ -43,7 +44,7 @@ export function ProblemCard({ problem, index = 0 }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0  }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: index * 0.04 }}
       onClick={() => navigate(`/problems/${id}`)}
       className={cn(
@@ -61,9 +62,9 @@ export function ProblemCard({ problem, index = 0 }) {
           <div className="w-6 h-6 rounded-full bg-success/15 border border-success/30
                           flex items-center justify-center">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                 stroke="#22c55e" strokeWidth="2.5"
-                 strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
+              stroke="#22c55e" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
         </div>
@@ -103,6 +104,19 @@ export function ProblemCard({ problem, index = 0 }) {
           {difficulty.charAt(0) + difficulty.slice(1).toLowerCase()}
         </Badge>
 
+        {/* Category badge */}
+        {problem.category && problem.category !== 'CODING' && (() => {
+          const cat = PROBLEM_CATEGORIES.find(c => c.id === problem.category)
+          return cat ? (
+            <span className={cn(
+              'text-[10px] font-bold px-1.5 py-px rounded-full border',
+              cat.bg
+            )}>
+              {cat.icon} {cat.label}
+            </span>
+          ) : null
+        })()}
+
         <span className={cn(
           'text-xs font-medium',
           SOURCE_COLORS[source] || 'text-text-tertiary'
@@ -112,7 +126,7 @@ export function ProblemCard({ problem, index = 0 }) {
 
         {tags.slice(0, 2).map(tag => (
           <span key={tag}
-                className="text-[11px] text-text-tertiary bg-surface-3
+            className="text-[11px] text-text-tertiary bg-surface-3
                            px-1.5 py-px rounded border border-border-subtle">
             {tag}
           </span>
@@ -128,12 +142,12 @@ export function ProblemCard({ problem, index = 0 }) {
       <div className="flex items-center justify-between text-xs text-text-tertiary">
         <div className="flex items-center gap-1">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" strokeWidth="2"
-               strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
           <span>
             {totalSolutions} solved

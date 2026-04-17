@@ -10,7 +10,7 @@ import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
 import { EmptyState } from '@components/ui/EmptyState'
 import { cn } from '@utils/cn'
-import { DIFFICULTY, SOURCE_LABELS, PATTERNS } from '@utils/constants'
+import { DIFFICULTY, SOURCE_LABELS, PATTERNS, PROBLEM_CATEGORIES } from '@utils/constants'
 
 // ── Filter pill ────────────────────────────────────────
 function FilterPill({ label, active, onClick, count }) {
@@ -73,6 +73,8 @@ export default function ProblemsPage() {
     const { data, isLoading } = useProblems({ limit: '200' })
     const allProblems = data?.problems || []
 
+    const [category, setCategory] = useState('')
+
     // Client-side filtering (server already handles basic filters,
     // but we do it client-side here since we fetched all)
     const filtered = useMemo(() => {
@@ -80,6 +82,7 @@ export default function ProblemsPage() {
         if (showPinned) list = list.filter(p => p.isPinned)
         if (difficulty) list = list.filter(p => p.difficulty === difficulty)
         if (source) list = list.filter(p => p.source === source)
+        if (category) list = list.filter(p => p.category === category)
         if (tag) list = list.filter(p =>
             p.tags.some(t => t.toLowerCase().includes(tag.toLowerCase()))
         )
@@ -106,13 +109,14 @@ export default function ProblemsPage() {
         return [...t].slice(0, 20)
     }, [allProblems])
 
-    const hasFilters = difficulty || source || tag || search || showPinned
+    const hasFilters = difficulty || source || tag || search || showPinned || category
 
     function clearFilters() {
         setSearch('')
         setDifficulty('')
         setSource('')
         setTag('')
+        setCategory('')
         setShowPinned(false)
     }
 
@@ -214,6 +218,18 @@ export default function ProblemsPage() {
                     active={showPinned}
                     onClick={() => setShowPinned(v => !v)}
                 />
+
+                {/* Category */}
+                {PROBLEM_CATEGORIES.map(cat => (
+                    <FilterPill
+                        key={cat.id}
+                        label={`${cat.icon} ${cat.label}`}
+                        active={category === cat.id}
+                        onClick={() => setCategory(v => v === cat.id ? '' : cat.id)}
+                        count={allProblems.filter(p => p.category === cat.id).length}
+                    />
+                ))}
+
                 {/* Difficulty */}
                 {['EASY', 'MEDIUM', 'HARD'].map(d => (
                     <FilterPill

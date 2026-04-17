@@ -11,7 +11,7 @@ import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatShortDate, formatRelativeDate } from '@utils/formatters'
-import { SOURCE_LABELS } from '@utils/constants'
+import { SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
 import { useResetUserPassword } from '@hooks/useAuth'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
@@ -97,7 +97,7 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
             <table className="w-full min-w-[700px]">
                 <thead>
                     <tr className="border-b border-border-default">
-                        {['Problem', 'Difficulty', 'Source', 'Solutions', 'Added', 'Status', ''].map(h => (
+                        {['Problem', 'Category', 'Difficulty', 'Source', 'Solutions', 'Added', 'Status', ''].map(h => (
                             <th key={h} className="py-3 px-4 text-left">
                                 <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
                                     {h}
@@ -232,6 +232,23 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                             </td>
                         </motion.tr>
                     ))}
+
+                    {/* Category  */}
+                    <td className="py-3 px-4">
+                        {(() => {
+                            const cat = PROBLEM_CATEGORIES.find(c => c.id === p.category)
+                            return cat ? (
+                                <span className={cn(
+                                    'text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap',
+                                    cat.bg
+                                )}>
+                                    {cat.icon} {cat.label}
+                                </span>
+                            ) : (
+                                <span className="text-[10px] text-text-disabled">Coding</span>
+                            )
+                        })()}
+                    </td>
                 </tbody>
             </table>
         </div>

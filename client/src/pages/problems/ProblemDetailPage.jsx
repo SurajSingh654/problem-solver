@@ -11,6 +11,7 @@ import { AIReviewCard } from '@components/features/ai/AIReviewCard'
 import { useAIStatus } from '@hooks/useAI'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
+import { PROBLEM_CATEGORIES } from '@utils/constants'
 import {
     DIFFICULTY_COLORS,
     SOURCE_LABELS,
@@ -103,6 +104,21 @@ export default function ProblemDetailPage() {
                     <Badge variant={DIFF_VARIANT[difficulty] || 'brand'} size="sm">
                         {difficulty.charAt(0) + difficulty.slice(1).toLowerCase()}
                     </Badge>
+
+                    {/* Category badge */}
+                    {problem.category && (() => {
+                        const cat = PROBLEM_CATEGORIES.find(c => c.id === problem.category)
+                        return cat ? (
+                            <span className={cn(
+                                'text-xs font-bold px-2.5 py-0.5 rounded-full border',
+                                cat.bg
+                            )}>
+                                {cat.icon} {cat.label}
+                            </span>
+                        ) : null
+                    })()}
+
+
                     <span className={cn(
                         'text-sm font-semibold',
                         SOURCE_COLOR[source] || 'text-text-tertiary'
