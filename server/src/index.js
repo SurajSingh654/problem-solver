@@ -19,6 +19,7 @@ import statsRoutes from "./routes/stats.routes.js";
 import simRoutes from "./routes/sim.routes.js";
 import aiRoutes from './routes/ai.routes.js'
 import prisma from './lib/prisma.js'
+import quizRoutes from './routes/quiz.routes.js'
 
 const app = express();
 
@@ -103,6 +104,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/sim", simRoutes);
 app.use('/api/ai', aiRoutes)
+app.use('/api/quizzes', quizRoutes)
 
 // ── 404 handler ───────────────────────────────────────
 app.use("*", (req, res) => {
