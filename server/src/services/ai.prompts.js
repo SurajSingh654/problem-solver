@@ -5,8 +5,20 @@
 
 // ── Solution Review ────────────────────────────────────
 export function solutionReviewPrompt(data) {
+  const categoryContext = {
+    CODING:
+      "This is a coding/algorithm problem. Review the approach, complexity analysis, and code quality.",
+    SYSTEM_DESIGN:
+      "This is a system design problem. Review requirements coverage, component design, scalability, and trade-offs.",
+    BEHAVIORAL:
+      "This is a behavioral interview question. Review the STAR structure (Situation, Task, Action, Result), specificity, and impact.",
+    CS_FUNDAMENTALS:
+      "This is a CS fundamentals question. Review conceptual accuracy, depth of explanation, and real-world examples.",
+    HR: "This is an HR interview question. Review authenticity, specificity, company research, and communication clarity.",
+    SQL: "This is a SQL problem. Review query correctness, optimization, and edge case handling.",
+  };
   const system = `You are an expert coding interview coach. You review solutions submitted by engineers preparing for top tech interviews (Google, Meta, Amazon, etc.).
-
+${categoryContext[data.category] || categoryContext.CODING}
 Your job is to give specific, actionable feedback. Be encouraging but honest. Focus on what matters in a real interview.
 
 ALWAYS respond in this exact JSON format:
@@ -51,6 +63,15 @@ Give specific feedback. If the approach or complexity is wrong, explain why. If 
 
 // ── Problem Content Generation ─────────────────────────
 export function problemContentPrompt(data) {
+
+    const categoryContext = {
+    CODING:          'Generate content focused on algorithm patterns, complexity analysis, and code optimization.',
+    SYSTEM_DESIGN:   'Generate content focused on architecture components, scalability, trade-offs, and real production systems.',
+    BEHAVIORAL:      'Generate content focused on STAR format, leadership principles, and common interview scenarios.',
+    CS_FUNDAMENTALS: 'Generate content focused on core CS concepts, common misconceptions, and interview-relevant depth.',
+    HR:              'Generate content focused on authenticity, company research, and structured responses.',
+    SQL:             'Generate content focused on query optimization, indexing strategies, and database design.',
+  }
   const system = `You are a senior engineering interview coach who creates learning content for a team preparation platform.
 
 Given a coding problem, generate educational content that helps engineers understand the real-world significance and deepen their learning.
@@ -75,7 +96,10 @@ ALWAYS respond in this exact JSON format:
 **Source:** ${data.source}
 **URL:** ${data.sourceUrl}
 **Difficulty:** ${data.difficulty}
+**Category:** ${data.category || 'CODING'}
 **Tags:** ${data.tags?.join(", ") || "None"}
+
+${categoryContext[data.category] || categoryContext.CODING}
 
 Generate real-world context, use cases, admin teaching notes, and 3 follow-up questions (EASY, MEDIUM, HARD) with hints.`;
 

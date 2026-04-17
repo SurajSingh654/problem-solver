@@ -281,3 +281,73 @@ export const QUIZ_SUGGESTED_SUBJECTS = [
   { label: "Aptitude & Reasoning", icon: "🧠" },
   { label: "Behavioral Interview", icon: "🗣️" },
 ];
+
+// ── Problem categories ─────────────────────────────
+export const PROBLEM_CATEGORIES = [
+  {
+    id: "CODING",
+    label: "Coding",
+    icon: "💻",
+    color: "text-brand-300",
+    bg: "bg-brand-400/12 border-brand-400/25",
+    desc: "Algorithm and data structure problems",
+    sources: [
+      "LEETCODE",
+      "GFG",
+      "CODECHEF",
+      "INTERVIEWBIT",
+      "HACKERRANK",
+      "CODEFORCES",
+      "OTHER",
+    ],
+  },
+  {
+    id: "SYSTEM_DESIGN",
+    label: "System Design",
+    icon: "🏗️",
+    color: "text-info",
+    bg: "bg-info/12 border-info/25",
+    desc: "Design scalable systems and architectures",
+    sources: ["OTHER"],
+  },
+  {
+    id: "BEHAVIORAL",
+    label: "Behavioral",
+    icon: "🗣️",
+    color: "text-success",
+    bg: "bg-success/12 border-success/25",
+    desc: "STAR format behavioral questions",
+    sources: ["OTHER"],
+  },
+  {
+    id: "CS_FUNDAMENTALS",
+    label: "CS Fundamentals",
+    icon: "📚",
+    color: "text-warning",
+    bg: "bg-warning/12 border-warning/25",
+    desc: "OS, Networking, DBMS, OOP concepts",
+    sources: ["OTHER"],
+  },
+  {
+    id: "HR",
+    label: "HR Round",
+    icon: "🤝",
+    color: "text-danger",
+    bg: "bg-danger/12 border-danger/25",
+    desc: "HR and soft skill questions",
+    sources: ["OTHER"],
+  },
+  {
+    id: "SQL",
+    label: "SQL",
+    icon: "🗄️",
+    color: "text-brand-300",
+    bg: "bg-brand-400/12 border-brand-400/25",
+    desc: "SQL queries and database problems",
+    sources: ["LEETCODE", "GFG", "HACKERRANK", "OTHER"],
+  },
+];
+
+export const PROBLEM_CATEGORY_LABELS = Object.fromEntries(
+  PROBLEM_CATEGORIES.map((c) => [c.id, c.label]),
+);

@@ -97,6 +97,8 @@ model Problem {
   // Difficulty — "EASY" | "MEDIUM" | "HARD"
   difficulty  String
 
+  category    String  @default("CODING")
+
   // Arrays stored as JSON strings (SQLite limitation)
   // Switch to native arrays when migrating to PostgreSQL
   tags         String @default("[]")   // algorithm patterns

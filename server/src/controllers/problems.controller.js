@@ -31,6 +31,7 @@ export async function getProblems(req, res) {
     company,
     search,
     pinned,
+    category, 
     page  = '1',
     limit = '50',
   } = req.query
@@ -40,7 +41,10 @@ export async function getProblems(req, res) {
 
   if (difficulty) where.difficulty = difficulty.toUpperCase()
   if (source)     where.source     = source.toUpperCase()
+  if (category)   where.category   = category  
   if (pinned)     where.isPinned   = pinned === 'true'
+  
+
 
   // For search, tag, and company we do a post-filter
   // since SQLite stores arrays as JSON strings
@@ -167,7 +171,7 @@ export async function getProblemById(req, res) {
 // ── POST /api/problems ─────────────────────────────────
 export async function createProblem(req, res) {
   const {
-    title, source, sourceUrl, difficulty,
+    title, source, sourceUrl, difficulty,category,
     tags, companyTags, isPinned, isBlindChallenge,
     blindRevealAt, realWorldContext, useCases,
     adminNotes, relatedProblems, followUps,
@@ -176,6 +180,7 @@ export async function createProblem(req, res) {
   const problem = await prisma.problem.create({
     data: {
       title, source, sourceUrl, difficulty,
+      category        : category        || 'CODING',
       tags            : JSON.stringify(tags            || []),
       companyTags     : JSON.stringify(companyTags     || []),
       useCases        : JSON.stringify(useCases        || []),
@@ -213,7 +218,7 @@ export async function updateProblem(req, res) {
   if (!existing) return notFoundResponse(res, 'Problem')
 
   const {
-    title, source, sourceUrl, difficulty,
+    title, source, sourceUrl, difficulty,category,
     tags, companyTags, isPinned, isBlindChallenge,
     blindRevealAt, realWorldContext, useCases,
     adminNotes, relatedProblems, isActive,
@@ -226,6 +231,7 @@ export async function updateProblem(req, res) {
       ...(source           !== undefined && { source }),
       ...(sourceUrl        !== undefined && { sourceUrl }),
       ...(difficulty       !== undefined && { difficulty }),
+      ...(category         !== undefined && { category }), 
       ...(isPinned         !== undefined && { isPinned }),
       ...(isBlindChallenge !== undefined && { isBlindChallenge }),
       ...(isActive         !== undefined && { isActive }),

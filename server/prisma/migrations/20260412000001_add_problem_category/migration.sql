@@ -1,0 +1,1 @@
+ALTER TABLE "problems" ADD COLUMN "category" TEXT NOT NULL DEFAULT 'CODING';
