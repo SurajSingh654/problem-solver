@@ -7,6 +7,8 @@ import { Badge } from '@components/ui/Badge'
 import { Button } from '@components/ui/Button'
 import { PageSpinner } from '@components/ui/Spinner'
 import { EmptyState } from '@components/ui/EmptyState'
+import { AIReviewCard } from '@components/features/ai/AIReviewCard'
+import { useAIStatus } from '@hooks/useAI'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
 import {
@@ -43,6 +45,8 @@ export default function ProblemDetailPage() {
     const navigate = useNavigate()
     const { user } = useAuthStore()
     const isAdmin = user?.role === 'ADMIN'
+    const { data: aiStatus } = useAIStatus()
+    const aiEnabled = aiStatus?.enabled
 
     const { data: problem, isLoading, isError } = useProblem(id)
 
@@ -409,6 +413,15 @@ export default function ProblemDetailPage() {
                                     isOwn
                                     problemFollowUps={followUps}
                                 />
+                                {/* AI Review — show only if AI is enabled */}
+                                {aiEnabled && (
+                                    <div className="mt-3">
+                                        <AIReviewCard
+                                            solutionId={mySolution.id}
+                                            existingReview={mySolution.aiFeedback}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         )}
                         {/* Teammates */}

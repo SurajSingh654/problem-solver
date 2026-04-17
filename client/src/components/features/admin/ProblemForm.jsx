@@ -8,6 +8,8 @@ import { ChipInput } from '@components/ui/ChipInput'
 import { Input } from '@components/ui/Input'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
+import { useAIGenerateProblemContent, useAIStatus } from '@hooks/useAI'
+import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import { COMPANIES, PATTERNS, SOURCE_LABELS } from '@utils/constants'
 
@@ -124,6 +126,9 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const [followUps, setFollowUps] = useState(initialData?.followUps || [])
     const [isPinned, setIsPinned] = useState(initialData?.isPinned || false)
     const [isBlindChallenge, setIsBlindChallenge] = useState(initialData?.isBlindChallenge || false)
+    const aiGenerate = useAIGenerateProblemContent()
+    const { data: aiStatus } = useAIStatus()
+    const aiEnabled = aiStatus?.enabled
 
     const selectedSource = watch('source')
     const selectedDifficulty = watch('difficulty')
@@ -247,6 +252,79 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
 
             {/* ── Learning content ───────────────────────── */}
             <FormSection title="Learning Content" icon="🌍">
+                {/* AI Generate button */}
+                {aiEnabled && (
+                    <div className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mb-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">🤖</span>
+                                <div>
+                                    <p className="text-sm font-bold text-text-primary">
+                                        Generate with AI
+                                    </p>
+                                    <p className="text-xs text-text-tertiary">
+                                        AI fills in context, use cases, notes, and follow-ups
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                loading={aiGenerate.isPending}
+                                onClick={async () => {
+                                    const title = watch('title')
+                                    const source = watch('source')
+                                    const sourceUrl = watch('sourceUrl')
+                                    const difficulty = watch('difficulty')
+
+                                    if (!title) {
+                                        toast.warning('Enter a problem title first')
+                                        return
+                                    }
+
+                                    try {
+                                        const res = await aiGenerate.mutateAsync({
+                                            title, source, sourceUrl, difficulty, tags,
+                                        })
+                                        const content = res.data.data
+
+                                        // Fill in the form fields
+                                        if (content.realWorldContext) {
+                                            setValue('realWorldContext', content.realWorldContext)
+                                        }
+                                        if (content.adminNotes) {
+                                            setValue('adminNotes', content.adminNotes)
+                                        }
+                                        if (content.useCases?.length) {
+                                            setUseCases(content.useCases)
+                                        }
+                                        if (content.followUps?.length) {
+                                            setFollowUps(content.followUps.map((fq, i) => ({
+                                                question: fq.question,
+                                                difficulty: fq.difficulty,
+                                                hint: fq.hint || '',
+                                            })))
+                                        }
+
+                                        toast.success('AI generated content! Review and edit as needed.')
+                                    } catch {
+                                        // error handled by hook
+                                    }
+                                }}
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2"
+                                    strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                                    <path d="M2 17l10 5 10-5" />
+                                    <path d="M2 12l10 5 10-5" />
+                                </svg>
+                                {aiGenerate.isPending ? 'Generating...' : 'Generate with AI'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
                 <Textarea
                     label="Real World Context"
                     optional
