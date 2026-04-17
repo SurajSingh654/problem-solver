@@ -17,6 +17,7 @@ import solutionRoutes from "./routes/solutions.routes.js";
 import userRoutes from "./routes/users.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
 import simRoutes from "./routes/sim.routes.js";
+import aiRoutes from './routes/ai.routes.js'
 import prisma from './lib/prisma.js'
 
 const app = express();
@@ -101,6 +102,7 @@ app.use("/api/solutions", solutionRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/sim", simRoutes);
+app.use('/api/ai', aiRoutes)
 
 // ── 404 handler ───────────────────────────────────────
 app.use("*", (req, res) => {
