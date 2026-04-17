@@ -283,13 +283,31 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                         return
                                     }
 
+                                    // Check if any fields already have content
+                                    const hasExisting =
+                                        watch('realWorldContext') ||
+                                        watch('adminNotes') ||
+                                        useCases.length > 0 ||
+                                        followUps.length > 0
+
+                                    if (hasExisting) {
+                                        const confirmed = window.confirm(
+                                            'AI-generated content will replace your current entries for:\n\n' +
+                                            '• Real World Context\n' +
+                                            '• Use Cases\n' +
+                                            '• Admin Notes\n' +
+                                            '• Follow-up Questions\n\n' +
+                                            'Continue?'
+                                        )
+                                        if (!confirmed) return
+                                    }
+
                                     try {
                                         const res = await aiGenerate.mutateAsync({
                                             title, source, sourceUrl, difficulty, tags,
                                         })
                                         const content = res.data.data
 
-                                        // Fill in the form fields
                                         if (content.realWorldContext) {
                                             setValue('realWorldContext', content.realWorldContext)
                                         }
@@ -300,7 +318,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                             setUseCases(content.useCases)
                                         }
                                         if (content.followUps?.length) {
-                                            setFollowUps(content.followUps.map((fq, i) => ({
+                                            setFollowUps(content.followUps.map((fq) => ({
                                                 question: fq.question,
                                                 difficulty: fq.difficulty,
                                                 hint: fq.hint || '',
