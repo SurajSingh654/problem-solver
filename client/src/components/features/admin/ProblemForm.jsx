@@ -25,15 +25,15 @@ const schema = z.object({
     realWorldContext: z.string().optional().default(''),
     adminNotes: z.string().optional().default(''),
 })
-
+ha
 // Fields to show/hide per category
 const CATEGORY_FIELD_CONFIG = {
-    CODING: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true },
-    SYSTEM_DESIGN: { showUrl: false, showDifficulty: true, showCompanyTags: true, showUseCases: true },
-    BEHAVIORAL: { showUrl: false, showDifficulty: false, showCompanyTags: true, showUseCases: false },
-    CS_FUNDAMENTALS: { showUrl: false, showDifficulty: true, showCompanyTags: false, showUseCases: true },
-    HR: { showUrl: false, showDifficulty: false, showCompanyTags: false, showUseCases: false },
-    SQL: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true },
+    CODING: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Algorithm Tags', tagPlaceholder: 'Type a pattern or pick from suggestions…' },
+    SYSTEM_DESIGN: { showUrl: false, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Design Concepts', tagPlaceholder: 'e.g. Microservices, CQRS, Event Sourcing…' },
+    BEHAVIORAL: { showUrl: false, showDifficulty: false, showCompanyTags: true, showUseCases: false, showAlgoTags: false, showFollowUps: true, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
+    CS_FUNDAMENTALS: { showUrl: false, showDifficulty: true, showCompanyTags: false, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Topic Tags', tagPlaceholder: 'e.g. Virtual Memory, TCP, Indexing…' },
+    HR: { showUrl: false, showDifficulty: false, showCompanyTags: false, showUseCases: false, showAlgoTags: false, showFollowUps: false, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
+    SQL: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Query Patterns', tagPlaceholder: 'e.g. JOIN, Window Function, CTE…' },
 }
 
 const CATEGORY_DESCRIPTION_CONFIG = {
