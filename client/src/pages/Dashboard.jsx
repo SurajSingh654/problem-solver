@@ -13,6 +13,7 @@ import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { Avatar } from '@components/ui/Avatar'
 import { formatCountdown } from '@utils/formatters'
+import { Recommendations } from '@components/features/Recommendations'
 
 // ── Greeting ───────────────────────────────────────────
 function getGreeting() {
@@ -286,6 +287,19 @@ export default function Dashboard() {
           index={3}
           onClick={reviewsDue > 0 ? () => navigate('/review') : undefined}
         />
+      </div>
+
+      {/* Recommended for you */}
+      <div className="mb-6">
+        <SectionHeader
+          title="Recommended For You"
+          icon="🎯"
+          action="View all"
+          onAction={() => navigate('/problems')}
+        />
+        <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+          <Recommendations limit={4} compact />
+        </div>
       </div>
 
       {/* Main grid */}
