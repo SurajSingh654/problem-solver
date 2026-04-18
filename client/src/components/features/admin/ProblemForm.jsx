@@ -25,8 +25,8 @@ const schema = z.object({
     realWorldContext: z.string().optional().default(''),
     adminNotes: z.string().optional().default(''),
 })
-ha
-// Fields to show/hide per category
+
+// Fields to show/hide as per category
 const CATEGORY_FIELD_CONFIG = {
     CODING: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Algorithm Tags', tagPlaceholder: 'Type a pattern or pick from suggestions…' },
     SYSTEM_DESIGN: { showUrl: false, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Design Concepts', tagPlaceholder: 'e.g. Microservices, CQRS, Event Sourcing…' },
