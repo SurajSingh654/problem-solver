@@ -7,26 +7,42 @@
 export function solutionReviewPrompt(data) {
   const categoryContext = {
     CODING:
-      "This is a coding/algorithm problem. Review the approach, complexity analysis, and code quality.",
+      "This is a coding/algorithm problem. Review approach, complexity, and code quality.",
     SYSTEM_DESIGN:
       "This is a system design problem. Review requirements coverage, component design, scalability, and trade-offs.",
     BEHAVIORAL:
-      "This is a behavioral interview question. Review the STAR structure (Situation, Task, Action, Result), specificity, and impact.",
+      "This is a behavioral question. Review STAR structure, specificity, and impact.",
     CS_FUNDAMENTALS:
-      "This is a CS fundamentals question. Review conceptual accuracy, depth of explanation, and real-world examples.",
-    HR: "This is an HR interview question. Review authenticity, specificity, company research, and communication clarity.",
-    SQL: "This is a SQL problem. Review query correctness, optimization, and edge case handling.",
+      "This is a CS fundamentals question. Review conceptual accuracy and explanation depth.",
+    HR: "This is an HR question. Review authenticity, specificity, and company research.",
+    SQL: "This is a SQL problem. Review query correctness, optimization, and edge cases.",
   };
-  const system = `You are an expert coding interview coach. You review solutions submitted by engineers preparing for top tech interviews (Google, Meta, Amazon, etc.).
+
+  const system = `You are an expert interview coach reviewing solutions from engineers preparing for top tech interviews.
+
 ${categoryContext[data.category] || categoryContext.CODING}
-Your job is to give specific, actionable feedback. Be encouraging but honest. Focus on what matters in a real interview.
+
+The candidate's level is: ${data.userLevel || "BEGINNER"}. Adjust your feedback depth accordingly.
+
+IMPORTANT: You have access to teammate solutions and admin teaching notes for this problem. Use them to give SPECIFIC, COMPARATIVE feedback — not generic advice.
+
+When teammate solutions are provided:
+- Compare the candidate's approach with teammates' approaches
+- Point out if teammates found a better optimization
+- Highlight if the candidate found something teammates missed
+- Reference specific teammates by name when making comparisons
+
+When admin notes are provided:
+- Check if the candidate covered the key teaching points
+- Verify their complexity analysis against the admin's expected answer
+- Note if they missed important edge cases mentioned in the notes
 
 ALWAYS respond in this exact JSON format:
 {
   "overallScore": <number 1-10>,
   "strengths": [<string>, <string>, ...],
   "gaps": [<string>, <string>, ...],
-  "improvement": <string — one specific, actionable improvement>,
+  "improvement": <string — one specific actionable improvement>,
   "interviewTip": <string — one tip for presenting this in a real interview>,
   "complexityCheck": {
     "timeCorrect": <boolean>,
@@ -40,7 +56,8 @@ ALWAYS respond in this exact JSON format:
 
 **Problem:** ${data.problemTitle}
 **Difficulty:** ${data.difficulty}
-**Pattern Used:** ${data.pattern || "Not identified"}
+**Category:** ${data.category || "CODING"}
+**Pattern/Topic:** ${data.pattern || "Not identified"}
 
 **Approach:**
 ${data.approach || "Not provided"}
@@ -55,23 +72,28 @@ ${data.code || "No code provided"}
 
 **Key Insight:** ${data.keyInsight || "Not provided"}
 **Explanation:** ${data.explanation || "Not provided"}
+${data.ragContext || ""}
+${data.adminContext || ""}
 
-Give specific feedback. If the approach or complexity is wrong, explain why. If the explanation is unclear, suggest how to make it interview-ready.`;
+Give specific, comparative feedback. If teammate solutions are provided, reference them directly in your review. If admin notes are provided, check the candidate's work against the expected approach.`;
 
   return { system, user };
 }
 
 // ── Problem Content Generation ─────────────────────────
 export function problemContentPrompt(data) {
-
-    const categoryContext = {
-    CODING:          'Generate content focused on algorithm patterns, complexity analysis, and code optimization.',
-    SYSTEM_DESIGN:   'Generate content focused on architecture components, scalability, trade-offs, and real production systems.',
-    BEHAVIORAL:      'Generate content focused on STAR format, leadership principles, and common interview scenarios.',
-    CS_FUNDAMENTALS: 'Generate content focused on core CS concepts, common misconceptions, and interview-relevant depth.',
-    HR:              'Generate content focused on authenticity, company research, and structured responses.',
-    SQL:             'Generate content focused on query optimization, indexing strategies, and database design.',
-  }
+  const categoryContext = {
+    CODING:
+      "Generate content focused on algorithm patterns, complexity analysis, and code optimization.",
+    SYSTEM_DESIGN:
+      "Generate content focused on architecture components, scalability, trade-offs, and real production systems.",
+    BEHAVIORAL:
+      "Generate content focused on STAR format, leadership principles, and common interview scenarios.",
+    CS_FUNDAMENTALS:
+      "Generate content focused on core CS concepts, common misconceptions, and interview-relevant depth.",
+    HR: "Generate content focused on authenticity, company research, and structured responses.",
+    SQL: "Generate content focused on query optimization, indexing strategies, and database design.",
+  };
   const system = `You are a senior engineering interview coach who creates learning content for a team preparation platform.
 
 Given a coding problem, generate educational content that helps engineers understand the real-world significance and deepen their learning.
@@ -96,7 +118,7 @@ ALWAYS respond in this exact JSON format:
 **Source:** ${data.source}
 **URL:** ${data.sourceUrl}
 **Difficulty:** ${data.difficulty}
-**Category:** ${data.category || 'CODING'}
+**Category:** ${data.category || "CODING"}
 **Tags:** ${data.tags?.join(", ") || "None"}
 
 ${categoryContext[data.category] || categoryContext.CODING}

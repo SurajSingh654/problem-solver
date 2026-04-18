@@ -132,8 +132,12 @@ export function AIReviewCard({ solutionId, existingReview }) {
                     </div>
                     <div>
                         <h3 className="text-sm font-bold text-text-primary">AI Review</h3>
+                        {/* In the header after "AI Review" title */}
                         <p className="text-xs text-text-tertiary">
-                            Powered by GPT-4o-mini
+                            {parsed.ragUsed
+                                ? `Compared with ${parsed.teammateCount} teammate solution${parsed.teammateCount !== 1 ? 's' : ''}`
+                                : 'Powered by GPT-4o-mini'
+                            }
                         </p>
                     </div>
                 </div>
