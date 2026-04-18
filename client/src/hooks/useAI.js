@@ -72,3 +72,16 @@ export function useAIWeeklyPlan() {
     },
   });
 }
+
+export function useSimilarProblems(problemId) {
+  return useQuery({
+    queryKey: ["ai", "similar-problems", problemId],
+    queryFn: async () => {
+      const res = await aiApi.getSimilarProblems(problemId);
+      return res.data.data;
+    },
+    enabled: !!problemId,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}

@@ -40,6 +40,74 @@ function InfoChip({ label, value, color }) {
     )
 }
 
+function SimilarProblemsSection({ problemId }) {
+    const navigate = useNavigate()
+    const { data: similar, isLoading } = useSimilarProblems(problemId)
+
+    if (isLoading || !similar?.length) return null
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mt-6"
+        >
+            <h2 className="text-base font-bold text-text-primary flex items-center gap-2 mb-4">
+                <span>🔍</span> Similar Problems
+                <span className="text-xs font-normal text-text-disabled">
+                    powered by AI
+                </span>
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {similar.slice(0, 4).map((p, i) => (
+                    <motion.div
+                        key={p.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        onClick={() => navigate(`/problems/${p.id}`)}
+                        className="flex items-center gap-3 p-3.5 rounded-xl border
+                       bg-surface-2 border-border-default
+                       hover:border-brand-400/30 hover:bg-surface-3
+                       cursor-pointer transition-all duration-150"
+                    >
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-text-primary truncate">
+                                {p.title}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <Badge
+                                    variant={
+                                        p.difficulty === 'EASY' ? 'easy' :
+                                            p.difficulty === 'HARD' ? 'hard' : 'medium'
+                                    }
+                                    size="xs"
+                                >
+                                    {p.difficulty?.charAt(0) + p.difficulty?.slice(1).toLowerCase()}
+                                </Badge>
+                                {p.tags?.slice(0, 2).map(t => (
+                                    <span key={t}
+                                        className="text-[10px] text-text-disabled bg-surface-3
+                                   border border-border-subtle rounded px-1.5 py-px">
+                                        {t}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2"
+                            strokeLinecap="round" strokeLinejoin="round"
+                            className="text-text-disabled flex-shrink-0">
+                            <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                    </motion.div>
+                ))}
+            </div>
+        </motion.div>
+    )
+}
+
 // ── Main ───────────────────────────────────────────────
 export default function ProblemDetailPage() {
     const { id } = useParams()
@@ -518,6 +586,11 @@ export default function ProblemDetailPage() {
                                     ))}
                                 </div>
                             </div>
+                        )}
+
+                        {/* Similar Problems — vector search powered */}
+                        {aiEnabled && (
+                            <SimilarProblemsSection problemId={id} />
                         )}
                     </div>
                 )}
