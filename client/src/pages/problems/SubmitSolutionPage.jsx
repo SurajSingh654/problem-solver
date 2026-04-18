@@ -157,7 +157,7 @@ function StepOne({ formConfig, data, onChange, category }) {
         <div className="space-y-6">
             {fields.patternIdentified?.show && (
                 <PatternSelector
-                    config={fields.patternIdentified}
+                    config={formConfig.fields.patternIdentified}
                     value={data.patternIdentified || ''}
                     onChange={val => onChange({ ...data, patternIdentified: val })}
                 />

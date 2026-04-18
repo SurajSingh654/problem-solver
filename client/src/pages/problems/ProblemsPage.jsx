@@ -12,32 +12,6 @@ import { EmptyState } from '@components/ui/EmptyState'
 import { cn } from '@utils/cn'
 import { DIFFICULTY, SOURCE_LABELS, PATTERNS, PROBLEM_CATEGORIES } from '@utils/constants'
 
-// ── Filter pill ────────────────────────────────────────
-function FilterPill({ label, active, onClick, count }) {
-    return (
-        <button
-            onClick={onClick}
-            className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold',
-                'border transition-all duration-150 whitespace-nowrap',
-                active
-                    ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                    : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-primary hover:border-border-strong'
-            )}
-        >
-            {label}
-            {count != null && (
-                <span className={cn(
-                    'text-[10px] px-1.5 py-px rounded-full font-bold',
-                    active ? 'bg-brand-400/25 text-brand-200' : 'bg-surface-4 text-text-disabled'
-                )}>
-                    {count}
-                </span>
-            )}
-        </button>
-    )
-}
-
 // ── Stats bar ──────────────────────────────────────────
 function StatsBar({ problems }) {
     const total = problems.length
@@ -211,74 +185,187 @@ export default function ProblemsPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-wrap gap-2 mb-4">
-                {/* Pinned */}
-                <FilterPill
-                    label="📌 Pinned"
-                    active={showPinned}
-                    onClick={() => setShowPinned(v => !v)}
-                />
+            {/* Filters — grouped by type */}
+            <div className="bg-surface-1 border border-border-default rounded-xl p-4 mb-4 space-y-3">
 
-                {/* Category */}
-                {PROBLEM_CATEGORIES.map(cat => (
-                    <FilterPill
-                        key={cat.id}
-                        label={`${cat.icon} ${cat.label}`}
-                        active={category === cat.id}
-                        onClick={() => setCategory(v => v === cat.id ? '' : cat.id)}
-                        count={allProblems.filter(p => p.category === cat.id).length}
-                    />
-                ))}
+                {/* Row 1: Category */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
+                     w-16 flex-shrink-0">
+                        Type
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {PROBLEM_CATEGORIES.map(cat => {
+                            const count = allProblems.filter(p => p.category === cat.id).length
+                            if (count === 0) return null
+                            return (
+                                <button
+                                    key={cat.id}
+                                    onClick={() => setCategory(v => v === cat.id ? '' : cat.id)}
+                                    className={cn(
+                                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg',
+                                        'text-[11px] font-semibold border transition-all duration-150',
+                                        category === cat.id
+                                            ? `${cat.bg} ${cat.color}`
+                                            : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-secondary hover:border-border-strong'
+                                    )}
+                                >
+                                    <span className="text-xs">{cat.icon}</span>
+                                    {cat.label}
+                                    <span className={cn(
+                                        'text-[9px] px-1 py-px rounded-full font-bold',
+                                        category === cat.id
+                                            ? 'bg-white/10'
+                                            : 'bg-surface-4 text-text-disabled'
+                                    )}>
+                                        {count}
+                                    </span>
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
 
-                {/* Difficulty */}
-                {['EASY', 'MEDIUM', 'HARD'].map(d => (
-                    <FilterPill
-                        key={d}
-                        label={d.charAt(0) + d.slice(1).toLowerCase()}
-                        active={difficulty === d}
-                        onClick={() => setDifficulty(v => v === d ? '' : d)}
-                        count={allProblems.filter(p => p.difficulty === d).length}
-                    />
-                ))}
-                {/* Sources */}
-                {availableSources.map(s => (
-                    <FilterPill
-                        key={s}
-                        label={SOURCE_LABELS[s] || s}
-                        active={source === s}
-                        onClick={() => setSource(v => v === s ? '' : s)}
-                    />
-                ))}
-                {/* Tags */}
-                {availableTags.slice(0, 8).map(t => (
-                    <FilterPill
-                        key={t}
-                        label={t}
-                        active={tag === t}
-                        onClick={() => setTag(v => v === t ? '' : t)}
-                    />
-                ))}
-                {/* Clear */}
+                {/* Row 2: Difficulty + Pinned */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
+                     w-16 flex-shrink-0">
+                        Level
+                    </span>
+                    <div className="flex gap-1.5">
+                        {['EASY', 'MEDIUM', 'HARD'].map(d => {
+                            const count = allProblems.filter(p => p.difficulty === d).length
+                            const colors = {
+                                EASY: { active: 'bg-success/15 border-success/40 text-success', dot: 'bg-success' },
+                                MEDIUM: { active: 'bg-warning/15 border-warning/40 text-warning', dot: 'bg-warning' },
+                                HARD: { active: 'bg-danger/15 border-danger/40 text-danger', dot: 'bg-danger' },
+                            }
+                            return (
+                                <button
+                                    key={d}
+                                    onClick={() => setDifficulty(v => v === d ? '' : d)}
+                                    className={cn(
+                                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg',
+                                        'text-[11px] font-semibold border transition-all duration-150',
+                                        difficulty === d
+                                            ? colors[d].active
+                                            : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                                    )}
+                                >
+                                    <span className={cn('w-1.5 h-1.5 rounded-full', colors[d].dot)} />
+                                    {d.charAt(0) + d.slice(1).toLowerCase()}
+                                    <span className={cn(
+                                        'text-[9px] px-1 py-px rounded-full font-bold',
+                                        difficulty === d ? 'bg-white/10' : 'bg-surface-4 text-text-disabled'
+                                    )}>
+                                        {count}
+                                    </span>
+                                </button>
+                            )
+                        })}
+                        <button
+                            onClick={() => setShowPinned(v => !v)}
+                            className={cn(
+                                'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg',
+                                'text-[11px] font-semibold border transition-all duration-150',
+                                showPinned
+                                    ? 'bg-warning/15 border-warning/40 text-warning'
+                                    : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                            )}
+                        >
+                            📌 Pinned
+                        </button>
+                    </div>
+                </div>
+
+                {/* Row 3: Source — only show if multiple sources */}
+                {availableSources.length > 1 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
+                       w-16 flex-shrink-0">
+                            Source
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {availableSources.map(s => (
+                                <button
+                                    key={s}
+                                    onClick={() => setSource(v => v === s ? '' : s)}
+                                    className={cn(
+                                        'inline-flex items-center px-2.5 py-1 rounded-lg',
+                                        'text-[11px] font-semibold border transition-all duration-150',
+                                        source === s
+                                            ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
+                                            : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                                    )}
+                                >
+                                    {SOURCE_LABELS[s] || s}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Row 4: Tags — only show if tags exist */}
+                {availableTags.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
+                       w-16 flex-shrink-0">
+                            Tags
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {availableTags.slice(0, 6).map(t => (
+                                <button
+                                    key={t}
+                                    onClick={() => setTag(v => v === t ? '' : t)}
+                                    className={cn(
+                                        'inline-flex items-center px-2.5 py-1 rounded-lg',
+                                        'text-[11px] font-semibold border transition-all duration-150',
+                                        tag === t
+                                            ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
+                                            : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                                    )}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                            {availableTags.length > 6 && (
+                                <span className="text-[10px] text-text-disabled self-center">
+                                    +{availableTags.length - 6} more
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Active filters summary + clear */}
                 {hasFilters && (
-                    <button
-                        onClick={clearFilters}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full
-                       text-xs font-semibold text-danger border border-danger/25
-                       bg-danger/8 hover:bg-danger/15 transition-all"
-                    >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="3"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                        Clear filters
-                    </button>
+                    <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
+                        <StatsBar problems={filtered} />
+                        <button
+                            onClick={clearFilters}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                   text-xs font-semibold text-danger border border-danger/25
+                   bg-danger/8 hover:bg-danger/15 transition-all"
+                        >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="3"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                            Clear all
+                        </button>
+                    </div>
+                )}
+
+                {/* No filters — show stats */}
+                {!hasFilters && !isLoading && (
+                    <div className="pt-2 border-t border-border-subtle">
+                        <StatsBar problems={filtered} />
+                    </div>
                 )}
             </div>
 
-            {/* Stats bar */}
-            {!isLoading && <StatsBar problems={filtered} />}
 
             {/* Content */}
             <div className="mt-4">
