@@ -69,7 +69,7 @@ export default function ProblemsPage() {
             )
         }
         return list
-    }, [allProblems, search, difficulty, source, tag, showPinned])
+    }, [allProblems, search, difficulty, source, category, tag, showPinned])
 
     // Unique sources from available problems
     const availableSources = useMemo(() => {
