@@ -22,6 +22,13 @@ import {
   notFoundResponse,
 } from "../utils/response.js";
 
+import {
+  embedAllExisting,
+  findSimilarSolutions,
+  findSimilarProblems,
+  isEmbeddingEnabled,
+} from "../services/embedding.service.js";
+
 // ── POST /api/ai/review-solution ───────────────────────
 export async function reviewSolution(req, res) {
   const { solutionId } = req.body;
@@ -241,4 +248,35 @@ export async function getAIStatus(req, res) {
       allowed: rateCheck.allowed,
     },
   });
+}
+
+// ── POST /api/ai/embed-all ─────────────────────────────
+export async function triggerBatchEmbedding(req, res) {
+  if (!isEmbeddingEnabled()) {
+    return errorResponse(res, "Embedding service not enabled", 503);
+  }
+
+  // Run in background
+  embedAllExisting().catch((err) =>
+    console.error("[Embedding] Batch failed:", err.message),
+  );
+
+  return successResponse(res, {
+    message:
+      "Batch embedding started in background. Check server logs for progress.",
+  });
+}
+
+// ── GET /api/ai/similar-solutions/:solutionId ──────────
+export async function getSimilarSolutions(req, res) {
+  const { solutionId } = req.params;
+  const results = await findSimilarSolutions(solutionId, 5);
+  return successResponse(res, results);
+}
+
+// ── GET /api/ai/similar-problems/:problemId ────────────
+export async function getSimilarProblems(req, res) {
+  const { problemId } = req.params;
+  const results = await findSimilarProblems(problemId, 5);
+  return successResponse(res, results);
 }

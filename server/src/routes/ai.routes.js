@@ -8,6 +8,9 @@ import {
   generateHint,
   generateWeeklyPlan,
   getAIStatus,
+  triggerBatchEmbedding,
+  getSimilarSolutions,
+  getSimilarProblems,
 } from "../controllers/ai.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireAI, aiRateLimit } from "../middleware/ai.middleware.js";
@@ -30,5 +33,11 @@ router.post(
 );
 router.post("/generate-hint", requireAI, aiRateLimit, generateHint);
 router.post("/weekly-plan", requireAI, aiRateLimit, generateWeeklyPlan);
+
+
+// Add these routes
+router.post('/embed-all',                    requireAI, aiRateLimit, triggerBatchEmbedding)
+router.get('/similar-solutions/:solutionId', requireAI, getSimilarSolutions)
+router.get('/similar-problems/:problemId',   requireAI, getSimilarProblems)
 
 export default router;

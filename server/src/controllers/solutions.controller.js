@@ -6,6 +6,7 @@ import {
   forbiddenResponse,
   errorResponse,
 } from "../utils/response.js";
+import { embedSolution } from "../services/embedding.service.js";
 
 // ── Helpers ────────────────────────────────────────────
 
@@ -173,6 +174,11 @@ export async function createSolution(req, res) {
   // Update user streak
   await updateStreak(userId);
 
+  // Generate embedding in background (don't block response)
+  embedSolution(solution.id).catch((err) =>
+    console.error("[Embedding] Background embed failed:", err.message),
+  );
+
   return createdResponse(
     res,
     parseSolution(solution),
@@ -248,6 +254,10 @@ export async function updateSolution(req, res) {
       problem: { select: { title: true, difficulty: true } },
     },
   });
+
+  embedSolution(updated.id).catch(err =>
+  console.error('[Embedding] Background embed failed:', err.message)
+)
 
   return successResponse(res, parseSolution(updated), "Solution updated");
 }

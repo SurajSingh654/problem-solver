@@ -5,6 +5,7 @@ import {
   notFoundResponse,
   errorResponse,
 } from "../utils/response.js";
+import { embedProblem } from "../services/embedding.service.js";
 
 // ── Helpers ────────────────────────────────────────────
 
@@ -232,6 +233,10 @@ export async function createProblem(req, res) {
     },
   });
 
+  embedProblem(problem.id).catch((err) =>
+    console.error("[Embedding] Background embed failed:", err.message),
+  );
+
   return createdResponse(res, parseProblem(problem), "Problem created");
 }
 
@@ -294,6 +299,9 @@ export async function updateProblem(req, res) {
       followUps: true,
     },
   });
+  embedProblem(updated.id).catch((err) =>
+    console.error("[Embedding] Background embed failed:", err.message),
+  );
 
   return successResponse(res, parseProblem(updated), "Problem updated");
 }
