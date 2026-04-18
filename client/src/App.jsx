@@ -23,24 +23,8 @@ import EditProblemPage from '@pages/admin/EditProblemPage'
 import DeployPage from '@pages/docs/DeployPage'
 import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
 import QuizPage from '@pages/QuizPage'
+import ShowcasePage from '@pages/admin/ShowcasePage'
 
-function ComingSoon({ name, step }) {
-  return (
-    <div className="flex flex-col items-center justify-center
-                    min-h-[60vh] gap-4 text-text-secondary">
-      <div className="w-14 h-14 rounded-2xl bg-brand-400/10 border border-brand-400/20
-                      flex items-center justify-center text-2xl animate-float">
-        ⚡
-      </div>
-      <div className="text-center">
-        <p className="text-lg font-bold text-text-primary">{name}</p>
-        <p className="text-sm mt-1 text-text-tertiary">
-          Coming in Step {step}
-        </p>
-      </div>
-    </div>
-  )
-}
 
 export default function App() {
   return (
@@ -83,6 +67,9 @@ export default function App() {
           } />
           <Route path="/admin/problems/:id/edit" element={
             <ProtectedRoute adminOnly><EditProblemPage /></ProtectedRoute>
+          } />
+          <Route path="/admin/showcase" element={
+            <ProtectedRoute adminOnly><ShowcasePage /></ProtectedRoute>
           } />
         </Route>
 
