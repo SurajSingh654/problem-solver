@@ -100,6 +100,7 @@ model Problem {
   category    String  @default("CODING")
   description  String?                    // Rich text problem statement
   categoryData String  @default("{}")     // JSON — category-specific structured data
+  embedding    Unsupported("vector(1536)")?  // OpenAI ada-002 embeddings
 
   // Arrays stored as JSON strings (SQLite limitation)
   // Switch to native arrays when migrating to PostgreSQL
@@ -217,6 +218,7 @@ model Solution {
   // ── AI feedback (Phase 2) ──
   aiFeedback      String?   // AI-generated feedback on approach
   aiSuggestedImprovements String @default("[]")
+  embedding    Unsupported("vector(1536)")?  // OpenAI ada-002 embeddings
 
   // Constraint: one solution per user per problem
   @@unique([problemId, userId])
