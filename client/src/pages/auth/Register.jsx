@@ -55,7 +55,14 @@ export default function Register() {
     const passwordValue = watch('password', '')
 
     useEffect(() => {
-        if (isAuthenticated) navigate('/', { replace: true })
+        if (isAuthenticated) {
+            const { user } = useAuthStore.getState()
+            if (user?.emailVerified === false) {
+                // Don't redirect — let the onSuccess handler navigate to /verify-email
+                return
+            }
+            navigate('/', { replace: true })
+        }
     }, [isAuthenticated, navigate])
 
     const onSubmit = async (data) => {
@@ -211,9 +218,9 @@ export default function Register() {
                                         ))}
                                     </div>
                                     <span className={`text-xs font-medium transition-colors ${strength.score <= 1 ? 'text-danger' :
-                                            strength.score <= 2 ? 'text-warning' :
-                                                strength.score <= 3 ? 'text-brand-300' :
-                                                    'text-success'
+                                        strength.score <= 2 ? 'text-warning' :
+                                            strength.score <= 3 ? 'text-brand-300' :
+                                                'text-success'
                                         }`}>
                                         {strength.label}
                                     </span>

@@ -63,7 +63,18 @@ export default function Login() {
 
     // Already logged in → redirect
     useEffect(() => {
-        if (isAuthenticated) navigate('/', { replace: true })
+        if (isAuthenticated) {
+            const { user } = useAuthStore.getState()
+            if (user?.emailVerified === false) {
+                navigate('/verify-email', { state: { email: user.email }, replace: true })
+                return
+            }
+            if (user?.mustChangePassword) {
+                navigate('/change-password', { replace: true })
+                return
+            }
+            navigate('/', { replace: true })
+        }
     }, [isAuthenticated, navigate])
 
     const onSubmit = async (data) => {
