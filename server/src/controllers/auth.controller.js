@@ -13,6 +13,7 @@ import {
 
 import {
   sendVerificationEmail,
+  sendPasswordResetEmail,
   sendWelcomeEmail,
   generateVerificationCode,
 } from "../services/email.service.js";
@@ -488,5 +489,103 @@ export async function resendVerification(req, res) {
     res,
     {},
     "If an account exists, a new code has been sent.",
+  );
+}
+
+// ── POST /api/auth/forgot-password ─────────────────────
+export async function forgotPassword(req, res) {
+  const { email } = req.body;
+
+  if (!email) {
+    return errorResponse(res, "Email is required", 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  // Always return success — don't reveal if email exists
+  if (!user) {
+    return successResponse(
+      res,
+      {},
+      "If an account exists with this email, a reset code has been sent.",
+    );
+  }
+
+  const code = generateVerificationCode();
+  const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      verificationCode: code,
+      verificationExpiry: expiry,
+    },
+  });
+
+  // Send reset email in background
+  sendPasswordResetEmail(email, user.username, code).catch((err) =>
+    console.error("[Auth] Password reset email failed:", err),
+  );
+
+  return successResponse(
+    res,
+    {},
+    "If an account exists with this email, a reset code has been sent.",
+  );
+}
+
+// ── POST /api/auth/reset-password-with-code ────────────
+export async function resetPasswordWithCode(req, res) {
+  const { email, code, newPassword } = req.body;
+
+  if (!email || !code || !newPassword) {
+    return errorResponse(
+      res,
+      "Email, code, and new password are required",
+      400,
+    );
+  }
+
+  if (newPassword.length < 6) {
+    return errorResponse(res, "Password must be at least 6 characters", 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    return errorResponse(res, "Invalid email or code", 400, "INVALID_RESET");
+  }
+
+  if (!user.verificationCode || user.verificationCode !== code) {
+    return errorResponse(res, "Invalid reset code", 400, "INVALID_CODE");
+  }
+
+  if (
+    user.verificationExpiry &&
+    new Date() > new Date(user.verificationExpiry)
+  ) {
+    return errorResponse(
+      res,
+      "Reset code has expired. Request a new one.",
+      400,
+      "CODE_EXPIRED",
+    );
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      verificationCode: null,
+      verificationExpiry: null,
+      mustChangePassword: false,
+    },
+  });
+
+  return successResponse(
+    res,
+    {},
+    "Password reset successfully. You can now log in with your new password.",
   );
 }

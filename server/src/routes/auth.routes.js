@@ -10,7 +10,11 @@ import {
   resetUserPassword,
   verifyEmail,
   resendVerification,
-} from "../controllers/auth.controller.js";
+  forgotPassword,
+  resetPasswordWithCode,
+} from '../controllers/auth.controller.js'
+
+
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireAdmin } from "../middleware/admin.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -45,5 +49,9 @@ router.post("/reset-password", requireAuth, requireAdmin, resetUserPassword);
 // Add these public routes (no auth required)
 router.post('/verify-email',        verifyEmail)
 router.post('/resend-verification', resendVerification)
+
+// Add these public routes (no auth required)
+router.post('/forgot-password',          forgotPassword)
+router.post('/reset-password-with-code', resetPasswordWithCode)
 
 export default router;

@@ -25,6 +25,9 @@ import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
 import QuizPage from '@pages/QuizPage'
 import ShowcasePage from '@pages/admin/ShowcasePage'
 import VerifyEmailPage from '@pages/auth/VerifyEmailPage'
+// Add imports
+import ForgotPasswordPage from '@pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
 
 
 export default function App() {
@@ -35,6 +38,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Protected */}
         <Route element={
