@@ -589,3 +589,145 @@ export async function resetPasswordWithCode(req, res) {
     "Password reset successfully. You can now log in with your new password.",
   );
 }
+
+// ── POST /api/auth/change-email ────────────────────────
+export async function initiateEmailChange(req, res) {
+  const { newEmail } = req.body;
+  const userId = req.user.id;
+
+  if (!newEmail || !newEmail.trim()) {
+    return errorResponse(res, "New email is required", 400);
+  }
+
+  // Check if new email is same as current
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (user.email === newEmail.trim()) {
+    return errorResponse(
+      res,
+      "New email is the same as your current email",
+      400,
+    );
+  }
+
+  // Check if new email is already taken
+  const existing = await prisma.user.findUnique({
+    where: { email: newEmail.trim() },
+  });
+  if (existing) {
+    return errorResponse(
+      res,
+      "This email is already associated with another account",
+      409,
+      "EMAIL_TAKEN",
+    );
+  }
+
+  // Generate verification code for the new email
+  const code = generateVerificationCode();
+  const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+  // Store pending email change data
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      verificationCode: code,
+      verificationExpiry: expiry,
+      // Store the new email in preferences temporarily
+      preferences: JSON.stringify({
+        ...JSON.parse(user.preferences || "{}"),
+        pendingEmail: newEmail.trim(),
+      }),
+    },
+  });
+
+  // Send verification code to the NEW email
+  sendVerificationEmail(newEmail.trim(), user.username, code).catch((err) =>
+    console.error("[Auth] Email change verification failed:", err),
+  );
+
+  return successResponse(
+    res,
+    {
+      newEmail: newEmail.trim(),
+    },
+    "Verification code sent to your new email address",
+  );
+}
+
+// ── POST /api/auth/confirm-email-change ────────────────
+export async function confirmEmailChange(req, res) {
+  const { code } = req.body;
+  const userId = req.user.id;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return unauthorizedResponse(res, "User not found");
+
+  // Verify the code
+  if (!user.verificationCode || user.verificationCode !== code) {
+    return errorResponse(res, "Invalid verification code", 400, "INVALID_CODE");
+  }
+
+  if (
+    user.verificationExpiry &&
+    new Date() > new Date(user.verificationExpiry)
+  ) {
+    return errorResponse(
+      res,
+      "Verification code has expired",
+      400,
+      "CODE_EXPIRED",
+    );
+  }
+
+  // Get the pending email from preferences
+  const preferences = JSON.parse(user.preferences || "{}");
+  const newEmail = preferences.pendingEmail;
+
+  if (!newEmail) {
+    return errorResponse(res, "No pending email change found", 400);
+  }
+
+  // Check again if email is taken (race condition protection)
+  const existing = await prisma.user.findUnique({ where: { email: newEmail } });
+  if (existing) {
+    return errorResponse(
+      res,
+      "This email is now taken by another account",
+      409,
+    );
+  }
+
+  const oldEmail = user.email;
+
+  // Remove pending email from preferences
+  delete preferences.pendingEmail;
+
+  // Update the email
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      email: newEmail,
+      emailVerified: true,
+      verificationCode: null,
+      verificationExpiry: null,
+      preferences: JSON.stringify(preferences),
+    },
+  });
+
+  // Notify the old email about the change (security measure)
+  sendPasswordResetEmail(oldEmail, user.username, "EMAIL_CHANGED").catch(
+    () => {},
+  );
+  // Note: reusing sendPasswordResetEmail template isn't ideal but works for notification
+
+  const token = signToken({ userId: updated.id, role: updated.role });
+
+  return successResponse(
+    res,
+    {
+      user: sanitizeUser(updated),
+      token,
+    },
+    "Email changed successfully",
+  );
+}

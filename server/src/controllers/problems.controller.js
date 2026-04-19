@@ -114,7 +114,7 @@ export async function getProblems(req, res) {
 
   const enriched = paginated.map((p) => ({
     ...p,
-    isSolvedByMe: solvedIds.has(p.id),
+    isSolvedByMe: req.user.role === "ADMIN" ? false : solvedIds.has(p.id),
     totalSolutions: p._count.solutions,
   }));
 

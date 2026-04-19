@@ -441,7 +441,7 @@ export function Sidebar() {
                                 )}>
                                     {isAdmin ? '⚡ Admin' : 'Member'}
                                 </span>
-                                {streak > 0 && (
+                                {!isAdmin && streak > 0 && (
                                     <span className="text-[10px] text-warning font-mono font-bold">
                                         🔥 {streak}
                                     </span>

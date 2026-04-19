@@ -12,8 +12,9 @@ import {
   resendVerification,
   forgotPassword,
   resetPasswordWithCode,
-} from '../controllers/auth.controller.js'
-
+  initiateEmailChange,
+  confirmEmailChange,
+} from "../controllers/auth.controller.js";
 
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireAdmin } from "../middleware/admin.middleware.js";
@@ -42,16 +43,18 @@ router.post(
   claimAdmin,
 );
 router.post("/admin/revoke", requireAuth, revokeAdmin);
+router.post('/change-email',         requireAuth, initiateEmailChange)
+router.post('/confirm-email-change', requireAuth, confirmEmailChange)
 
 // ── Admin only ────────────────────────────────────────
 router.post("/reset-password", requireAuth, requireAdmin, resetUserPassword);
 
 // Add these public routes (no auth required)
-router.post('/verify-email',        verifyEmail)
-router.post('/resend-verification', resendVerification)
+router.post("/verify-email", verifyEmail);
+router.post("/resend-verification", resendVerification);
 
 // Add these public routes (no auth required)
-router.post('/forgot-password',          forgotPassword)
-router.post('/reset-password-with-code', resetPasswordWithCode)
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password-with-code", resetPasswordWithCode);
 
 export default router;

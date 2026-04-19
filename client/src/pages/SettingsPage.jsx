@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@store/useAuthStore'
 import { useUIStore } from '@store/useUIStore'
-import { useUpdateProfile, useClaimAdmin,useChangePassword } from '@hooks/useAuth'
+import { useUpdateProfile, useClaimAdmin, useChangePassword } from '@hooks/useAuth'
 import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
 import { Avatar } from '@components/ui/Avatar'
@@ -20,6 +20,107 @@ const AVATAR_COLORS = [
     '#a855f7', '#06b6d4', '#84cc16', '#f43f5e',
     '#8b5cf6', '#10b981', '#f59e0b', '#6366f1',
 ]
+
+function ChangeEmailSection() {
+    const { user } = useAuthStore()
+    const [newEmail, setNewEmail] = useState('')
+    const [step, setStep] = useState('email') // 'email' | 'verify'
+    const [code, setCode] = useState('')
+    const changeEmail = useChangeEmail()
+    const confirmChange = useConfirmEmailChange()
+
+    async function handleSendCode() {
+        if (!newEmail.trim()) {
+            toast.error('Enter a new email address')
+            return
+        }
+        await changeEmail.mutateAsync(newEmail.trim())
+        setStep('verify')
+    }
+
+    async function handleVerify() {
+        if (code.length !== 6) {
+            toast.error('Enter the 6-digit code')
+            return
+        }
+        await confirmChange.mutateAsync(code)
+        setStep('email')
+        setNewEmail('')
+        setCode('')
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3 bg-surface-2 border border-border-default
+                      rounded-xl">
+                <span className="text-xs text-text-tertiary">Current email:</span>
+                <span className="text-sm font-semibold text-text-primary">{user?.email}</span>
+                {user?.emailVerified && (
+                    <span className="text-[10px] font-bold px-1.5 py-px rounded-full
+                           bg-success/12 text-success border border-success/25">
+                        Verified
+                    </span>
+                )}
+            </div>
+
+            {step === 'email' && (
+                <div className="space-y-3">
+                    <Input
+                        label="New Email Address"
+                        type="email"
+                        placeholder="new-email@example.com"
+                        value={newEmail}
+                        onChange={e => setNewEmail(e.target.value)}
+                    />
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        loading={changeEmail.isPending}
+                        disabled={!newEmail.trim()}
+                        onClick={handleSendCode}
+                    >
+                        Send Verification Code
+                    </Button>
+                </div>
+            )}
+
+            {step === 'verify' && (
+                <div className="space-y-3">
+                    <p className="text-xs text-text-tertiary">
+                        A 6-digit code was sent to <span className="text-brand-300 font-semibold">{newEmail}</span>
+                    </p>
+                    <Input
+                        label="Verification Code"
+                        placeholder="Enter 6-digit code"
+                        value={code}
+                        onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    />
+                    <div className="flex gap-2">
+                        <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            loading={confirmChange.isPending}
+                            disabled={code.length !== 6}
+                            onClick={handleVerify}
+                        >
+                            Confirm Change
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setStep('email'); setCode('') }}
+                        >
+                            Cancel
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
 
 function ColorPicker({ value, onChange }) {
     return (
@@ -327,70 +428,76 @@ export default function SettingsPage() {
                     </div>
                 </Section>
 
-                {/* ── Interview Goals ───────────────────────── */}
-                <Section title="Interview Goals" icon="🎯">
-                    <div className="space-y-4">
-                        <Input
-                            label="Target Role"
-                            placeholder="e.g. Senior Software Engineer at Google"
-                            {...register('targetRole')}
-                        />
-
-                        <Input
-                            label="Target Date"
-                            type="date"
-                            hint="When is your interview?"
-                            {...register('targetDate')}
-                        />
-
-                        {/* Current Level */}
-                        <div>
-                            <label className="block text-sm font-semibold text-text-primary mb-2">
-                                Current Level
-                            </label>
-                            <div className="flex gap-2">
-                                {[
-                                    { value: 'BEGINNER', label: '🌱 Beginner' },
-                                    { value: 'INTERMEDIATE', label: '📈 Intermediate' },
-                                    { value: 'ADVANCED', label: '🔥 Advanced' },
-                                ].map(level => {
-                                    const current = watch('currentLevel')
-                                    return (
-                                        <button
-                                            key={level.value}
-                                            type="button"
-                                            onClick={() => setValue('currentLevel', level.value, { shouldDirty: true })}
-                                            className={cn(
-                                                'flex-1 flex items-center justify-center gap-2',
-                                                'py-2.5 px-3 rounded-xl border cursor-pointer',
-                                                'text-xs font-semibold transition-all duration-150',
-                                                current === level.value
-                                                    ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                                    : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
-                                            )}
-                                        >
-                                            {level.label}
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-text-primary mb-2">
-                                Target Companies
-                                <span className="ml-1.5 text-xs font-normal text-text-disabled">
-                                    up to 5
-                                </span>
-                            </label>
-                            <CompanyPicker
-                                value={targetCompanies}
-                                onChange={setTargetCompanies}
-                            />
-                        </div>
-                    </div>
+                {/* ── Change Email ───────────────────────────── */}
+                <Section title="Change Email" icon="📧">
+                    <ChangeEmailSection />
                 </Section>
 
+                {/* ── Interview Goals ───────────────────────── */}
+                {user?.role !== 'ADMIN' && (
+                    <Section title="Interview Goals" icon="🎯">
+                        <div className="space-y-4">
+                            <Input
+                                label="Target Role"
+                                placeholder="e.g. Senior Software Engineer at Google"
+                                {...register('targetRole')}
+                            />
+
+                            <Input
+                                label="Target Date"
+                                type="date"
+                                hint="When is your interview?"
+                                {...register('targetDate')}
+                            />
+
+                            {/* Current Level */}
+                            <div>
+                                <label className="block text-sm font-semibold text-text-primary mb-2">
+                                    Current Level
+                                </label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { value: 'BEGINNER', label: '🌱 Beginner' },
+                                        { value: 'INTERMEDIATE', label: '📈 Intermediate' },
+                                        { value: 'ADVANCED', label: '🔥 Advanced' },
+                                    ].map(level => {
+                                        const current = watch('currentLevel')
+                                        return (
+                                            <button
+                                                key={level.value}
+                                                type="button"
+                                                onClick={() => setValue('currentLevel', level.value, { shouldDirty: true })}
+                                                className={cn(
+                                                    'flex-1 flex items-center justify-center gap-2',
+                                                    'py-2.5 px-3 rounded-xl border cursor-pointer',
+                                                    'text-xs font-semibold transition-all duration-150',
+                                                    current === level.value
+                                                        ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
+                                                        : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
+                                                )}
+                                            >
+                                                {level.label}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-text-primary mb-2">
+                                    Target Companies
+                                    <span className="ml-1.5 text-xs font-normal text-text-disabled">
+                                        up to 5
+                                    </span>
+                                </label>
+                                <CompanyPicker
+                                    value={targetCompanies}
+                                    onChange={setTargetCompanies}
+                                />
+                            </div>
+                        </div>
+                    </Section>
+                )}
                 {/* ── Appearance ───────────────────────────── */}
                 <Section title="Appearance" icon="🎨">
                     <div className="flex items-center justify-between">

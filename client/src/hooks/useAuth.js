@@ -200,3 +200,42 @@ export function useResetUserPassword() {
     },
   });
 }
+
+
+export function useChangeEmail() {
+  return useMutation({
+    mutationFn: (newEmail) => authApi.initiateEmailChange(newEmail),
+    onSuccess: () => {
+      toast.success('Verification code sent to your new email')
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || 'Failed to initiate email change')
+    },
+  })
+}
+
+export function useConfirmEmailChange() {
+  const { setAuth } = useAuthStore()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (code) => authApi.confirmEmailChange(code),
+    onSuccess: (res) => {
+      const { user, token } = res.data.data
+      setAuth(user, token)
+      localStorage.setItem('ps_token', token)
+      queryClient.setQueryData(QUERY_KEYS.ME, user)
+      toast.success('Email changed successfully!')
+    },
+    onError: (err) => {
+      const code = err.response?.data?.code
+      if (code === 'CODE_EXPIRED') {
+        toast.error('Code expired. Please try again.')
+      } else if (code === 'INVALID_CODE') {
+        toast.error('Invalid code. Please check and try again.')
+      } else {
+        toast.error(err.response?.data?.error || 'Email change failed')
+      }
+    },
+  })
+}

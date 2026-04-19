@@ -253,7 +253,7 @@ export async function getMyStats(req, res) {
 // ── GET /api/stats/team ────────────────────────────────
 export async function getTeamStats(req, res) {
   // Total members
-  const totalMembers = await prisma.user.count();
+  const totalMembers = await prisma.user.count({ where: { role: "MEMBER" } });
 
   // Total solutions
   const totalSolutions = await prisma.solution.count();
@@ -343,8 +343,8 @@ export async function getTeamStats(req, res) {
 // ── GET /api/stats/leaderboard ─────────────────────────
 export async function getLeaderboard(req, res) {
   const users = await prisma.user.findMany({
-     where: {
-      role: 'MEMBER',
+    where: {
+      role: "MEMBER",
     },
     include: {
       solutions: {
