@@ -9,16 +9,14 @@ import { Tooltip } from '@components/ui/Tooltip'
 import { cn } from '@utils/cn'
 import { useMe } from '@hooks/useAuth'
 
-// ── Nav item data ──────────────────────────────────────
-function useNavItems(isAdmin, reviewDue) {
+// ── Nav items for MEMBER ───────────────────────────────
+function useMemberNavItems(reviewDue) {
     return [
         {
             group: 'Main',
             items: [
                 {
-                    to: '/',
-                    end: true,
-                    label: 'Dashboard',
+                    to: '/', end: true, label: 'Dashboard',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -30,8 +28,7 @@ function useNavItems(isAdmin, reviewDue) {
                     ),
                 },
                 {
-                    to: '/problems',
-                    label: 'Problems',
+                    to: '/problems', label: 'Problems',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -39,7 +36,6 @@ function useNavItems(isAdmin, reviewDue) {
                             <polyline points="14 2 14 8 20 8" />
                             <line x1="16" y1="13" x2="8" y2="13" />
                             <line x1="16" y1="17" x2="8" y2="17" />
-                            <polyline points="10 9 9 9 8 9" />
                         </svg>
                     ),
                 },
@@ -49,8 +45,7 @@ function useNavItems(isAdmin, reviewDue) {
             group: 'Practice',
             items: [
                 {
-                    to: '/interview',
-                    label: 'Interview Sim',
+                    to: '/interview', label: 'Interview Sim',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -60,8 +55,7 @@ function useNavItems(isAdmin, reviewDue) {
                     ),
                 },
                 {
-                    to: '/quizzes',
-                    label: 'Quiz',
+                    to: '/quizzes', label: 'Quiz',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -72,8 +66,7 @@ function useNavItems(isAdmin, reviewDue) {
                     ),
                 },
                 {
-                    to: '/review',
-                    label: 'Review Queue',
+                    to: '/review', label: 'Review Queue',
                     badge: reviewDue > 0 ? String(reviewDue) : null,
                     badgeVariant: 'danger',
                     icon: (
@@ -91,8 +84,7 @@ function useNavItems(isAdmin, reviewDue) {
             group: 'Progress',
             items: [
                 {
-                    to: '/report',
-                    label: 'My Report',
+                    to: '/report', label: 'My Report',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -103,8 +95,7 @@ function useNavItems(isAdmin, reviewDue) {
                     ),
                 },
                 {
-                    to: '/leaderboard',
-                    label: 'Leaderboard',
+                    to: '/leaderboard', label: 'Leaderboard',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -113,8 +104,7 @@ function useNavItems(isAdmin, reviewDue) {
                     ),
                 },
                 {
-                    to: '/profile',
-                    label: 'My Profile',
+                    to: '/profile', label: 'My Profile',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -125,22 +115,87 @@ function useNavItems(isAdmin, reviewDue) {
                 },
             ],
         },
-        ...(isAdmin ? [{
-            group: 'Admin',
+        {
+            group: 'Account',
             items: [
                 {
-                    to: '/admin',
-                    label: 'Admin Panel',
+                    to: '/settings', label: 'Settings',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                        </svg>
+                    ),
+                },
+            ],
+        },
+    ]
+}
+
+// ── Nav items for ADMIN ────────────────────────────────
+function useAdminNavItems() {
+    return [
+        {
+            group: 'Overview',
+            items: [
+                {
+                    to: '/', end: true, label: 'Dashboard',
+                    icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="14" width="7" height="7" rx="1" />
+                            <rect x="3" y="14" width="7" height="7" rx="1" />
+                        </svg>
+                    ),
+                },
+            ],
+        },
+        {
+            group: 'Team',
+            items: [
+                {
+                    to: '/admin', label: 'Members',
+                    icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                         </svg>
                     ),
                 },
                 {
-                    to: '/admin/problems/new',
-                    label: 'Add Problem',
+                    to: '/leaderboard', label: 'Leaderboard',
+                    icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                        </svg>
+                    ),
+                },
+            ],
+        },
+        {
+            group: 'Content',
+            items: [
+                {
+                    to: '/problems', label: 'Problems',
+                    icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                        </svg>
+                    ),
+                },
+                {
+                    to: '/admin/problems/new', label: 'Add Problem',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -150,9 +205,13 @@ function useNavItems(isAdmin, reviewDue) {
                         </svg>
                     ),
                 },
+            ],
+        },
+        {
+            group: 'Showcase',
+            items: [
                 {
-                    to: '/admin/showcase',
-                    label: 'Showcase',
+                    to: '/admin/showcase', label: 'Showcase',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -162,13 +221,36 @@ function useNavItems(isAdmin, reviewDue) {
                     ),
                 },
             ],
-        }] : []),
+        },
+        {
+            group: 'Docs',
+            items: [
+                {
+                    to: '/docs/readme', label: 'README',
+                    icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                    ),
+                },
+                {
+                    to: '/docs/deploy', label: 'Deploy Guide',
+                    icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                    ),
+                },
+            ],
+        },
         {
             group: 'Account',
             items: [
                 {
-                    to: '/settings',
-                    label: 'Settings',
+                    to: '/settings', label: 'Settings',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -269,7 +351,7 @@ export function Sidebar() {
     const streak = currentUser?.streak || 0
     const reviewDue = 0 // will be computed from solutions in later step
 
-    const navItems = useNavItems(isAdmin, reviewDue)
+    const navItems = isAdmin ? useAdminNavItems() : useMemberNavItems(reviewDue)
 
     // ── Sidebar inner content ─────────────────────────────
     const sidebarContent = (

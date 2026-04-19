@@ -25,9 +25,16 @@ import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
 import QuizPage from '@pages/QuizPage'
 import ShowcasePage from '@pages/admin/ShowcasePage'
 import VerifyEmailPage from '@pages/auth/VerifyEmailPage'
-// Add imports
 import ForgotPasswordPage from '@pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
+import AdminDashboard from '@pages/AdminDashboard'
+import { useAuthStore } from '@store/useAuthStore'
+
+function DashboardPage() {
+  const { user } = useAuthStore()
+  if (user?.role === 'ADMIN') return <AdminDashboard />
+  return <Dashboard />
+}
 
 
 export default function App() {
@@ -47,7 +54,7 @@ export default function App() {
             <AppShell />
           </ProtectedRoute>
         }>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<DashboardPage />} />
           <Route path="/problems" element={<ProblemsPage />} />
           <Route path="/problems/:id" element={<ProblemDetailPage />} />
           <Route path="/problems/:id/submit" element={<SubmitSolutionPage />} />

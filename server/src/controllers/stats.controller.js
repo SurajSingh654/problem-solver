@@ -343,6 +343,9 @@ export async function getTeamStats(req, res) {
 // ── GET /api/stats/leaderboard ─────────────────────────
 export async function getLeaderboard(req, res) {
   const users = await prisma.user.findMany({
+     where: {
+      role: 'MEMBER',
+    },
     include: {
       solutions: {
         include: {
