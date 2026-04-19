@@ -12,6 +12,7 @@ import { Badge } from '@components/ui/Badge'
 import { cn } from '@utils/cn'
 import { COMPANIES, LEVEL } from '@utils/constants'
 import { toast } from '@store/useUIStore'
+import { useChangeEmail,useConfirmEmailChange } from '../hooks/useAuth'
 
 // ── Avatar color picker ────────────────────────────────
 const AVATAR_COLORS = [
