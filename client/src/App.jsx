@@ -29,6 +29,7 @@ import ForgotPasswordPage from '@pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
 import AdminDashboard from '@pages/AdminDashboard'
 import { useAuthStore } from '@store/useAuthStore'
+import ProductHealthPage from '@pages/admin/ProductHealthPage'
 
 function DashboardPage() {
   const { user } = useAuthStore()
@@ -84,6 +85,9 @@ export default function App() {
           } />
           <Route path="/admin/showcase" element={
             <ProtectedRoute adminOnly><ShowcasePage /></ProtectedRoute>
+          } />
+          <Route path="/admin/analytics" element={
+            <ProtectedRoute adminOnly><ProductHealthPage /></ProtectedRoute>
           } />
         </Route>
 
