@@ -7,6 +7,8 @@ import {
   createdResponse,
   errorResponse,
   unauthorizedResponse,
+  forbiddenResponse,
+  notFoundResponse,
 } from "../utils/response.js";
 
 import {
