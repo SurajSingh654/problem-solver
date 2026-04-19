@@ -68,8 +68,17 @@ export function useLogin() {
       localStorage.setItem("ps_token", token);
       queryClient.setQueryData(QUERY_KEYS.ME, user);
 
-      toast.success(`Welcome back, ${user.username}!`);
-      navigate("/");
+      // Check verification and password change status
+      if (!user.emailVerified) {
+        toast.info("Please verify your email first");
+        navigate("/verify-email", { state: { email: user.email } });
+      } else if (user.mustChangePassword) {
+        toast.info("Please set a new password");
+        navigate("/change-password");
+      } else {
+        toast.success(`Welcome back, ${user.username}!`);
+        navigate("/");
+      }
     },
 
     onError: (err) => {

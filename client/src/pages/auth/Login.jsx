@@ -253,7 +253,6 @@ export default function Login() {
                     </form>
 
                 </div>
-                {/* Forgot password hint */}
                 {/* Forgot password */}
                 <motion.p
                     initial={{ opacity: 0 }}
