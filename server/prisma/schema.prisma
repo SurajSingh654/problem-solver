@@ -40,6 +40,9 @@ model User {
   email          String    @unique
   passwordHash   String
   mustChangePassword Boolean   @default(false)
+  emailVerified      Boolean   @default(false)
+  verificationCode   String?
+  verificationExpiry DateTime?
 
   // Role — "ADMIN" | "MEMBER"
   role           String    @default("MEMBER")

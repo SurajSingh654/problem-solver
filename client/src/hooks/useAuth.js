@@ -29,21 +29,22 @@ export function useRegister() {
 
   return useMutation({
     mutationFn: (data) => authApi.register(data),
-
     onSuccess: (res) => {
       const { user, token } = res.data.data;
 
-      // Persist to Zustand + localStorage
       setAuth(user, token);
       localStorage.setItem("ps_token", token);
-
-      // Pre-populate query cache
       queryClient.setQueryData(QUERY_KEYS.ME, user);
 
-      toast.success("Welcome to ProbSolver! 🎉", "Account Created");
-      navigate("/");
+      // If email not verified, redirect to verification page
+      if (!user.emailVerified) {
+        toast.info("Check your email for a verification code");
+        navigate("/verify-email", { state: { email: user.email } });
+      } else {
+        toast.success("Welcome to ProbSolver! 🎉", "Account Created");
+        navigate("/");
+      }
     },
-
     onError: (err) => {
       const msg = err.response?.data?.error || "Registration failed";
       toast.error(msg, "Error");

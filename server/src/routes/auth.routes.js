@@ -8,6 +8,8 @@ import {
   revokeAdmin,
   changePassword,
   resetUserPassword,
+  verifyEmail,
+  resendVerification,
 } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireAdmin } from "../middleware/admin.middleware.js";
@@ -39,5 +41,9 @@ router.post("/admin/revoke", requireAuth, revokeAdmin);
 
 // ── Admin only ────────────────────────────────────────
 router.post("/reset-password", requireAuth, requireAdmin, resetUserPassword);
+
+// Add these public routes (no auth required)
+router.post('/verify-email',        verifyEmail)
+router.post('/resend-verification', resendVerification)
 
 export default router;

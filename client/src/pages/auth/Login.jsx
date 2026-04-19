@@ -254,6 +254,7 @@ export default function Login() {
 
                 </div>
                 {/* Forgot password hint */}
+                {/* Forgot password */}
                 <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -261,9 +262,12 @@ export default function Login() {
                     className="text-center text-xs text-text-tertiary mt-4"
                 >
                     Forgot your password?{' '}
-                    <span className="text-brand-300 font-semibold">
-                        Contact your admin to reset it.
-                    </span>
+                    <Link
+                        to="/forgot-password"
+                        className="text-brand-300 font-semibold hover:text-brand-200 transition-colors"
+                    >
+                        Reset it here
+                    </Link>
                 </motion.p>
             </motion.div>
         </div>

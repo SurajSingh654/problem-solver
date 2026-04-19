@@ -24,6 +24,7 @@ import DeployPage from '@pages/docs/DeployPage'
 import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
 import QuizPage from '@pages/QuizPage'
 import ShowcasePage from '@pages/admin/ShowcasePage'
+import VerifyEmailPage from '@pages/auth/VerifyEmailPage'
 
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
         {/* Public */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
 
         {/* Protected */}
         <Route element={

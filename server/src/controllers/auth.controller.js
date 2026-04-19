@@ -9,17 +9,24 @@ import {
   unauthorizedResponse,
 } from "../utils/response.js";
 
+import {
+  sendVerificationEmail,
+  sendWelcomeEmail,
+  generateVerificationCode,
+} from "../services/email.service.js";
+
 // ── Helpers ────────────────────────────────────────────
 
 // Shape the user object we send to the client
 // Never send passwordHash
 function sanitizeUser(user) {
-  const { passwordHash, ...safe } = user;
+  const { passwordHash, verificationCode, verificationExpiry, ...safe } = user;
   return {
     ...safe,
     targetCompanies: JSON.parse(safe.targetCompanies || "[]"),
     preferences: JSON.parse(safe.preferences || "{}"),
     mustChangePassword: safe.mustChangePassword || false,
+    emailVerified: safe.emailVerified || false,
   };
 }
 
@@ -66,6 +73,23 @@ export async function register(req, res) {
       avatarColor: generateAvatarColor(username),
     },
   });
+
+  // Generate and send verification code
+  const code = generateVerificationCode();
+  const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      verificationCode: code,
+      verificationExpiry: expiry,
+    },
+  });
+
+  // Send verification email in background
+  sendVerificationEmail(email, username, code).catch((err) =>
+    console.error("[Auth] Verification email failed:", err),
+  );
 
   // Sign token
   const token = signToken({ userId: user.id, role: user.role });
@@ -359,5 +383,108 @@ export async function resetUserPassword(req, res) {
       username: user.username,
     },
     `Temporary password set for ${user.username}`,
+  );
+}
+
+// ── POST /api/auth/verify-email ────────────────────────
+export async function verifyEmail(req, res) {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return errorResponse(res, "Email and code are required", 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    return errorResponse(res, "No account found with this email", 404);
+  }
+
+  if (user.emailVerified) {
+    return successResponse(res, sanitizeUser(user), "Email already verified");
+  }
+
+  if (!user.verificationCode || user.verificationCode !== code) {
+    return errorResponse(res, "Invalid verification code", 400, "INVALID_CODE");
+  }
+
+  if (
+    user.verificationExpiry &&
+    new Date() > new Date(user.verificationExpiry)
+  ) {
+    return errorResponse(
+      res,
+      "Verification code has expired. Request a new one.",
+      400,
+      "CODE_EXPIRED",
+    );
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerified: true,
+      verificationCode: null,
+      verificationExpiry: null,
+    },
+  });
+
+  // Send welcome email in background
+  sendWelcomeEmail(email, user.username).catch((err) =>
+    console.error("[Auth] Welcome email failed:", err),
+  );
+
+  const token = signToken({ userId: updated.id, role: updated.role });
+
+  return successResponse(
+    res,
+    {
+      user: sanitizeUser(updated),
+      token,
+    },
+    "Email verified successfully",
+  );
+}
+
+// ── POST /api/auth/resend-verification ─────────────────
+export async function resendVerification(req, res) {
+  const { email } = req.body;
+
+  if (!email) {
+    return errorResponse(res, "Email is required", 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    // Don't reveal if email exists
+    return successResponse(
+      res,
+      {},
+      "If an account exists, a new code has been sent.",
+    );
+  }
+
+  if (user.emailVerified) {
+    return successResponse(res, {}, "Email is already verified.");
+  }
+
+  const code = generateVerificationCode();
+  const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      verificationCode: code,
+      verificationExpiry: expiry,
+    },
+  });
+
+  sendVerificationEmail(email, user.username, code).catch((err) =>
+    console.error("[Auth] Resend verification failed:", err),
+  );
+
+  return successResponse(
+    res,
+    {},
+    "If an account exists, a new code has been sent.",
   );
 }
