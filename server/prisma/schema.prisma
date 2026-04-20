@@ -79,7 +79,6 @@ model User {
   simSessions    SimSession[]
   addedProblems  Problem[]       @relation("AddedBy")
   interviewSessions InterviewSession[] @relation("UserInterviews")
-  interviewSessions InterviewSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -136,6 +135,7 @@ model Problem {
   // Relations
   solutions     Solution[]
   followUps     FollowUpQuestion[]
+  interviewSessions InterviewSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -9,6 +9,8 @@ import { chdir } from "process";
 import { existsSync } from "fs";
 import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/error.middleware.js";
+import { createServer } from "http";
+import { initWebSocket } from "./services/websocket.service.js";
 
 // Route imports
 import authRoutes from "./routes/auth.routes.js";
@@ -21,7 +23,8 @@ import aiRoutes from "./routes/ai.routes.js";
 import prisma from "./lib/prisma.js";
 import quizRoutes from "./routes/quiz.routes.js";
 import recommendationRoutes from "./routes/recommendations.routes.js";
-import adminRoutes from './routes/admin.routes.js'
+import adminRoutes from "./routes/admin.routes.js";
+import interviewRoutes from './routes/interview.routes.js'
 
 const app = express();
 
@@ -108,7 +111,8 @@ app.use("/api/sim", simRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/quizzes", quizRoutes);
 app.use("/api/recommendations", recommendationRoutes);
-app.use('/api/admin', adminRoutes)
+app.use("/api/admin", adminRoutes);
+app.use('/api/interview-v2', interviewRoutes)
 
 // ── 404 handler ───────────────────────────────────────
 app.use("*", (req, res) => {
@@ -123,12 +127,18 @@ app.use("*", (req, res) => {
 app.use(errorHandler);
 
 // ── Start ─────────────────────────────────────────────
-app.listen(env.PORT, async () => {
+const httpServer = createServer(app);
+
+// Initialize WebSocket server on the same HTTP server
+initWebSocket(httpServer);
+
+httpServer.listen(env.PORT, async () => {
   console.log("");
   console.log("  ⚡ ProbSolver API");
   console.log(`  🚀 Running on   http://localhost:${env.PORT}`);
   console.log(`  🌍 Environment: ${env.NODE_ENV}`);
   console.log(`  🤖 AI features: ${env.AI_ENABLED ? "enabled" : "disabled"}`);
+  console.log(`  🔌 WebSocket:   ws://localhost:${env.PORT}/ws/interview`);
   console.log("");
 
   // Auto-seed on first deploy
