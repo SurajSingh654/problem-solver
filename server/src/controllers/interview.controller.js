@@ -14,6 +14,8 @@ import {
   errorResponse,
 } from "../utils/response.js";
 
+import { generateDebrief } from "../services/interview.engine.js";
+
 // ── POST /api/interview/start ──────────────────────────
 export async function startInterviewSession(req, res) {
   const userId = req.user.id;
@@ -220,4 +222,30 @@ export async function abandonInterviewSession(req, res) {
   });
 
   return successResponse(res, updated, "Interview abandoned");
+}
+
+// ── POST /api/interview-v2/:id/debrief ─────────────────
+export async function generateInterviewDebrief(req, res) {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  const session = await prisma.interviewSession.findUnique({ where: { id } });
+  if (!session) return notFoundResponse(res, "Interview session");
+  if (session.userId !== userId)
+    return errorResponse(res, "Not your session", 403);
+
+  if (session.debrief) {
+    return successResponse(
+      res,
+      JSON.parse(session.debrief),
+      "Debrief already exists",
+    );
+  }
+
+  const debrief = await generateDebrief(id);
+  if (!debrief) {
+    return errorResponse(res, "Failed to generate debrief", 500);
+  }
+
+  return successResponse(res, debrief, "Debrief generated");
 }

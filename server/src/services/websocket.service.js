@@ -6,6 +6,7 @@
 import { WebSocketServer } from "ws";
 import { verifyToken } from "../lib/jwt.js";
 import prisma from "../lib/prisma.js";
+import { handleInterviewChat, generateDebrief } from "./interview.engine.js";
 
 // Store active connections: sessionId → { ws, userId, user }
 const activeConnections = new Map();
@@ -224,7 +225,7 @@ async function handleMessage(sessionId, user, session, message, ws) {
  * This is where LangChain will be integrated in Step 3
  */
 async function handleChatMessage(sessionId, user, session, data, ws) {
-  const { content, workspaceSnapshot } = data;
+  const { content, workspaceSnapshot, currentPhase } = data;
 
   if (!content || !content.trim()) return;
 
@@ -237,7 +238,7 @@ async function handleChatMessage(sessionId, user, session, data, ws) {
       workspaceSnapshot: workspaceSnapshot
         ? JSON.stringify(workspaceSnapshot)
         : null,
-      phase: data.currentPhase || null,
+      phase: currentPhase || null,
     },
   });
 
@@ -247,28 +248,62 @@ async function handleChatMessage(sessionId, user, session, data, ws) {
     data: { role: "user", content: content.trim() },
   });
 
-  // Placeholder: AI response will be handled by LangChain in Step 3
-  // For now, send a placeholder response
+  // Show typing indicator
   sendMessage(ws, {
     type: "ai_typing",
     data: { typing: true },
   });
 
-  // TODO: Replace with LangChain conversation engine in Step 3
-  setTimeout(() => {
-    sendMessage(ws, {
-      type: "ai_message",
-      data: {
-        role: "assistant",
-        content: `[AI interviewer placeholder] I received your message: "${content.trim().slice(0, 50)}...". The LangChain conversation engine will be connected in Step 3.`,
-        phase: data.currentPhase,
-      },
-    });
-    sendMessage(ws, {
-      type: "ai_typing",
-      data: { typing: false },
-    });
-  }, 1000);
+  // Call the interview engine with streaming
+  await handleInterviewChat({
+    sessionId,
+    userId: user.id,
+    userMessage: content.trim(),
+    workspaceSnapshot,
+    currentPhase,
+    session,
+
+    // Stream chunks to the client
+    sendChunk: (chunk) => {
+      sendMessage(ws, {
+        type: "ai_chunk",
+        data: { chunk },
+      });
+    },
+
+    // Complete message
+    sendComplete: (fullResponse) => {
+      sendMessage(ws, {
+        type: "ai_message",
+        data: {
+          role: "assistant",
+          content: fullResponse,
+          phase: currentPhase,
+        },
+      });
+      sendMessage(ws, {
+        type: "ai_typing",
+        data: { typing: false },
+      });
+    },
+
+    // Error
+    sendError: (errorMessage) => {
+      sendMessage(ws, {
+        type: "ai_message",
+        data: {
+          role: "assistant",
+          content: `I apologize, I encountered an issue. Let me try that again. (${errorMessage})`,
+          phase: currentPhase,
+          error: true,
+        },
+      });
+      sendMessage(ws, {
+        type: "ai_typing",
+        data: { typing: false },
+      });
+    },
+  });
 }
 
 /**
@@ -330,7 +365,6 @@ async function handleEndInterview(sessionId, user, ws) {
     },
   });
 
-  // Store end message
   await prisma.interviewMessage.create({
     data: {
       sessionId,
@@ -344,15 +378,24 @@ async function handleEndInterview(sessionId, user, ws) {
     data: {
       sessionId,
       endedAt: new Date().toISOString(),
-      message: "Interview session completed. Generating debrief...",
+      message: "Interview completed. Generating debrief...",
     },
   });
 
-  // Close the connection
+  // Generate AI debrief
+  const debrief = await generateDebrief(sessionId);
+
+  if (debrief) {
+    sendMessage(ws, {
+      type: "debrief_ready",
+      data: { debrief },
+    });
+  }
+
   setTimeout(() => {
     ws.close(1000, "Interview completed");
     activeConnections.delete(sessionId);
-  }, 2000);
+  }, 5000);
 }
 
 /**
