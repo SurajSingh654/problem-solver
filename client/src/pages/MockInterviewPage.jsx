@@ -12,12 +12,15 @@ import { PROBLEM_CATEGORIES } from '@utils/constants'
 import { formatDuration } from '@utils/formatters'
 import api from '@services/api'
 
-const COMPANIES = [
-    { id: 'Google', label: 'Google', icon: '🔵', level: 'L3-L7' },
-    { id: 'Meta', label: 'Meta', icon: '🔷', level: 'E3-E7' },
-    { id: 'Amazon', label: 'Amazon', icon: '🟠', level: 'SDE 1-3' },
-    { id: 'Microsoft', label: 'Microsoft', icon: '🟦', level: 'SDE-Principal' },
-    { id: 'Startup', label: 'Startup', icon: '🚀', level: 'Senior+' },
+const INTERVIEW_STYLES = [
+    { id: 'ALGORITHM_FOCUSED', label: 'Algorithm-Focused', icon: '🎯', desc: 'Structured, rubric-based — most tech companies', examples: 'Google, Meta, Apple, Stripe' },
+    { id: 'SYSTEM_FOCUSED', label: 'System-Focused', icon: '🏗️', desc: 'Architecture, scale, reliability', examples: 'AWS, Cloudflare, Databricks' },
+    { id: 'VALUES_DRIVEN', label: 'Values-Driven', icon: '🗣️', desc: 'Behavioral-heavy, culture fit', examples: 'Amazon, mission-driven orgs' },
+    { id: 'PRAGMATIC_STARTUP', label: 'Startup / Pragmatic', icon: '🚀', desc: 'Ship fast, breadth over depth', examples: 'Startups, small teams, agencies' },
+    { id: 'COLLABORATIVE', label: 'Collaborative', icon: '🤝', desc: 'Pair programming feel, testing mindset', examples: 'Microsoft, Thoughtworks' },
+    { id: 'DOMAIN_SPECIFIC', label: 'Domain-Specific', icon: '🏢', desc: 'Industry knowledge + tech skills', examples: 'Banks, healthcare, fintech' },
+    { id: 'PRODUCT_ORIENTED', label: 'Product-Oriented', icon: '📱', desc: '"Why" matters more than "how"', examples: 'Spotify, Pinterest, Notion' },
+    { id: 'HIGH_PRESSURE', label: 'High-Pressure', icon: '⚡', desc: 'Fast-paced, no hints, mathematical rigor', examples: 'Trading firms, competitive roles' },
 ]
 
 const DURATIONS = [
@@ -102,39 +105,69 @@ function SetupScreen({ onStart }) {
                 </div>
             </motion.div>
 
-            {/* Company */}
+            {/* Interview Style */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 }}
                 className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-4"
             >
-                <h2 className="text-sm font-bold text-text-primary mb-3">
-                    Who's interviewing you?
+                <h2 className="text-sm font-bold text-text-primary mb-1">
+                    Interview Style
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    {COMPANIES.map(c => (
+                <p className="text-xs text-text-tertiary mb-3">
+                    Each style simulates a different interview culture — pick what matches where you're applying
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                    {INTERVIEW_STYLES.map(s => (
                         <button
-                            key={c.id}
-                            onClick={() => setCompany(c.id)}
+                            key={s.id}
+                            onClick={() => setCompany(s.id)}
                             className={cn(
-                                'flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border',
-                                'transition-all duration-150 text-center',
-                                company === c.id
-                                    ? 'bg-brand-400/12 border-brand-400/40 scale-[1.02]'
+                                'flex items-start gap-3 p-3 rounded-xl border text-left',
+                                'transition-all duration-150',
+                                company === s.id
+                                    ? 'bg-brand-400/10 border-brand-400/35'
                                     : 'bg-surface-2 border-border-default hover:border-border-strong'
                             )}
                         >
-                            <span className="text-xl">{c.icon}</span>
-                            <span className={cn(
-                                'text-xs font-bold',
-                                company === c.id ? 'text-brand-300' : 'text-text-primary'
-                            )}>
-                                {c.label}
-                            </span>
-                            <span className="text-[9px] text-text-disabled">{c.level}</span>
+                            <span className="text-xl flex-shrink-0 mt-0.5">{s.icon}</span>
+                            <div className="min-w-0">
+                                <span className={cn(
+                                    'text-xs font-bold block',
+                                    company === s.id ? 'text-brand-300' : 'text-text-primary'
+                                )}>
+                                    {s.label}
+                                </span>
+                                <span className="text-[10px] text-text-tertiary block leading-relaxed">
+                                    {s.desc}
+                                </span>
+                                <span className="text-[9px] text-text-disabled block mt-0.5">
+                                    e.g. {s.examples}
+                                </span>
+                            </div>
                         </button>
                     ))}
+                </div>
+
+                {/* Or type a specific company */}
+                <div>
+                    <p className="text-[10px] text-text-disabled mb-1.5">
+                        Or type a specific company — we'll match the closest interview style
+                    </p>
+                    <input
+                        type="text"
+                        placeholder="e.g. Google, Goldman Sachs, my startup..."
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl
+                 text-sm text-text-primary placeholder:text-text-tertiary
+                 px-3 py-2 outline-none
+                 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                        onChange={e => {
+                            const val = e.target.value.trim()
+                            if (val) setCompany(val)
+                        }}
+                    />
                 </div>
             </motion.div>
 
@@ -309,7 +342,7 @@ function SetupScreen({ onStart }) {
                     />
                     <div className="flex-1">
                         <p className="text-sm font-bold text-text-primary">
-                            {persona?.label} Interview
+                            {INTERVIEW_STYLES.find(s => s.id === company)?.label || company} Interview
                         </p>
                         <p className="text-xs text-text-tertiary">
                             {PROBLEM_CATEGORIES.find(c => c.id === category)?.label} · {duration} minutes
