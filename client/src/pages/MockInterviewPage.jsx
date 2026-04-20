@@ -62,7 +62,7 @@ function SetupScreen({ onStart }) {
         : problems
 
     const selectedProblem = problems.find(p => p.id === problemId)
-    const persona = COMPANIES.find(c => c.id === company)
+    const persona = INTERVIEW_STYLES.find(s => s.id === company)
 
     async function handleStart() {
         setLoading(true)
