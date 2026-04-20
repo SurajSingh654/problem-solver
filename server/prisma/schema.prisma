@@ -78,6 +78,8 @@ model User {
   clarityRatings ClarityRating[]
   simSessions    SimSession[]
   addedProblems  Problem[]       @relation("AddedBy")
+  interviewSessions InterviewSession[] @relation("UserInterviews")
+  interviewSessions InterviewSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -312,4 +314,84 @@ model QuizAttempt {
   completedAt  DateTime @default(now())
 
   @@map("quiz_attempts")
+}
+
+
+// ─────────────────────────────────────────────────────
+// INTERVIEW SESSION — AI Mock Interview
+// ─────────────────────────────────────────────────────
+model InterviewSession {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation("UserInterviews", fields: [userId], references: [id], onDelete: Cascade)
+  problemId     String?
+  problem       Problem?  @relation(fields: [problemId], references: [id])
+
+  // Config
+  company       String?                     // "Google L5", "Meta E4", "Amazon SDE-2"
+  category      String    @default("CODING") // matches problem category
+  duration      Int       @default(2700)     // total seconds (default 45 min)
+
+  // Phases — JSON array of phase configs
+  // [{ name: "Requirements", duration: 300, started: true, completedAt: "..." }]
+  phases        String    @default("[]")
+
+  // Status
+  status        String    @default("ACTIVE")  // ACTIVE | COMPLETED | ABANDONED
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+
+  // Workspace snapshots — JSON stored periodically
+  // { code: "...", diagram: "...", notes: "...", thinking: "..." }
+  workspace     String    @default("{}")
+
+  // AI Debrief — JSON generated at end
+  // { overallScore, dimensions: { approach, communication, ... }, feedback[], moments[] }
+  debrief       String?
+
+  // Scores (extracted from debrief for easy querying)
+  overallScore       Int?     // 1-10
+  approachScore      Int?     // 1-10
+  communicationScore Int?     // 1-10
+  codeQualityScore   Int?     // 1-10
+  timeMgmtScore      Int?     // 1-10
+
+  // Messages
+  messages      InterviewMessage[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("interview_sessions_v2")
+}
+
+// ─────────────────────────────────────────────────────
+// INTERVIEW MESSAGE — Individual messages in a session
+// ─────────────────────────────────────────────────────
+model InterviewMessage {
+  id          String    @id @default(cuid())
+  sessionId   String
+  session     InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Message content
+  role        String              // "user" | "assistant" | "system" | "tool"
+  content     String              // The actual message text
+
+  // Tool call tracking
+  toolName    String?             // Name of tool called (if role is "tool")
+  toolArgs    String?             // JSON — arguments passed to tool
+  toolResult  String?             // JSON — result returned from tool
+
+  // Workspace snapshot at this message (optional)
+  // Allows AI to "see" what the candidate has in their workspace
+  workspaceSnapshot String?       // JSON — { code, diagram, notes }
+
+  // Phase tracking
+  phase       String?             // Which interview phase this message belongs to
+
+  // Metadata
+  tokenCount  Int?                // Tokens used for this message
+  createdAt   DateTime  @default(now())
+
+  @@map("interview_messages")
 }
