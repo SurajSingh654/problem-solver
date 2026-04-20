@@ -30,6 +30,7 @@ import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
 import AdminDashboard from '@pages/AdminDashboard'
 import { useAuthStore } from '@store/useAuthStore'
 import ProductHealthPage from '@pages/admin/ProductHealthPage'
+import MockInterviewPage from '@pages/MockInterviewPage'
 
 function DashboardPage() {
   const { user } = useAuthStore()
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/problems/:id/submit" element={<SubmitSolutionPage />} />
           <Route path="/problems/:id/edit" element={<EditSolutionPage />} />
           <Route path="/interview" element={<InterviewSimPage />} />
+          <Route path="/mock-interview" element={<MockInterviewPage />} />
           <Route path="/review" element={<ReviewQueuePage />} />
           <Route path="/report" element={<ReportPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
