@@ -54,6 +54,17 @@ function useMemberNavItems(reviewDue) {
                     ),
                 },
                 {
+                    to: '/interview-history', label: 'Past Interviews',
+                    icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 8v4l3 3" />
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M3.05 11a9 9 0 0 1 .5-4" />
+                        </svg>
+                    ),
+                },
+                {
                     to: '/interview', label: 'Interview Sim',
                     icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"

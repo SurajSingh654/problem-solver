@@ -1107,6 +1107,9 @@ export default function MockInterviewPage() {
                         sessionData={sessionData}
                         onNewInterview={handleNewInterview}
                     />
+                    <Button variant="ghost" size="md" onClick={() => navigate('/interview-history')}>
+                        View All Interviews
+                    </Button>
                 </motion.div>
             )}
         </AnimatePresence>
