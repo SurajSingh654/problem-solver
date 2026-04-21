@@ -1,11 +1,12 @@
 /* ─────────────────────────────────────────────────────
    PROSE.CSS — Long-form text styles
+   Uses CSS variables for theme support.
    Used for Feynman explanations, approach descriptions,
    and any markdown-like content rendering.
 ───────────────────────────────────────────────────── */
 
 .prose-content {
-  color: #9999bb;
+  color: var(--text-secondary);
   line-height: 1.75;
   font-size: 0.9375rem;
 }
@@ -13,22 +14,22 @@
 .prose-content p {
   margin-bottom: 1rem;
 }
-
 .prose-content p:last-child {
   margin-bottom: 0;
 }
 
 .prose-content strong {
-  color: #eeeef5;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .prose-content em {
-  color: #c4c4d8;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .prose-content code {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 0.875em;
   background: rgba(124, 111, 247, 0.12);
   color: #9d93f9;
@@ -45,37 +46,35 @@
 
 .prose-content li {
   margin-bottom: 0.4rem;
-  color: #9999bb;
+  color: var(--text-secondary);
 }
 
 .prose-content blockquote {
   border-left: 3px solid #7c6ff7;
-  padding-left: 1rem;
+  padding: 12px 16px;
   margin: 1rem 0;
-  color: #9999bb;
+  color: var(--text-tertiary);
   font-style: italic;
   background: rgba(124, 111, 247, 0.05);
   border-radius: 0 8px 8px 0;
-  padding: 12px 16px;
 }
 
-/* Light mode prose */
-body.light .prose-content {
-  color: #4a4a6a;
+.prose-content a {
+  color: #9d93f9;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-content a:hover {
+  color: var(--text-primary);
 }
 
-body.light .prose-content strong {
-  color: #0f0f1a;
+.prose-content img {
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
 }
 
-body.light .prose-content em {
-  color: #2d2d42;
-}
-
-body.light .prose-content li {
-  color: #4a4a6a;
-}
-
-body.light .prose-content blockquote {
-  color: #4a4a6a;
+.prose-content hr {
+  border: none;
+  border-top: 1px solid var(--border-default);
+  margin: 1.5rem 0;
 }

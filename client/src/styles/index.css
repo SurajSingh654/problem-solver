@@ -1,13 +1,24 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap");
+/* ─────────────────────────────────────────────────────
+   PROBSOLVER — Global Styles
+   Architecture: CSS Variables → Tailwind → Components → Utilities
+───────────────────────────────────────────────────── */
 
+/* NOTE: Fonts loaded via <link preload> in index.html — NOT @import */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── Dark mode variables (default) ───────────────────── */
+/* ═══════════════════════════════════════════════════
+   CSS VARIABLES — Theme System
+   Dark mode is default. Light mode activated by html.light class.
+   All component colors use these variables via Tailwind config.
+═══════════════════════════════════════════════════ */
+
 :root,
 html.dark,
 html:not(.light) {
+  color-scheme: dark;
+
   --surface-0: #09090f;
   --surface-1: #111118;
   --surface-2: #18181f;
@@ -23,32 +34,76 @@ html:not(.light) {
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-default: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.15);
+
+  --shadow-color: 0 0% 0%;
+  --shadow-strength: 0.45;
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-hover: rgba(124, 111, 247, 0.6);
+
+  --selection-bg: rgba(124, 111, 247, 0.28);
+
+  --gradient-hero-start: #0e0a1e;
+  --gradient-hero-mid: #111118;
+  --gradient-hero-end: #16162a;
 }
 
-/* ── Light mode variables ─────────────────────────────── */
 html.light {
-  --surface-0: #f4f4f8;
+  color-scheme: light;
+
+  --surface-0: #f8f8fc;
   --surface-1: #ffffff;
-  --surface-2: #f0f0f5;
-  --surface-3: #e8e8f0;
-  --surface-4: #dddde8;
-  --surface-5: #d0d0de;
+  --surface-2: #f2f2f7;
+  --surface-3: #eaeaf2;
+  --surface-4: #e0e0ec;
+  --surface-5: #d4d4e2;
 
   --text-primary: #0f0f1a;
   --text-secondary: #3a3a5c;
   --text-tertiary: #6b6b8a;
-  --text-disabled: #9999b0;
+  --text-disabled: #a0a0b8;
 
-  --border-subtle: rgba(0, 0, 0, 0.05);
-  --border-default: rgba(0, 0, 0, 0.09);
-  --border-strong: rgba(0, 0, 0, 0.15);
+  --border-subtle: rgba(0, 0, 0, 0.04);
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+
+  --shadow-color: 220 10% 50%;
+  --shadow-strength: 0.12;
+
+  --scrollbar-thumb: rgba(0, 0, 0, 0.14);
+  --scrollbar-hover: rgba(124, 111, 247, 0.5);
+
+  --selection-bg: rgba(124, 111, 247, 0.18);
+
+  --gradient-hero-start: #f0f0f8;
+  --gradient-hero-mid: #f8f8fc;
+  --gradient-hero-end: #eeeef8;
 }
+
+/* ═══════════════════════════════════════════════════
+   BASE LAYER — HTML defaults and resets
+═══════════════════════════════════════════════════ */
 
 @layer base {
   html {
     font-size: 16px;
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Respect user motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 
   *,
@@ -71,41 +126,68 @@ html.light {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
-    transition:
-      background-color 0.2s ease,
-      color 0.2s ease;
   }
 
+  /* Smooth theme transition — only on color properties */
+  body,
+  body * {
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  /* Exclude elements where transition causes jank */
+  input,
+  textarea,
+  select,
+  button,
+  a,
+  svg,
+  canvas,
+  [class*="animate-"],
+  [class*="motion-"] {
+    transition: none;
+  }
+
+  /* Selection */
   ::selection {
-    background: rgba(124, 111, 247, 0.28);
+    background: var(--selection-bg);
     color: var(--text-primary);
   }
 
+  /* Focus — accessible and beautiful */
   :focus-visible {
     outline: 2px solid #7c6ff7;
     outline-offset: 2px;
     border-radius: 4px;
   }
-
   :focus:not(:focus-visible) {
     outline: none;
   }
 
+  /* Scrollbar — themed */
   ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--border-strong);
+    background: var(--scrollbar-thumb);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(124, 111, 247, 0.6);
+    background: var(--scrollbar-hover);
+  }
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
+  /* Typography */
   h1,
   h2,
   h3,
@@ -114,18 +196,18 @@ html.light {
   h6 {
     line-height: 1.2;
     letter-spacing: -0.02em;
+    text-wrap: balance;
   }
 
   p {
     line-height: 1.65;
+    text-wrap: pretty;
   }
 
   a {
     color: #9d93f9;
     text-decoration: none;
-    transition: color 120ms ease;
   }
-
   a:hover {
     color: var(--text-primary);
   }
@@ -133,6 +215,7 @@ html.light {
   img {
     display: block;
     max-width: 100%;
+    height: auto;
   }
 
   input,
@@ -141,14 +224,26 @@ html.light {
   button {
     font-family: inherit;
     font-size: inherit;
+    accent-color: #7c6ff7;
   }
 
   button {
     cursor: pointer;
   }
+
+  /* Native form elements in light/dark */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-disabled);
+  }
 }
 
+/* ═══════════════════════════════════════════════════
+   COMPONENT LAYER — Reusable patterns
+═══════════════════════════════════════════════════ */
+
 @layer components {
+  /* Skeleton loading */
   .skeleton {
     background: linear-gradient(
       90deg,
@@ -163,23 +258,19 @@ html.light {
     pointer-events: none;
     user-select: none;
   }
-
   .skeleton * {
     visibility: hidden !important;
   }
 
+  /* Glass morphism */
   .glass {
-    background: rgba(17, 17, 24, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--surface-1);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
     border: 1px solid var(--border-default);
   }
 
-  html.light .glass {
-    background: rgba(255, 255, 255, 0.88);
-    border-color: var(--border-default);
-  }
-
+  /* Gradient text */
   .gradient-text {
     background: linear-gradient(135deg, #9d93f9, #60a5fa);
     -webkit-background-clip: text;
@@ -187,17 +278,18 @@ html.light {
     background-clip: text;
   }
 
+  /* Page enter animation */
   .page-enter {
     animation: fade-in-up 300ms ease-out both;
   }
 
+  /* Code blocks */
   .code-block {
     background: var(--surface-0);
     border: 1px solid var(--border-default);
     border-radius: 12px;
     overflow: hidden;
   }
-
   .code-block pre {
     margin: 0;
     padding: 16px 20px;
@@ -207,7 +299,21 @@ html.light {
     overflow-x: auto;
     color: var(--text-secondary);
   }
+
+  /* Hero gradients — theme-aware */
+  .hero-gradient {
+    background: linear-gradient(
+      160deg,
+      var(--gradient-hero-start) 0%,
+      var(--gradient-hero-mid) 40%,
+      var(--gradient-hero-end) 100%
+    );
+  }
 }
+
+/* ═══════════════════════════════════════════════════
+   UTILITY LAYER
+═══════════════════════════════════════════════════ */
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
@@ -217,6 +323,7 @@ html.light {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .press-effect:active {
     transform: scale(0.97);
   }
@@ -227,7 +334,6 @@ html.light {
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-
   .line-clamp-3 {
     display: -webkit-box;
     -webkit-line-clamp: 3;
@@ -238,29 +344,30 @@ html.light {
   .no-tap-highlight {
     -webkit-tap-highlight-color: transparent;
   }
-  .text-balance {
-    text-wrap: balance;
-  }
-  .text-pretty {
-    text-wrap: pretty;
-  }
 }
 
+/* ═══════════════════════════════════════════════════
+   THIRD-PARTY OVERRIDES
+═══════════════════════════════════════════════════ */
+
+/* Highlight.js */
 .hljs {
   background: transparent !important;
   padding: 0 !important;
 }
 
+/* ═══════════════════════════════════════════════════
+   TIPTAP EDITOR STYLES
+═══════════════════════════════════════════════════ */
 
-/* ── Tiptap editor styles ──────────────────────────── */
 .ProseMirror {
   outline: none;
+  caret-color: #7c6ff7;
 }
 
 .ProseMirror p {
   margin-bottom: 0.5rem;
 }
-
 .ProseMirror p:last-child {
   margin-bottom: 0;
 }
@@ -274,7 +381,6 @@ html.light {
 .ProseMirror li {
   margin-bottom: 0.25rem;
 }
-
 .ProseMirror li p {
   margin-bottom: 0;
 }
@@ -288,7 +394,7 @@ html.light {
 }
 
 .ProseMirror code {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 0.85em;
   background: rgba(124, 111, 247, 0.12);
   color: #9d93f9;
@@ -312,4 +418,48 @@ html.light {
   color: var(--text-disabled);
   pointer-events: none;
   height: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   PRINT STYLES — for debrief and report pages
+═══════════════════════════════════════════════════ */
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Hide non-printable elements */
+  nav,
+  aside,
+  .no-print,
+  [class*="sidebar"],
+  [class*="topbar"],
+  [class*="toast"],
+  [class*="modal"] {
+    display: none !important;
+  }
+
+  /* Reset for print */
+  * {
+    background: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: underline;
+  }
+
+  .page-break-before {
+    page-break-before: always;
+  }
+  .page-break-after {
+    page-break-after: always;
+  }
+  .no-page-break {
+    page-break-inside: avoid;
+  }
 }
