@@ -516,6 +516,96 @@ export default function ShowcasePage() {
                             delay={0.15}
                             onClick={() => navigate('/report')}
                         />
+                        {/* AI Mock Interview — NEW */}
+                        <h3 className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-4 mt-8">
+                            AI Mock Interview — GPT-4o Powered
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+                            <FeatureCard
+                                icon="💬" title="AI Mock Interviewer"
+                                desc="Real-time conversational interview with GPT-4o. WebSocket streaming, function calling, workspace awareness. The AI evaluates — it never teaches."
+                                tag="GPT-4o + WebSocket"
+                                color="bg-brand-400/10 border-brand-400/25"
+                                delay={0}
+                                onClick={() => navigate('/mock-interview')}
+                            />
+                            <FeatureCard
+                                icon="🎭" title="8 Interview Culture Styles"
+                                desc="Algorithm-Focused, System-Focused, Values-Driven, Pragmatic/Startup, Collaborative, Domain-Specific, Product-Oriented, High-Pressure — each with unique behavior."
+                                tag="Culture-Based"
+                                color="bg-warning/10 border-warning/25"
+                                delay={0.05}
+                                onClick={() => navigate('/mock-interview')}
+                            />
+                            <FeatureCard
+                                icon="📊" title="Structured Debrief"
+                                desc="AI generates hire/no-hire verdict with scores across 5 dimensions: approach, communication, code quality, time management, knowledge depth."
+                                tag="Style-Aware"
+                                color="bg-info/10 border-info/25"
+                                delay={0.1}
+                            />
+                            <FeatureCard
+                                icon="📜" title="Interview History"
+                                desc="Review past sessions, re-read full conversation transcripts, compare scores across interviews, and track improvement over time."
+                                color="bg-success/10 border-success/25"
+                                delay={0.15}
+                                onClick={() => navigate('/interview-history')}
+                            />
+                        </div>
+
+                        {/* Security & Auth — NEW */}
+                        <h3 className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-4">
+                            Security & Authentication
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+                            <FeatureCard
+                                icon="📧" title="Email Verification"
+                                desc="6-digit code sent via Resend on registration. 15-minute expiry, auto-redirect flow, resend with cooldown. No unverified accounts."
+                                tag="Resend"
+                                color="bg-success/10 border-success/25"
+                                delay={0}
+                            />
+                            <FeatureCard
+                                icon="🔑" title="Self-Service Password Reset"
+                                desc="Forgot password → email with reset code → enter code + new password. No admin involvement needed. Styled HTML emails."
+                                color="bg-warning/10 border-warning/25"
+                                delay={0.05}
+                            />
+                            <FeatureCard
+                                icon="🛡️" title="Admin Password Reset"
+                                desc="Admin can set temporary passwords for members. Forced password change on next login. Complete audit trail."
+                                color="bg-danger/10 border-danger/25"
+                                delay={0.1}
+                            />
+                            <FeatureCard
+                                icon="📱" title="Email Change with Verification"
+                                desc="Members can change their email. New email verified with 6-digit code before switch. Old email notified for security."
+                                color="bg-info/10 border-info/25"
+                                delay={0.15}
+                            />
+                        </div>
+
+                        {/* Admin Intelligence — NEW */}
+                        <h3 className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-4">
+                            Admin Intelligence
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+                            <FeatureCard
+                                icon="🩺" title="AI Product Health Analytics"
+                                desc="Comprehensive platform metrics analyzed by AI. Engagement funnel, feature adoption, content gaps, growth trends — with specific actionable recommendations."
+                                tag="AI-Driven"
+                                color="bg-brand-400/10 border-brand-400/25"
+                                delay={0}
+                                onClick={() => navigate('/admin/analytics')}
+                            />
+                            <FeatureCard
+                                icon="👥" title="Separate Admin Experience"
+                                desc="Admins see team health, content coverage, member monitoring. Members see personal stats, recommendations, practice tools. Completely different dashboards."
+                                color="bg-warning/10 border-warning/25"
+                                delay={0.05}
+                                onClick={() => navigate('/admin')}
+                            />
+                        </div>
                     </div>
 
                     {/* Team & Analytics */}
@@ -642,16 +732,16 @@ export default function ShowcasePage() {
 │  TanStack Query         │◄────│  JWT Authentication  │     │  + pgvector     │
 │  Zustand (UI state)     │JSON │  Zod Validation      │     │                 │
 │  Framer Motion          │     │  AI Service Layer    │     │  Vector Search  │
-│  Monaco Editor          │     │                      │     │  Embeddings     │
-│  Tiptap Rich Text       │     │  OpenAI GPT-4o-mini  │     │                 │
-│                         │     │  RAG Pipeline        │     │                 │
-│  :3000 (serve)          │     │  :8080 (Express)     │     │  :5432          │
+│  Monaco Editor          │  WS │  OpenAI GPT-4o       │     │  Embeddings     │
+│  Tiptap Rich Text       │◄───►│  WebSocket Server    │     │                 │
+│                         │     │  Resend Email        │     │                 │
+│  :3000 (serve)          │     │  RAG Pipeline        │     │  :5432          │
 └─────────────────────────┘     └──────────────────────┘     └─────────────────┘
-         │                              │                            │
-         │  Vite build → static         │  Prisma ORM               │  pgvector
-         │  Docker (serve)              │  Docker (node:20-slim)     │  Railway Plugin
-         │                              │                            │
-         └──────────────── Railway.app ─┴────────────────────────────┘`}
+         │                              │         │                  │
+         │  Vite build → static         │ Prisma  │ Resend          │  pgvector
+         │  Docker (serve)              │ Docker  │ Email API       │  Railway
+         │                              │         │                  │
+         └──────────────── Railway.app ─┴─────────┴──────────────────┘`}
                     </motion.div>
 
                     {/* Tech stack grid */}
@@ -728,6 +818,9 @@ export default function ShowcasePage() {
                                     { name: 'Zod', desc: 'Schema validation (shared)', badge: 'Validation' },
                                     { name: 'OpenAI GPT-4o-mini', desc: 'AI reviews, quizzes, coaching', badge: 'AI' },
                                     { name: 'Railway', desc: 'Deployment + PostgreSQL', badge: 'Infra' },
+                                    { name: 'WebSocket (ws)', desc: 'Real-time interview communication', badge: 'Real-time' },
+                                    { name: 'OpenAI GPT-4o', desc: 'AI mock interviewer conversations', badge: 'AI' },
+                                    { name: 'Resend', desc: 'Transactional email service', badge: 'Email' },
                                 ].map((tech, i) => (
                                     <motion.div
                                         key={tech.name}
@@ -887,6 +980,42 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                               5. GPT generates daily plan          → Actionable advice`}
                     </motion.div>
 
+
+                    {/* Mock Interview Pipeline — NEW */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="bg-surface-1 border border-brand-400/20 rounded-2xl p-6 mb-8 font-mono text-xs leading-7 text-text-tertiary overflow-x-auto whitespace-pre"
+                    >
+                        {`AI Mock Interview Pipeline
+──────────────────────────────────────────────────────────────────────────────
+
+Start Interview ──────────►   1. Create session (REST API)         → Session ID
+                              2. Open WebSocket connection          → JWT authenticated
+                              3. Load candidate profile (tool)      → Calibrate difficulty
+                              4. Load problem details (tool)        → Context for questions
+
+Each Message ─────────────►   1. Store in database                 → Full transcript saved
+                              2. Load conversation history          → Last 20 messages
+                              3. Build system prompt                → Style-aware persona
+                                 + conversation stage tracking       (OPENING/EARLY/MIDDLE/LATE)
+                                 + phase-specific instructions       (Requirements/Approach/Code)
+                                 + workspace snapshot                (code, diagram, notes)
+                              4. Call GPT-4o with streaming         → Token-by-token delivery
+                                 + 6 function tools available        via WebSocket
+                                 + auto tool execution               
+                              5. Save interview notes (tool)        → Performance observations
+
+End Interview ────────────►   1. Collect all conversation           → Full transcript
+                              2. Collect all interview notes         → Tool observations
+                              3. GPT-4o generates debrief           → Style-aware evaluation
+                                 Score: 1-10 per dimension           
+                                 Verdict: Hire / No Hire             
+                                 Specific moments referenced         
+                              4. Store debrief in database          → Reviewable later`}
+                    </motion.div>
+
                     {/* RAG explanation */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
                         <motion.div
@@ -1029,6 +1158,8 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                             { icon: '📅', name: 'Weekly Coach', desc: 'Personalized 7-day study plan from 6D scores', status: 'Live' },
                             { icon: '📋', name: 'Content Generator', desc: 'Admin enters title → AI fills context, notes, follow-ups', status: 'Live' },
                             { icon: '🎯', name: 'Recommendations', desc: 'Vector similarity + gap analysis for smart suggestions', status: 'Live' },
+                            { icon: '💬', name: 'AI Mock Interviewer', desc: 'GPT-4o real-time conversation with 8 interview styles, function calling, and streaming', status: 'Live' },
+                            { icon: '📊', name: 'Product Health AI', desc: 'AI analyzes platform metrics and generates growth insights and recommendations', status: 'Live' },
                         ].map((feature, i) => (
                             <motion.div
                                 key={feature.name}
@@ -1292,18 +1423,21 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                     <div className="space-y-4">
                         {[
                             {
-                                phase: 'Now',
+                                phase: 'Delivered',
                                 status: 'live',
-                                title: 'Core Platform + AI Intelligence',
+                                title: 'Complete Interview Intelligence Platform',
                                 items: [
-                                    '6-category problem system (Coding, System Design, Behavioral, CS, HR, SQL)',
-                                    'AI Solution Review with RAG — compares with teammate approaches',
-                                    'AI Quiz Generation — any subject, any difficulty, instant',
-                                    'Smart Recommendations — vector similarity + gap analysis',
-                                    'pgvector embeddings on PostgreSQL — semantic search across all content',
-                                    'Interview Simulation with AI progressive hints',
-                                    'Spaced Repetition review queue with adaptive scheduling',
-                                    '6D Intelligence Report with action items and weekly AI coach',
+                                    '6-category problem system with dynamic submission forms per category',
+                                    'AI Solution Review with RAG — compares with teammate approaches via pgvector',
+                                    'AI Mock Interviewer — GPT-4o with 8 interview culture styles, WebSocket streaming, function calling',
+                                    'AI Quiz Generation — any subject, any difficulty, with post-quiz AI analysis',
+                                    'Smart Recommendations — vector similarity + gap analysis + company targeting',
+                                    'Email verification, self-service password reset, admin password management',
+                                    'Separate admin/member experiences with AI-powered product health analytics',
+                                    'Interview history with full transcript replay and score tracking',
+                                    'Spaced repetition review queue with adaptive scheduling',
+                                    '6D Intelligence Report with AI weekly coaching plans',
+                                    'Showcase presentation page with live platform metrics',
                                 ],
                                 color: 'border-success',
                                 dotColor: 'bg-success',
@@ -1312,49 +1446,33 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                             {
                                 phase: 'Next',
                                 status: 'building',
-                                title: 'AI Mock Interviewer',
+                                title: 'Enhanced Interview Experience',
                                 items: [
-                                    'Conversational AI interviewer using LangChain memory',
-                                    'Function calling — AI looks up your profile, problems, and past solutions mid-interview',
-                                    'WebSocket streaming for real-time conversation feel',
-                                    'Company-specific interviewer personas ("I\'m your Google L5 interviewer")',
-                                    'Structured debrief with scores across approach, communication, and time management',
-                                    'Session recording and playback for self-review',
+                                    'Excalidraw whiteboard integration for system design diagrams',
+                                    'Voice-based mock interviews using Whisper STT + TTS',
+                                    'LangGraph Interview Readiness Agent — "Am I ready for my interview?"',
+                                    'Google + GitHub OAuth social login',
+                                    'Light mode polish and mobile responsiveness',
                                 ],
                                 color: 'border-brand-400',
                                 dotColor: 'bg-brand-400',
-                                badge: { text: 'IN PROGRESS', color: 'bg-brand-400/12 text-brand-300 border-brand-400/25' },
+                                badge: { text: 'NEXT', color: 'bg-brand-400/12 text-brand-300 border-brand-400/25' },
                             },
                             {
-                                phase: 'Q3 2026',
-                                status: 'planned',
-                                title: 'Interview Readiness Agent',
-                                items: [
-                                    'LangGraph multi-step analysis workflow',
-                                    'Conversational readiness assessment — "Am I ready for Google next week?"',
-                                    'Cross-references 6D scores, quiz history, solving patterns, and timeline',
-                                    'Generates specific daily action plans adjusted to constraints',
-                                    'Adapts in real-time based on follow-up questions',
-                                ],
-                                color: 'border-warning',
-                                dotColor: 'bg-warning',
-                                badge: { text: 'PLANNED', color: 'bg-warning/12 text-warning border-warning/25' },
-                            },
-                            {
-                                phase: 'Q4 2026',
+                                phase: 'Future',
                                 status: 'planned',
                                 title: 'Advanced Intelligence',
                                 items: [
-                                    'Fine-tuned solution scoring model — instant quality assessment without API calls',
-                                    'Voice-based mock interviews using Whisper + TTS',
+                                    'Fine-tuned solution scoring model for instant quality assessment',
                                     'Cross-category learning connections (coding ↔ system design ↔ DBMS)',
                                     'Interview pipeline tracker — applications, stages, outcomes, conversion rates',
                                     'Team-wide analytics dashboard for engineering managers',
                                     'Mobile app for reviews and quizzes on the go',
+                                    'Email notifications and weekly digest for members',
                                 ],
-                                color: 'border-info',
-                                dotColor: 'bg-info',
-                                badge: { text: 'FUTURE', color: 'bg-info/12 text-info border-info/25' },
+                                color: 'border-warning',
+                                dotColor: 'bg-warning',
+                                badge: { text: 'PLANNED', color: 'bg-warning/12 text-warning border-warning/25' },
                             },
                         ].map((phase, i) => (
                             <motion.div
@@ -1484,6 +1602,11 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                                         ['Vector semantic search', true, false, false, false, false],
                                         ['Self-hosted / own data', true, false, false, false, false],
                                         ['Free for teams', true, false, true, false, false],
+                                        ['AI mock interviewer (GPT-4o)', true, false, false, false, true],
+                                        ['8 interview culture styles', true, false, false, false, false],
+                                        ['Email verification + reset', true, true, false, true, false],
+                                        ['Product health AI analytics', true, false, false, false, false],
+                                        ['Interview session history', true, false, false, false, true],
                                     ].map((row, i) => (
                                         <tr key={i} className="hover:bg-surface-2/50 transition-colors">
                                             <td className="py-2.5 px-4 text-xs font-medium text-text-secondary">
@@ -1662,6 +1785,8 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                                     { model: 'ClarityRating', fields: 'Peer-to-peer solution quality ratings' },
                                     { model: 'SimSession', fields: 'Timed interviews with scoring and debrief' },
                                     { model: 'QuizAttempt', fields: 'AI-generated quizzes with analysis and suggestions' },
+                                    { model: 'InterviewSession', fields: 'AI mock interview with phases, workspace, debrief' },
+                                    { model: 'InterviewMessage', fields: 'Conversation transcript with tool calls and phase tracking' },
                                 ].map((m, i) => (
                                     <div key={m.model}
                                         className="flex items-center gap-3 px-3 py-2 rounded-xl
@@ -1697,6 +1822,9 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                                     { route: '/api/stats', methods: 'GET GET GET GET', desc: 'Personal, team, leaderboard, showcase' },
                                     { route: '/api/recommendations', methods: 'GET', desc: 'Smart problem recommendations' },
                                     { route: '/api/users', methods: 'GET DELETE PATCH', desc: 'List, delete, role management' },
+                                    { route: '/api/interview-v2', methods: 'POST GET PATCH', desc: 'AI mock interview sessions' },
+                                    { route: '/api/admin', methods: 'GET POST', desc: 'Product health analytics + AI analysis' },
+                                    { route: '/ws/interview', methods: 'WebSocket', desc: 'Real-time AI interviewer streaming' },
                                 ].map((api, i) => (
                                     <div key={api.route}
                                         className="flex items-center gap-3 px-3 py-2 rounded-xl
@@ -1836,6 +1964,7 @@ Weekly Plan ──────────────►   1. Fetch user's 6D s
                                 { label: 'Problems', to: '/problems', icon: '📋' },
                                 { label: 'Quiz', to: '/quizzes', icon: '🧠' },
                                 { label: 'Interview', to: '/interview', icon: '⏱' },
+                                { label: 'AI Interview', to: '/mock-interview', icon: '💬' },
                                 { label: 'Report', to: '/report', icon: '📊' },
                                 { label: 'Leaderboard', to: '/leaderboard', icon: '🏆' },
                                 { label: 'Docs', to: '/docs/readme', icon: '📖' },
