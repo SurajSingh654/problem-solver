@@ -4,6 +4,13 @@ import '@excalidraw/excalidraw/index.css'
 export function ExcalidrawEditor({ onChange, initialData }) {
     const [ExcalidrawComponent, setExcalidrawComponent] = useState(null)
     const containerRef = useRef(null)
+    const debounceRef = useRef(null)
+    const onChangeRef = useRef(onChange)
+
+    // Keep onChange ref fresh without causing re-renders
+    useEffect(() => {
+        onChangeRef.current = onChange
+    }, [onChange])
 
     // Dynamic import on mount
     useEffect(() => {
@@ -12,12 +19,24 @@ export function ExcalidrawEditor({ onChange, initialData }) {
         })
     }, [])
 
+    // Debounced change handler — avoids infinite re-render loop
     const handleChange = useCallback((elements) => {
-        if (onChange && elements.length > 0) {
-            const serialized = JSON.stringify(elements)
-            onChange(serialized)
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+
+        debounceRef.current = setTimeout(() => {
+            const nonDeleted = elements.filter(el => !el.isDeleted)
+            if (onChangeRef.current && nonDeleted.length > 0) {
+                onChangeRef.current(JSON.stringify(nonDeleted))
+            }
+        }, 300)
+    }, [])
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current)
         }
-    }, [onChange])
+    }, [])
 
     if (!ExcalidrawComponent) {
         return (
