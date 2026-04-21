@@ -11,6 +11,7 @@ import { cn } from '@utils/cn'
 import { PROBLEM_CATEGORIES } from '@utils/constants'
 import { formatDuration } from '@utils/formatters'
 import api from '@services/api'
+import { ExcalidrawEditor } from '@components/ui/ExcalidrawEditor'
 
 const INTERVIEW_STYLES = [
     { id: 'ALGORITHM_FOCUSED', label: 'Algorithm-Focused', icon: '🎯', desc: 'Structured, rubric-based — most tech companies', examples: 'Google, Meta, Apple, Stripe' },
