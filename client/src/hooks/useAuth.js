@@ -31,25 +31,17 @@ export function useRegister() {
     mutationFn: (data) => authApi.register(data),
 
     onSuccess: (res) => {
-      console.log("[Register] Full API response:", JSON.stringify(res.data));
 
       const { user, token } = res.data.data;
-
-      console.log("[Register] User object:", JSON.stringify(user));
-      console.log("[Register] emailVerified value:", user.emailVerified);
-      console.log("[Register] emailVerified type:", typeof user.emailVerified);
-      console.log("[Register] !emailVerified:", !user.emailVerified);
 
       setAuth(user, token);
       localStorage.setItem("ps_token", token);
       queryClient.setQueryData(QUERY_KEYS.ME, user);
 
       if (!user.emailVerified) {
-        console.log("[Register] → Redirecting to /verify-email");
         toast.info("Check your email for a verification code");
         navigate("/verify-email", { state: { email: user.email } });
       } else {
-        console.log("[Register] → Redirecting to / (email already verified)");
         toast.success("Welcome to ProbSolver! 🎉", "Account Created");
         navigate("/");
       }
@@ -73,29 +65,20 @@ export function useLogin() {
     mutationFn: (data) => authApi.login(data),
 
     onSuccess: (res) => {
-      console.log("[Login] Full API response:", JSON.stringify(res.data));
 
       const { user, token } = res.data.data;
-
-      console.log("[Login] User object:", JSON.stringify(user));
-      console.log("[Login] emailVerified value:", user.emailVerified);
-      console.log("[Login] emailVerified type:", typeof user.emailVerified);
-      console.log("[Login] mustChangePassword:", user.mustChangePassword);
 
       setAuth(user, token);
       localStorage.setItem("ps_token", token);
       queryClient.setQueryData(QUERY_KEYS.ME, user);
 
       if (!user.emailVerified) {
-        console.log("[Login] → Redirecting to /verify-email");
         toast.info("Please verify your email first");
         navigate("/verify-email", { state: { email: user.email } });
       } else if (user.mustChangePassword) {
-        console.log("[Login] → Redirecting to /change-password");
         toast.info("Please set a new password");
         navigate("/change-password");
       } else {
-        console.log("[Login] → Redirecting to / (all checks passed)");
         toast.success(`Welcome back, ${user.username}!`);
         navigate("/");
       }

@@ -41,8 +41,6 @@ async function main() {
     },
   })
 
-  console.log('✓ Created admin:', admin.username)
-
   // ── Create Member users ───────────────────────────
   const memberData = [
     {
@@ -363,8 +361,6 @@ async function main() {
     },
   })
 
-  console.log('✓ Created sample solutions for alex')
-
   // ── Create a sim session for Alex ─────────────────
   await prisma.simSession.create({
     data: {
@@ -381,16 +377,6 @@ async function main() {
       whatToImprove:   'Spent too long on edge cases. Should have stated assumptions upfront.',
     },
   })
-
-  console.log('✓ Created sample sim session')
-
-  console.log('\n✅ Seed complete!')
-  console.log('─────────────────────────────────')
-  console.log('Admin:   admin@probsolver.dev / admin123')
-  console.log('Members: alex@example.com / member123')
-  console.log('         sarah@example.com / member123')
-  console.log('         mike@example.com  / member123')
-  console.log('─────────────────────────────────')
 }
 
 main()

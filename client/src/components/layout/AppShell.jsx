@@ -44,16 +44,12 @@ export function AppShell() {
     const navigate = useNavigate()
     const location = useLocation()
 
-    console.log('[AppShell] Current path:', location.pathname)
-    console.log('[AppShell] emailVerified:', user?.emailVerified)
-    console.log('[AppShell] mustChangePassword:', user?.mustChangePassword)
 
     useEffect(() => {
         if (
             user?.mustChangePassword &&
             location.pathname !== '/change-password'
         ) {
-             console.log('[AppShell] → Forcing redirect to /change-password')
             navigate('/change-password', { replace: true })
         }
     }, [user?.mustChangePassword, location.pathname])

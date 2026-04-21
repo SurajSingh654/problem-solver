@@ -5,13 +5,7 @@ import { toast } from "@store/useUIStore.js";
 export function useGenerateQuiz() {
   return useMutation({
     mutationFn: async (data) => {
-      console.log("[Quiz] Generating with params:", data);
       const res = await quizApi.generate(data);
-      console.log(
-        "[Quiz] Generation successful:",
-        res.data.data?.questions?.length,
-        "questions",
-      );
       return res;
     },
     onError: (err) => {

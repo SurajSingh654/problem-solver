@@ -632,7 +632,6 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
         wsRef.current = ws
 
         ws.onopen = () => {
-            console.log('[WS] Connected')
             setConnected(true)
         }
 
@@ -691,7 +690,6 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
         }
 
         ws.onclose = (event) => {
-            console.log('[WS] Disconnected:', event.code)
             setConnected(false)
         }
 

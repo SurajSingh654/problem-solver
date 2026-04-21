@@ -316,7 +316,6 @@ async function autoSeedIfEmpty() {
   try {
     const userCount = await prisma.user.count()
     if (userCount === 0) {
-      console.log('  📦 Database empty — running seed...')
       const { execSync } = await import('child_process')
       execSync('node prisma/seed.js', {
         cwd: process.cwd(),

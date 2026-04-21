@@ -21,18 +21,36 @@ export async function startInterviewSession(req, res) {
   const userId = req.user.id;
   const { problemId, company, duration, category } = req.body;
 
-  // Validate problem if provided
-  let problem = null;
-  if (problemId) {
-    problem = await prisma.problem.findUnique({
-      where: { id: problemId },
-      select: { id: true, title: true, category: true, difficulty: true },
+  const effectiveCategory = category || "CODING";
+  const effectiveDuration = duration || 2700;
+
+  // If no problem specified, randomly pick one from the category
+  let finalProblemId = problemId || null;
+
+  if (!finalProblemId) {
+    const availableProblems = await prisma.problem.findMany({
+      where: {
+        isActive: true,
+        category: effectiveCategory,
+      },
+      select: { id: true },
     });
-    if (!problem) return notFoundResponse(res, "Problem");
+
+    if (availableProblems.length > 0) {
+      const randomIndex = Math.floor(Math.random() * availableProblems.length);
+      finalProblemId = availableProblems[randomIndex].id;
+    }
   }
 
-  const effectiveCategory = category || problem?.category || "CODING";
-  const effectiveDuration = duration || 2700;
+  // Validate problem if we have one
+  let problem = null;
+  if (finalProblemId) {
+    problem = await prisma.problem.findUnique({
+      where: { id: finalProblemId },
+      select: { id: true, title: true, category: true, difficulty: true },
+    });
+    if (!problem) finalProblemId = null;
+  }
 
   // Get phase config
   const phaseConfig = getPhaseConfig(effectiveCategory, effectiveDuration);
@@ -44,7 +62,7 @@ export async function startInterviewSession(req, res) {
   const session = await prisma.interviewSession.create({
     data: {
       userId,
-      problemId: problemId || null,
+      problemId: finalProblemId,
       company: company || null,
       category: effectiveCategory,
       duration: effectiveDuration,
@@ -71,7 +89,7 @@ export async function startInterviewSession(req, res) {
     data: {
       sessionId: session.id,
       role: "system",
-      content: `Interview session started. Category: ${effectiveCategory}. Duration: ${effectiveDuration}s. Company: ${company || "General"}.`,
+      content: `Interview session started. Category: ${effectiveCategory}. Duration: ${effectiveDuration}s. Company: ${company || "General"}. Problem: ${problem?.title || "Open-ended"}.`,
       phase: phaseConfig.phases[0]?.name || "Start",
     },
   });

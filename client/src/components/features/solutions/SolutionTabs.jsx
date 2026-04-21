@@ -209,7 +209,7 @@ export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesCha
         return null
     }
 
-    const typeInfo = SOLUTION_TYPES.find(t => t.id === solutions[activeTab]?.type) || SOLUTION_TYPES[1]
+    const typeInfo = solutionTypes.find(t => t.id === solutions[activeTab]?.type) || solutionTypes[0]
 
     return (
         <div className="space-y-5">
