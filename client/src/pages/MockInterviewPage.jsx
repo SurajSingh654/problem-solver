@@ -578,25 +578,31 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
 
             {/* Tab content */}
             <div className="flex-1 overflow-hidden">
-                <textarea
-                    value={workspace[activeTab] || ''}
-                    onChange={e => updateWorkspace(activeTab, e.target.value)}
-                    placeholder={
-                        activeTab === 'thinking' ? 'Write your approach and thought process here before diving in...' :
-                            activeTab === 'code' ? '// Write your code here...' :
-                                activeTab === 'diagram' ? 'Describe your architecture — components, connections, data flow...' :
+                {activeTab === 'diagram' ? (
+                    <ExcalidrawEditor
+                        onChange={val => updateWorkspace('diagram', val)}
+                        initialData={workspace.diagram}
+                    />
+                ) : (
+                    <textarea
+                        value={workspace[activeTab] || ''}
+                        onChange={e => updateWorkspace(activeTab, e.target.value)}
+                        placeholder={
+                            activeTab === 'thinking' ? 'Write your approach and thought process here...' :
+                                activeTab === 'code' ? '// Write your code here...' :
                                     activeTab === 'response' ? 'Write your structured response here...' :
-                                        activeTab === 'scratchpad' ? 'Rough calculations, notes, scratch work...' :
+                                        activeTab === 'scratchpad' ? 'Rough calculations, notes...' :
                                             'Your notes...'
-                    }
-                    className={cn(
-                        'w-full h-full bg-surface-0 text-sm text-text-primary',
-                        'placeholder:text-text-disabled px-4 py-3 outline-none resize-none',
-                        activeTab === 'code' || activeTab === 'scratchpad'
-                            ? 'font-mono text-xs leading-relaxed'
-                            : 'leading-relaxed'
-                    )}
-                />
+                        }
+                        className={cn(
+                            'w-full h-full bg-surface-0 text-sm text-text-primary',
+                            'placeholder:text-text-disabled px-4 py-3 outline-none resize-none',
+                            activeTab === 'code' || activeTab === 'scratchpad'
+                                ? 'font-mono text-xs leading-relaxed'
+                                : 'leading-relaxed'
+                        )}
+                    />
+                )}
             </div>
         </div>
     )

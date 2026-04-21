@@ -52,6 +52,7 @@ export default defineConfig({
           charts: ["recharts"],
           forms: ["react-hook-form", "@hookform/resolvers", "zod"],
           highlight: ["highlight.js"],
+          excalidraw: ["@excalidraw/excalidraw"],
         },
       },
     },
