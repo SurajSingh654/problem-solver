@@ -578,12 +578,14 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden" style={{ position: 'relative' }}>
                 {activeTab === 'diagram' ? (
-                    <ExcalidrawEditor
-                        onChange={val => updateWorkspace('diagram', val)}
-                        initialData={workspace.diagram}
-                    />
+                    <div style={{ position: 'absolute', inset: 0 }}>
+                        <ExcalidrawEditor
+                            onChange={val => updateWorkspace('diagram', val)}
+                            initialData={workspace.diagram}
+                        />
+                    </div>
                 ) : (
                     <textarea
                         value={workspace[activeTab] || ''}

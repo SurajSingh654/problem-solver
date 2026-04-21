@@ -1,30 +1,25 @@
-import { useState, useCallback } from 'react'
-
-// Lazy load Excalidraw to avoid SSR issues and reduce initial bundle
-let Excalidraw = null
+import { useState, useCallback, useEffect, useRef } from 'react'
+import '@excalidraw/excalidraw/index.css'
 
 export function ExcalidrawEditor({ onChange, initialData }) {
-    const [loaded, setLoaded] = useState(false)
     const [ExcalidrawComponent, setExcalidrawComponent] = useState(null)
+    const containerRef = useRef(null)
 
-    // Dynamic import on first render
-    useState(() => {
+    // Dynamic import on mount
+    useEffect(() => {
         import('@excalidraw/excalidraw').then(mod => {
-            Excalidraw = mod.Excalidraw
             setExcalidrawComponent(() => mod.Excalidraw)
-            setLoaded(true)
         })
-    })
+    }, [])
 
-    const handleChange = useCallback((elements, appState) => {
-        // Serialize elements to JSON string for storage
+    const handleChange = useCallback((elements) => {
         if (onChange && elements.length > 0) {
             const serialized = JSON.stringify(elements)
             onChange(serialized)
         }
     }, [onChange])
 
-    if (!loaded || !ExcalidrawComponent) {
+    if (!ExcalidrawComponent) {
         return (
             <div className="flex items-center justify-center h-full
                       text-xs text-text-tertiary gap-2">
@@ -35,7 +30,6 @@ export function ExcalidrawEditor({ onChange, initialData }) {
         )
     }
 
-    // Parse initial data if it's a JSON string of elements
     let initialElements = []
     if (initialData) {
         try {
@@ -51,11 +45,14 @@ export function ExcalidrawEditor({ onChange, initialData }) {
         : true
 
     return (
-        <div className="h-full w-full" style={{ minHeight: '400px' }}>
+        <div
+            ref={containerRef}
+            style={{ width: '100%', height: '100%', minHeight: '400px' }}
+        >
             <ExcalidrawComponent
                 initialData={{ elements: initialElements }}
                 onChange={handleChange}
-                theme={isDark ? "dark" : "light"}
+                theme={isDark ? 'dark' : 'light'}
                 UIOptions={{
                     canvasActions: {
                         export: false,
