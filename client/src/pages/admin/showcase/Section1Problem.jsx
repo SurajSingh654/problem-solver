@@ -5,8 +5,7 @@ import { Section, PainPoint } from './components'
 export default function Section1Problem() {
     return (
         <Section id="problem">
-            <div className="relative overflow-hidden"
-                style={{ background: 'linear-gradient(160deg, #0e0a1e 0%, #111118 40%, #16162a 100%)' }}>
+            <div className="relative overflow-hidden hero-gradient">
                 {/* Background orbs */}
                 <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute top-[-150px] right-[-100px] w-[500px] h-[500px]

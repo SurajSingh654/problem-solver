@@ -242,11 +242,7 @@ export default function ReportPage() {
             <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="relative rounded-2xl overflow-hidden border border-border-default mb-6 p-6"
-                style={{
-                    background: 'linear-gradient(135deg, #16162a 0%, #111118 60%, #0e0a1e 100%)',
-                }}
-            >
+                className="relative rounded-2xl overflow-hidden border border-border-default mb-6 p-6 hero-gradient">
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">
                     <div className="absolute top-[-60px] right-[-60px] w-[280px] h-[280px]
                           rounded-full bg-brand-400/8 blur-[80px]" />

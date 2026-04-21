@@ -59,7 +59,7 @@ export function PatternCoverage({ patternMap = {} }) {
             {/* Color dot */}
             <div
               className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ background: pattern.count > 0 ? pattern.color : '#35354a' }}
+              style={{ background: pattern.count > 0 ? pattern.color : 'var(--text-disabled)' }}
             />
 
             {/* Name */}

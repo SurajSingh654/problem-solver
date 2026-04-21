@@ -168,10 +168,7 @@ export default function ProfilePage() {
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="relative rounded-2xl overflow-hidden border border-border-default
-                   p-6 mb-6"
-                style={{
-                    background: 'linear-gradient(135deg, #16162a 0%, #111118 60%, #0e0a1e 100%)',
-                }}
+                   p-6 mb-6 hero-gradient"
             >
                 {/* Background orb */}
                 <div className="absolute top-[-60px] right-[-60px] w-[240px] h-[240px]

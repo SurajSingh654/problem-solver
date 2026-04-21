@@ -364,10 +364,7 @@ export function DocsLayout({ sidebar, children }) {
 // ── Docs hero ──────────────────────────────────────────
 export function DocsHero({ eyebrow, eyebrowColor = '#7c6ff7', title, titleGradient, desc, children }) {
     return (
-        <div className="relative border-b border-border-default overflow-hidden"
-            style={{
-                background: 'linear-gradient(160deg, #18181f 0%, #09090f 60%, #0e0a1e 100%)'
-            }}>
+        <div className="relative border-b border-border-default overflow-hidden hero-gradient">
             {/* Orbs */}
             <div className="absolute top-[-120px] right-[-60px] w-[400px] h-[400px]
                       rounded-full pointer-events-none"

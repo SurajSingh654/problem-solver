@@ -283,12 +283,7 @@ export default function Register() {
                 initial={{ opacity: 0, x: 24 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4, delay: 0.1, ease: 'easeOut' }}
-                className="hidden lg:flex w-[440px] flex-col justify-center px-12 relative overflow-hidden"
-                style={{
-                    background: 'linear-gradient(160deg, #111118 0%, #0e0a1e 100%)',
-                    borderLeft: '1px solid rgba(255,255,255,0.06)',
-                }}
-            >
+                className="hidden lg:flex w-[440px] flex-col justify-center px-12 relative overflow-hidden hero-gradient">
                 {/* Background orb */}
                 <div className="absolute top-[-100px] right-[-100px] w-[400px] h-[400px] bg-brand-400/8 rounded-full blur-[100px] pointer-events-none" />
                 <div className="absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] bg-blue-500/6 rounded-full blur-[100px] pointer-events-none" />
