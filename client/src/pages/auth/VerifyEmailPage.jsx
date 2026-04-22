@@ -9,6 +9,7 @@ import { Input } from '@components/ui/Input'
 import { cn } from '@utils/cn'
 import { toast } from '@store/useUIStore'
 import api from '@services/api'
+import useAuthStore from '@store/useAuthStore'
 
 export default function VerifyEmailPage() {
     const navigate = useNavigate()
@@ -90,10 +91,24 @@ export default function VerifyEmailPage() {
                 code: fullCode,
             })
 
-            // v3.0: verify endpoint returns { success, message } — no token
-            // User must now log in with their verified account
-            toast.success('Email verified! Please log in.')
-            navigate('/auth/login', { replace: true })
+            // v3.0: verify returns token + user — auto-login
+            const { token, user: verifiedUser } = res.data
+
+            if (token && verifiedUser) {
+                // Auto-login: store token and redirect to onboarding
+                const { setAuth } = useAuthStore.getState()
+                setAuth(token, verifiedUser)
+                toast.success('Email verified! Welcome to ProbSolver 🎉')
+
+                if (!verifiedUser.onboardingComplete) {
+                    navigate('/onboarding', { replace: true })
+                } else {
+                    navigate('/', { replace: true })
+                }
+            } else {
+                toast.success('Email verified! Please log in.')
+                navigate('/auth/login', { replace: true })
+            }
         } catch (err) {
             const msg = err.response?.data?.error || 'Verification failed'
             toast.error(msg)

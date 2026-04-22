@@ -30,6 +30,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppShell } from '@components/layout/AppShell'
 import ProtectedRoute from '@components/layout/ProtectedRoute'
 import { Spinner } from '@components/ui/Spinner'
+import { ToastContainer } from '@components/ui/Toast'
 
 // ── Auth pages (always eager — small bundle) ─────────────────
 import Login from '@pages/auth/Login'
@@ -282,6 +283,7 @@ export default function App() {
 
         </Routes>
       </BrowserRouter>
+      <ToastContainer />
     </QueryClientProvider>
   )
 }
