@@ -416,7 +416,6 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                         return
                                     }
 
-                                    // Check if any fields already have content
                                     const hasExisting =
                                         watch('realWorldContext') ||
                                         watch('adminNotes') ||
@@ -426,10 +425,12 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                     if (hasExisting) {
                                         const confirmed = window.confirm(
                                             'AI-generated content will replace your current entries for:\n\n' +
+                                            '• Description\n' +
                                             '• Real World Context\n' +
                                             '• Use Cases\n' +
                                             '• Admin Notes\n' +
-                                            '• Follow-up Questions\n\n' +
+                                            '• Follow-up Questions\n' +
+                                            '• Tags\n\n' +
                                             'Continue?'
                                         )
                                         if (!confirmed) return
@@ -440,23 +441,38 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                             title, source, sourceUrl, difficulty, tags,
                                             category: watch('category'),
                                         })
-                                        const content = res.data.data
 
+                                        // v3.0 FIX: response is { data: { success, content: {...} } }
+                                        const content = res.data?.content || res.data?.data || res.data
+
+                                        if (content.description) {
+                                            setValue('description', content.description)
+                                        }
                                         if (content.realWorldContext) {
                                             setValue('realWorldContext', content.realWorldContext)
                                         }
                                         if (content.adminNotes) {
                                             setValue('adminNotes', content.adminNotes)
                                         }
-                                        if (content.useCases?.length) {
-                                            setUseCases(content.useCases)
+                                        // v3.0 FIX: useCases comes as string, split into array
+                                        if (content.useCases) {
+                                            const cases = typeof content.useCases === 'string'
+                                                ? content.useCases.split('\n').filter(Boolean).map(s => s.replace(/^\d+\.\s*/, '').trim())
+                                                : content.useCases
+                                            setUseCases(cases)
                                         }
-                                        if (content.followUps?.length) {
-                                            setFollowUps(content.followUps.map((fq) => ({
+                                        // v3.0 FIX: AI returns followUpQuestions not followUps
+                                        const fqs = content.followUpQuestions || content.followUps || []
+                                        if (fqs.length > 0) {
+                                            setFollowUps(fqs.map((fq) => ({
                                                 question: fq.question,
-                                                difficulty: fq.difficulty,
+                                                difficulty: fq.difficulty || 'MEDIUM',
                                                 hint: fq.hint || '',
                                             })))
+                                        }
+                                        // v3.0 FIX: Also set tags from AI response
+                                        if (content.tags?.length > 0) {
+                                            setTags(prev => [...new Set([...prev, ...content.tags])])
                                         }
 
                                         toast.success('AI generated content! Review and edit as needed.')

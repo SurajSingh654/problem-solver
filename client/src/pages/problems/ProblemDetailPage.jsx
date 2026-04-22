@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
+import { useProblemSolutions } from '@hooks/useSolutions'
 import useAuthStore from '@store/useAuthStore'
 import { SolutionCard } from '@components/features/solutions/SolutionCard'
 import { Badge } from '@components/ui/Badge'
@@ -12,21 +13,9 @@ import { useAIStatus } from '@hooks/useAI'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
 import { PROBLEM_CATEGORIES } from '@utils/constants'
-import {
-    DIFFICULTY_COLORS,
-    SOURCE_LABELS,
-} from '@utils/constants'
 
-// ── Difficulty badge ───────────────────────────────────
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
-const SOURCE_COLOR = {
-    LEETCODE: 'text-orange-400', GFG: 'text-green-500',
-    CODECHEF: 'text-amber-600', INTERVIEWBIT: 'text-blue-500',
-    HACKERRANK: 'text-emerald-500', CODEFORCES: 'text-red-500',
-    OTHER: 'text-text-tertiary',
-}
 
-// ── Info chip ──────────────────────────────────────────
 function InfoChip({ label, value, color }) {
     return (
         <div className="flex flex-col items-center justify-center
@@ -40,84 +29,23 @@ function InfoChip({ label, value, color }) {
     )
 }
 
-function SimilarProblemsSection({ problemId }) {
-    const navigate = useNavigate()
-    const { data: similar, isLoading } = useSimilarProblems(problemId)
-
-    if (isLoading || !similar?.length) return null
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="mt-6"
-        >
-            <h2 className="text-base font-bold text-text-primary flex items-center gap-2 mb-4">
-                <span>🔍</span> Similar Problems
-                <span className="text-xs font-normal text-text-disabled">
-                    powered by AI
-                </span>
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {similar.slice(0, 4).map((p, i) => (
-                    <motion.div
-                        key={p.id}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        onClick={() => navigate(`/problems/${p.id}`)}
-                        className="flex items-center gap-3 p-3.5 rounded-xl border
-                       bg-surface-2 border-border-default
-                       hover:border-brand-400/30 hover:bg-surface-3
-                       cursor-pointer transition-all duration-150"
-                    >
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-text-primary truncate">
-                                {p.title}
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <Badge
-                                    variant={
-                                        p.difficulty === 'EASY' ? 'easy' :
-                                            p.difficulty === 'HARD' ? 'hard' : 'medium'
-                                    }
-                                    size="xs"
-                                >
-                                    {p.difficulty?.charAt(0) + p.difficulty?.slice(1).toLowerCase()}
-                                </Badge>
-                                {p.tags?.slice(0, 2).map(t => (
-                                    <span key={t}
-                                        className="text-[10px] text-text-disabled bg-surface-3
-                                   border border-border-subtle rounded px-1.5 py-px">
-                                        {t}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2"
-                            strokeLinecap="round" strokeLinejoin="round"
-                            className="text-text-disabled flex-shrink-0">
-                            <polyline points="9 18 15 12 9 6" />
-                        </svg>
-                    </motion.div>
-                ))}
-            </div>
-        </motion.div>
-    )
-}
-
-// ── Main ───────────────────────────────────────────────
 export default function ProblemDetailPage() {
-    const { id } = useParams()
+    // v3.0 FIX: Route param is `problemId` not `id`
+    const { problemId } = useParams()
     const navigate = useNavigate()
     const { user } = useAuthStore()
-    const isAdmin = user?.role === 'ADMIN'
+
+    // v3.0 FIX: Check role using v3 fields
+    const isAdmin = user?.globalRole === 'SUPER_ADMIN' || user?.teamRole === 'TEAM_ADMIN'
+
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
 
-    const { data: problem, isLoading, isError } = useProblem(id)
+    // v3.0: useProblem returns the problem object directly
+    const { data: problem, isLoading, isError } = useProblem(problemId)
+
+    // v3.0 FIX: Solutions are fetched separately
+    const { data: solutionsData } = useProblemSolutions(problemId)
 
     if (isLoading) return <PageSpinner />
 
@@ -133,17 +61,33 @@ export default function ProblemDetailPage() {
         )
     }
 
+    // v3.0 FIX: Map v3 field names
     const {
-        title, source, sourceUrl, difficulty, category,
+        title,
+        difficulty,
+        category,
         description,
-        tags, companyTags, isPinned, isBlindChallenge,
-        realWorldContext, useCases, adminNotes,
-        followUps, solutions, isSolvedByMe,
-        totalSolutions, addedBy, addedAt,
+        tags,
+        isPinned,
+        realWorldContext,
+        useCases,
+        adminNotes,
+        followUpQuestions,
+        isSolved,
+        teamSolutionCount,
+        createdBy,
+        createdAt,
     } = problem
 
-    const mySolution = solutions?.find(s => s.userId === user?.id)
-    const otherSolutions = solutions?.filter(s => s.userId !== user?.id) || []
+    // v3.0 FIX: Solutions come from separate hook
+    const solutions = solutionsData?.solutions || []
+    const mySolution = solutions.find(s => s.userId === user?.id || s.isOwn)
+    const otherSolutions = solutions.filter(s => s.userId !== user?.id && !s.isOwn)
+
+    // v3.0 FIX: Parse useCases — could be string or null
+    const useCasesList = useCases
+        ? (typeof useCases === 'string' ? useCases.split('\n').filter(Boolean) : useCases)
+        : []
 
     return (
         <div className="p-6 max-w-[900px] mx-auto">
@@ -171,12 +115,11 @@ export default function ProblemDetailPage() {
                 {/* Badges row */}
                 <div className="flex items-center gap-2 flex-wrap mb-3">
                     <Badge variant={DIFF_VARIANT[difficulty] || 'brand'} size="sm">
-                        {difficulty.charAt(0) + difficulty.slice(1).toLowerCase()}
+                        {difficulty?.charAt(0) + difficulty?.slice(1).toLowerCase()}
                     </Badge>
 
-                    {/* Category badge */}
-                    {problem.category && (() => {
-                        const cat = PROBLEM_CATEGORIES.find(c => c.id === problem.category)
+                    {category && (() => {
+                        const cat = PROBLEM_CATEGORIES.find(c => c.id === category)
                         return cat ? (
                             <span className={cn(
                                 'text-xs font-bold px-2.5 py-0.5 rounded-full border',
@@ -187,26 +130,20 @@ export default function ProblemDetailPage() {
                         ) : null
                     })()}
 
+                    {problem.source && problem.source !== 'MANUAL' && (
+                        <span className="text-sm font-semibold text-text-tertiary">
+                            {problem.source}
+                        </span>
+                    )}
 
-                    <span className={cn(
-                        'text-sm font-semibold',
-                        SOURCE_COLOR[source] || 'text-text-tertiary'
-                    )}>
-                        {SOURCE_LABELS[source] || source}
-                    </span>
                     {isPinned && (
                         <span className="text-xs font-bold text-warning bg-warning/10
                              border border-warning/25 rounded-full px-2 py-0.5">
                             📌 Pinned
                         </span>
                     )}
-                    {isBlindChallenge && (
-                        <span className="text-xs font-bold text-brand-300 bg-brand-400/10
-                             border border-brand-400/25 rounded-full px-2 py-0.5">
-                            🎯 Blind Challenge
-                        </span>
-                    )}
-                    {isSolvedByMe && (
+
+                    {isSolved && (
                         <span className="text-xs font-bold text-success bg-success/10
                              border border-success/25 rounded-full px-2 py-0.5
                              flex items-center gap-1">
@@ -229,22 +166,22 @@ export default function ProblemDetailPage() {
                 <div className="flex items-center gap-3 flex-wrap mb-5">
                     <InfoChip
                         label="Solutions"
-                        value={totalSolutions}
+                        value={teamSolutionCount || 0}
                         color="text-brand-300"
                     />
                     <InfoChip
                         label="Follow-ups"
-                        value={followUps?.length || 0}
+                        value={followUpQuestions?.length || 0}
                         color="text-info"
                     />
-                    {addedBy && (
+                    {createdBy && (
                         <div className="flex flex-col justify-center bg-surface-2
                             border border-border-default rounded-xl px-4 py-3">
                             <span className="text-[10px] text-text-disabled uppercase tracking-wider mb-0.5">
                                 Added by
                             </span>
                             <span className="text-sm font-bold text-text-primary">
-                                {addedBy.username}
+                                {createdBy.name}
                             </span>
                         </div>
                     )}
@@ -254,7 +191,7 @@ export default function ProblemDetailPage() {
                             Added
                         </span>
                         <span className="text-sm font-bold text-text-primary">
-                            {formatShortDate(addedAt)}
+                            {formatShortDate(createdAt)}
                         </span>
                     </div>
                 </div>
@@ -272,89 +209,44 @@ export default function ProblemDetailPage() {
                     </div>
                 )}
 
-                {/* Company tags */}
-                {companyTags?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                        {companyTags.map(c => (
-                            <span key={c}
-                                className="text-xs text-warning bg-warning/8
-                               border border-warning/20 rounded-lg px-2.5 py-1 font-medium">
-                                🏢 {c}
-                            </span>
-                        ))}
-                    </div>
-                )}
-
-                {/* Source link */}
-                {/* Source link — hide placeholder URLs */}
-                {sourceUrl && !sourceUrl.includes('probsolver.app') && (
-                    <a
-                        href={sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-brand-300
-                   hover:text-brand-200 transition-colors mt-1"
-                    >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                            <polyline points="15 3 21 3 21 9" />
-                            <line x1="10" y1="14" x2="21" y2="3" />
-                        </svg>
-                        View on {SOURCE_LABELS[source] || source}
-                    </a>
-                )}
-
                 {/* Action buttons */}
                 <div className="flex items-center gap-3 mt-5 flex-wrap">
-                    {!isSolvedByMe ? (
+                    {!isSolved ? (
                         <Button
                             variant="primary"
                             size="md"
-                            onClick={() => navigate(`/problems/${id}/submit`)}
+                            onClick={() => navigate(`/problems/${problemId}/submit`)}
                         >
-                            {problem.category === 'SYSTEM_DESIGN' ? 'Submit My Design' :
-                                problem.category === 'BEHAVIORAL' ? 'Submit My Response' :
-                                    problem.category === 'CS_FUNDAMENTALS' ? 'Submit My Explanation' :
-                                        problem.category === 'HR' ? 'Submit My Answer' :
-                                            problem.category === 'SQL' ? 'Submit My Query' :
+                            {category === 'SYSTEM_DESIGN' ? 'Submit My Design' :
+                                category === 'BEHAVIORAL' ? 'Submit My Response' :
+                                    category === 'CS_FUNDAMENTALS' ? 'Submit My Explanation' :
+                                        category === 'HR' ? 'Submit My Answer' :
+                                            category === 'SQL' ? 'Submit My Query' :
                                                 'Submit Solution'}
                         </Button>
                     ) : (
                         <Button
                             variant="secondary"
                             size="md"
-                            onClick={() => navigate(`/problems/${id}/edit`)}
+                            onClick={() => navigate(`/problems/${problemId}/submit`)}
                         >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                            </svg>
                             Edit My Solution
                         </Button>
                     )}
+
                     {isAdmin && (
                         <Button
                             variant="ghost"
                             size="md"
-                            onClick={() => navigate(`/admin/problems/${id}/edit`)}
+                            onClick={() => navigate(`/admin/edit-problem/${problemId}`)}
                         >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="3" />
-                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                            </svg>
                             Edit Problem
                         </Button>
                     )}
                 </div>
             </motion.div>
 
-            {/* Problem Description — prominent for non-coding, subtle for coding */}
+            {/* Problem Description */}
             {description && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -375,45 +267,16 @@ export default function ProblemDetailPage() {
                                         category === 'HR' ? '🤝' :
                                             category === 'SQL' ? '🗄️' : '📋'}
                         </span>
-                        {category === 'SYSTEM_DESIGN' ? 'Problem Statement' :
-                            category === 'BEHAVIORAL' ? 'Question & Context' :
-                                category === 'CS_FUNDAMENTALS' ? 'Topic Description' :
-                                    category === 'HR' ? 'Question & Guidance' :
-                                        category === 'SQL' ? 'Problem & Schema' :
-                                            'Description'}
+                        Description
                     </h2>
                     <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
                         {description}
                     </div>
-
-                    {/* For non-coding categories, show a prominent CTA if not solved */}
-                    {category && category !== 'CODING' && !isSolvedByMe && (
-                        <div className="mt-4 pt-4 border-t border-border-default">
-                            <Button
-                                variant="primary"
-                                size="md"
-                                onClick={() => navigate(`/problems/${id}/submit`)}
-                            >
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2.5"
-                                    strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 20h9" />
-                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                </svg>
-                                {category === 'SYSTEM_DESIGN' ? 'Submit My Design' :
-                                    category === 'BEHAVIORAL' ? 'Submit My Response' :
-                                        category === 'CS_FUNDAMENTALS' ? 'Submit My Explanation' :
-                                            category === 'HR' ? 'Submit My Answer' :
-                                                category === 'SQL' ? 'Submit My Query' :
-                                                    'Submit Solution'}
-                            </Button>
-                        </div>
-                    )}
                 </motion.div>
             )}
 
             {/* Real world context */}
-            {(realWorldContext || useCases?.length > 0) && (
+            {(realWorldContext || useCasesList.length > 0) && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -428,9 +291,9 @@ export default function ProblemDetailPage() {
                             {realWorldContext}
                         </p>
                     )}
-                    {useCases?.length > 0 && (
+                    {useCasesList.length > 0 && (
                         <div className="flex flex-wrap gap-2">
-                            {useCases.map((u, i) => (
+                            {useCasesList.map((u, i) => (
                                 <span key={i}
                                     className="text-xs bg-surface-3 border border-border-default
                                  rounded-lg px-2.5 py-1 text-text-secondary">
@@ -443,7 +306,7 @@ export default function ProblemDetailPage() {
             )}
 
             {/* Follow-up questions */}
-            {followUps?.length > 0 && (
+            {followUpQuestions?.length > 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -452,11 +315,11 @@ export default function ProblemDetailPage() {
                 >
                     <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-4">
                         <span>🧠</span> Follow-up Questions
-                        <Badge variant="brand" size="xs">{followUps.length}</Badge>
+                        <Badge variant="brand" size="xs">{followUpQuestions.length}</Badge>
                     </h2>
                     <div className="space-y-3">
-                        {followUps.map((fq, i) => (
-                            <div key={fq.id}
+                        {followUpQuestions.map((fq, i) => (
+                            <div key={fq.id || i}
                                 className="flex gap-3 bg-surface-2 border border-border-subtle
                               rounded-xl p-3.5">
                                 <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-3
@@ -470,11 +333,11 @@ export default function ProblemDetailPage() {
                                             {fq.question}
                                         </p>
                                         <Badge
-                                            variant={DIFF_VARIANT[fq.difficulty] || 'gray'}
+                                            variant={DIFF_VARIANT[fq.difficulty] || 'brand'}
                                             size="xs"
                                             className="flex-shrink-0"
                                         >
-                                            {fq.difficulty.charAt(0) + fq.difficulty.slice(1).toLowerCase()}
+                                            {fq.difficulty?.charAt(0) + fq.difficulty?.slice(1).toLowerCase()}
                                         </Badge>
                                     </div>
                                     {fq.hint && (
@@ -507,7 +370,7 @@ export default function ProblemDetailPage() {
                     <h2 className="text-sm font-bold text-warning flex items-center gap-2 mb-2">
                         <span>⚡</span> Admin Notes
                     </h2>
-                    <p className="text-sm text-text-secondary leading-relaxed">{adminNotes}</p>
+                    <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">{adminNotes}</p>
                 </motion.div>
             )}
 
@@ -520,11 +383,11 @@ export default function ProblemDetailPage() {
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
                         <span>👥</span> Team Solutions
-                        <Badge variant="brand" size="xs">{totalSolutions}</Badge>
+                        <Badge variant="brand" size="xs">{teamSolutionCount || 0}</Badge>
                     </h2>
                 </div>
 
-                {solutions?.length === 0 ? (
+                {solutions.length === 0 ? (
                     <div className="bg-surface-1 border border-border-default
                           rounded-2xl p-10 text-center">
                         <div className="text-3xl mb-3">🌱</div>
@@ -537,14 +400,13 @@ export default function ProblemDetailPage() {
                         <Button
                             variant="primary"
                             size="sm"
-                            onClick={() => navigate(`/problems/${id}/submit`)}
+                            onClick={() => navigate(`/problems/${problemId}/submit`)}
                         >
                             Submit Solution
                         </Button>
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {/* Your solution first */}
                         {mySolution && (
                             <div>
                                 <p className="text-xs font-bold text-text-disabled uppercase
@@ -554,9 +416,8 @@ export default function ProblemDetailPage() {
                                 <SolutionCard
                                     solution={mySolution}
                                     isOwn
-                                    problemFollowUps={followUps}
+                                    problemFollowUps={followUpQuestions}
                                 />
-                                {/* AI Review — show only if AI is enabled */}
                                 {aiEnabled && (
                                     <div className="mt-3">
                                         <AIReviewCard
@@ -567,7 +428,7 @@ export default function ProblemDetailPage() {
                                 )}
                             </div>
                         )}
-                        {/* Teammates */}
+
                         {otherSolutions.length > 0 && (
                             <div>
                                 {mySolution && (
@@ -581,16 +442,11 @@ export default function ProblemDetailPage() {
                                         <SolutionCard
                                             key={s.id}
                                             solution={s}
-                                            problemFollowUps={followUps}
+                                            problemFollowUps={followUpQuestions}
                                         />
                                     ))}
                                 </div>
                             </div>
-                        )}
-
-                        {/* Similar Problems — vector search powered */}
-                        {aiEnabled && (
-                            <SimilarProblemsSection problemId={id} />
                         )}
                     </div>
                 )}
