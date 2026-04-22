@@ -1,8 +1,11 @@
+// ============================================================================
+// ProbSolver v3.0 — Submit Solution Page
+// ============================================================================
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
-import { useCreateSolution } from '@hooks/useSolutions'
+import { useSubmitSolution } from '@hooks/useSolutions'
 import { SolutionTabs } from '@components/features/solutions/SolutionTabs'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
 import { CodeEditor } from '@components/ui/CodeEditor'
@@ -14,11 +17,6 @@ import { PATTERNS, CONFIDENCE_LEVELS, PROBLEM_CATEGORIES } from '@utils/constant
 import { getCategoryForm } from '@utils/categoryForms'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
-const SOURCE_LABELS = {
-    LEETCODE: 'LeetCode', GFG: 'GFG', CODECHEF: 'CodeChef',
-    INTERVIEWBIT: 'InterviewBit', HACKERRANK: 'HackerRank',
-    CODEFORCES: 'Codeforces', OTHER: 'Other',
-}
 
 // ── Step indicator ─────────────────────────────────────
 function StepIndicator({ current, steps, onStepClick, completedSteps }) {
@@ -29,6 +27,7 @@ function StepIndicator({ current, steps, onStepClick, completedSteps }) {
                 const isCompleted = completedSteps.has(step.id)
                 const isPast = step.id < current
                 const isClickable = isPast || isCompleted
+
                 return (
                     <div key={step.id} className="flex items-center flex-1">
                         <button
@@ -151,15 +150,15 @@ function RichField({ icon, label, hint, placeholder, content, onChange, minHeigh
 }
 
 // ── Step 1: Category-aware first step ──────────────────
-function StepOne({ formConfig, data, onChange, category }) {
+function StepOne({ formConfig, data, onChange }) {
     const fields = formConfig.fields
     return (
         <div className="space-y-6">
             {fields.patternIdentified?.show && (
                 <PatternSelector
                     config={formConfig.fields.patternIdentified}
-                    value={data.patternIdentified || ''}
-                    onChange={val => onChange({ ...data, patternIdentified: val })}
+                    value={data.pattern || ''}
+                    onChange={val => onChange({ ...data, pattern: val })}
                 />
             )}
             {fields.patternReasoning?.show && (
@@ -167,8 +166,8 @@ function StepOne({ formConfig, data, onChange, category }) {
                     label={fields.patternReasoning.label}
                     hint={fields.patternReasoning.hint}
                     placeholder={fields.patternReasoning.placeholder}
-                    content={data.patternReasoning || ''}
-                    onChange={val => onChange({ ...data, patternReasoning: val })}
+                    content={data.approach || ''}
+                    onChange={val => onChange({ ...data, approach: val })}
                     minHeight="120px"
                     optional
                 />
@@ -178,8 +177,7 @@ function StepOne({ formConfig, data, onChange, category }) {
 }
 
 // ── Step 2: Solutions or Action or Detail ──────────────
-function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNotes, setCommonNotes, category }) {
-    // For categories with SolutionTabs (CODING, SYSTEM_DESIGN, SQL)
+function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNotes, setCommonNotes }) {
     if (formConfig.showSolutionTabs) {
         return (
             <SolutionTabs
@@ -192,7 +190,6 @@ function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNo
         )
     }
 
-    // For BEHAVIORAL — show the Action field
     if (formConfig.showActionSection) {
         const actionConfig = formConfig.actionField
         return (
@@ -202,11 +199,10 @@ function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNo
                     label={actionConfig.label}
                     hint={actionConfig.hint}
                     placeholder={actionConfig.placeholder}
-                    content={data.actionContent || ''}
-                    onChange={val => onChange({ ...data, actionContent: val })}
+                    content={data.approach || ''}
+                    onChange={val => onChange({ ...data, approach: val })}
                     minHeight="200px"
                 />
-                {/* Common notes */}
                 <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
                     <RichTextEditor
                         label="Additional Notes"
@@ -221,7 +217,6 @@ function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNo
         )
     }
 
-    // For CS_FUNDAMENTALS — show the Detail field
     if (formConfig.showDetailSection) {
         const detailConfig = formConfig.detailField
         return (
@@ -231,8 +226,8 @@ function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNo
                     label={detailConfig.label}
                     hint={detailConfig.hint}
                     placeholder={detailConfig.placeholder}
-                    content={data.detailContent || ''}
-                    onChange={val => onChange({ ...data, detailContent: val })}
+                    content={data.approach || ''}
+                    onChange={val => onChange({ ...data, approach: val })}
                     minHeight="200px"
                 />
                 <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
@@ -249,7 +244,7 @@ function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNo
         )
     }
 
-    // For HR — show the response field
+    // HR / default
     return (
         <div className="space-y-5">
             <RichField
@@ -257,8 +252,8 @@ function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNo
                 label="Your Response"
                 hint="Write your complete, polished answer. Be authentic and specific."
                 placeholder="Write your answer here..."
-                content={data.actionContent || ''}
-                onChange={val => onChange({ ...data, actionContent: val })}
+                content={data.approach || ''}
+                onChange={val => onChange({ ...data, approach: val })}
                 minHeight="200px"
             />
             <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
@@ -276,19 +271,12 @@ function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNo
 }
 
 // ── Step 3: Reflection ─────────────────────────────────
-function StepThree({ formConfig, data, onChange, followUps }) {
+function StepThree({ formConfig, data, onChange, followUpQuestions }) {
     const fields = formConfig.fields
-    const followUpAnswers = data.followUpAnswers || []
-
-    function setAnswer(i, val) {
-        const updated = [...followUpAnswers]
-        updated[i] = val
-        onChange({ ...data, followUpAnswers: updated })
-    }
 
     return (
         <div className="space-y-6">
-            {/* Key Insight / Trade-off / Learning */}
+            {/* Key Insight */}
             {fields.keyInsight?.show && (
                 <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
                     <div className="flex items-start gap-3 mb-3">
@@ -319,25 +307,25 @@ function StepThree({ formConfig, data, onChange, followUps }) {
                 </div>
             )}
 
-            {/* Simple explanation / Scaling / Result */}
+            {/* Feynman explanation */}
             {fields.simpleExplanation?.show && (
                 <RichField
                     icon="🗣"
                     label={fields.simpleExplanation.label}
                     placeholder={fields.simpleExplanation.placeholder}
-                    content={data.simpleExplanation || ''}
-                    onChange={val => onChange({ ...data, simpleExplanation: val })}
+                    content={data.feynmanExplanation || ''}
+                    onChange={val => onChange({ ...data, feynmanExplanation: val })}
                 />
             )}
 
-            {/* Challenges / Bottlenecks / What differently */}
+            {/* Real world connection */}
             {fields.challenges?.show && (
                 <RichField
-                    icon="🤔"
+                    icon="🌍"
                     label={fields.challenges.label}
                     placeholder={fields.challenges.placeholder}
-                    content={data.challenges || ''}
-                    onChange={val => onChange({ ...data, challenges: val })}
+                    content={data.realWorldConnection || ''}
+                    onChange={val => onChange({ ...data, realWorldConnection: val })}
                     minHeight="80px"
                 />
             )}
@@ -355,11 +343,11 @@ function StepThree({ formConfig, data, onChange, followUps }) {
                         <button
                             key={c.value}
                             type="button"
-                            onClick={() => onChange({ ...data, confidenceLevel: c.value })}
+                            onClick={() => onChange({ ...data, confidence: c.value })}
                             className={cn(
                                 'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
                                 'transition-all duration-150 min-w-[80px]',
-                                data.confidenceLevel === c.value
+                                data.confidence === c.value
                                     ? 'bg-brand-400/15 border-brand-400/40 scale-105'
                                     : 'bg-surface-3 border-border-default hover:border-border-strong'
                             )}
@@ -367,7 +355,7 @@ function StepThree({ formConfig, data, onChange, followUps }) {
                             <span className="text-2xl">{c.emoji}</span>
                             <span className={cn(
                                 'text-[10px] font-bold text-center leading-tight',
-                                data.confidenceLevel === c.value ? c.color : 'text-text-tertiary'
+                                data.confidence === c.value ? c.color : 'text-text-tertiary'
                             )}>
                                 {c.label}
                             </span>
@@ -377,7 +365,7 @@ function StepThree({ formConfig, data, onChange, followUps }) {
             </div>
 
             {/* Follow-up questions */}
-            {formConfig.showFollowUps && followUps?.length > 0 && (
+            {formConfig.showFollowUps && followUpQuestions?.length > 0 && (
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-semibold text-text-primary mb-0.5">
@@ -387,8 +375,8 @@ function StepThree({ formConfig, data, onChange, followUps }) {
                             Answer as many as you can — these deepen your understanding.
                         </p>
                     </div>
-                    {followUps.map((fq, i) => (
-                        <div key={fq.id}
+                    {followUpQuestions.map((fq, i) => (
+                        <div key={fq.id || i}
                             className="bg-surface-2 border border-border-default rounded-xl p-4 space-y-3">
                             <div className="flex items-start gap-3">
                                 <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-3
@@ -402,7 +390,7 @@ function StepThree({ formConfig, data, onChange, followUps }) {
                                             {fq.question}
                                         </p>
                                         <Badge
-                                            variant={DIFF_VARIANT[fq.difficulty] || 'gray'}
+                                            variant={DIFF_VARIANT[fq.difficulty] || 'brand'}
                                             size="xs"
                                             className="flex-shrink-0"
                                         >
@@ -421,17 +409,6 @@ function StepThree({ formConfig, data, onChange, followUps }) {
                                             </p>
                                         </details>
                                     )}
-                                    <textarea
-                                        rows={2}
-                                        value={followUpAnswers[i] || ''}
-                                        onChange={e => setAnswer(i, e.target.value)}
-                                        placeholder="Your answer…"
-                                        className="w-full bg-surface-3 border border-border-strong rounded-xl
-                               text-sm text-text-primary placeholder:text-text-tertiary
-                               px-3 py-2 outline-none resize-none
-                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                               transition-all duration-150 mt-1"
-                                    />
                                 </div>
                             </div>
                         </div>
@@ -446,30 +423,26 @@ function StepThree({ formConfig, data, onChange, followUps }) {
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
 export default function SubmitSolutionPage() {
-    const { id } = useParams()
+    const { problemId } = useParams()
     const navigate = useNavigate()
     const [step, setStep] = useState(1)
     const [completedSteps, setCompleted] = useState(new Set())
 
-    const { data: problem, isLoading } = useProblem(id)
-    const createSolution = useCreateSolution()
+    const { data: problem, isLoading } = useProblem(problemId)
+    const submitSolution = useSubmitSolution()
 
-    // Get the category-specific form config
     const category = problem?.category || 'CODING'
     const formConfig = getCategoryForm(category)
     const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
 
-    // ── Form state ─────────────────────────────────────
+    // ── Form state (v3 field names) ────────────────────
     const [formData, setFormData] = useState({
-        patternIdentified: '',
-        patternReasoning: '',
+        pattern: '',
+        approach: '',
         keyInsight: '',
-        simpleExplanation: '',
-        challenges: '',
-        confidenceLevel: 0,
-        followUpAnswers: [],
-        actionContent: '',   // for BEHAVIORAL
-        detailContent: '',   // for CS_FUNDAMENTALS
+        feynmanExplanation: '',
+        realWorldConnection: '',
+        confidence: 0,
     })
 
     const [solutions, setSolutions] = useState([{
@@ -480,6 +453,7 @@ export default function SubmitSolutionPage() {
         code: '',
         language: localStorage.getItem('ps_last_language') || 'PYTHON',
     }])
+
     const [commonNotes, setCommonNotes] = useState('')
 
     function updateFormData(updates) {
@@ -510,35 +484,27 @@ export default function SubmitSolutionPage() {
         const brute = solutions.find(s => s.type === 'BRUTE_FORCE' || s.type === 'HIGH_LEVEL')
         const bestSol = optimized || solutions[0]
         const language = bestSol?.language || 'PYTHON'
-
         localStorage.setItem('ps_last_language', language)
 
-        // Map form data to existing Solution fields based on category
-        const payload = {
-            problemId: id,
-            patternIdentified: formData.patternIdentified || null,
-            firstInstinct: formData.patternReasoning || formData.actionContent || formData.detailContent || null,
-            whyThisPattern: null,
-            bruteForceApproach: brute?.approach || formData.actionContent || formData.detailContent || null,
-            bruteForceTime: brute?.timeComplexity || null,
-            bruteForceSpace: brute?.spaceComplexity || null,
-            optimizedApproach: optimized?.approach || bestSol?.approach || null,
-            optimizedTime: optimized?.timeComplexity || bestSol?.timeComplexity || null,
-            optimizedSpace: optimized?.spaceComplexity || bestSol?.spaceComplexity || null,
+        // v3.0: Map form state to v3 solution schema
+        const data = {
+            approach: formData.approach || optimized?.approach || bestSol?.approach || null,
             code: bestSol?.code || null,
             language,
+            bruteForce: brute?.approach || null,
+            optimizedApproach: optimized?.approach || null,
+            timeComplexity: optimized?.timeComplexity || bestSol?.timeComplexity || null,
+            spaceComplexity: optimized?.spaceComplexity || bestSol?.spaceComplexity || null,
             keyInsight: formData.keyInsight || null,
-            feynmanExplanation: formData.simpleExplanation || null,
-            realWorldConnection: commonNotes || null,
-            stuckPoints: formData.challenges || null,
-            followUpAnswers: formData.followUpAnswers || [],
-            confidenceLevel: formData.confidenceLevel || 0,
-            hintsUsed: false,
+            feynmanExplanation: formData.feynmanExplanation || null,
+            realWorldConnection: formData.realWorldConnection || commonNotes || null,
+            confidence: formData.confidence || 3,
+            pattern: formData.pattern || null,
         }
 
         try {
-            await createSolution.mutateAsync(payload)
-            navigate(`/problems/${id}`)
+            await submitSolution.mutateAsync({ problemId, data })
+            navigate(`/problems/${problemId}`)
         } catch {
             // error toast handled by mutation
         }
@@ -565,7 +531,7 @@ export default function SubmitSolutionPage() {
             {/* Back */}
             <button
                 type="button"
-                onClick={() => navigate(`/problems/${id}`)}
+                onClick={() => navigate(`/problems/${problemId}`)}
                 className="flex items-center gap-1.5 text-sm text-text-tertiary
                    hover:text-text-primary transition-colors mb-6"
             >
@@ -584,7 +550,7 @@ export default function SubmitSolutionPage() {
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
-                                {problem.difficulty.charAt(0) + problem.difficulty.slice(1).toLowerCase()}
+                                {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
                             </Badge>
                             {catInfo && (
                                 <span className={cn(
@@ -594,35 +560,16 @@ export default function SubmitSolutionPage() {
                                     {catInfo.icon} {catInfo.label}
                                 </span>
                             )}
-                            <span className="text-xs text-text-tertiary">
-                                {SOURCE_LABELS[problem.source] || problem.source}
-                            </span>
                         </div>
                         <h2 className="text-base font-bold text-text-primary">
                             {problem.title}
                         </h2>
                     </div>
-                    {problem.sourceUrl && (
-                        <a href={problem.sourceUrl} target="_blank" rel="noopener noreferrer"
-                            className="flex-shrink-0">
-                            <Button variant="outline" size="sm">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2"
-                                    strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                    <polyline points="15 3 21 3 21 9" />
-                                    <line x1="10" y1="14" x2="21" y2="3" />
-                                </svg>
-                                Open Problem
-                            </Button>
-                        </a>
-                    )}
                 </div>
             </div>
 
             {/* Form card */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-6">
-                {/* Step indicator — uses category-specific steps */}
                 <StepIndicator
                     current={step}
                     steps={formConfig.steps}
@@ -630,7 +577,6 @@ export default function SubmitSolutionPage() {
                     completedSteps={completedSteps}
                 />
 
-                {/* Step title */}
                 <div className="mb-6">
                     <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
                         <span>{currentStepMeta.icon}</span>
@@ -641,14 +587,12 @@ export default function SubmitSolutionPage() {
                     </p>
                 </div>
 
-                {/* Dynamic step content */}
                 <div className="relative">
                     {step === 1 && (
                         <StepOne
                             formConfig={formConfig}
                             data={formData}
                             onChange={updateFormData}
-                            category={category}
                         />
                     )}
                     {step === 2 && (
@@ -660,7 +604,6 @@ export default function SubmitSolutionPage() {
                             setSolutions={setSolutions}
                             commonNotes={commonNotes}
                             setCommonNotes={setCommonNotes}
-                            category={category}
                         />
                     )}
                     {step === 3 && (
@@ -668,7 +611,7 @@ export default function SubmitSolutionPage() {
                             formConfig={formConfig}
                             data={formData}
                             onChange={updateFormData}
-                            followUps={problem.followUps}
+                            followUpQuestions={problem.followUpQuestions}
                         />
                     )}
                 </div>
@@ -710,7 +653,7 @@ export default function SubmitSolutionPage() {
                             type="button"
                             variant="primary"
                             size="md"
-                            loading={createSolution.isPending}
+                            loading={submitSolution.isPending}
                             onClick={onSubmit}
                         >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
