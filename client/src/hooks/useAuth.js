@@ -79,7 +79,21 @@ export function useLogin() {
     },
     onError: (err) => {
       console.error("[Login] Error:", err.response?.data);
+      const code = err.response?.data?.code;
       const msg = err.response?.data?.error || "Login failed";
+
+      // Server rejects unverified users — redirect to verification
+      if (code === "EMAIL_NOT_VERIFIED") {
+        toast.info("Please verify your email first");
+        // We need the email to resend verification — get it from the login form
+        // The navigate state passes the email to VerifyEmailPage
+        const email = err.config?.data
+          ? JSON.parse(err.config.data)?.email
+          : null;
+        navigate("/auth/verify-email", { state: { email } });
+        return;
+      }
+
       toast.error(msg, "Error");
     },
   });

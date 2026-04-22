@@ -773,3 +773,66 @@ export async function switchTeam(req, res) {
     return error(res, 'Failed to switch team.', 500)
   }
 }
+
+
+// ============================================================================
+// UPDATE EMAIL (pre-verification only)
+// ============================================================================
+
+export async function updateUnverifiedEmail(req, res) {
+  try {
+    const { currentEmail, newEmail } = req.body
+
+    if (!currentEmail || !newEmail) {
+      return error(res, 'Both current and new email are required.', 400)
+    }
+
+    // Find the unverified user
+    const user = await prisma.user.findUnique({
+      where: { email: currentEmail },
+      select: { id: true, isVerified: true, name: true },
+    })
+
+    if (!user) {
+      return error(res, 'No account found with this email.', 404)
+    }
+
+    if (user.isVerified) {
+      return error(res, 'This account is already verified. Please log in and change email from settings.', 400)
+    }
+
+    // Check if new email is already taken
+    const existingNew = await prisma.user.findUnique({
+      where: { email: newEmail },
+      select: { id: true },
+    })
+
+    if (existingNew) {
+      return error(res, 'An account with this email already exists.', 409)
+    }
+
+    // Update email and send new verification code
+    const code = generateCode()
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        email: newEmail,
+        verificationCode: code,
+        verificationExpiry: codeExpiry(),
+      },
+    })
+
+    sendVerificationEmail(newEmail, user.name, code).catch((err) => {
+      console.error('Failed to send verification email:', err.message)
+    })
+
+    return success(res, {
+      message: 'Email updated. A new verification code has been sent.',
+      email: newEmail,
+    })
+  } catch (err) {
+    console.error('Update unverified email error:', err)
+    return error(res, 'Failed to update email.', 500)
+  }
+}

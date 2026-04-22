@@ -51,6 +51,7 @@ import {
   completeOnboarding,
   getMe,
   switchTeam,
+  updateUnverifiedEmail,
 } from "../controllers/auth.controller.js";
 
 const router = Router();
@@ -115,5 +116,6 @@ router.post(
   completeOnboarding,
 );
 router.post("/switch-team", authenticate, switchTeam);
+router.post("/update-unverified-email", updateUnverifiedEmail);
 
 export default router;

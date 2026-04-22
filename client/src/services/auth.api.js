@@ -21,6 +21,9 @@ export const authApi = {
   forgotPassword: (email) => api.post("/auth/forgot-password", { email }),
   resetPassword: (data) => api.post("/auth/reset-password", data),
 
+  // emai-verification
+  updateUnverifiedEmail: (data) => api.post("/auth/update-unverified-email", data),
+
   // ── Onboarding & Team Context ──────────────────────────
   onboarding: (data) => api.post("/auth/onboarding", data),
   switchTeam: (teamId) => api.post("/auth/switch-team", { teamId }),

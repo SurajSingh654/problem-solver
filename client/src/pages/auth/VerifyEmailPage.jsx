@@ -1,8 +1,11 @@
+// ============================================================================
+// ProbSolver v3.0 — Email Verification Page
+// ============================================================================
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import useAuthStore from '@store/useAuthStore'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@components/ui/Button'
+import { Input } from '@components/ui/Input'
 import { cn } from '@utils/cn'
 import { toast } from '@store/useUIStore'
 import api from '@services/api'
@@ -10,13 +13,18 @@ import api from '@services/api'
 export default function VerifyEmailPage() {
     const navigate = useNavigate()
     const location = useLocation()
-    const { user, setAuth } = useAuthStore()
-    const email = location.state?.email || user?.email || ''
 
+    const [email, setEmail] = useState(location.state?.email || '')
     const [code, setCode] = useState(['', '', '', '', '', ''])
     const [verifying, setVerifying] = useState(false)
     const [resending, setResending] = useState(false)
     const [cooldown, setCooldown] = useState(0)
+
+    // Wrong email fix state
+    const [showEmailEdit, setShowEmailEdit] = useState(false)
+    const [newEmail, setNewEmail] = useState('')
+    const [emailUpdating, setEmailUpdating] = useState(false)
+
     const inputRefs = useRef([])
 
     // Cooldown timer for resend
@@ -42,8 +50,6 @@ export default function VerifyEmailPage() {
             setCode(newCode)
             const nextIndex = Math.min(index + digits.length, 5)
             inputRefs.current[nextIndex]?.focus()
-
-            // Auto-submit if all 6 digits filled
             if (newCode.every(d => d !== '')) {
                 handleVerify(newCode.join(''))
             }
@@ -59,7 +65,6 @@ export default function VerifyEmailPage() {
             inputRefs.current[index + 1]?.focus()
         }
 
-        // Auto-submit if all 6 digits filled
         if (newCode.every(d => d !== '')) {
             handleVerify(newCode.join(''))
         }
@@ -80,28 +85,18 @@ export default function VerifyEmailPage() {
 
         setVerifying(true)
         try {
-            const res = await api.post('/auth/verify-email', {
+            await api.post('/auth/verify-email', {
                 email,
                 code: fullCode,
             })
 
-            const { user: updatedUser, token } = res.data.data
-            if (updatedUser && token) {
-                setAuth(updatedUser, token)
-                localStorage.setItem('ps_token', token)
-            }
-
-            toast.success('Email verified! Welcome to ProbSolver 🎉')
-            navigate('/', { replace: true })
+            // v3.0: verify endpoint returns { success, message } — no token
+            // User must now log in with their verified account
+            toast.success('Email verified! Please log in.')
+            navigate('/auth/login', { replace: true })
         } catch (err) {
-            const errorCode = err.response?.data?.code
-            if (errorCode === 'CODE_EXPIRED') {
-                toast.error('Code expired. Click "Resend Code" to get a new one.')
-            } else if (errorCode === 'INVALID_CODE') {
-                toast.error('Invalid code. Please check and try again.')
-            } else {
-                toast.error(err.response?.data?.error || 'Verification failed')
-            }
+            const msg = err.response?.data?.error || 'Verification failed'
+            toast.error(msg)
             setCode(['', '', '', '', '', ''])
             inputRefs.current[0]?.focus()
         } finally {
@@ -110,18 +105,42 @@ export default function VerifyEmailPage() {
     }
 
     async function handleResend() {
-        if (cooldown > 0) return
+        if (cooldown > 0 || !email) return
+
         setResending(true)
         try {
-            await api.post('/auth/resend-verification', { email })
+            await api.post('/auth/resend-verify', { email })
             toast.success('New code sent! Check your email.')
             setCooldown(60)
             setCode(['', '', '', '', '', ''])
             inputRefs.current[0]?.focus()
         } catch (err) {
-            toast.error('Failed to resend code. Try again.')
+            toast.error(err.response?.data?.error || 'Failed to resend code.')
         } finally {
             setResending(false)
+        }
+    }
+
+    async function handleUpdateEmail() {
+        if (!newEmail.trim() || !email) return
+
+        setEmailUpdating(true)
+        try {
+            const res = await api.post('/auth/update-unverified-email', {
+                currentEmail: email,
+                newEmail: newEmail.trim(),
+            })
+            setEmail(res.data.email)
+            setNewEmail('')
+            setShowEmailEdit(false)
+            setCooldown(60)
+            setCode(['', '', '', '', '', ''])
+            inputRefs.current[0]?.focus()
+            toast.success('Email updated! Check your new inbox for the code.')
+        } catch (err) {
+            toast.error(err.response?.data?.error || 'Failed to update email')
+        } finally {
+            setEmailUpdating(false)
         }
     }
 
@@ -135,6 +154,7 @@ export default function VerifyEmailPage() {
             >
                 <div className="bg-surface-1 border border-border-default rounded-2xl
                         overflow-hidden shadow-xl">
+
                     {/* Header */}
                     <div className="px-8 pt-8 pb-4 text-center">
                         <motion.div
@@ -146,7 +166,6 @@ export default function VerifyEmailPage() {
                         >
                             📧
                         </motion.div>
-
                         <h1 className="text-xl font-bold text-text-primary mb-1">
                             Check your email
                         </h1>
@@ -221,14 +240,57 @@ export default function VerifyEmailPage() {
                             </button>
                         </div>
 
-                        {/* Skip for now — only in development */}
+                        {/* Wrong email — update it */}
                         <div className="text-center mt-4 pt-4 border-t border-border-subtle">
                             <button
-                                onClick={() => navigate('/', { replace: true })}
+                                onClick={() => setShowEmailEdit(!showEmailEdit)}
                                 className="text-xs text-text-disabled hover:text-text-tertiary
-                           transition-colors"
+                                           transition-colors"
                             >
-                                Skip for now
+                                {showEmailEdit ? 'Cancel' : 'Wrong email? Update it'}
+                            </button>
+
+                            <AnimatePresence>
+                                {showEmailEdit && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="mt-3 space-y-3 text-left">
+                                            <Input
+                                                label="Correct Email"
+                                                type="email"
+                                                placeholder="your-correct@email.com"
+                                                value={newEmail}
+                                                onChange={(e) => setNewEmail(e.target.value)}
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="sm"
+                                                fullWidth
+                                                loading={emailUpdating}
+                                                disabled={!newEmail.trim()}
+                                                onClick={handleUpdateEmail}
+                                            >
+                                                Update Email & Resend Code
+                                            </Button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Back to login */}
+                        <div className="text-center mt-3">
+                            <button
+                                onClick={() => navigate('/auth/login')}
+                                className="text-xs text-text-disabled hover:text-text-tertiary
+                                           transition-colors"
+                            >
+                                ← Back to login
                             </button>
                         </div>
                     </div>
