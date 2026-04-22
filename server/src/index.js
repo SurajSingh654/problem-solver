@@ -57,6 +57,9 @@ import { setupWebSocket } from "./services/websocket.service.js";
 const app = express();
 const server = createServer(app);
 
+// v3.0 FIX: Railway runs behind a reverse proxy — required for rate limiter
+app.set('trust proxy', 1)
+
 // ── 1. Security headers ──────────────────────────────────────
 app.use(
   helmet({

@@ -89,6 +89,8 @@ export default function TeamManagePage() {
             const res = await teamsApi.join(joinCode.trim())
             const { token, user: updatedUser } = res.data
             useAuthStore.getState().setAuth(token, updatedUser)
+            // v3.0 FIX: Clear pending team on successful join
+            localStorage.removeItem('pendingTeam')
             navigate('/', { replace: true })
         } catch (err) {
             setJoinError(err.response?.data?.error || 'Failed to join team.')
@@ -235,13 +237,50 @@ export default function TeamManagePage() {
     // PERSONAL MODE — show join/create options
     // ============================================================================
 
+    // ============================================================================
+    // PERSONAL MODE — show pending banner + join/create options
+    // ============================================================================
     if (isPersonalMode) {
+        // v3.0 FIX: Check for pending team
+        const storedPending = (() => {
+            try {
+                const s = localStorage.getItem('pendingTeam')
+                return s ? JSON.parse(s) : null
+            } catch { return null }
+        })()
+
         return (
             <div className="max-w-2xl mx-auto px-6 py-8">
                 <h1 className="text-2xl font-extrabold text-text-primary mb-1">Teams</h1>
-                <p className="text-sm text-text-secondary mb-8">
+                <p className="text-sm text-text-secondary mb-6">
                     You're in individual mode. Join a team or create one.
                 </p>
+
+                {/* v3.0 FIX: Pending team banner */}
+                {storedPending && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-warning/5 border border-warning/20 rounded-xl p-5 mb-6"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">⏳</span>
+                            <div className="flex-1">
+                                <p className="text-sm font-bold text-text-primary">
+                                    {storedPending.name}
+                                </p>
+                                <p className="text-xs text-text-tertiary mt-0.5">
+                                    Your team is pending admin approval. You'll be
+                                    automatically switched once approved. Refresh the page to check.
+                                </p>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full
+                                           bg-warning/10 text-warning border border-warning/20">
+                                PENDING
+                            </span>
+                        </div>
+                    </motion.div>
+                )}
 
                 <div className="space-y-4">
                     {/* ── Join a team ──────────────────────────────── */}
@@ -265,7 +304,6 @@ export default function TeamManagePage() {
                                 <polyline points="6 9 12 15 18 9" />
                             </svg>
                         </button>
-
                         <AnimatePresence>
                             {showJoin && (
                                 <motion.div
@@ -298,69 +336,70 @@ export default function TeamManagePage() {
                     </div>
 
                     {/* ── Create a team ───────────────────────────── */}
-                    <div className="bg-surface-1 border border-border-default rounded-xl p-5">
-                        <button
-                            onClick={() => { setShowCreate(!showCreate); setShowJoin(false) }}
-                            className="w-full flex items-center justify-between"
-                        >
-                            <div className="flex items-center gap-3">
-                                <span className="text-xl">🚀</span>
-                                <div className="text-left">
-                                    <p className="text-sm font-bold text-text-primary">Create a Team</p>
-                                    <p className="text-xs text-text-tertiary">Start a new team (requires admin approval)</p>
-                                </div>
-                            </div>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2" className={cn(
-                                    'text-text-disabled transition-transform',
-                                    showCreate && 'rotate-180'
-                                )}>
-                                <polyline points="6 9 12 15 18 9" />
-                            </svg>
-                        </button>
-
-                        <AnimatePresence>
-                            {showCreate && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="overflow-hidden"
-                                >
-                                    <div className="mt-4 space-y-3">
-                                        <Input
-                                            label="Team Name"
-                                            placeholder="e.g. Google Prep Squad"
-                                            value={createName}
-                                            onChange={(e) => setCreateName(e.target.value)}
-                                        />
-                                        <Input
-                                            label="Description (optional)"
-                                            placeholder="What's your team preparing for?"
-                                            value={createDesc}
-                                            onChange={(e) => setCreateDesc(e.target.value)}
-                                        />
-                                        <Button
-                                            variant="primary"
-                                            className="w-full"
-                                            onClick={handleCreate}
-                                            disabled={actionLoading === 'create'}
-                                        >
-                                            {actionLoading === 'create' ? 'Creating...' : 'Create Team'}
-                                        </Button>
-                                        {createResult && (
-                                            <p className={cn(
-                                                'text-xs',
-                                                createResult.success ? 'text-success' : 'text-danger'
-                                            )}>
-                                                {createResult.message}
-                                            </p>
-                                        )}
+                    {!storedPending && (
+                        <div className="bg-surface-1 border border-border-default rounded-xl p-5">
+                            <button
+                                onClick={() => { setShowCreate(!showCreate); setShowJoin(false) }}
+                                className="w-full flex items-center justify-between"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xl">🚀</span>
+                                    <div className="text-left">
+                                        <p className="text-sm font-bold text-text-primary">Create a Team</p>
+                                        <p className="text-xs text-text-tertiary">Start a new team (requires admin approval)</p>
                                     </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                                </div>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2" className={cn(
+                                        'text-text-disabled transition-transform',
+                                        showCreate && 'rotate-180'
+                                    )}>
+                                    <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                            </button>
+                            <AnimatePresence>
+                                {showCreate && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="mt-4 space-y-3">
+                                            <Input
+                                                label="Team Name"
+                                                placeholder="e.g. Google Prep Squad"
+                                                value={createName}
+                                                onChange={(e) => setCreateName(e.target.value)}
+                                            />
+                                            <Input
+                                                label="Description (optional)"
+                                                placeholder="What's your team preparing for?"
+                                                value={createDesc}
+                                                onChange={(e) => setCreateDesc(e.target.value)}
+                                            />
+                                            <Button
+                                                variant="primary"
+                                                className="w-full"
+                                                onClick={handleCreate}
+                                                disabled={actionLoading === 'create'}
+                                            >
+                                                {actionLoading === 'create' ? 'Creating...' : 'Create Team'}
+                                            </Button>
+                                            {createResult && (
+                                                <p className={cn(
+                                                    'text-xs',
+                                                    createResult.success ? 'text-success' : 'text-danger'
+                                                )}>
+                                                    {createResult.message}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    )}
                 </div>
             </div>
         )

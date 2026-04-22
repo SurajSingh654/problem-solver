@@ -1,7 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — Dashboard (Team-Context-Aware)
 // ============================================================================
-
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useTeamContext } from '@hooks/useTeamContext'
@@ -20,6 +20,20 @@ export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = usePersonalStats()
   const { data: reviewData } = useReviewQueue()
   const { data: recsData } = useRecommendations()
+
+  // v3.0 FIX: Check for pending team to show banner
+  const [pendingTeam, setPendingTeam] = useState(null)
+
+  useEffect(() => {
+    if (isPersonalMode) {
+      try {
+        const stored = localStorage.getItem('pendingTeam')
+        if (stored) setPendingTeam(JSON.parse(stored))
+      } catch { /* ignore */ }
+    } else {
+      setPendingTeam(null)
+    }
+  }, [isPersonalMode])
 
   if (statsLoading) {
     return (
@@ -46,6 +60,31 @@ export default function Dashboard() {
             : 'Your team practice overview and readiness metrics.'}
         </p>
       </motion.div>
+
+      {/* v3.0 FIX: Pending team banner */}
+      {pendingTeam && isPersonalMode && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-warning/5 border border-warning/20 rounded-xl p-4 mb-6"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-lg">⏳</span>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-text-primary">
+                Team "{pendingTeam.name}" is pending approval
+              </p>
+              <p className="text-xs text-text-tertiary">
+                You can practice individually while waiting. You'll be switched automatically once approved.
+              </p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full
+                           bg-warning/10 text-warning border border-warning/20">
+              PENDING
+            </span>
+          </div>
+        </motion.div>
+      )}
 
       {/* ── Stats Grid ──────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
@@ -96,7 +135,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ── Review preview ────────────────────────────── */}
         {reviewData?.dueCount > 0 && (
           <ReviewPreview
             reviews={reviewData.due.slice(0, 3)}
@@ -104,7 +142,6 @@ export default function Dashboard() {
           />
         )}
 
-        {/* ── Recommendations ───────────────────────────── */}
         {recsData?.recommendations?.length > 0 && (
           <Recommendations
             recommendations={recsData.recommendations.slice(0, 4)}
