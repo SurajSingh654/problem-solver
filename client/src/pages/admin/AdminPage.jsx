@@ -1,36 +1,32 @@
+// ============================================================================
+// ProbSolver v3.0 — Team Admin Page
+// ============================================================================
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProblems, useDeleteProblem, useUpdateProblem } from '@hooks/useProblems'
-import { useUsers, useDeleteUser, useUpdateUserRole } from '@hooks/useUsers'
+import { useTeamContext } from '@hooks/useTeamContext'
 import useAuthStore from '@store/useAuthStore'
 import { usePersonalStats } from '@hooks/useReport'
+import { teamsApi } from '@services/teams.api'
 import { Avatar } from '@components/ui/Avatar'
 import { Badge } from '@components/ui/Badge'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
-import { formatShortDate, formatRelativeDate } from '@utils/formatters'
-import { SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
-import { useResetUserPassword } from '@hooks/useAuth'
+import { formatShortDate } from '@utils/formatters'
+import { PROBLEM_CATEGORIES } from '@utils/constants'
+import { useEffect } from 'react'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
-
 
 // ── Stat card ──────────────────────────────────────────
 function AdminStat({ icon, label, value, color }) {
     return (
-        <div className={cn(
-            'rounded-xl border p-4 text-center',
-            color
-        )}>
+        <div className={cn('rounded-xl border p-4 text-center', color)}>
             <div className="text-2xl mb-1">{icon}</div>
-            <div className="text-3xl font-extrabold font-mono text-text-primary">
-                {value}
-            </div>
-            <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-1">
-                {label}
-            </div>
+            <div className="text-3xl font-extrabold font-mono text-text-primary">{value}</div>
+            <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-1">{label}</div>
         </div>
     )
 }
@@ -57,22 +53,14 @@ function DeleteModal({ problem, onConfirm, onCancel, isDeleting }) {
                         Delete problem?
                     </h3>
                     <p className="text-sm text-text-tertiary text-center mb-1">
-                        <span className="font-semibold text-text-primary">
-                            "{problem.title}"
-                        </span>
+                        <span className="font-semibold text-text-primary">"{problem.title}"</span>
                     </p>
                     <p className="text-xs text-text-tertiary text-center mb-5">
-                        This will also delete all solutions submitted for this problem.
-                        This cannot be undone.
+                        This will also delete all solutions. This cannot be undone.
                     </p>
                     <div className="flex gap-3">
-                        <Button variant="ghost" size="md" fullWidth onClick={onCancel}>
-                            Cancel
-                        </Button>
-                        <Button variant="danger" size="md" fullWidth
-                            loading={isDeleting} onClick={onConfirm}>
-                            Delete
-                        </Button>
+                        <Button variant="ghost" size="md" fullWidth onClick={onCancel}>Cancel</Button>
+                        <Button variant="danger" size="md" fullWidth loading={isDeleting} onClick={onConfirm}>Delete</Button>
                     </div>
                 </motion.div>
             </div>
@@ -81,7 +69,7 @@ function DeleteModal({ problem, onConfirm, onCancel, isDeleting }) {
 }
 
 // ── Problems table ─────────────────────────────────────
-function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive }) {
+function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleVisibility }) {
     if (!problems.length) {
         return (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -97,11 +85,9 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
             <table className="w-full min-w-[700px]">
                 <thead>
                     <tr className="border-b border-border-default">
-                        {['Problem', 'Category', 'Difficulty', 'Source', 'Solutions', 'Added', 'Status', ''].map(h => (
+                        {['Problem', 'Category', 'Difficulty', 'Solutions', 'Added', 'Status', ''].map(h => (
                             <th key={h} className="py-3 px-4 text-left">
-                                <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
-                                    {h}
-                                </span>
+                                <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">{h}</span>
                             </th>
                         ))}
                     </tr>
@@ -117,11 +103,9 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                                 transition={{ delay: i * 0.02 }}
                                 className="hover:bg-surface-2 transition-colors group"
                             >
-                                {/* Title */}
                                 <td className="py-3 px-4 max-w-[260px]">
                                     <div className="flex items-center gap-2">
                                         {p.isPinned && <span className="text-warning text-sm">📌</span>}
-                                        {p.isBlindChallenge && <span className="text-brand-300 text-sm">🎯</span>}
                                         <span
                                             onClick={() => onEdit(p.id)}
                                             className="text-sm font-semibold text-text-primary truncate
@@ -130,7 +114,7 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                                             {p.title}
                                         </span>
                                     </div>
-                                    {p.tags?.slice(0, 2).map(t => (
+                                    {(p.tags || []).slice(0, 2).map(t => (
                                         <span key={t}
                                             className="inline-block mr-1 mt-0.5 text-[10px] text-text-disabled
                                                        bg-surface-3 border border-border-subtle rounded px-1 py-px">
@@ -138,8 +122,6 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                                         </span>
                                     ))}
                                 </td>
-
-                                {/* Category */}
                                 <td className="py-3 px-4">
                                     {cat ? (
                                         <span className={cn(
@@ -152,66 +134,43 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                                         <span className="text-[10px] text-text-disabled">Coding</span>
                                     )}
                                 </td>
-
-                                {/* Difficulty */}
                                 <td className="py-3 px-4">
                                     <Badge variant={DIFF_VARIANT[p.difficulty] || 'brand'} size="xs">
-                                        {p.difficulty.charAt(0) + p.difficulty.slice(1).toLowerCase()}
+                                        {p.difficulty?.charAt(0) + p.difficulty?.slice(1).toLowerCase()}
                                     </Badge>
                                 </td>
-
-                                {/* Source */}
-                                <td className="py-3 px-4">
-                                    <span className="text-xs text-text-tertiary">
-                                        {SOURCE_LABELS[p.source] || p.source}
-                                    </span>
-                                </td>
-
-                                {/* Solutions */}
                                 <td className="py-3 px-4 text-center">
                                     <span className="text-sm font-bold font-mono text-text-primary">
-                                        {p.totalSolutions ?? p._count?.solutions ?? 0}
+                                        {p.solutionCount || 0}
                                     </span>
                                 </td>
-
-                                {/* Added */}
                                 <td className="py-3 px-4">
                                     <span className="text-xs text-text-tertiary font-mono">
-                                        {formatShortDate(p.addedAt)}
+                                        {formatShortDate(p.createdAt)}
                                     </span>
                                 </td>
-
-                                {/* Status */}
                                 <td className="py-3 px-4">
                                     <button
-                                        onClick={() => onToggleActive(p)}
+                                        onClick={() => onToggleVisibility(p)}
                                         className={cn(
                                             'text-[10px] font-bold px-2 py-1 rounded-full border transition-all',
-                                            p.isActive
+                                            !p.isHidden
                                                 ? 'bg-success/10 border-success/25 text-success hover:bg-success/20'
                                                 : 'bg-surface-3 border-border-default text-text-disabled hover:border-border-strong'
                                         )}
                                     >
-                                        {p.isActive ? 'Active' : 'Hidden'}
+                                        {!p.isHidden ? 'Visible' : 'Hidden'}
                                     </button>
                                 </td>
-
-                                {/* Actions */}
                                 <td className="py-3 px-4">
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100
-                                                    transition-opacity">
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
                                             onClick={() => onTogglePin(p)}
                                             title={p.isPinned ? 'Unpin' : 'Pin'}
                                             className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
                                                        text-text-tertiary hover:text-warning"
                                         >
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                                stroke="currentColor" strokeWidth="2"
-                                                strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                                <circle cx="12" cy="10" r="3" />
-                                            </svg>
+                                            📌
                                         </button>
                                         <button
                                             onClick={() => onEdit(p.id)}
@@ -219,12 +178,7 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                                             className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
                                                        text-text-tertiary hover:text-brand-300"
                                         >
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                                stroke="currentColor" strokeWidth="2"
-                                                strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                            </svg>
+                                            ✏️
                                         </button>
                                         <button
                                             onClick={() => onDelete(p)}
@@ -232,12 +186,7 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
                                             className="p-1.5 rounded-lg hover:bg-danger/10 transition-colors
                                                        text-text-tertiary hover:text-danger"
                                         >
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                                stroke="currentColor" strokeWidth="2"
-                                                strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="3 6 5 6 21 6" />
-                                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                            </svg>
+                                            🗑️
                                         </button>
                                     </div>
                                 </td>
@@ -250,403 +199,145 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleActive
     )
 }
 
-// ── Members table ──────────────────────────────────────
-function MembersTable({ users, currentUserId }) {
+// ── Members table (uses team API) ──────────────────────
+function MembersTable({ members, currentUserId }) {
     const navigate = useNavigate()
-    const deleteUser = useDeleteUser()
-    const updateRole = useUpdateUserRole()
-    const [confirmDelete, setConfirmDelete] = useState(null)
-    const resetPassword = useResetUserPassword()
-    const [resetTarget, setResetTarget] = useState(null)
-    const [tempPassword, setTempPassword] = useState('')
-    const [showTempPass, setShowTempPass] = useState(false)
 
-
-    if (!users?.length) return null
+    if (!members?.length) {
+        return (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <div className="text-4xl">👥</div>
+                <p className="text-sm font-semibold text-text-primary">No members yet</p>
+                <p className="text-xs text-text-tertiary">Invite team members to get started</p>
+            </div>
+        )
+    }
 
     return (
-        <>
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px]">
-                    <thead>
-                        <tr className="border-b border-border-default">
-                            {['Member', 'Role', 'Solved', 'Streak', 'Sims', 'Joined', ''].map(h => (
-                                <th key={h} className="py-3 px-4 text-left">
-                                    <span className="text-[10px] font-bold text-text-disabled
-                                   uppercase tracking-widest">
-                                        {h}
-                                    </span>
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-subtle">
-                        {users.map((u, i) => {
-                            const isYou = u.id === currentUserId
-                            const isAdmin = u.role === 'ADMIN'
-                            return (
-                                <motion.tr
-                                    key={u.id}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: i * 0.03 }}
-                                    className="hover:bg-surface-2 transition-colors group"
-                                >
-                                    {/* Member */}
-                                    <td className="py-3 px-4 cursor-pointer"
-                                        onClick={() => navigate(`/profile/${u.username}`)}>
-                                        <div className="flex items-center gap-3">
-                                            <Avatar name={u.username} color={u.avatarColor} size="sm" />
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-bold text-text-primary">
-                                                        {u.username}
+        <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px]">
+                <thead>
+                    <tr className="border-b border-border-default">
+                        {['Member', 'Role', 'Streak', 'Status', 'Joined'].map(h => (
+                            <th key={h} className="py-3 px-4 text-left">
+                                <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">{h}</span>
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                    {members.map((u, i) => {
+                        const isYou = u.id === currentUserId
+                        const isAdmin = u.teamRole === 'TEAM_ADMIN'
+
+                        return (
+                            <motion.tr
+                                key={u.id}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: i * 0.03 }}
+                                className="hover:bg-surface-2 transition-colors"
+                            >
+                                <td className="py-3 px-4">
+                                    <div className="flex items-center gap-3">
+                                        <Avatar name={u.name} url={u.avatarUrl} size="sm" />
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-text-primary">
+                                                    {u.name}
+                                                </span>
+                                                {isYou && (
+                                                    <span className="text-[10px] px-1.5 py-px rounded-full
+                                                         bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                                                        you
                                                     </span>
-                                                    {isYou && (
-                                                        <span className="text-[10px] px-1.5 py-px rounded-full
-                                             bg-brand-400/15 text-brand-300
-                                             border border-brand-400/25">
-                                                            you
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <span className="text-xs text-text-disabled">{u.email}</span>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    {/* Role */}
-                                    <td className="py-3 px-4">
-                                        <span className={cn(
-                                            'text-[10px] font-bold px-2 py-px rounded-full border',
-                                            isAdmin
-                                                ? 'bg-warning/12 text-warning border-warning/25'
-                                                : 'bg-surface-3 text-text-secondary border-border-default'
-                                        )}>
-                                            {isAdmin ? '⚡ Admin' : 'Member'}
-                                        </span>
-                                    </td>
-
-                                    {/* Solved */}
-                                    <td className="py-3 px-4">
-                                        <span className="text-sm font-bold font-mono text-text-primary">
-                                            {u.solutionCount}
-                                        </span>
-                                    </td>
-
-                                    {/* Streak */}
-                                    <td className="py-3 px-4">
-                                        <span className={cn(
-                                            'text-sm font-bold',
-                                            u.streak > 0 ? 'text-warning' : 'text-text-disabled'
-                                        )}>
-                                            {u.streak > 0 ? `${u.streak} 🔥` : '—'}
-                                        </span>
-                                    </td>
-
-                                    {/* Sims */}
-                                    <td className="py-3 px-4">
-                                        <span className="text-sm text-text-tertiary">{u.simCount}</span>
-                                    </td>
-
-                                    {/* Joined */}
-                                    <td className="py-3 px-4">
-                                        <span className="text-xs text-text-tertiary font-mono">
-                                            {formatShortDate(u.joinedAt)}
-                                        </span>
-                                    </td>
-
-                                    {/* Actions */}
-                                    <td className="py-3 px-4">
-                                        {!isYou && (
-                                            <div className="flex items-center gap-1
-                                      opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {/* Promote / Demote */}
-                                                <button
-                                                    onClick={() => updateRole.mutate({
-                                                        id: u.id,
-                                                        role: isAdmin ? 'MEMBER' : 'ADMIN',
-                                                    })}
-                                                    title={isAdmin ? 'Demote to Member' : 'Promote to Admin'}
-                                                    className={cn(
-                                                        'px-2 py-1 rounded-lg text-[10px] font-bold border transition-all',
-                                                        isAdmin
-                                                            ? 'text-text-tertiary border-border-default hover:border-danger/40 hover:text-danger hover:bg-danger/8'
-                                                            : 'text-text-tertiary border-border-default hover:border-warning/40 hover:text-warning hover:bg-warning/8'
-                                                    )}
-                                                >
-                                                    {isAdmin ? 'Demote' : 'Promote'}
-                                                </button>
-
-                                                {/* Delete */}
-                                                {!isAdmin && (
-                                                    <button
-                                                        onClick={() => setConfirmDelete(u)}
-                                                        title="Remove member"
-                                                        className="p-1.5 rounded-lg hover:bg-danger/10 transition-colors
-                                       text-text-disabled hover:text-danger"
-                                                    >
-                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                                            stroke="currentColor" strokeWidth="2"
-                                                            strokeLinecap="round" strokeLinejoin="round">
-                                                            <polyline points="3 6 5 6 21 6" />
-                                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                                            <path d="M10 11v6M14 11v6" />
-                                                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                                                        </svg>
-                                                    </button>
-                                                )}
-
-                                                {/* Reset Password */}
-                                                {!isAdmin && (
-                                                    <button
-                                                        onClick={() => { setResetTarget(u); setTempPassword('') }}
-                                                        title="Reset password"
-                                                        className="p-1.5 rounded-lg hover:bg-warning/10 transition-colors
-               text-text-disabled hover:text-warning"
-                                                    >
-                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                                            stroke="currentColor" strokeWidth="2"
-                                                            strokeLinecap="round" strokeLinejoin="round">
-                                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                                        </svg>
-                                                    </button>
                                                 )}
                                             </div>
-                                        )}
-                                    </td>
-                                </motion.tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Delete confirm modal */}
-            <AnimatePresence>
-                {confirmDelete && (
-                    <>
-                        <motion.div
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-overlay bg-black/65 backdrop-blur-sm"
-                            onClick={() => setConfirmDelete(null)}
-                        />
-                        <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95, y: -12 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-surface-2 border border-border-strong rounded-2xl p-6
-                           w-full max-w-sm shadow-xl"
-                            >
-                                <div className="flex items-center gap-3 mb-4">
-                                    <Avatar
-                                        name={confirmDelete.username}
-                                        color={confirmDelete.avatarColor}
-                                        size="md"
-                                    />
-                                    <div>
-                                        <p className="text-sm font-bold text-text-primary">
-                                            {confirmDelete.username}
-                                        </p>
-                                        <p className="text-xs text-text-tertiary">
-                                            {confirmDelete.solutionCount} solutions · joined {formatShortDate(confirmDelete.joinedAt)}
-                                        </p>
-                                    </div>
-                                </div>
-                                <p className="text-sm text-text-secondary mb-2">
-                                    Remove this member from ProbSolver?
-                                </p>
-                                <p className="text-xs text-text-tertiary mb-5">
-                                    This permanently deletes their account, all solutions, sim sessions,
-                                    and clarity ratings. This cannot be undone.
-                                </p>
-                                <div className="flex gap-3">
-                                    <Button variant="ghost" size="md" fullWidth
-                                        onClick={() => setConfirmDelete(null)}>
-                                        Cancel
-                                    </Button>
-                                    <Button variant="danger" size="md" fullWidth
-                                        loading={deleteUser.isPending}
-                                        onClick={async () => {
-                                            await deleteUser.mutateAsync(confirmDelete.id)
-                                            setConfirmDelete(null)
-                                        }}>
-                                        Remove Member
-                                    </Button>
-                                </div>
-                            </motion.div>
-                        </div>
-                    </>
-                )}
-            </AnimatePresence>
-            {/* Reset password modal */}
-            <AnimatePresence>
-                {resetTarget && (
-                    <>
-                        <motion.div
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-overlay bg-black/65 backdrop-blur-sm"
-                            onClick={() => { setResetTarget(null); setShowTempPass(false) }}
-                        />
-                        <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95, y: -12 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-surface-2 border border-border-strong rounded-2xl p-6
-                     w-full max-w-sm shadow-xl"
-                            >
-                                <div className="flex items-center gap-3 mb-5">
-                                    <Avatar
-                                        name={resetTarget.username}
-                                        color={resetTarget.avatarColor}
-                                        size="md"
-                                    />
-                                    <div>
-                                        <p className="text-sm font-bold text-text-primary">
-                                            Reset password for {resetTarget.username}
-                                        </p>
-                                        <p className="text-xs text-text-tertiary mt-0.5">
-                                            They will be required to change it on next login
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3 mb-5">
-                                    <div>
-                                        <label className="block text-sm font-semibold text-text-primary mb-1.5">
-                                            Temporary Password
-                                        </label>
-                                        <div className="relative">
-                                            <input
-                                                type={showTempPass ? 'text' : 'password'}
-                                                value={tempPassword}
-                                                onChange={e => setTempPassword(e.target.value)}
-                                                placeholder="Set a temporary password"
-                                                className="w-full bg-surface-3 border border-border-strong rounded-xl
-                             text-sm text-text-primary placeholder:text-text-tertiary
-                             px-3.5 py-2.5 pr-10 outline-none
-                             focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowTempPass(v => !v)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2
-                             text-text-tertiary hover:text-text-primary transition-colors"
-                                            >
-                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                                    stroke="currentColor" strokeWidth="2"
-                                                    strokeLinecap="round" strokeLinejoin="round">
-                                                    {showTempPass ? (
-                                                        <>
-                                                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                                                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                                                            <line x1="1" y1="1" x2="23" y2="23" />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                                            <circle cx="12" cy="12" r="3" />
-                                                        </>
-                                                    )}
-                                                </svg>
-                                            </button>
+                                            <span className="text-xs text-text-disabled">{u.email}</span>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {['temp1234', 'reset123', 'change me'].map(s => (
-                                            <button
-                                                key={s}
-                                                type="button"
-                                                onClick={() => setTempPassword(s)}
-                                                className="text-[11px] px-2 py-1 rounded-lg border
-                             bg-surface-3 border-border-default text-text-tertiary
-                             hover:border-brand-400/40 hover:text-brand-300
-                             transition-all font-mono"
-                                            >
-                                                {s}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="bg-warning/8 border border-warning/25 rounded-xl p-3 mb-5">
-                                    <p className="text-xs text-warning font-semibold mb-1">
-                                        📋 Share this with {resetTarget.username}:
-                                    </p>
-                                    <p className="text-xs text-text-secondary">
-                                        Temporary password:{' '}
-                                        <code className="text-warning bg-warning/10 px-1.5 py-0.5 rounded font-mono">
-                                            {tempPassword || '—'}
-                                        </code>
-                                    </p>
-                                    <p className="text-xs text-text-tertiary mt-1">
-                                        They must change it after logging in.
-                                    </p>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    <Button
-                                        variant="ghost" size="md" fullWidth
-                                        onClick={() => { setResetTarget(null); setShowTempPass(false) }}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        variant="primary" size="md" fullWidth
-                                        disabled={!tempPassword || tempPassword.length < 4}
-                                        loading={resetPassword.isPending}
-                                        onClick={async () => {
-                                            await resetPassword.mutateAsync({
-                                                userId: resetTarget.id,
-                                                temporaryPassword: tempPassword,
-                                            })
-                                            setResetTarget(null)
-                                            setTempPassword('')
-                                            setShowTempPass(false)
-                                        }}
-                                    >
-                                        Set Temporary Password
-                                    </Button>
-                                </div>
-                            </motion.div>
-                        </div>
-                    </>
-                )}
-            </AnimatePresence>
-        </>
+                                </td>
+                                <td className="py-3 px-4">
+                                    <span className={cn(
+                                        'text-[10px] font-bold px-2 py-px rounded-full border',
+                                        isAdmin
+                                            ? 'bg-warning/12 text-warning border-warning/25'
+                                            : 'bg-surface-3 text-text-secondary border-border-default'
+                                    )}>
+                                        {isAdmin ? '👑 Admin' : 'Member'}
+                                    </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                    <span className={cn(
+                                        'text-sm font-bold',
+                                        u.streak > 0 ? 'text-warning' : 'text-text-disabled'
+                                    )}>
+                                        {u.streak > 0 ? `${u.streak} 🔥` : '—'}
+                                    </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                    <span className={cn(
+                                        'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                                        u.activityStatus === 'ACTIVE'
+                                            ? 'bg-success/10 text-success border-success/25'
+                                            : u.activityStatus === 'INACTIVE'
+                                                ? 'bg-warning/10 text-warning border-warning/25'
+                                                : 'bg-surface-3 text-text-disabled border-border-default'
+                                    )}>
+                                        {u.activityStatus || 'Unknown'}
+                                    </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                    <span className="text-xs text-text-tertiary font-mono">
+                                        {formatShortDate(u.createdAt)}
+                                    </span>
+                                </td>
+                            </motion.tr>
+                        )
+                    })}
+                </tbody>
+            </table>
+        </div>
     )
 }
+
 // ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
 export default function AdminPage() {
     const navigate = useNavigate()
-    const [tab, setTab] = useState('problems') // 'problems' | 'members'
+    const { user } = useAuthStore()
+    const { teamName } = useTeamContext()
+
+    const [tab, setTab] = useState('problems')
     const [deleting, setDeleting] = useState(null)
     const [search, setSearch] = useState('')
-    const { user: currentUser } = useAuthStore()  // ← called outside a component!
+    const [members, setMembers] = useState([])
+    const [membersLoading, setMembersLoading] = useState(false)
 
-    const { data: problemsData, isLoading: problemsLoading } =
-        useProblems({ limit: '200' })
-    const { data: users, isLoading: usersLoading } = useUsers()
+    const { data: problemsData, isLoading: problemsLoading } = useProblems({ limit: 200 })
     const { data: stats } = usePersonalStats()
-
     const deleteProblem = useDeleteProblem()
     const updateProblem = useUpdateProblem()
 
     const problems = problemsData?.problems || []
-
     const filtered = search
-        ? problems.filter(p =>
-            p.title.toLowerCase().includes(search.toLowerCase())
-        )
+        ? problems.filter(p => p.title.toLowerCase().includes(search.toLowerCase()))
         : problems
 
-    function handleEdit(id) {
-        navigate(`/admin/problems/${id}/edit`)
+    // Load members from team API (not /api/users)
+    useEffect(() => {
+        if (tab === 'members' && members.length === 0) {
+            setMembersLoading(true)
+            teamsApi.getMembers()
+                .then(res => setMembers(res.data.members || []))
+                .catch(err => console.error('Failed to load members:', err))
+                .finally(() => setMembersLoading(false))
+        }
+    }, [tab])
+
+    function handleEdit(problemId) {
+        navigate(`/admin/edit-problem/${problemId}`)
     }
 
     function handleDelete(problem) {
@@ -661,15 +352,15 @@ export default function AdminPage() {
 
     async function handleTogglePin(problem) {
         await updateProblem.mutateAsync({
-            id: problem.id,
+            problemId: problem.id,
             data: { isPinned: !problem.isPinned },
         })
     }
 
-    async function handleToggleActive(problem) {
+    async function handleToggleVisibility(problem) {
         await updateProblem.mutateAsync({
-            id: problem.id,
-            data: { isActive: !problem.isActive },
+            problemId: problem.id,
+            data: { isHidden: !problem.isHidden },
         })
     }
 
@@ -679,17 +370,13 @@ export default function AdminPage() {
             <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                 <div>
                     <h1 className="text-2xl font-extrabold text-text-primary mb-1">
-                        Admin Panel
+                        Team Admin
                     </h1>
                     <p className="text-sm text-text-tertiary">
-                        Manage problems and members
+                        Manage {teamName} problems and members
                     </p>
                 </div>
-                <Button
-                    variant="primary"
-                    size="md"
-                    onClick={() => navigate('/admin/problems/new')}
-                >
+                <Button variant="primary" size="md" onClick={() => navigate('/admin/add-problem')}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" strokeWidth="2.5"
                         strokeLinecap="round" strokeLinejoin="round">
@@ -702,49 +389,29 @@ export default function AdminPage() {
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                {[
-                    {
-                        icon: '📋',
-                        label: 'Problems',
-                        value: stats?.totalProblems || problems.length,
-                        color: 'bg-brand-400/10 border-brand-400/20',
-                    },
-                    {
-                        icon: '👥',
-                        label: 'Members',
-                        value: stats?.totalMembers || users?.length || 0,
-                        color: 'bg-info/10 border-info/20',
-                    },
-                    {
-                        icon: '✅',
-                        label: 'Solutions',
-                        value: stats?.totalSolutions || 0,
-                        color: 'bg-success/10 border-success/20',
-                    },
-                    {
-                        icon: '📌',
-                        label: 'Pinned',
-                        value: problems.filter(p => p.isPinned).length,
-                        color: 'bg-warning/10 border-warning/20',
-                    },
-                ].map((s, i) => (
-                    <motion.div
-                        key={s.label}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                    >
-                        <AdminStat {...s} />
-                    </motion.div>
-                ))}
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
+                    <AdminStat icon="📋" label="Problems" value={problems.length}
+                        color="bg-brand-400/10 border-brand-400/20" />
+                </motion.div>
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+                    <AdminStat icon="👥" label="Members" value={members.length || '—'}
+                        color="bg-info/10 border-info/20" />
+                </motion.div>
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                    <AdminStat icon="✅" label="Solutions" value={stats?.totalSolved || 0}
+                        color="bg-success/10 border-success/20" />
+                </motion.div>
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                    <AdminStat icon="📌" label="Pinned" value={problems.filter(p => p.isPinned).length}
+                        color="bg-warning/10 border-warning/20" />
+                </motion.div>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 bg-surface-2 border border-border-default
-                      rounded-xl p-1 mb-5 w-fit">
+            <div className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1 mb-5 w-fit">
                 {[
                     { id: 'problems', label: `Problems (${problems.length})` },
-                    { id: 'members', label: `Members (${users?.length || 0})` },
+                    { id: 'members', label: `Members` },
                 ].map(t => (
                     <button
                         key={t.id}
@@ -765,7 +432,6 @@ export default function AdminPage() {
             <div className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
                 {tab === 'problems' && (
                     <>
-                        {/* Search */}
                         <div className="p-4 border-b border-border-default">
                             <input
                                 type="text"
@@ -773,23 +439,20 @@ export default function AdminPage() {
                                 onChange={e => setSearch(e.target.value)}
                                 placeholder="Search problems…"
                                 className="w-full sm:w-80 bg-surface-3 border border-border-strong
-                           rounded-xl text-sm text-text-primary placeholder:text-text-tertiary
-                           px-3.5 py-2 outline-none
-                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                   rounded-xl text-sm text-text-primary placeholder:text-text-tertiary
+                                   px-3.5 py-2 outline-none
+                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                             />
                         </div>
-
                         {problemsLoading ? (
-                            <div className="flex justify-center py-16">
-                                <Spinner size="lg" />
-                            </div>
+                            <div className="flex justify-center py-16"><Spinner size="lg" /></div>
                         ) : (
                             <ProblemsTable
                                 problems={filtered}
                                 onEdit={handleEdit}
                                 onDelete={handleDelete}
                                 onTogglePin={handleTogglePin}
-                                onToggleActive={handleToggleActive}
+                                onToggleVisibility={handleToggleVisibility}
                             />
                         )}
                     </>
@@ -797,12 +460,10 @@ export default function AdminPage() {
 
                 {tab === 'members' && (
                     <>
-                        {usersLoading ? (
-                            <div className="flex justify-center py-16">
-                                <Spinner size="lg" />
-                            </div>
+                        {membersLoading ? (
+                            <div className="flex justify-center py-16"><Spinner size="lg" /></div>
                         ) : (
-                            <MembersTable users={users} currentUserId={currentUser?.id} />
+                            <MembersTable members={members} currentUserId={user?.id} />
                         )}
                     </>
                 )}

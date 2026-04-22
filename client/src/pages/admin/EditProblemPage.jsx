@@ -1,28 +1,30 @@
+// ============================================================================
+// ProbSolver v3.0 — Edit Problem Page
+// ============================================================================
 import { useParams, useNavigate } from 'react-router-dom'
 import { ProblemForm } from '@components/features/admin/ProblemForm'
-import { useProblem, useUpdateProblem } from '@hooks/useProblems'
-import { useDeleteProblem } from '@hooks/useProblems'
+import { useProblem, useUpdateProblem, useDeleteProblem } from '@hooks/useProblems'
 import { Button } from '@components/ui/Button'
 import { PageSpinner } from '@components/ui/Spinner'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export default function EditProblemPage() {
-    const { id } = useParams()
+    const { problemId } = useParams()
     const navigate = useNavigate()
     const [showDelete, setShowDelete] = useState(false)
 
-    const { data: problem, isLoading } = useProblem(id)
+    const { data: problem, isLoading } = useProblem(problemId)
     const updateProblem = useUpdateProblem()
     const deleteProblem = useDeleteProblem()
 
     async function handleSubmit(data) {
-        await updateProblem.mutateAsync({ id, data })
+        await updateProblem.mutateAsync({ problemId, data })
         navigate('/admin')
     }
 
     async function handleDelete() {
-        await deleteProblem.mutateAsync(id)
+        await deleteProblem.mutateAsync(problemId)
         navigate('/admin')
     }
 
@@ -55,7 +57,6 @@ export default function EditProblemPage() {
                     </svg>
                     Back to Admin
                 </button>
-
                 <Button
                     variant="danger"
                     size="sm"
@@ -87,7 +88,6 @@ export default function EditProblemPage() {
                 submitLabel="Save Changes"
             />
 
-            {/* Delete confirm */}
             <AnimatePresence>
                 {showDelete && (
                     <>
