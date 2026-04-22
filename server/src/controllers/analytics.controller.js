@@ -6,7 +6,7 @@
 import prisma from "../lib/prisma.js";
 import { aiComplete } from "../services/ai.service.js";
 import { isAIEnabled } from "../services/ai.service.js";
-import { successResponse, errorResponse } from "../utils/response.js";
+import { success, error } from "../utils/response.js";
 
 // ── Helper: calculate date ranges ──────────────────────
 function getDaysAgo(days) {
@@ -451,7 +451,7 @@ export async function getProductHealth(req, res) {
   // COMPILE RESPONSE
   // ═══════════════════════════════════════════════════
 
-  return successResponse(res, {
+  return success(res, {
     period: days,
     generatedAt: new Date().toISOString(),
 
@@ -562,12 +562,12 @@ export async function getProductHealth(req, res) {
 // AI generates insights from the raw metrics
 export async function analyzeProductHealth(req, res) {
   if (!isAIEnabled()) {
-    return errorResponse(res, "AI features not enabled", 503, "AI_DISABLED");
+    return error(res, "AI features not enabled", 503, "AI_DISABLED");
   }
 
   const { metrics } = req.body;
   if (!metrics) {
-    return errorResponse(res, "Metrics data required", 400);
+    return error(res, "Metrics data required", 400);
   }
 
   const system = `You are a product growth analyst for ProbSolver — a team interview preparation platform. You analyze platform usage metrics and generate actionable insights for the admin who manages the product.
@@ -638,9 +638,9 @@ Focus on:
       temperature: 0.7,
     });
 
-    return successResponse(res, raw, "Product health analysis generated");
+    return success(res, raw, "Product health analysis generated");
   } catch (error) {
     console.error("[Analytics] AI analysis failed:", error.message);
-    return errorResponse(res, `Analysis failed: ${error.message}`, 500);
+    return error(res, `Analysis failed: ${error.message}`, 500);
   }
 }
