@@ -9,19 +9,21 @@ import useAuthStore from '@store/useAuthStore'
 import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
 
-// ── Validation schema ──────────────────────────────────
+// ── Validation schema (matches v3.0 backend auth.schema.js) ──
 const registerSchema = z.object({
-    username: z
+    name: z
         .string()
-        .min(2, 'Username must be at least 2 characters')
-        .max(30, 'Username must be at most 30 characters')
-        .regex(/^[a-zA-Z0-9_-]+$/, 'Only letters, numbers, - and _ allowed'),
+        .min(2, 'Name must be at least 2 characters')
+        .max(100, 'Name must be under 100 characters'),
     email: z
         .string()
         .email('Enter a valid email'),
     password: z
         .string()
-        .min(6, 'Password must be at least 6 characters'),
+        .min(8, 'Password must be at least 8 characters')
+        .regex(/[a-z]/, 'Must contain at least one lowercase letter')
+        .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
+        .regex(/[0-9]/, 'Must contain at least one number'),
     confirmPassword: z
         .string(),
 }).refine(
@@ -33,10 +35,10 @@ const registerSchema = z.object({
 const features = [
     { icon: '🧠', text: 'Intelligence report across 6 dimensions' },
     { icon: '👥', text: "See your team's solutions side by side" },
-    { icon: '⏱️', text: 'Interview simulation with timer' },
+    { icon: '⏱️', text: 'AI mock interviews with live feedback' },
     { icon: '🔁', text: 'Spaced repetition to fight forgetting' },
     { icon: '🏆', text: 'Leaderboard to stay accountable' },
-    { icon: '🤖', text: 'AI coaching coming in Phase 2' },
+    { icon: '🤖', text: 'AI-powered coaching and problem generation' },
 ]
 
 export default function Register() {
@@ -57,8 +59,7 @@ export default function Register() {
     useEffect(() => {
         if (isAuthenticated) {
             const { user } = useAuthStore.getState()
-            if (user?.emailVerified === false) {
-                // Don't redirect — let the onSuccess handler navigate to /verify-email
+            if (!user?.isVerified) {
                 return
             }
             navigate('/', { replace: true })
@@ -68,17 +69,22 @@ export default function Register() {
     const onSubmit = async (data) => {
         try {
             await registerMutation.mutateAsync({
-                username: data.username,
+                name: data.name,
                 email: data.email,
                 password: data.password,
             })
         } catch (err) {
-            const code = err.response?.data?.code
             const msg = err.response?.data?.error || 'Registration failed'
+            const details = err.response?.data?.details
 
-            if (code === 'USERNAME_TAKEN') {
-                setError('username', { message: msg })
-            } else if (code === 'EMAIL_TAKEN') {
+            // Map server validation errors to form fields
+            if (details?.length) {
+                details.forEach((d) => {
+                    if (d.field === 'name') setError('name', { message: d.message })
+                    if (d.field === 'email') setError('email', { message: d.message })
+                    if (d.field === 'password') setError('password', { message: d.message })
+                })
+            } else if (msg.toLowerCase().includes('email')) {
                 setError('email', { message: msg })
             }
         }
@@ -88,8 +94,8 @@ export default function Register() {
     const getStrength = (pwd) => {
         if (!pwd) return { score: 0, label: '', color: '' }
         let score = 0
-        if (pwd.length >= 6) score++
-        if (pwd.length >= 10) score++
+        if (pwd.length >= 8) score++
+        if (pwd.length >= 12) score++
         if (/[A-Z]/.test(pwd)) score++
         if (/[0-9]/.test(pwd)) score++
         if (/[^A-Za-z0-9]/.test(pwd)) score++
@@ -98,16 +104,12 @@ export default function Register() {
         if (score <= 3) return { score, label: 'Good', color: 'bg-brand-400' }
         return { score, label: 'Strong', color: 'bg-success' }
     }
-
     const strength = getStrength(passwordValue)
 
     return (
         <div className="min-h-screen bg-surface-0 flex relative overflow-hidden">
-
             {/* Left — form */}
             <div className="flex-1 flex items-center justify-center p-6 relative z-10">
-
-                {/* Background glow */}
                 <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-brand-400/5 rounded-full blur-[120px] pointer-events-none" />
 
                 <motion.div
@@ -116,7 +118,6 @@ export default function Register() {
                     transition={{ duration: 0.4, ease: 'easeOut' }}
                     className="w-full max-w-[420px]"
                 >
-
                     {/* Logo */}
                     <div className="flex items-center gap-3 mb-8">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-blue-500 flex items-center justify-center shadow-glow-sm">
@@ -135,10 +136,10 @@ export default function Register() {
                     {/* Title */}
                     <div className="mb-7">
                         <h1 className="text-2xl font-bold text-text-primary mb-1">
-                            Join your team
+                            Create your account
                         </h1>
                         <p className="text-sm text-text-secondary">
-                            Create your account and start your journey
+                            Start your interview preparation journey
                         </p>
                     </div>
 
@@ -147,14 +148,12 @@ export default function Register() {
                         onSubmit={handleSubmit(onSubmit)}
                         className="flex flex-col gap-4"
                     >
-
                         <Input
-                            label="Username"
-                            placeholder="your-username"
-                            autoComplete="username"
+                            label="Full Name"
+                            placeholder="e.g. Suraj Singh"
+                            autoComplete="name"
                             autoFocus
-                            hint="Letters, numbers, - and _ only"
-                            error={errors.username?.message}
+                            error={errors.name?.message}
                             leftIcon={
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" strokeWidth="2"
@@ -163,7 +162,7 @@ export default function Register() {
                                     <circle cx="12" cy="7" r="4" />
                                 </svg>
                             }
-                            {...register('username')}
+                            {...register('name')}
                         />
 
                         <Input
@@ -187,7 +186,7 @@ export default function Register() {
                             <Input
                                 label="Password"
                                 type="password"
-                                placeholder="Minimum 6 characters"
+                                placeholder="Min 8 chars, uppercase, lowercase, number"
                                 autoComplete="new-password"
                                 error={errors.password?.message}
                                 leftIcon={
@@ -200,7 +199,6 @@ export default function Register() {
                                 }
                                 {...register('password')}
                             />
-
                             {/* Password strength bar */}
                             {passwordValue && (
                                 <motion.div
@@ -218,9 +216,9 @@ export default function Register() {
                                         ))}
                                     </div>
                                     <span className={`text-xs font-medium transition-colors ${strength.score <= 1 ? 'text-danger' :
-                                        strength.score <= 2 ? 'text-warning' :
-                                            strength.score <= 3 ? 'text-brand-300' :
-                                                'text-success'
+                                            strength.score <= 2 ? 'text-warning' :
+                                                strength.score <= 3 ? 'text-brand-300' :
+                                                    'text-success'
                                         }`}>
                                         {strength.label}
                                     </span>
@@ -273,7 +271,6 @@ export default function Register() {
                                 Sign in
                             </Link>
                         </p>
-
                     </form>
                 </motion.div>
             </div>
@@ -283,18 +280,17 @@ export default function Register() {
                 initial={{ opacity: 0, x: 24 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4, delay: 0.1, ease: 'easeOut' }}
-                className="hidden lg:flex w-[440px] flex-col justify-center px-12 relative overflow-hidden hero-gradient">
-                {/* Background orb */}
+                className="hidden lg:flex w-[440px] flex-col justify-center px-12 relative overflow-hidden hero-gradient"
+            >
                 <div className="absolute top-[-100px] right-[-100px] w-[400px] h-[400px] bg-brand-400/8 rounded-full blur-[100px] pointer-events-none" />
                 <div className="absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] bg-blue-500/6 rounded-full blur-[100px] pointer-events-none" />
 
                 <div className="relative z-10">
-                    {/* Heading */}
                     <div className="mb-10">
                         <div className="inline-flex items-center gap-2 bg-brand-400/10 border border-brand-400/20 rounded-full px-4 py-2 mb-5">
                             <div className="w-2 h-2 bg-success rounded-full animate-pulse-dot" />
                             <span className="text-xs font-semibold text-brand-300">
-                                Your team is waiting
+                                Join the community
                             </span>
                         </div>
                         <h2 className="text-3xl font-extrabold text-text-primary mb-3 leading-tight">
@@ -304,13 +300,12 @@ export default function Register() {
                             </span>
                         </h2>
                         <p className="text-sm text-text-secondary leading-relaxed">
-                            ProbSolver is not just a problem tracker. It is a full
-                            learning intelligence system built for teams who are
-                            serious about cracking top-tier interviews.
+                            ProbSolver is a full interview intelligence platform —
+                            practice with your team, get AI coaching, and track your
+                            readiness across every interview dimension.
                         </p>
                     </div>
 
-                    {/* Feature list */}
                     <div className="flex flex-col gap-3">
                         {features.map((f, i) => (
                             <motion.div
@@ -326,7 +321,6 @@ export default function Register() {
                         ))}
                     </div>
 
-                    {/* Social proof */}
                     <div className="mt-8 pt-6 border-t border-border-subtle">
                         <p className="text-xs text-text-tertiary text-center">
                             Built for engineering teams · Self-hosted · Free forever
@@ -334,7 +328,6 @@ export default function Register() {
                     </div>
                 </div>
             </motion.div>
-
         </div>
     )
 }
