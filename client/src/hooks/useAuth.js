@@ -1,3 +1,7 @@
+// ============================================================================
+// ProbSolver v3.0 — Auth Hooks (v2 compatible)
+// ============================================================================
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../services/auth.api.js";
@@ -13,39 +17,27 @@ export function useMe() {
     queryKey: QUERY_KEYS.ME,
     queryFn: async () => {
       const res = await authApi.getMe();
-      return res.data.data;
+      // v3.0 returns { success, user } — not nested in .data
+      return res.data.user || res.data.data;
     },
     enabled: isAuthenticated,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
     retry: false,
   });
 }
 
 // ── Register ───────────────────────────────────────────
 export function useRegister() {
-  const { setAuth } = useAuthStore();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data) => authApi.register(data),
-
     onSuccess: (res) => {
-      const { user, token } = res.data.data;
-
-      setAuth(user, token);
-      localStorage.setItem("ps_token", token);
-      queryClient.setQueryData(QUERY_KEYS.ME, user);
-
-      if (!user.emailVerified) {
-        toast.info("Check your email for a verification code");
-        navigate("/verify-email", { state: { email: user.email } });
-      } else {
-        toast.success("Welcome to ProbSolver! 🎉", "Account Created");
-        navigate("/");
-      }
+      // v3.0 registration does NOT return a token — user must verify email first
+      const data = res.data;
+      toast.info("Check your email for a verification code");
+      navigate("/auth/verify-email", { state: { email: data.user?.email } });
     },
-
     onError: (err) => {
       console.error("[Register] Error:", err.response?.data);
       const msg = err.response?.data?.error || "Registration failed";
@@ -62,12 +54,11 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data) => authApi.login(data),
     onSuccess: (res) => {
-      // v3.0 response format: { success, token, user }
+      // v3.0 response: { success, token, user }
       const { user, token } = res.data;
 
       // v3.0 store: setAuth(token, user) — token first
       useAuthStore.getState().setAuth(token, user);
-
       queryClient.setQueryData(QUERY_KEYS.ME, user);
 
       if (!user.isVerified) {
@@ -76,10 +67,10 @@ export function useLogin() {
       } else if (user.mustChangePassword) {
         toast.info("Please set a new password");
         navigate("/auth/change-password");
-      } else if (
-        !user.onboardingComplete &&
-        user.globalRole !== "SUPER_ADMIN"
-      ) {
+      } else if (user.globalRole === "SUPER_ADMIN") {
+        toast.success(`Welcome back, ${user.name}!`);
+        navigate("/super-admin");
+      } else if (!user.onboardingComplete) {
         navigate("/onboarding");
       } else {
         toast.success(`Welcome back, ${user.name}!`);
@@ -96,56 +87,53 @@ export function useLogin() {
 
 // ── Logout ─────────────────────────────────────────────
 export function useLogout() {
-  const { clearAuth } = useAuthStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   return () => {
-    clearAuth();
-    localStorage.removeItem("ps_token");
+    // v3.0 store method is 'logout', not 'clearAuth'
+    useAuthStore.getState().logout();
     queryClient.clear();
-    navigate("/login");
+    navigate("/auth/login");
     toast.info("Logged out successfully");
   };
 }
 
 // ── Update profile ─────────────────────────────────────
 export function useUpdateProfile() {
-  const { updateUser } = useAuthStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data) => authApi.updateProfile(data),
-
     onSuccess: (res) => {
-      const user = res.data.data;
-      updateUser(user);
+      // v3.0 returns { success, message, user }
+      const user = res.data.user || res.data.data;
+      useAuthStore.getState().updateUser(user);
       queryClient.setQueryData(QUERY_KEYS.ME, user);
       toast.success("Profile updated");
     },
-
     onError: (err) => {
       toast.error(err.response?.data?.error || "Update failed");
     },
   });
 }
 
-// ── Claim admin ────────────────────────────────────────
+// ── Claim admin (v2 — may not exist in v3.0, kept for compatibility) ──
 export function useClaimAdmin() {
-  const { setAuth, user } = useAuthStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (password) => authApi.claimAdmin(password),
-
     onSuccess: (res) => {
-      const { user: updatedUser, token } = res.data.data;
-      setAuth(updatedUser, token);
-      localStorage.setItem("ps_token", token);
-      queryClient.setQueryData(QUERY_KEYS.ME, updatedUser);
-      toast.success("Admin access granted ⚡", "Role Updated");
+      const data = res.data;
+      const user = data.user || data.data?.user;
+      const token = data.token || data.data?.token;
+      if (token && user) {
+        useAuthStore.getState().setAuth(token, user);
+        queryClient.setQueryData(QUERY_KEYS.ME, user);
+      }
+      toast.success("Admin access granted", "Role Updated");
     },
-
     onError: (err) => {
       toast.error(err.response?.data?.error || "Incorrect password");
     },
@@ -154,21 +142,15 @@ export function useClaimAdmin() {
 
 // ── Change password ────────────────────────────────────
 export function useChangePassword() {
-  const { updateUser } = useAuthStore();
   return useMutation({
     mutationFn: (data) => authApi.changePassword(data),
-    onSuccess: (res) => {
-      // Clear mustChangePassword flag in store
-      updateUser({ mustChangePassword: false });
+    onSuccess: () => {
+      useAuthStore.getState().updateUser({ mustChangePassword: false });
       toast.success("Password changed successfully");
     },
     onError: (err) => {
-      const code = err.response?.data?.code;
-      if (code === "WRONG_PASSWORD") {
-        toast.error("Current password is incorrect");
-      } else {
-        toast.error(err.response?.data?.error || "Failed to change password");
-      }
+      const msg = err.response?.data?.error || "Failed to change password";
+      toast.error(msg);
     },
   });
 }
@@ -186,6 +168,7 @@ export function useResetUserPassword() {
   });
 }
 
+// ── Change email (initiate) ────────────────────────────
 export function useChangeEmail() {
   return useMutation({
     mutationFn: (newEmail) => authApi.initiateEmailChange(newEmail),
@@ -200,28 +183,25 @@ export function useChangeEmail() {
   });
 }
 
+// ── Change email (confirm) ─────────────────────────────
 export function useConfirmEmailChange() {
-  const { setAuth } = useAuthStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (code) => authApi.confirmEmailChange(code),
     onSuccess: (res) => {
-      const { user, token } = res.data.data;
-      setAuth(user, token);
-      localStorage.setItem("ps_token", token);
-      queryClient.setQueryData(QUERY_KEYS.ME, user);
+      const data = res.data;
+      const user = data.user || data.data?.user;
+      const token = data.token || data.data?.token;
+      if (token && user) {
+        useAuthStore.getState().setAuth(token, user);
+        queryClient.setQueryData(QUERY_KEYS.ME, user);
+      }
       toast.success("Email changed successfully!");
     },
     onError: (err) => {
-      const code = err.response?.data?.code;
-      if (code === "CODE_EXPIRED") {
-        toast.error("Code expired. Please try again.");
-      } else if (code === "INVALID_CODE") {
-        toast.error("Invalid code. Please check and try again.");
-      } else {
-        toast.error(err.response?.data?.error || "Email change failed");
-      }
+      const msg = err.response?.data?.error || "Email change failed";
+      toast.error(msg);
     },
   });
 }

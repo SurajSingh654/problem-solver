@@ -15,48 +15,52 @@ import { Navigate, useLocation } from 'react-router-dom'
 import useAuthStore from '@store/useAuthStore'
 
 export default function ProtectedRoute({
-  children,
-  requireSuperAdmin = false,
-  requireTeamAdmin = false,
-  requireTeamContext = false,
+    children,
+    requireSuperAdmin = false,
+    requireTeamAdmin = false,
+    requireTeamContext = false,
 }) {
-  const { isAuthenticated, user } = useAuthStore()
-  const location = useLocation()
+    const { isAuthenticated, user } = useAuthStore()
+    const location = useLocation()
 
-  // ── Not logged in ────────────────────────────────────
-  if (!isAuthenticated || !user) {
-    return <Navigate to="/auth/login" state={{ from: location }} replace />
-  }
-
-  // ── Must change password ─────────────────────────────
-  if (user.mustChangePassword && location.pathname !== '/auth/change-password') {
-    return <Navigate to="/auth/change-password" replace />
-  }
-
-  // ── Must complete onboarding ─────────────────────────
-  if (!user.onboardingComplete && location.pathname !== '/onboarding') {
-    // SUPER_ADMIN doesn't need onboarding
-    if (user.globalRole !== 'SUPER_ADMIN') {
-      return <Navigate to="/onboarding" replace />
+    // ── Not logged in ────────────────────────────────────
+    if (!isAuthenticated || !user) {
+        return <Navigate to="/auth/login" state={{ from: location }} replace />
     }
-  }
 
-  // ── Role checks ──────────────────────────────────────
-  if (requireSuperAdmin && user.globalRole !== 'SUPER_ADMIN') {
-    return <Navigate to="/" replace />
-  }
-
-  if (requireTeamAdmin) {
-    const isAdmin = user.globalRole === 'SUPER_ADMIN' || user.teamRole === 'TEAM_ADMIN'
-    if (!isAdmin) {
-      return <Navigate to="/" replace />
+    // ── Must change password ─────────────────────────────
+    if (user.mustChangePassword && location.pathname !== '/auth/change-password') {
+        return <Navigate to="/auth/change-password" replace />
     }
-  }
 
-  // ── Team context required ────────────────────────────
-  if (requireTeamContext && !user.currentTeamId) {
-    return <Navigate to="/onboarding" replace />
-  }
+    // ── Must complete onboarding ─────────────────────────
+    if (!user.onboardingComplete && location.pathname !== '/onboarding') {
+        // SUPER_ADMIN doesn't need onboarding
+        if (user.globalRole !== 'SUPER_ADMIN') {
+            return <Navigate to="/onboarding" replace />
+        }
+    }
 
-  return children
+    // ── Role checks ──────────────────────────────────────
+    if (requireSuperAdmin && user.globalRole !== 'SUPER_ADMIN') {
+        return <Navigate to="/" replace />
+    }
+
+    if (requireTeamAdmin) {
+        const isAdmin = user.globalRole === 'SUPER_ADMIN' || user.teamRole === 'TEAM_ADMIN'
+        if (!isAdmin) {
+            return <Navigate to="/" replace />
+        }
+    }
+
+    // ── Team context required ────────────────────────────
+    // ── Team context required ────────────────────────────
+    if (requireTeamContext && !user.currentTeamId) {
+        // SUPER_ADMIN doesn't need team context — they manage the platform
+        if (user.globalRole !== 'SUPER_ADMIN') {
+            return <Navigate to="/onboarding" replace />
+        }
+    }
+
+    return children
 }
