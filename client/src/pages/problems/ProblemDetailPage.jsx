@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
-import { useAuthStore } from '@store/useAuthStore'
+import useAuthStore from '@store/useAuthStore'
 import { SolutionCard } from '@components/features/solutions/SolutionCard'
 import { Badge } from '@components/ui/Badge'
 import { Button } from '@components/ui/Button'

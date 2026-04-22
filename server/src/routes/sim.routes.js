@@ -1,22 +1,14 @@
-import { Router } from "express";
-import {
-  startSession,
-  useHint,
-  completeSession,
-  abandonSession,
-  getMySessions,
-  getSession,
-} from "../controllers/sim.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
+import { Router } from 'express'
+import { authenticate } from '../middleware/auth.middleware.js'
+import { requireTeamContext } from '../middleware/team.middleware.js'
+import { startSim, completeSim, abandonSim, getSimHistory } from '../controllers/sim.controller.js'
 
-const router = Router();
-router.use(requireAuth);
+const router = Router()
+router.use(authenticate, requireTeamContext)
 
-router.post("/", startSession);
-router.get("/my", getMySessions);
-router.get("/:id", getSession);
-router.patch("/:id/hint", useHint);
-router.patch("/:id/complete", completeSession);
-router.patch("/:id/abandon", abandonSession);
+router.post('/start', startSim)
+router.post('/:sessionId/complete', completeSim)
+router.post('/:sessionId/abandon', abandonSim)
+router.get('/history', getSimHistory)
 
-export default router;
+export default router

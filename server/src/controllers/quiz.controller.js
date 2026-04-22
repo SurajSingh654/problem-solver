@@ -1,297 +1,326 @@
-import prisma from "../lib/prisma.js";
-import { aiComplete } from "../services/ai.service.js";
-import {
-  quizGenerationPrompt,
-  quizAnalysisPrompt,
-} from "../services/ai.prompts.js";
-import {
-  quizQuestionsSchema,
-  quizAnalysisSchema,
-  validateAIResponse,
-} from "../services/ai.schemas.js";
-import {
-  successResponse,
-  createdResponse,
-  notFoundResponse,
-  errorResponse,
-} from "../utils/response.js";
+// ============================================================================
+// ProbSolver v3.0 — Quiz Controller (Team-Aware)
+// ============================================================================
+//
+// SCOPING: Quizzes use optionalTeamContext. The quiz itself is personal
+// (user types a subject, AI generates questions), but the teamId is
+// stored for team stats aggregation. Individual-mode users store their
+// personalTeamId.
+//
+// The quiz generation prompt doesn't change between team/individual mode.
+// Team context only affects where the quiz attempt is counted in stats.
+//
+// ============================================================================
 
-// ── POST /api/quizzes/generate ─────────────────────────
-// AI generates quiz questions live based on user input
+import prisma from '../lib/prisma.js'
+import { success, error } from '../utils/response.js'
+import { AI_ENABLED, AI_MODEL_FAST } from '../config/env.js'
+
+// ============================================================================
+// GENERATE QUIZ
+// ============================================================================
+
 export async function generateQuiz(req, res) {
-  const userId = req.user.id;
-  const { subject, difficulty, count, context } = req.body;
-
-  if (!subject || !subject.trim()) {
-    return errorResponse(res, "Subject is required", 400);
-  }
-
-  const questionCount = Math.min(Math.max(parseInt(count) || 5, 3), 25);
-
   try {
-    const { system, user } = quizGenerationPrompt({
-      subject: subject.trim(),
-      difficulty: difficulty || "MEDIUM",
-      count: questionCount,
-      context: context || "",
-    });
+    if (!AI_ENABLED) {
+      return error(res, 'AI features are not enabled.', 503)
+    }
 
-    console.log(
-      `[AI Quiz] Generating ${questionCount} questions on "${subject}" (${difficulty})`,
-    );
+    const userId = req.user.id
+    const teamId = req.teamId || null // nullable — works in both modes
+    const { subject, difficulty, questionCount } = req.body
 
-    const raw = await aiComplete({
-      systemPrompt: system,
-      userPrompt: user,
-      userId,
-      maxTokens: 4000,
+    const count = Math.min(questionCount || 10, 20)
+
+    // ── Generate questions via GPT ─────────────────────
+    const { default: OpenAI } = await import('openai')
+    const openai = new OpenAI()
+
+    const response = await openai.chat.completions.create({
+      model: AI_MODEL_FAST,
       temperature: 0.8,
-    });
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert quiz generator for interview preparation.
+Generate exactly ${count} multiple-choice questions on the given subject.
+Each question must have exactly 4 options labeled A, B, C, D.
+Difficulty level: ${difficulty || 'MEDIUM'}.
 
-    console.log("[AI Quiz] Response keys:", Object.keys(raw || {}));
-    console.log("[AI Quiz] Questions count:", raw?.questions?.length || 0);
+Return JSON: {
+  "questions": [
+    {
+      "id": 1,
+      "question": "...",
+      "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+      "correctAnswer": "A",
+      "explanation": "Brief explanation of why this is correct."
+    }
+  ]
+}`
+        },
+        {
+          role: 'user',
+          content: `Generate a ${difficulty || 'medium'} difficulty quiz on: ${subject}`,
+        },
+      ],
+    })
 
-    const validation = validateAIResponse(quizQuestionsSchema, raw);
-    if (!validation.valid) {
-      console.error(
-        "[AI Quiz] Validation failed:",
-        JSON.stringify(validation.error),
-      );
-      return errorResponse(
-        res,
-        "AI returned invalid format. Try again.",
-        500,
-        "AI_VALIDATION_ERROR",
-      );
+    let questions
+    try {
+      const parsed = JSON.parse(response.choices[0].message.content)
+      questions = parsed.questions
+    } catch {
+      return error(res, 'Failed to parse AI response. Please try again.', 500)
     }
 
-    return successResponse(
-      res,
-      {
-        title: raw.title || `${subject} Quiz`,
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return error(res, 'AI failed to generate questions. Please try again.', 500)
+    }
+
+    // ── Create quiz attempt record ─────────────────────
+    const quiz = await prisma.quizAttempt.create({
+      data: {
+        userId,
+        teamId, // SCOPING: nullable for individual mode
         subject,
-        difficulty,
-        questions: validation.data.questions,
+        difficulty: difficulty || 'MEDIUM',
+        questions, // Store full questions JSON
       },
-      "Quiz generated",
-    );
-  } catch (error) {
-    console.error("[AI Quiz] Error:", error.code || error.name, error.message);
-    if (error.name === "AIError") {
-      return errorResponse(
-        res,
-        error.message,
-        error.code === "RATE_LIMITED" ? 429 : 500,
-        error.code,
-      );
-    }
-    return errorResponse(
-      res,
-      `Quiz generation failed: ${error.message}`,
-      500,
-      "AI_ERROR",
-    );
-  }
-}
+      select: {
+        id: true,
+        subject: true,
+        difficulty: true,
+        questions: true,
+        createdAt: true,
+      },
+    })
 
-// ── POST /api/quizzes/submit ───────────────────────────
-// Submit completed quiz attempt with answers
-export async function submitQuizAttempt(req, res) {
-  const userId = req.user.id;
-  const { subject, difficulty, questions, answers, timeUsedSecs } = req.body;
-
-  if (!questions?.length || !answers?.length) {
-    return errorResponse(res, "Questions and answers are required", 400);
-  }
-
-  // Score the attempt
-  let score = 0;
-  const gradedQuestions = questions.map((q, i) => {
-    const userAnswer = answers[i];
-    const selected = userAnswer?.selected ?? -1;
-    const isCorrect = selected === q.correctIndex;
-
-    if (isCorrect) score++;
-
-    return {
+    // ── Strip correct answers before sending to client ─
+    const clientQuestions = questions.map((q) => ({
+      id: q.id,
       question: q.question,
       options: q.options,
-      correctIndex: q.correctIndex,
-      selected,
-      correct: isCorrect,
-      explanation: q.explanation,
-      difficulty: q.difficulty,
-    };
-  });
+      // correctAnswer and explanation omitted
+    }))
 
-  const total = questions.length;
-  const percentage = Math.round((score / total) * 100);
-
-  // Save attempt
-  const attempt = await prisma.quizAttempt.create({
-    data: {
-      userId,
-      subject: subject || "General",
-      difficulty: difficulty || "MEDIUM",
-      questionCount: total,
-      score,
-      total,
-      percentage,
-      timeUsedSecs: timeUsedSecs || null,
-      questions: JSON.stringify(gradedQuestions),
-    },
-  });
-
-  return createdResponse(
-    res,
-    {
-      ...attempt,
-      questions: gradedQuestions,
-    },
-    `Quiz completed — ${score}/${total} (${percentage}%)`,
-  );
+    return success(res, {
+      quiz: {
+        id: quiz.id,
+        subject: quiz.subject,
+        difficulty: quiz.difficulty,
+        questionCount: clientQuestions.length,
+        questions: clientQuestions,
+      },
+    }, 201)
+  } catch (err) {
+    console.error('Generate quiz error:', err)
+    return error(res, 'Failed to generate quiz.', 500)
+  }
 }
 
-// ── POST /api/quizzes/:id/analyze ──────────────────────
-// AI analyzes quiz performance and gives study advice
-export async function analyzeQuizAttempt(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
+// ============================================================================
+// SUBMIT QUIZ ANSWERS
+// ============================================================================
 
-  const attempt = await prisma.quizAttempt.findUnique({ where: { id } });
-  if (!attempt) return notFoundResponse(res, "Quiz attempt");
-  if (attempt.userId !== userId) {
-    return errorResponse(res, "Not your quiz attempt", 403);
+export async function submitQuizAnswers(req, res) {
+  try {
+    const { quizId } = req.params
+    const userId = req.user.id
+    const { answers, timeSpent } = req.body
+
+    // ── Find quiz and verify ownership ─────────────────
+    const quiz = await prisma.quizAttempt.findFirst({
+      where: { id: quizId, userId },
+      select: { id: true, questions: true, answers: true, teamId: true },
+    })
+
+    if (!quiz) {
+      return error(res, 'Quiz not found.', 404)
+    }
+
+    if (quiz.answers) {
+      return error(res, 'Quiz already submitted.', 400)
+    }
+
+    // ── Grade the quiz ─────────────────────────────────
+    const questions = quiz.questions
+    let correct = 0
+    const graded = questions.map((q) => {
+      const userAnswer = answers[q.id] || answers[String(q.id)] || null
+      const isCorrect = userAnswer === q.correctAnswer
+      if (isCorrect) correct++
+
+      return {
+        id: q.id,
+        question: q.question,
+        userAnswer,
+        correctAnswer: q.correctAnswer,
+        isCorrect,
+        explanation: q.explanation,
+      }
+    })
+
+    const score = Math.round((correct / questions.length) * 100)
+
+    // ── Update quiz attempt ────────────────────────────
+    const updated = await prisma.quizAttempt.update({
+      where: { id: quizId },
+      data: {
+        answers: graded,
+        score,
+        timeSpent: timeSpent || null,
+        completedAt: new Date(),
+      },
+      select: {
+        id: true,
+        subject: true,
+        score: true,
+        answers: true,
+        timeSpent: true,
+        completedAt: true,
+      },
+    })
+
+    // ── Generate AI analysis in background ─────────────
+    if (AI_ENABLED) {
+      generateQuizAnalysis(quizId).catch(() => {})
+    }
+
+    return success(res, {
+      result: {
+        quizId: updated.id,
+        subject: updated.subject,
+        score: updated.score,
+        correct,
+        total: questions.length,
+        timeSpent: updated.timeSpent,
+        answers: graded,
+      },
+    })
+  } catch (err) {
+    console.error('Submit quiz error:', err)
+    return error(res, 'Failed to submit quiz.', 500)
   }
+}
 
-  const questions = JSON.parse(attempt.questions || "[]");
-  const wrongAnswers = questions
-    .filter((q) => !q.correct)
-    .map((q) => ({
-      question: q.question,
-      selectedOption: q.options[q.selected] || "No answer",
-      correctOption: q.options[q.correctIndex],
-    }));
+// ============================================================================
+// GET QUIZ HISTORY (team-scoped)
+// ============================================================================
 
-  if (wrongAnswers.length === 0) {
-    const perfectAnalysis = {
-      summary: `Perfect score on ${attempt.subject}! You got all ${attempt.total} questions correct.`,
-      weakTopics: [],
-      studyAdvice: ["Try harder difficulty to challenge yourself further."],
-      encouragement: "Excellent work! You have strong command of this subject.",
-    };
+export async function getQuizHistory(req, res) {
+  try {
+    const userId = req.user.id
+    const teamId = req.teamId || null
+    const { page = 1, limit = 20 } = req.query
+
+    const where = { userId }
+    if (teamId) where.teamId = teamId // SCOPING: filter by team if available
+
+    const [quizzes, total] = await Promise.all([
+      prisma.quizAttempt.findMany({
+        where,
+        select: {
+          id: true,
+          subject: true,
+          difficulty: true,
+          score: true,
+          timeSpent: true,
+          completedAt: true,
+          createdAt: true,
+          aiAnalysis: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (parseInt(page) - 1) * parseInt(limit),
+        take: parseInt(limit),
+      }),
+      prisma.quizAttempt.count({ where }),
+    ])
+
+    return success(res, {
+      quizzes,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit)),
+      },
+    })
+  } catch (err) {
+    console.error('Quiz history error:', err)
+    return error(res, 'Failed to fetch quiz history.', 500)
+  }
+}
+
+// ============================================================================
+// GET SINGLE QUIZ (with answers)
+// ============================================================================
+
+export async function getQuiz(req, res) {
+  try {
+    const { quizId } = req.params
+    const userId = req.user.id
+
+    const quiz = await prisma.quizAttempt.findFirst({
+      where: { id: quizId, userId },
+    })
+
+    if (!quiz) {
+      return error(res, 'Quiz not found.', 404)
+    }
+
+    return success(res, { quiz })
+  } catch (err) {
+    console.error('Get quiz error:', err)
+    return error(res, 'Failed to fetch quiz.', 500)
+  }
+}
+
+// ============================================================================
+// BACKGROUND: AI quiz analysis
+// ============================================================================
+
+async function generateQuizAnalysis(quizId) {
+  try {
+    const quiz = await prisma.quizAttempt.findUnique({
+      where: { id: quizId },
+      select: { subject: true, score: true, answers: true },
+    })
+
+    if (!quiz || !quiz.answers) return
+
+    const wrongAnswers = quiz.answers.filter((a) => !a.isCorrect)
+    if (wrongAnswers.length === 0) return
+
+    const { default: OpenAI } = await import('openai')
+    const openai = new OpenAI()
+
+    const response = await openai.chat.completions.create({
+      model: AI_MODEL_FAST,
+      temperature: 0.7,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `Analyze quiz results and identify patterns in wrong answers.
+Return JSON: { "weakAreas": ["area1", ...], "advice": "specific study advice", "encouragement": "brief encouragement" }`,
+        },
+        {
+          role: 'user',
+          content: `Subject: ${quiz.subject}. Score: ${quiz.score}%.
+Wrong answers:\n${wrongAnswers.map((a) => `Q: ${a.question}\nUser: ${a.userAnswer}, Correct: ${a.correctAnswer}`).join('\n\n')}`,
+        },
+      ],
+    })
+
+    const analysis = JSON.parse(response.choices[0].message.content)
 
     await prisma.quizAttempt.update({
-      where: { id },
-      data: {
-        aiAnalysis: JSON.stringify(perfectAnalysis),
-        aiSuggestions: JSON.stringify(perfectAnalysis.studyAdvice),
-      },
-    });
-
-    return successResponse(res, perfectAnalysis, "Analysis complete");
+      where: { id: quizId },
+      data: { aiAnalysis: analysis },
+    })
+  } catch (err) {
+    console.error('Quiz analysis error:', err.message)
   }
-
-  const { system, user } = quizAnalysisPrompt({
-    category: attempt.subject,
-    score: attempt.score,
-    total: attempt.total,
-    percentage: attempt.percentage,
-    wrongAnswers,
-  });
-
-  const raw = await aiComplete({
-    systemPrompt: system,
-    userPrompt: user,
-    userId,
-    maxTokens: 1000,
-  });
-
-  const validation = validateAIResponse(quizAnalysisSchema, raw);
-  if (!validation.valid) {
-    return errorResponse(res, "AI analysis failed. Try again.", 500);
-  }
-
-  // Save analysis
-  await prisma.quizAttempt.update({
-    where: { id },
-    data: {
-      aiAnalysis: JSON.stringify(validation.data),
-      aiSuggestions: JSON.stringify(validation.data.studyAdvice || []),
-    },
-  });
-
-  return successResponse(res, validation.data, "Analysis complete");
-}
-
-// ── GET /api/quizzes/my-attempts ───────────────────────
-export async function getMyAttempts(req, res) {
-  const userId = req.user.id;
-
-  const attempts = await prisma.quizAttempt.findMany({
-    where: { userId },
-    orderBy: { completedAt: "desc" },
-    take: 50,
-  });
-
-  return successResponse(
-    res,
-    attempts.map((a) => ({
-      ...a,
-      questions: JSON.parse(a.questions || "[]"),
-      aiAnalysis: a.aiAnalysis ? JSON.parse(a.aiAnalysis) : null,
-      aiSuggestions: JSON.parse(a.aiSuggestions || "[]"),
-    })),
-  );
-}
-
-// ── GET /api/quizzes/attempt/:id ───────────────────────
-export async function getAttemptById(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  const attempt = await prisma.quizAttempt.findUnique({ where: { id } });
-  if (!attempt) return notFoundResponse(res, "Quiz attempt");
-  if (attempt.userId !== userId) {
-    return errorResponse(res, "Not your quiz attempt", 403);
-  }
-
-  return successResponse(res, {
-    ...attempt,
-    questions: JSON.parse(attempt.questions || "[]"),
-    aiAnalysis: attempt.aiAnalysis ? JSON.parse(attempt.aiAnalysis) : null,
-    aiSuggestions: JSON.parse(attempt.aiSuggestions || "[]"),
-  });
-}
-
-// ── GET /api/quizzes/subjects ──────────────────────────
-// Returns unique subjects from user's history for quick re-take
-export async function getMySubjects(req, res) {
-  const userId = req.user.id;
-
-  const attempts = await prisma.quizAttempt.findMany({
-    where: { userId },
-    select: { subject: true, difficulty: true, percentage: true },
-    orderBy: { completedAt: "desc" },
-  });
-
-  // Group by subject
-  const subjectMap = {};
-  attempts.forEach((a) => {
-    if (!subjectMap[a.subject]) {
-      subjectMap[a.subject] = {
-        subject: a.subject,
-        attempts: 0,
-        bestScore: 0,
-        lastDifficulty: a.difficulty,
-      };
-    }
-    subjectMap[a.subject].attempts++;
-    subjectMap[a.subject].bestScore = Math.max(
-      subjectMap[a.subject].bestScore,
-      a.percentage,
-    );
-  });
-
-  return successResponse(res, Object.values(subjectMap));
 }

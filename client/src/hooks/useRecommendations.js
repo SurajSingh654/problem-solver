@@ -1,13 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
-import { recommendationsApi } from "@services/recommendations.api.js";
+import { useQuery } from '@tanstack/react-query'
+import api from '@services/api'
+import { useTeamContext } from './useTeamContext'
 
 export function useRecommendations() {
+  const { teamQueryKey } = useTeamContext()
+
   return useQuery({
-    queryKey: ["recommendations"],
+    queryKey: [...teamQueryKey, 'recommendations'],
     queryFn: async () => {
-      const res = await recommendationsApi.get();
-      return res.data.data;
+      const res = await api.get('/recommendations')
+      return res.data
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
+    staleTime: 1000 * 60 * 5, // 5 minutes — recommendations don't need constant refresh
+  })
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate, NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuthStore } from '@store/useAuthStore'
+import useAuthStore from '@store/useAuthStore'
 import { useUIStore } from '@store/useUIStore'
 import { Avatar } from '@components/ui/Avatar'
 import { Tooltip } from '@components/ui/Tooltip'

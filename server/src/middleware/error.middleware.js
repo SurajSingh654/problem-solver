@@ -1,84 +1,52 @@
-import { env } from "../config/env.js";
+// ============================================================================
+// ProbSolver v3.0 — Global Error Handler
+// ============================================================================
 
+import { IS_PRODUCTION } from "../config/env.js";
+
+/**
+ * Express global error handler.
+ * Must have 4 parameters (err, req, res, next) for Express to recognize it.
+ */
 export function errorHandler(err, req, res, next) {
-  console.error("─── Error Handler ───");
-  console.error(`  Route:   ${req.method} ${req.originalUrl}`);
-  console.error(`  Name:    ${err.name}`);
-  console.error(`  Code:    ${err.code || "none"}`);
-  console.error(`  Message: ${err.message}`);
-  if (env.IS_DEV) {
-    console.error(
-      `  Stack:   ${err.stack?.split("\n").slice(0, 5).join("\n")}`,
-    );
-  }
-  console.error("─────────────────────");
+  console.error("Unhandled error:", err);
 
-  if (err.name === "AIError") {
-    const statusMap = {
-      RATE_LIMITED: 429,
-      OPENAI_RATE_LIMITED: 429,
-      INVALID_API_KEY: 500,
-      OPENAI_DOWN: 503,
-      EMPTY_RESPONSE: 500,
-      PARSE_ERROR: 500,
-      AI_ERROR: 500,
-    };
-    return res.status(statusMap[err.code] || 500).json({
-      success: false,
-      error: err.message,
-      code: err.code || "AI_ERROR",
-    });
-  }
-
+  // ── Prisma known errors ────────────────────────────
   if (err.code === "P2002") {
     return res.status(409).json({
       success: false,
-      error: "A record with this value already exists",
-      code: "DUPLICATE",
+      error: "A record with this data already exists.",
     });
   }
 
   if (err.code === "P2025") {
     return res.status(404).json({
       success: false,
-      error: "Record not found",
-      code: "NOT_FOUND",
+      error: "Record not found.",
     });
   }
 
-  if (err.name === "JsonWebTokenError") {
-    return res.status(401).json({
+  // ── JSON parse errors ──────────────────────────────
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({
       success: false,
-      error: "Invalid token",
-      code: "INVALID_TOKEN",
+      error: "Invalid JSON in request body.",
     });
   }
 
-  if (err.name === "TokenExpiredError") {
-    return res.status(401).json({
+  // ── Body too large ─────────────────────────────────
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({
       success: false,
-      error: "Token expired",
-      code: "TOKEN_EXPIRED",
+      error: "Request body too large. Maximum size is 10MB.",
     });
   }
 
-  if (err.name === "ZodError") {
-    return res.status(422).json({
-      success: false,
-      error: "Validation failed",
-      code: "VALIDATION_ERROR",
-      errors: err.errors.map((e) => ({
-        field: e.path.join("."),
-        message: e.message,
-      })),
-    });
-  }
-
-  const status = err.statusCode || err.status || 500;
-  return res.status(status).json({
+  // ── Default server error ───────────────────────────
+  return res.status(err.status || 500).json({
     success: false,
-    error:
-      env.IS_PROD && status === 500 ? "Internal server error" : err.message,
-    code: err.code || "SERVER_ERROR",
+    error: IS_PRODUCTION
+      ? "An unexpected error occurred."
+      : err.message || "An unexpected error occurred.",
   });
 }

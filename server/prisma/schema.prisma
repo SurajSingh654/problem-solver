@@ -1,397 +1,830 @@
-// ─────────────────────────────────────────────────────────
-// PRISMA SCHEMA
-// Phase 1: SQLite (zero setup, file-based)
-// Phase 2: Switch provider to "postgresql" and update
-//          DATABASE_URL — all queries stay identical.
-// ─────────────────────────────────────────────────────────
+// ============================================================================
+// ProbSolver v3.0 — Multi-Tenant Schema
+// ============================================================================
+//
+// DESIGN DECISIONS:
+//
+// 1. IDs: Using @default(cuid()) — CUID is time-sortable (B-tree friendly),
+//    collision-resistant, URL-safe, and shorter than UUID. Better index
+//    locality than UUIDv4 since sequential inserts stay near each other
+//    on disk pages. Prisma's default and battle-tested at scale.
+//
+// 2. Multi-tenancy: Shared database, shared schema, teamId foreign key
+//    on every tenant-scoped table. Every query filters by teamId.
+//    This is the simplest pattern that scales to thousands of teams
+//    without operational complexity of schema-per-tenant.
+//
+// 3. Soft deletes: Using deletedAt timestamp (null = active) on Team
+//    and User. Allows recovery, audit trails, and prevents orphaned
+//    references. Partial indexes exclude soft-deleted rows from queries.
+//
+// 4. JSON columns: Used for semi-structured data that varies by context
+//    (categoryData, aiProblemConfig, phases, workspace, debrief, scores).
+//    These are never used in WHERE clauses — they're read/write blobs.
+//    Structured data that we filter/sort on always gets its own column.
+//
+// 5. Vector columns: Handled via raw SQL in migrations since Prisma
+//    doesn't natively support pgvector types. We use Unsupported("vector(1536)")
+//    as a placeholder and create actual columns + HNSW indexes in migrations.
+//
+// 6. Indexes: Every teamId FK has a composite index with the most common
+//    co-filtered column (usually createdAt or userId). This ensures
+//    the two most frequent query patterns — "all items in this team"
+//    and "all items by this user in this team" — are index-only scans.
+//
+// 7. Cascade rules: Deleting a Team cascades to all team-scoped data.
+//    Deleting a User nullifies their authored content where possible
+//    (problems stay, attributed to "[deleted user]") and cascades
+//    personal data (solutions, sessions, messages).
+//
+// ============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"   // was "sqlite"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector", schema: "public")]
 }
 
-
-// ─────────────────────────────────────────────────────────
+// ============================================================================
 // ENUMS
-// SQLite does not support native enums — stored as strings.
-// Validated at the application layer via Zod.
-// ─────────────────────────────────────────────────────────
+// ============================================================================
 
-// Role: "ADMIN" | "MEMBER"
-// Difficulty: "EASY" | "MEDIUM" | "HARD"
-// Source: "LEETCODE" | "GFG" | "CODECHEF" | "INTERVIEWBIT"
-//         | "HACKERRANK" | "CODEFORCES" | "OTHER"
-// Language: "PYTHON" | "JAVASCRIPT" | "JAVA" | "CPP"
-//           | "C" | "GO" | "RUST" | "TYPESCRIPT"
-//           | "SWIFT" | "KOTLIN" | "OTHER"
-// Level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
+/// Platform-level role — only SUPER_ADMIN has platform-wide powers
+enum GlobalRole {
+  SUPER_ADMIN
+  USER
+}
 
+/// Role within a specific team
+enum TeamRole {
+  TEAM_ADMIN
+  MEMBER
+}
 
-// ─────────────────────────────────────────────────────────
+/// Team lifecycle status — creation requires SUPER_ADMIN approval
+enum TeamStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+/// Team invitation status
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+/// How the problem was created
+enum ProblemSource {
+  MANUAL
+  AI_GENERATED
+}
+
+/// The 6 interview categories
+enum ProblemCategory {
+  CODING
+  SYSTEM_DESIGN
+  BEHAVIORAL
+  CS_FUNDAMENTALS
+  HR
+  SQL
+}
+
+/// Standard difficulty levels
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+/// Mock interview session status
+enum InterviewStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+/// Interview message role
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+/// User activity classification — computed on login/action
+enum ActivityStatus {
+  ACTIVE
+  INACTIVE
+  DORMANT
+}
+
+/// Competition lifecycle (FUTURE)
+enum CompetitionStatus {
+  DRAFT
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================================================
 // USER
-// ─────────────────────────────────────────────────────────
+// ============================================================================
+
+/// The user model — every person on the platform
+///
+/// Key design: globalRole controls platform-level access.
+/// currentTeamId + teamRole control team-level access.
+/// When currentTeamId is null AND the user has a personal team,
+/// they're in "individual mode."
 model User {
-  id             String    @id @default(cuid())
-  username       String    @unique
-  email          String    @unique
-  passwordHash   String
-  mustChangePassword Boolean   @default(false)
-  emailVerified      Boolean   @default(false)
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  avatarUrl String?
+
+  // ── Platform role ──────────────────────────────────
+  globalRole GlobalRole @default(USER)
+
+  // ── Current team context ───────────────────────────
+  // Which team the user is currently operating in.
+  // Null means they haven't joined a team / are in individual mode.
+  // This is denormalized for fast JWT embedding and query filtering.
+  currentTeamId String?
+  currentTeam   Team?    @relation("CurrentTeamMembers", fields: [currentTeamId], references: [id], onDelete: SetNull)
+  teamRole      TeamRole?
+
+  // ── Personal space ─────────────────────────────────
+  // Every individual-mode user gets a hidden "personal team."
+  // This ID links to that team for uniform query patterns.
+  personalTeamId String?  @unique
+  personalTeam   Team?    @relation("PersonalTeam", fields: [personalTeamId], references: [id], onDelete: SetNull)
+
+  // ── Onboarding ─────────────────────────────────────
+  onboardingComplete Boolean @default(false)
+
+  // ── Email verification ─────────────────────────────
+  isVerified         Boolean   @default(false)
   verificationCode   String?
   verificationExpiry DateTime?
 
-  // Role — "ADMIN" | "MEMBER"
-  role           String    @default("MEMBER")
+  // ── Password reset ─────────────────────────────────
+  resetCode       String?
+  resetExpiry     DateTime?
+  mustChangePassword Boolean @default(false)
 
-  // Profile
-  avatarColor    String    @default("#7c6ff7")
-  joinedAt       DateTime  @default(now())
+  // ── Email change ───────────────────────────────────
+  pendingEmail         String?
+  emailChangeCode      String?
+  emailChangeExpiry    DateTime?
 
-  // Streak tracking
+  // ── Interview prep profile ─────────────────────────
+  targetCompany     String?
+  interviewDate     DateTime?
+  preferredLanguage String?
+
+  // ── Activity tracking ──────────────────────────────
   streak         Int       @default(0)
-  longestStreak  Int       @default(0)
-  lastActiveDate DateTime?
+  lastSolvedAt   DateTime?
+  lastActiveAt   DateTime?
+  activityStatus ActivityStatus @default(ACTIVE)
 
-  // Interview goals
-  targetCompanies String   @default("[]")   // JSON array
-  targetRole      String?
-  targetDate      DateTime?
+  // ── AI problem preferences (individual mode) ───────
+  // JSON: { categories: [...], difficulty: "MEDIUM", dailyCount: 2,
+  //         targetCompanyStyle: "google", patterns: [...] }
+  aiProblemConfig Json?
 
-  // Skill level — "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
-  currentLevel   String    @default("BEGINNER")
+  // ── Soft delete ────────────────────────────────────
+  deletedAt DateTime?
 
-  // Preferences stored as JSON string
-  preferences    String    @default("{}")
-
-  // AI interaction history (for context — Phase 2)
-  aiConversations String   @default("[]")   // JSON array
- 
-  // Quiz
-  quizAttempts   QuizAttempt[] @relation("QuizAttempts")
-
-  // Relations
-  solutions      Solution[]
-  clarityRatings ClarityRating[]
-  simSessions    SimSession[]
-  addedProblems  Problem[]       @relation("AddedBy")
-  interviewSessions InterviewSession[] @relation("UserInterviews")
-
+  // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // ── Relations ──────────────────────────────────────
+  createdTeams       Team[]             @relation("TeamCreator")
+  teamInvitesSent    TeamInvitation[]   @relation("InviteSender")
+  problems           Problem[]          @relation("ProblemAuthor")
+  solutions          Solution[]
+  clarityRatingsGiven ClarityRating[]   @relation("RatingAuthor")
+  simSessions        SimSession[]
+  quizAttempts       QuizAttempt[]
+  interviewSessions  InterviewSession[]
+
+  // ── Indexes ────────────────────────────────────────
+  // Composite index for "all users in this team" — the most common query
+  @@index([currentTeamId, activityStatus])
+  // For leaderboard queries: team members sorted by streak/activity
+  @@index([currentTeamId, streak])
+  // For SUPER_ADMIN: find users by activity status platform-wide
+  @@index([activityStatus, lastActiveAt])
+  // Partial index for soft delete — only query non-deleted users
+  @@index([deletedAt])
+  // Fast email lookup (already unique, but compound with deletedAt
+  // ensures we only find active accounts)
+  @@index([email, deletedAt])
 
   @@map("users")
 }
 
+// ============================================================================
+// TEAM
+// ============================================================================
 
-// ─────────────────────────────────────────────────────────
-// PROBLEM
-// ─────────────────────────────────────────────────────────
-model Problem {
-  id          String  @id @default(cuid())
-  title       String
+/// A team is the primary multi-tenant boundary.
+///
+/// Every piece of content (problems, solutions, sessions) belongs to a team.
+/// Individual users get a "personal team" with isPersonal=true that behaves
+/// identically in the database but is presented as "My Practice" in the UI.
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  avatarUrl   String?
 
-  // Source — "LEETCODE" | "GFG" | etc
-  source      String
-  sourceUrl   String
+  // ── Lifecycle ──────────────────────────────────────
+  status          TeamStatus @default(PENDING)
+  rejectionReason String?
+  approvedAt      DateTime?
 
-  // Difficulty — "EASY" | "MEDIUM" | "HARD"
-  difficulty  String
+  // ── Join code — generated on approval ──────────────
+  // 8-char alphanumeric, unique, regeneratable by team admin
+  joinCode String? @unique
 
-  category    String  @default("CODING")
-  description  String?                    // Rich text problem statement
-  categoryData String  @default("{}")     // JSON — category-specific structured data
-  embedding    Unsupported("vector(1536)")?  // OpenAI ada-002 embeddings
+  // ── Creator ────────────────────────────────────────
+  createdById String
+  createdBy   User   @relation("TeamCreator", fields: [createdById], references: [id], onDelete: Cascade)
 
-  // Arrays stored as JSON strings (SQLite limitation)
-  // Switch to native arrays when migrating to PostgreSQL
-  tags         String @default("[]")   // algorithm patterns
-  companyTags  String @default("[]")   // companies that ask this
+  // ── Team config ────────────────────────────────────
+  maxMembers Int @default(20)
 
-  // Status
-  isPinned         Boolean @default(false)
-  isActive         Boolean @default(true)
-  isBlindChallenge Boolean @default(false)
-  blindRevealAt    DateTime?
+  // ── Personal team flag ─────────────────────────────
+  // True for auto-created individual spaces.
+  // Personal teams don't appear in search, can't be joined,
+  // and don't require approval.
+  isPersonal Boolean @default(false)
 
-  // Admin-curated learning content
-  realWorldContext String?
-  useCases         String  @default("[]")   // JSON array
-  adminNotes       String?
-  relatedProblems  String  @default("[]")   // JSON array of Problem ids
+  // ── AI problem generation config ───────────────────
+  // JSON: { enabled: true, categories: [...], difficultyDistribution: {...},
+  //         frequency: "daily", autoPublish: false, targetCompanyStyle: "google" }
+  aiProblemsEnabled Boolean @default(true)
+  aiProblemConfig   Json?
 
-  // Metadata
-  addedAt  DateTime @default(now())
-  addedById String
-  addedBy  User     @relation("AddedBy", fields: [addedById], references: [id])
+  // ── Soft delete ────────────────────────────────────
+  deletedAt DateTime?
 
-  // AI-generated content (Phase 2)
-  aiHints        String @default("[]")   // JSON array
-  aiRealWorldSuggestions String @default("[]")
-
-  // Relations
-  solutions     Solution[]
-  followUps     FollowUpQuestion[]
-  interviewSessions InterviewSession[]
-
+  // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // ── Relations ──────────────────────────────────────
+  currentMembers    User[]             @relation("CurrentTeamMembers")
+  personalOwner     User?              @relation("PersonalTeam")
+  invitations       TeamInvitation[]
+  problems          Problem[]
+  solutions         Solution[]
+  clarityRatings    ClarityRating[]
+  simSessions       SimSession[]
+  quizAttempts      QuizAttempt[]
+  interviewSessions InterviewSession[]
+
+  // ── Indexes ────────────────────────────────────────
+  // For SUPER_ADMIN: list teams by status (pending approvals)
+  @@index([status, createdAt])
+  // For filtering out personal teams in team search/listings
+  @@index([isPersonal, status])
+  // Soft delete filtering
+  @@index([deletedAt])
+
+  @@map("teams")
+}
+
+// ============================================================================
+// TEAM INVITATION
+// ============================================================================
+
+/// Invitations to join a team — sent by TEAM_ADMIN via email
+model TeamInvitation {
+  id String @id @default(cuid())
+
+  // ── Team ───────────────────────────────────────────
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // ── Invitee ────────────────────────────────────────
+  email String
+
+  // ── Inviter ────────────────────────────────────────
+  invitedById String
+  invitedBy   User   @relation("InviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  // ── Status ─────────────────────────────────────────
+  status InvitationStatus @default(PENDING)
+
+  // ── Invite link token ──────────────────────────────
+  token String @unique @default(cuid())
+
+  // ── Expiry ─────────────────────────────────────────
+  expiresAt DateTime
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+
+  // ── Indexes ────────────────────────────────────────
+  // Find pending invitations for a given email (registration flow)
+  @@index([email, status])
+  // Find all invitations for a team (admin view)
+  @@index([teamId, status])
+
+  @@map("team_invitations")
+}
+
+// ============================================================================
+// PROBLEM
+// ============================================================================
+
+/// An interview problem — always belongs to a team.
+///
+/// For team mode: created by TEAM_ADMIN manually or AI-generated.
+/// For individual mode: AI-generated into the user's personal team.
+/// Embeddings enable vector similarity search scoped to the team.
+model Problem {
+  id    String @id @default(cuid())
+  title String
+
+  // ── Content ────────────────────────────────────────
+  description  String?
+  difficulty   Difficulty      @default(MEDIUM)
+  category     ProblemCategory @default(CODING)
+  categoryData Json?
+
+  // ── Context & metadata ─────────────────────────────
+  tags             String[]  @default([])
+  realWorldContext String?
+  useCases         String?
+  adminNotes       String?
+
+  // ── Source tracking ────────────────────────────────
+  source ProblemSource @default(MANUAL)
+
+  // ── Team ownership (required) ──────────────────────
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // ── Author ─────────────────────────────────────────
+  createdById String
+  createdBy   User   @relation("ProblemAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  // ── Publishing (for AI-generated review workflow) ──
+  isPublished Boolean @default(true)
+
+  // ── Pinning & visibility ───────────────────────────
+  isPinned Boolean @default(false)
+  isHidden Boolean @default(false)
+
+  // ── Vector embedding ───────────────────────────────
+  // Actual column created via raw SQL migration:
+  // ALTER TABLE problems ADD COLUMN embedding vector(1536);
+  // CREATE INDEX idx_problems_embedding ON problems
+  //   USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+  embedding Unsupported("vector(1536)")?
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ──────────────────────────────────────
+  followUpQuestions FollowUpQuestion[]
+  solutions         Solution[]
+  simSessions       SimSession[]
+  interviewSessions InterviewSession[]
+
+  // ── Indexes ────────────────────────────────────────
+  // THE critical multi-tenant index: "all problems in this team"
+  // Composite with category for filtered listings
+  @@index([teamId, category, difficulty])
+  // For problem listings: team + published + not hidden
+  @@index([teamId, isPublished, isHidden])
+  // For pinned problems (shown at top)
+  @@index([teamId, isPinned])
+  // Full-text search candidate (title)
+  @@index([teamId, title])
+  // For AI-generated review queue: unpublished in a team
+  @@index([teamId, source, isPublished])
 
   @@map("problems")
 }
 
+// ============================================================================
+// FOLLOW-UP QUESTION
+// ============================================================================
 
-// ─────────────────────────────────────────────────────────
-// FOLLOW UP QUESTION
-// ─────────────────────────────────────────────────────────
+/// Progressive follow-up questions attached to a problem.
+/// No teamId needed — follows the problem's team scope.
 model FollowUpQuestion {
-  id         String @id @default(cuid())
-  problemId  String
-  problem    Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
 
+  // ── Parent problem ─────────────────────────────────
+  problemId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  // ── Content ────────────────────────────────────────
   question   String
-  difficulty String  // "EASY" | "MEDIUM" | "HARD"
+  difficulty Difficulty @default(MEDIUM)
   hint       String?
-  order      Int     @default(0)
+  order      Int        @default(0)
 
-  createdAt  DateTime @default(now())
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+
+  // ── Indexes ────────────────────────────────────────
+  @@index([problemId, order])
 
   @@map("follow_up_questions")
 }
 
-
-// ─────────────────────────────────────────────────────────
+// ============================================================================
 // SOLUTION
-// The richest model — captures the full learning journey
-// ─────────────────────────────────────────────────────────
+// ============================================================================
+
+/// A user's solution to a problem — scoped to a team.
+///
+/// Contains multi-step approach (brute → optimized), code,
+/// complexity analysis, explanations, and AI feedback.
+/// Embeddings enable RAG: "find similar solutions in this team."
 model Solution {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
+
+  // ── Problem reference ──────────────────────────────
   problemId String
   problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  solvedAt  DateTime @default(now())
+  // ── Author ─────────────────────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Team scope ─────────────────────────────────────
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // ── Solution content ───────────────────────────────
+  approach          String?
+  code              String?
+  language          String?
+  bruteForce        String?
+  optimizedApproach String?
+  timeComplexity    String?
+  spaceComplexity   String?
+
+  // ── Deep understanding fields ──────────────────────
+  keyInsight          String?
+  feynmanExplanation  String?
+  realWorldConnection String?
+
+  // ── Self-assessment ────────────────────────────────
+  confidence Int @default(3)
+
+  // ── Pattern recognition ────────────────────────────
+  pattern                   String?
+  patternIdentificationTime Int?
+
+  // ── AI feedback (stored after review) ──────────────
+  aiFeedback Json?
+
+  // ── Spaced repetition ──────────────────────────────
+  // JSON array of review dates: [date1, date2, ...]
+  reviewDates    Json?
+  nextReviewDate DateTime?
+  reviewCount    Int       @default(0)
+  lastReviewedAt DateTime?
+
+  // ── Vector embedding ───────────────────────────────
+  // Actual column created via raw SQL migration
+  embedding Unsupported("vector(1536)")?
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // ── STEP 1: Pattern identification (before code) ──
-  patternIdentified  String?  // which pattern did you identify?
-  firstInstinct      String?  // what was your first thought?
-  whyThisPattern     String?  // why does this pattern apply?
-  timeToPatternSecs  Int?     // seconds taken to identify pattern
-
-  // ── STEP 2: Brute force ──
-  bruteForceApproach String?
-  bruteForceTime     String?   // e.g. "O(n²)"
-  bruteForceSpace    String?
-
-  // ── STEP 3: Optimized solution ──
-  optimizedApproach  String?
-  optimizedTime      String?
-  optimizedSpace     String?
-  predictedTime      String?   // what you predicted BEFORE writing
-  predictedSpace     String?   // accuracy tracked as a signal
-  code               String?
-  language           String    @default("PYTHON")
-
-  // ── STEP 4: Depth ──
-  keyInsight          String?  // one-sentence core realization
-  feynmanExplanation  String?  // explain to a non-programmer
-  realWorldConnection String?  // your own real-world analogy
-  followUpAnswers     String   @default("[]")  // JSON array
-
-  // ── STEP 5: Self-assessment ──
-  confidenceLevel Int     @default(0)   // 0-5
-  difficultyFelt  String?               // perceived difficulty
-  stuckPoints     String?               // where did you get stuck?
-  hintsUsed       Boolean @default(false)
-
-  // ── Performance signals ──
-  isInterviewMode  Boolean @default(false)
-  timeLimitSecs    Int?
-  timeUsedSecs     Int?
-
-  // ── Review schedule (spaced repetition) ──
-  reviewDates String @default("[]")   // JSON array of ISO date strings
-
-  // ── Peer feedback ──
+  // ── Relations ──────────────────────────────────────
   clarityRatings ClarityRating[]
 
-  // ── AI feedback (Phase 2) ──
-  aiFeedback      String?   // AI-generated feedback on approach
-  aiSuggestedImprovements String @default("[]")
-  embedding    Unsupported("vector(1536)")?  // OpenAI ada-002 embeddings
+  // ── Indexes ────────────────────────────────────────
+  // THE critical query: "all solutions for this problem in this team"
+  @@index([teamId, problemId])
+  // "All solutions by this user in this team" (profile page)
+  @@index([teamId, userId])
+  // Spaced repetition queue: "my due reviews in this team"
+  @@index([teamId, userId, nextReviewDate])
+  // Leaderboard computation: count solutions per user per team
+  @@index([teamId, userId, createdAt])
+  // Unique constraint: one solution per user per problem per team
+  @@unique([userId, problemId, teamId])
 
-  // Constraint: one solution per user per problem
-  @@unique([problemId, userId])
   @@map("solutions")
 }
 
-
-// ─────────────────────────────────────────────────────────
+// ============================================================================
 // CLARITY RATING
-// Peer-to-peer rating of solution explanation quality
-// ─────────────────────────────────────────────────────────
+// ============================================================================
+
+/// Peer rating of a solution's explanation quality (1-5 stars).
+/// Feeds into the Communication dimension of the 6D report.
 model ClarityRating {
-  id         String @id @default(cuid())
+  id String @id @default(cuid())
+
+  // ── Solution being rated ───────────────────────────
   solutionId String
   solution   Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
-  fromUserId String
-  fromUser   User     @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
 
-  score     Int      // 1-5
-  comment   String?
+  // ── Rater ──────────────────────────────────────────
+  raterId String
+  rater   User   @relation("RatingAuthor", fields: [raterId], references: [id], onDelete: Cascade)
 
+  // ── Team scope ─────────────────────────────────────
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // ── Rating ─────────────────────────────────────────
+  rating Int
+
+  // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
 
+  // ── Indexes ────────────────────────────────────────
   // One rating per user per solution
-  @@unique([solutionId, fromUserId])
+  @@unique([raterId, solutionId])
+  // Aggregate ratings for a solution
+  @@index([solutionId])
+  // Team-scoped rating queries
+  @@index([teamId])
+
   @@map("clarity_ratings")
 }
 
+// ============================================================================
+// SIM SESSION (Timer-based practice)
+// ============================================================================
 
-// ─────────────────────────────────────────────────────────
-// SIMULATION SESSION
-// Records of interview simulation attempts
-// ─────────────────────────────────────────────────────────
+/// A timed problem-solving simulation session.
 model SimSession {
-  id        String @id @default(cuid())
-  userId    String
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
+
+  // ── User & team ────────────────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // ── Problem ────────────────────────────────────────
   problemId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
 
-  simulatedAt    DateTime @default(now())
-  timeLimitSecs  Int      @default(2700)   // 45 minutes default
-  timeUsedSecs   Int?
-  hintUsed       Boolean  @default(false)
-  hintUsedAtSecs Int?
-  completed      Boolean  @default(false)
+  // ── Session data ───────────────────────────────────
+  score       Int?
+  hintsUsed   Int       @default(0)
+  completed   Boolean   @default(false)
+  abandoned   Boolean   @default(false)
+  timeSpent   Int?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
 
-  // Post-sim self-assessment
-  approachScore     Int?    // 1-5
-  communicationScore Int?   // 1-5
-  overallScore      Int?    // 1-5
-  whatWentWell      String?
-  whatToImprove     String?
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
 
-  // AI debrief (Phase 2)
-  aiDebriefNotes String?
+  // ── Indexes ────────────────────────────────────────
+  // "My sim sessions in this team"
+  @@index([teamId, userId, createdAt])
+  // Aggregate team stats
+  @@index([teamId, completed])
 
   @@map("sim_sessions")
 }
 
-// ─────────────────────────────────────────────────────
-// QUIZ ATTEMPT — stores completed quiz results
-// Questions are AI-generated live, not pre-stored
-// ─────────────────────────────────────────────────────
+// ============================================================================
+// QUIZ ATTEMPT
+// ============================================================================
+
+/// An AI-generated quiz attempt on any subject.
+/// teamId is optional — quizzes work in both team and individual context.
 model QuizAttempt {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation("QuizAttempts", fields: [userId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
 
-  // What was the quiz about
-  subject      String           // free text: "TCP/IP", "React Hooks", "Physics"
-  difficulty   String           // EASY | MEDIUM | HARD
-  questionCount Int             // how many questions were generated
+  // ── User ───────────────────────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Results
-  score        Int              // correct count
-  total        Int              // total questions
-  percentage   Float
-  timeUsedSecs Int?
+  // ── Team scope (optional — works in both modes) ────
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
-  // Full quiz data stored as JSON
-  questions    String  @default("[]")   // JSON array of generated questions with user answers
-  // Each question: { question, options[], correctIndex, selected, correct, explanation }
+  // ── Quiz content ───────────────────────────────────
+  subject    String
+  difficulty Difficulty @default(MEDIUM)
+  questions  Json
+  answers    Json?
+  score      Int?
 
-  // AI analysis of performance
-  aiAnalysis   String?
-  aiSuggestions String @default("[]")   // JSON array of study suggestions
+  // ── AI analysis (post-quiz) ────────────────────────
+  aiAnalysis Json?
 
-  completedAt  DateTime @default(now())
+  // ── Timing ─────────────────────────────────────────
+  timeSpent   Int?
+  completedAt DateTime?
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+
+  // ── Indexes ────────────────────────────────────────
+  // "My quizzes" — personal regardless of team
+  @@index([userId, createdAt])
+  // Team-scoped quiz stats
+  @@index([teamId, createdAt])
 
   @@map("quiz_attempts")
 }
 
+// ============================================================================
+// INTERVIEW SESSION (AI Mock Interview)
+// ============================================================================
 
-// ─────────────────────────────────────────────────────
-// INTERVIEW SESSION — AI Mock Interview
-// ─────────────────────────────────────────────────────
+/// A GPT-4o powered mock interview session.
+///
+/// Contains the full interview lifecycle: configuration, phases,
+/// workspace artifacts, and the final debrief with scores.
 model InterviewSession {
-  id            String    @id @default(cuid())
-  userId        String
-  user          User      @relation("UserInterviews", fields: [userId], references: [id], onDelete: Cascade)
-  problemId     String?
-  problem       Problem?  @relation(fields: [problemId], references: [id])
+  id String @id @default(cuid())
 
-  // Config
-  company       String?                     // "Google L5", "Meta E4", "Amazon SDE-2"
-  category      String    @default("CODING") // matches problem category
-  duration      Int       @default(2700)     // total seconds (default 45 min)
+  // ── User & team ────────────────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
-  // Phases — JSON array of phase configs
-  // [{ name: "Requirements", duration: 300, started: true, completedAt: "..." }]
-  phases        String    @default("[]")
+  // ── Problem (optional — can be AI-selected) ────────
+  problemId String?
+  problem   Problem? @relation(fields: [problemId], references: [id], onDelete: SetNull)
 
-  // Status
-  status        String    @default("ACTIVE")  // ACTIVE | COMPLETED | ABANDONED
-  startedAt     DateTime  @default(now())
-  endedAt       DateTime?
+  // ── Interview configuration ────────────────────────
+  category       ProblemCategory @default(CODING)
+  difficulty     Difficulty      @default(MEDIUM)
+  interviewStyle String?
 
-  // Workspace snapshots — JSON stored periodically
-  // { code: "...", diagram: "...", notes: "...", thinking: "..." }
-  workspace     String    @default("{}")
+  // ── Session state ──────────────────────────────────
+  status    InterviewStatus @default(IN_PROGRESS)
+  phases    Json?
+  workspace Json?
 
-  // AI Debrief — JSON generated at end
-  // { overallScore, dimensions: { approach, communication, ... }, feedback[], moments[] }
-  debrief       String?
+  // ── Results ────────────────────────────────────────
+  debrief Json?
+  scores  Json?
 
-  // Scores (extracted from debrief for easy querying)
-  overallScore       Int?     // 1-10
-  approachScore      Int?     // 1-10
-  communicationScore Int?     // 1-10
-  codeQualityScore   Int?     // 1-10
-  timeMgmtScore      Int?     // 1-10
+  // ── Timing ─────────────────────────────────────────
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
 
-  // Messages
-  messages      InterviewMessage[]
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  // ── Relations ──────────────────────────────────────
+  messages InterviewMessage[]
 
-  @@map("interview_sessions_v2")
+  // ── Indexes ────────────────────────────────────────
+  // "My interview history" — personal
+  @@index([userId, createdAt])
+  // Team-scoped interview stats
+  @@index([teamId, createdAt])
+  // Active sessions (for cleanup/monitoring)
+  @@index([status, createdAt])
+
+  @@map("interview_sessions")
 }
 
-// ─────────────────────────────────────────────────────
-// INTERVIEW MESSAGE — Individual messages in a session
-// ─────────────────────────────────────────────────────
+// ============================================================================
+// INTERVIEW MESSAGE
+// ============================================================================
+
+/// A single message in a mock interview conversation.
+///
+/// Stores the full conversation transcript including tool calls,
+/// workspace snapshots at each turn, and phase tags.
 model InterviewMessage {
-  id          String    @id @default(cuid())
-  sessionId   String
-  session     InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
 
-  // Message content
-  role        String              // "user" | "assistant" | "system" | "tool"
-  content     String              // The actual message text
+  // ── Session reference ──────────────────────────────
+  sessionId String
+  session   InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  // Tool call tracking
-  toolName    String?             // Name of tool called (if role is "tool")
-  toolArgs    String?             // JSON — arguments passed to tool
-  toolResult  String?             // JSON — result returned from tool
+  // ── Message content ────────────────────────────────
+  role    MessageRole
+  content String?
 
-  // Workspace snapshot at this message (optional)
-  // Allows AI to "see" what the candidate has in their workspace
-  workspaceSnapshot String?       // JSON — { code, diagram, notes }
+  // ── Tool calling ───────────────────────────────────
+  toolCalls   Json?
+  toolResults Json?
 
-  // Phase tracking
-  phase       String?             // Which interview phase this message belongs to
+  // ── Context snapshots ──────────────────────────────
+  workspaceSnapshot Json?
+  phase             String?
 
-  // Metadata
-  tokenCount  Int?                // Tokens used for this message
-  createdAt   DateTime  @default(now())
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+
+  // ── Indexes ────────────────────────────────────────
+  // Sequential message retrieval for a session
+  @@index([sessionId, createdAt])
 
   @@map("interview_messages")
+}
+
+// ============================================================================
+// COMPETITION (FUTURE — Schema placeholder)
+// ============================================================================
+
+/// A global competition event — crosses team boundaries.
+///
+/// Created by SUPER_ADMIN. Any platform user can participate.
+/// Problems are self-contained within the competition (not linked to teams).
+model Competition {
+  id          String @id @default(cuid())
+  title       String
+  description String?
+
+  // ── Timing ─────────────────────────────────────────
+  startTime DateTime
+  endTime   DateTime
+  duration  Int
+
+  // ── Status ─────────────────────────────────────────
+  status CompetitionStatus @default(DRAFT)
+
+  // ── Problem set (self-contained) ───────────────────
+  // JSON array of full problem objects — not FK references.
+  // This ensures competition problems are immutable snapshots.
+  problems Json
+
+  // ── Rules & config ─────────────────────────────────
+  maxParticipants Int?
+  rules           Json?
+
+  // ── Creator ────────────────────────────────────────
+  createdById String
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ──────────────────────────────────────
+  entries CompetitionEntry[]
+
+  // ── Indexes ────────────────────────────────────────
+  @@index([status, startTime])
+
+  @@map("competitions")
+}
+
+// ============================================================================
+// COMPETITION ENTRY (FUTURE)
+// ============================================================================
+
+/// A user's participation in a competition.
+model CompetitionEntry {
+  id String @id @default(cuid())
+
+  // ── Competition ────────────────────────────────────
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  // ── Participant ────────────────────────────────────
+  userId String
+
+  // ── Results ────────────────────────────────────────
+  score       Int    @default(0)
+  rank        Int?
+  submissions Json?
+
+  // ── Timing ─────────────────────────────────────────
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+
+  // ── Indexes ────────────────────────────────────────
+  // One entry per user per competition
+  @@unique([userId, competitionId])
+  // Leaderboard: competition ranked by score
+  @@index([competitionId, score(sort: Desc)])
+
+  @@map("competition_entries")
 }

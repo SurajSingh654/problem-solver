@@ -1,38 +1,26 @@
-import { Router } from "express";
+import { Router } from 'express'
+import { authenticate } from '../middleware/auth.middleware.js'
+import { requireTeamContext, requireTeamAdmin } from '../middleware/team.middleware.js'
 import {
-  getProblems,
-  getProblemById,
+  listProblems,
+  getProblem,
   createProblem,
   updateProblem,
   deleteProblem,
-} from "../controllers/problems.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
-import { requireAdmin } from "../middleware/admin.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
-import {
-  createProblemSchema,
-  updateProblemSchema,
-  problemParamsSchema,
-  problemQuerySchema,
-} from "../schemas/problem.schema.js";
+  toggleProblemFlag,
+} from '../controllers/problems.controller.js'
 
-const router = Router();
+const router = Router()
+router.use(authenticate)
 
-// All problem routes require authentication
-router.use(requireAuth);
+// ── Member operations ────────────────────────────────────────
+router.get('/', requireTeamContext, listProblems)
+router.get('/:problemId', requireTeamContext, getProblem)
 
-// ── Public (any member) ───────────────────────────────
-router.get("/", validate(problemQuerySchema), getProblems);
-router.get("/:id", validate(problemParamsSchema), getProblemById);
+// ── Admin operations ─────────────────────────────────────────
+router.post('/', requireTeamContext, requireTeamAdmin, createProblem)
+router.put('/:problemId', requireTeamContext, requireTeamAdmin, updateProblem)
+router.delete('/:problemId', requireTeamContext, requireTeamAdmin, deleteProblem)
+router.patch('/:problemId/flag', requireTeamContext, requireTeamAdmin, toggleProblemFlag)
 
-// ── Admin only ────────────────────────────────────────
-router.post("/", requireAdmin, validate(createProblemSchema), createProblem);
-router.put("/:id", requireAdmin, validate(updateProblemSchema), updateProblem);
-router.delete(
-  "/:id",
-  requireAdmin,
-  validate(problemParamsSchema),
-  deleteProblem,
-);
-
-export default router;
+export default router

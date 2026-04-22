@@ -1,22 +1,33 @@
+// ============================================================================
+// ProbSolver v3.0 — Validation Middleware
+// ============================================================================
+
 /**
- * VALIDATION MIDDLEWARE
- * Validates request body/query/params using Zod schemas.
- * Usage: validate(schema) as route middleware
+ * Create a validation middleware from a Zod schema.
+ * Validates req.body and replaces it with the parsed/transformed data.
+ *
+ * @param {import('zod').ZodSchema} schema
+ * @returns {Function} Express middleware
  */
 export function validate(schema) {
   return (req, res, next) => {
-    try {
-      const parsed = schema.parse({
-        body:   req.body,
-        query:  req.query,
-        params: req.params,
+    const result = schema.safeParse(req.body)
+
+    if (!result.success) {
+      const errors = result.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }))
+
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed.',
+        details: errors,
       })
-      req.body   = parsed.body   || req.body
-      req.query  = parsed.query  || req.query
-      req.params = parsed.params || req.params
-      next()
-    } catch (err) {
-      next(err)  // Caught by errorHandler (ZodError)
     }
+
+    // Replace body with parsed/transformed data
+    req.body = result.data
+    next()
   }
 }

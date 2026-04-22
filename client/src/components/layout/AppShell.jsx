@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Sidebar } from './Sidebar'
+import Sidebar from './Sidebar'
 import { Topbar } from './Topbar'
 import { CommandPalette } from '@components/ui/CommandPalette'
 import { useUIStore } from '@store/useUIStore'
-import { useAuthStore } from '@store/useAuthStore'
+import useAuthStore from '@store/useAuthStore'
 import { useMe } from '@hooks/useAuth'
 import { cn } from '@utils/cn'
 

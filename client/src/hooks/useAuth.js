@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../services/auth.api.js";
-import { useAuthStore } from "../store/useAuthStore.js";
+import useAuthStore from "../store/useAuthStore.js";
 import { toast } from "../store/useUIStore.js";
 import { QUERY_KEYS } from "../utils/constants.js";
 

@@ -1,32 +1,23 @@
-import { Router } from "express";
+import { Router } from 'express'
+import { authenticate } from '../middleware/auth.middleware.js'
+import { requireTeamContext } from '../middleware/team.middleware.js'
 import {
-  getMySolutions,
-  getSolutionsForProblem,
-  createSolution,
+  submitSolution,
+  getProblemSolutions,
+  getUserSolutions,
   updateSolution,
-  deleteSolution,
   rateSolutionClarity,
-  reviewSolution,
-} from "../controllers/solutions.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
-import {
-  createSolutionSchema,
-  updateSolutionSchema,
-  clarityRatingSchema,
-} from "../schemas/solution.schema.js";
+  getReviewQueue,
+} from '../controllers/solutions.controller.js'
 
-const router = Router();
+const router = Router()
+router.use(authenticate, requireTeamContext)
 
-router.use(requireAuth);
+router.post('/:problemId', submitSolution)
+router.get('/problem/:problemId', getProblemSolutions)
+router.get('/user/:userId?', getUserSolutions)
+router.put('/:solutionId', updateSolution)
+router.post('/:solutionId/rate', rateSolutionClarity)
+router.get('/review/queue', getReviewQueue)
 
-// ── Routes ────────────────────────────────────────────
-router.get("/", getMySolutions);
-router.get("/problem/:problemId", getSolutionsForProblem);
-router.post("/", validate(createSolutionSchema), createSolution);
-router.put("/:id", validate(updateSolutionSchema), updateSolution);
-router.delete("/:id", deleteSolution);
-router.post("/:id/clarity", validate(clarityRatingSchema), rateSolutionClarity);
-router.post("/:id/review", reviewSolution);
-
-export default router;
+export default router

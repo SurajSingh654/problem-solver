@@ -1,761 +1,171 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+// ============================================================================
+// ProbSolver v3.0 — Intelligence Report (Team-Scoped)
+// ============================================================================
+
 import { motion } from 'framer-motion'
-import { useMyStats } from '@hooks/useReport'
-import { useMySolutions } from '@hooks/useSolutions'
-import { useAuthStore } from '@store/useAuthStore'
-import { RadarChart } from '@components/charts/RadarChart'
-import { ActivityHeatmap } from '@components/charts/ActivityHeatmap'
-import { PatternCoverage } from '@components/features/PatternCoverage'
-import { Badge } from '@components/ui/Badge'
-import { Button } from '@components/ui/Button'
+import { useTeamContext } from '@hooks/useTeamContext'
+import { use6DReport } from '@hooks/useReport'
 import { Spinner } from '@components/ui/Spinner'
-import { Avatar } from '@components/ui/Avatar'
+import { RadarChart } from '@components/charts/RadarChart'
 import { cn } from '@utils/cn'
-import { useAIWeeklyPlan, useAIStatus } from '@hooks/useAI'
-import { formatCountdown, formatShortDate } from '@utils/formatters'
-import { DIMENSIONS, CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
-import {
-    generateActionItems,
-    getOverallVerdict,
-    getStrengthsAndWeaknesses,
-} from '@utils/generateActions'
 
-// ── Score ring ─────────────────────────────────────────
-function ScoreRing({ score, size = 80, color = '#7c6ff7', label }) {
-    const r = (size / 2) - 6
-    const circumf = 2 * Math.PI * r
-    const dashOffset = circumf - (score / 100) * circumf
+const DIMENSIONS = [
+  { key: 'patternRecognition', label: 'Pattern Recognition', color: '#7c6ff7', icon: '🔍' },
+  { key: 'solutionDepth', label: 'Solution Depth', color: '#22c55e', icon: '🧠' },
+  { key: 'communication', label: 'Communication', color: '#3b82f6', icon: '💬' },
+  { key: 'optimization', label: 'Optimization', color: '#eab308', icon: '⚡' },
+  { key: 'pressurePerformance', label: 'Pressure', color: '#ef4444', icon: '🎯' },
+  { key: 'knowledgeRetention', label: 'Retention', color: '#a855f7', icon: '📚' },
+]
 
-    return (
-        <div className="flex flex-col items-center gap-1">
-            <div className="relative" style={{ width: size, height: size }}>
-                <svg width={size} height={size} className="-rotate-90">
-                    <circle cx={size / 2} cy={size / 2} r={r} fill="none"
-                        stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-                    <motion.circle
-                        cx={size / 2} cy={size / 2} r={r} fill="none"
-                        stroke={color} strokeWidth="5" strokeLinecap="round"
-                        strokeDasharray={circumf}
-                        initial={{ strokeDashoffset: circumf }}
-                        animate={{ strokeDashoffset: dashOffset }}
-                        transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
-                    />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-sm font-extrabold font-mono text-text-primary">
-                        {score}
-                    </span>
-                </div>
-            </div>
-            {label && (
-                <span className="text-[10px] font-semibold text-text-disabled uppercase tracking-wide">
-                    {label}
-                </span>
-            )}
-        </div>
-    )
-}
-
-// ── Section card ───────────────────────────────────────
-function SectionCard({ title, icon, children, className, action, onAction }) {
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn(
-                'bg-surface-1 border border-border-default rounded-2xl p-5',
-                className
-            )}
-        >
-            <div className="flex items-center justify-between mb-5">
-                <h2 className="text-sm font-bold text-text-primary flex items-center gap-2">
-                    <span>{icon}</span>
-                    {title}
-                </h2>
-                {action && (
-                    <button
-                        onClick={onAction}
-                        className="text-xs text-brand-300 hover:text-brand-200
-                       font-medium transition-colors flex items-center gap-1"
-                    >
-                        {action}
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2.5"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                        </svg>
-                    </button>
-                )}
-            </div>
-            {children}
-        </motion.div>
-    )
-}
-
-// ── Action item card ───────────────────────────────────
-function ActionCard({ action, index }) {
-    const navigate = useNavigate()
-    const colors = {
-        warning: 'border-warning/25 bg-warning/5',
-        danger: 'border-danger/25  bg-danger/5',
-        brand: 'border-brand-400/25 bg-brand-400/5',
-        info: 'border-info/25 bg-info/5',
-        success: 'border-success/25 bg-success/5',
-    }
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.08 }}
-            className={cn(
-                'flex items-start gap-4 p-4 rounded-xl border transition-all duration-200',
-                'hover:-translate-y-0.5 hover:shadow-md',
-                colors[action.color] || colors.brand
-            )}
-        >
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center
-                      text-xl flex-shrink-0 bg-surface-1 border border-border-default">
-                {action.icon}
-            </div>
-            <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-bold text-text-primary mb-0.5">
-                    {action.title}
-                </h3>
-                <p className="text-xs text-text-tertiary leading-relaxed mb-2">
-                    {action.desc}
-                </p>
-                <button
-                    onClick={() => navigate(action.link)}
-                    className="text-xs font-semibold text-brand-300 hover:text-brand-200
-                     transition-colors flex items-center gap-1"
-                >
-                    {action.linkLabel}
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.5"
-                        strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                        <polyline points="12 5 19 12 12 19" />
-                    </svg>
-                </button>
-            </div>
-        </motion.div>
-    )
-}
-
-// ── Strength / weakness card ───────────────────────────
-function DimInsightCard({ dim, type }) {
-    const isStrength = type === 'strength'
-    return (
-        <div className={cn(
-            'flex items-start gap-3 p-3.5 rounded-xl border',
-            isStrength
-                ? 'border-success/20 bg-success/5'
-                : 'border-warning/20 bg-warning/5'
-        )}>
-            <span className="text-xl flex-shrink-0 mt-0.5">{dim.icon}</span>
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-text-primary">{dim.label}</span>
-                    <span className={cn(
-                        'text-xs font-extrabold font-mono',
-                        isStrength ? 'text-success' : 'text-warning'
-                    )}>
-                        {dim.score}/100
-                    </span>
-                </div>
-                <p className="text-xs text-text-tertiary leading-relaxed">
-                    {dim.tip}
-                </p>
-            </div>
-        </div>
-    )
-}
-
-// ══════════════════════════════════════════════════════
-// MAIN PAGE
-// ══════════════════════════════════════════════════════
 export default function ReportPage() {
-    const navigate = useNavigate()
-    const { user } = useAuthStore()
-    const { data: stats, isLoading } = useMyStats()
-    const { data: solutions } = useMySolutions()
-    const aiWeeklyPlan = useAIWeeklyPlan()
-    const { data: aiStatus } = useAIStatus()
-    const aiEnabled = aiStatus?.enabled
-    const [weeklyPlan, setWeeklyPlan] = useState(null)
+  const { teamName, isPersonalMode } = useTeamContext()
+  const { data: report, isLoading } = use6DReport()
 
-    const countdown = formatCountdown(stats?.targetDate)
-    const dims = stats?.dimensions || {}
-
-    // Generate insights
-    const actionItems = useMemo(
-        () => generateActionItems(stats, solutions),
-        [stats, solutions]
-    )
-    const verdict = useMemo(
-        () => getOverallVerdict(stats?.overallScore || 0, dims),
-        [stats?.overallScore, dims]
-    )
-    const { strengths, weaknesses } = useMemo(
-        () => getStrengthsAndWeaknesses(dims),
-        [dims]
-    )
-
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-[60vh]">
-                <div className="flex flex-col items-center gap-3">
-                    <Spinner size="lg" />
-                    <p className="text-xs text-text-tertiary animate-pulse">
-                        Building your report…
-                    </p>
-                </div>
-            </div>
-        )
-    }
-
-    if (!stats || stats.totalSolved === 0) {
-        return (
-            <div className="p-6 max-w-[900px] mx-auto">
-                <div className="flex flex-col items-center justify-center min-h-[60vh] gap-5">
-                    <div className="text-5xl">📊</div>
-                    <h1 className="text-xl font-bold text-text-primary">No data yet</h1>
-                    <p className="text-sm text-text-tertiary text-center max-w-sm">
-                        Solve at least one problem to generate your intelligence report.
-                    </p>
-                    <Button variant="primary" size="md"
-                        onClick={() => navigate('/problems')}>
-                        Browse Problems
-                    </Button>
-                </div>
-            </div>
-        )
-    }
-
+  if (isLoading) {
     return (
-        <div className="p-6 max-w-[1100px] mx-auto">
-
-            {/* ── Hero ────────────────────────────────────── */}
-            <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="relative rounded-2xl overflow-hidden border border-border-default mb-6 p-6 hero-gradient">
-                <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div className="absolute top-[-60px] right-[-60px] w-[280px] h-[280px]
-                          rounded-full bg-brand-400/8 blur-[80px]" />
-                </div>
-
-                <div className="relative z-10">
-                    {/* Top row — avatar + score */}
-                    <div className="flex items-center gap-5 mb-5 flex-wrap">
-                        <Avatar name={user?.username} color={user?.avatarColor} size="xl" />
-                        <div className="flex-1 min-w-0">
-                            <h1 className="text-xl font-extrabold text-text-primary mb-1">
-                                {user?.username}'s Report
-                            </h1>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <span className={cn(
-                                    'text-sm font-bold',
-                                    verdict.color
-                                )}>
-                                    {verdict.label}
-                                </span>
-                                <span className="text-xs text-text-disabled">·</span>
-                                <span className="text-xs text-text-tertiary">
-                                    {stats.totalSolved} solved · {stats.streak > 0 ? `${stats.streak} day streak 🔥` : 'No active streak'}
-                                </span>
-                            </div>
-                        </div>
-                        <ScoreRing score={stats.overallScore || 0} size={80} color="#7c6ff7" label="Overall" />
-                    </div>
-
-                    {/* Verdict summary */}
-                    <p className="text-sm text-text-secondary leading-relaxed mb-4
-                        bg-surface-2/30 rounded-xl px-4 py-3 border border-border-subtle">
-                        {verdict.summary}
-                    </p>
-
-                    {/* Quick stats */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {[
-                            { label: 'Solved', value: stats.totalSolved, color: 'text-brand-300' },
-                            { label: 'This week', value: stats.solvedThisWeek, color: 'text-success' },
-                            {
-                                label: 'Reviews due', value: stats.reviewsDue,
-                                color: stats.reviewsDue > 0 ? 'text-warning' : 'text-success'
-                            },
-                            { label: 'Avg conf.', value: `${stats.avgConfidence}/5`, color: 'text-info' },
-                        ].map(s => (
-                            <div key={s.label} className="bg-surface-2/30 rounded-xl p-3 text-center
-                                            border border-border-subtle">
-                                <div className={cn('text-lg font-extrabold font-mono', s.color)}>
-                                    {s.value}
-                                </div>
-                                <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">
-                                    {s.label}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Target countdown */}
-                    {countdown && (
-                        <div className="mt-4 pt-4 border-t border-white/6 flex items-center gap-2">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                stroke="#eab308" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="3" y="4" width="18" height="18" rx="2" />
-                                <line x1="16" y1="2" x2="16" y2="6" />
-                                <line x1="8" y1="2" x2="8" y2="6" />
-                                <line x1="3" y1="10" x2="21" y2="10" />
-                            </svg>
-                            <span className="text-xs font-semibold text-warning">
-                                {countdown} — {formatShortDate(stats.targetDate)}
-                            </span>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
-
-            {/* ── Action Items (most important section) ───── */}
-            <SectionCard
-                title="What To Do Next"
-                icon="🎯"
-                className="mb-6"
-            >
-                <div className="space-y-3">
-                    {actionItems.map((action, i) => (
-                        <ActionCard key={i} action={action} index={i} />
-                    ))}
-                </div>
-            </SectionCard>
-            {/* ── AI Weekly Plan ────────────────────────── */}
-            {aiEnabled && (
-                <SectionCard
-                    title="AI Weekly Coach"
-                    icon="🤖"
-                    className="mb-6"
-                >
-                    {!weeklyPlan ? (
-                        <div className="flex items-center justify-between p-4
-                      bg-brand-400/5 border border-brand-400/20 rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-brand-400/15 flex items-center
-                          justify-center text-xl flex-shrink-0">
-                                    📅
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-text-primary">
-                                        Get your personalized 7-day plan
-                                    </p>
-                                    <p className="text-xs text-text-tertiary">
-                                        AI analyzes your 6D scores and generates specific daily tasks
-                                    </p>
-                                </div>
-                            </div>
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                loading={aiWeeklyPlan.isPending}
-                                onClick={async () => {
-                                    try {
-                                        const res = await aiWeeklyPlan.mutateAsync({
-                                            dimensions: dims,
-                                        })
-                                        setWeeklyPlan(res.data.data)
-                                    } catch {
-                                        // error handled by hook
-                                    }
-                                }}
-                            >
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2"
-                                    strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                                    <path d="M2 17l10 5 10-5" />
-                                    <path d="M2 12l10 5 10-5" />
-                                </svg>
-                                {aiWeeklyPlan.isPending ? 'Generating...' : 'Generate Plan'}
-                            </Button>
-                        </div>
-                    ) : (
-                        <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="space-y-5"
-                        >
-                            {/* Summary */}
-                            <div className="bg-surface-2 border border-border-default rounded-xl p-4">
-                                <p className="text-sm text-text-secondary leading-relaxed">
-                                    {weeklyPlan.summary}
-                                </p>
-                            </div>
-
-                            {/* Focus areas */}
-                            {weeklyPlan.focusAreas?.length > 0 && (
-                                <div className="flex gap-2 flex-wrap">
-                                    {weeklyPlan.focusAreas.map((area, i) => (
-                                        <span key={i}
-                                            className="px-3 py-1.5 rounded-full text-xs font-semibold
-                               bg-brand-400/12 text-brand-300 border border-brand-400/25">
-                                            🎯 {area}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Daily plan */}
-                            <div className="space-y-2">
-                                {weeklyPlan.dailyPlan?.map((day, i) => {
-                                    const typeColors = {
-                                        solve: 'bg-brand-400/10 border-brand-400/25 text-brand-300',
-                                        review: 'bg-warning/10 border-warning/25 text-warning',
-                                        simulate: 'bg-danger/10 border-danger/25 text-danger',
-                                        study: 'bg-info/10 border-info/25 text-info',
-                                    }
-                                    const typeIcons = {
-                                        solve: '💻',
-                                        review: '🧠',
-                                        simulate: '⏱',
-                                        study: '📖',
-                                    }
-                                    return (
-                                        <motion.div
-                                            key={day.day}
-                                            initial={{ opacity: 0, x: -8 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: i * 0.06 }}
-                                            className="flex items-center gap-3 p-3.5 rounded-xl border
-                           bg-surface-1 border-border-default"
-                                        >
-                                            {/* Day */}
-                                            <div className="w-20 flex-shrink-0">
-                                                <span className="text-xs font-bold text-text-primary">
-                                                    {day.day}
-                                                </span>
-                                            </div>
-
-                                            {/* Type badge */}
-                                            <span className={cn(
-                                                'text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0',
-                                                typeColors[day.type] || typeColors.study
-                                            )}>
-                                                {typeIcons[day.type] || '📖'} {day.type}
-                                            </span>
-
-                                            {/* Task */}
-                                            <p className="text-sm text-text-secondary flex-1">
-                                                {day.task}
-                                            </p>
-                                        </motion.div>
-                                    )
-                                })}
-                            </div>
-
-                            {/* Weekly goal */}
-                            {weeklyPlan.weeklyGoal && (
-                                <div className="bg-success/5 border border-success/20 rounded-xl p-4
-                          flex items-start gap-3">
-                                    <span className="text-xl flex-shrink-0">🏁</span>
-                                    <div>
-                                        <p className="text-xs font-bold text-success uppercase tracking-widest mb-1">
-                                            Weekly Goal
-                                        </p>
-                                        <p className="text-sm text-text-secondary">
-                                            {weeklyPlan.weeklyGoal}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Regenerate button */}
-                            <div className="flex justify-end">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    loading={aiWeeklyPlan.isPending}
-                                    onClick={async () => {
-                                        try {
-                                            const res = await aiWeeklyPlan.mutateAsync({
-                                                dimensions: dims,
-                                            })
-                                            setWeeklyPlan(res.data.data)
-                                        } catch {
-                                            // error handled
-                                        }
-                                    }}
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="2"
-                                        strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="1 4 1 10 7 10" />
-                                        <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
-                                    </svg>
-                                    Regenerate Plan
-                                </Button>
-                            </div>
-                        </motion.div>
-                    )}
-                </SectionCard>
-            )}
-
-            {/* ── Radar + Strengths / Weaknesses ─────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* Radar */}
-                <SectionCard title="6D Intelligence" icon="🕸">
-                    <div className="flex justify-center py-2">
-                        <RadarChart dimensions={dims} size={280} />
-                    </div>
-                </SectionCard>
-
-                {/* Strengths & Weaknesses */}
-                <SectionCard title="Strengths & Weaknesses" icon="📊">
-                    <div className="space-y-4">
-                        {/* Strengths */}
-                        {strengths.length > 0 && (
-                            <div>
-                                <p className="text-xs font-bold text-success uppercase tracking-widest mb-2">
-                                    ✅ Your Strengths
-                                </p>
-                                <div className="space-y-2">
-                                    {strengths.map(s => (
-                                        <DimInsightCard key={s.id} dim={s} type="strength" />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Weaknesses */}
-                        {weaknesses.length > 0 && (
-                            <div>
-                                <p className="text-xs font-bold text-warning uppercase tracking-widest mb-2">
-                                    🔧 Areas to Improve
-                                </p>
-                                <div className="space-y-2">
-                                    {weaknesses.map(w => (
-                                        <DimInsightCard key={w.id} dim={w} type="weakness" />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </SectionCard>
-            </div>
-
-            {/* ── Difficulty + Pattern ──────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* Difficulty */}
-                <SectionCard title="Difficulty Breakdown" icon="🎯">
-                    <div className="space-y-4">
-                        {[
-                            { label: 'Easy', count: stats.easy, color: 'text-success', bar: 'bg-success' },
-                            { label: 'Medium', count: stats.medium, color: 'text-warning', bar: 'bg-warning' },
-                            { label: 'Hard', count: stats.hard, color: 'text-danger', bar: 'bg-danger' },
-                        ].map(d => {
-                            const pct = stats.totalSolved
-                                ? Math.round((d.count / stats.totalSolved) * 100)
-                                : 0
-                            return (
-                                <div key={d.label}>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <span className={cn('text-sm font-bold', d.color)}>{d.label}</span>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-text-disabled">{pct}%</span>
-                                            <span className={cn('text-sm font-extrabold font-mono', d.color)}>
-                                                {d.count}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
-                                        <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${pct}%` }}
-                                            transition={{ duration: 0.7, ease: 'easeOut' }}
-                                            className={cn('h-full rounded-full', d.bar)}
-                                        />
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-
-                    {/* Confidence breakdown — compact */}
-                    <div className="mt-5 pt-4 border-t border-border-default">
-                        <p className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-3">
-                            Confidence Snapshot
-                        </p>
-                        <div className="flex items-center gap-3">
-                            {CONFIDENCE_LEVELS.map(c => {
-                                const count = stats.confidenceBreakdown?.find(
-                                    b => b.level === c.value
-                                )?.count || 0
-                                return (
-                                    <div key={c.value} className="flex flex-col items-center gap-1 flex-1">
-                                        <span className="text-lg">{c.emoji}</span>
-                                        <span className={cn('text-xs font-bold', c.color)}>{count}</span>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
-                </SectionCard>
-
-                {/* Pattern coverage */}
-                <SectionCard title="Pattern Coverage" icon="🗺️">
-                    <PatternCoverage patternMap={stats.patternMap || {}} />
-                </SectionCard>
-            </div>
-
-            {/* ── Activity ─────────────────────────────────── */}
-            <SectionCard title="Solving Activity" icon="📅" className="mb-6">
-                <ActivityHeatmap activity={stats.activity || {}} days={91} />
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4
-                        border-t border-border-default">
-                    {[
-                        { label: 'This week', value: stats.solvedThisWeek, color: 'text-brand-300' },
-                        { label: 'This month', value: stats.solvedThisMonth || 0, color: 'text-brand-300' },
-                        { label: 'Best streak', value: stats.longestStreak, color: 'text-warning' },
-                        {
-                            label: 'Active days',
-                            value: Object.keys(stats.activity || {}).length,
-                            color: 'text-success'
-                        },
-                    ].map(s => (
-                        <div key={s.label}
-                            className="bg-surface-2 border border-border-default rounded-xl p-3 text-center">
-                            <div className={cn('text-xl font-extrabold font-mono', s.color)}>
-                                {s.value}
-                            </div>
-                            <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-1">
-                                {s.label}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </SectionCard>
-
-            {/* ── Sim + Retention (compact row) ──────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* Sim */}
-                <SectionCard
-                    title="Interview Simulation"
-                    icon="⏱"
-                    action="Practice"
-                    onAction={() => navigate('/interview')}
-                >
-                    {stats.simCount === 0 ? (
-                        <div className="flex flex-col items-center gap-3 py-4 text-center">
-                            <p className="text-sm text-text-tertiary">No simulations yet</p>
-                            <Button variant="secondary" size="sm"
-                                onClick={() => navigate('/interview')}>
-                                Start Simulation
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-3 gap-3">
-                            {[
-                                { label: 'Sessions', value: stats.simCount, color: 'text-text-primary' },
-                                { label: 'Completed', value: stats.completedSims, color: 'text-success' },
-                                {
-                                    label: 'Avg Score', value: stats.avgSimScore > 0
-                                        ? `${stats.avgSimScore}/5` : '—',
-                                    color: 'text-brand-300'
-                                },
-                            ].map(s => (
-                                <div key={s.label}
-                                    className="bg-surface-2 border border-border-default
-                                rounded-xl p-3 text-center">
-                                    <div className={cn('text-lg font-extrabold font-mono', s.color)}>
-                                        {s.value}
-                                    </div>
-                                    <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-1">
-                                        {s.label}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </SectionCard>
-
-                {/* Retention */}
-                <SectionCard
-                    title="Knowledge Retention"
-                    icon="🔁"
-                    action="Review Queue"
-                    onAction={() => navigate('/review')}
-                >
-                    <div className="grid grid-cols-3 gap-3">
-                        {[
-                            {
-                                label: 'Reviews Due',
-                                value: stats.reviewsDue,
-                                color: stats.reviewsDue > 0 ? 'text-warning' : 'text-success',
-                            },
-                            {
-                                label: 'Avg Confidence',
-                                value: `${stats.avgConfidence}/5`,
-                                color: 'text-brand-300',
-                            },
-                            {
-                                label: 'Retention',
-                                value: `${dims.retention ?? 0}`,
-                                color: 'text-success',
-                            },
-                        ].map(s => (
-                            <div key={s.label}
-                                className="bg-surface-2 border border-border-default
-                              rounded-xl p-3 text-center">
-                                <div className={cn('text-lg font-extrabold font-mono', s.color)}>
-                                    {s.value}
-                                </div>
-                                <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-1">
-                                    {s.label}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    {stats.reviewsDue > 0 && (
-                        <div className="bg-warning/8 border border-warning/25 rounded-xl p-3.5
-                            flex items-center gap-3 mt-4">
-                            <span className="text-xl flex-shrink-0">⚠️</span>
-                            <div className="flex-1">
-                                <p className="text-xs font-bold text-warning">
-                                    {stats.reviewsDue} review{stats.reviewsDue !== 1 ? 's' : ''} overdue
-                                </p>
-                                <p className="text-[11px] text-text-tertiary mt-0.5">
-                                    Complete reviews to maintain retention
-                                </p>
-                            </div>
-                            <Button variant="secondary" size="sm"
-                                onClick={() => navigate('/review')}>
-                                Review
-                            </Button>
-                        </div>
-                    )}
-                </SectionCard>
-            </div>
-
-            {/* ── CTA ──────────────────────────────────────── */}
-            <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="flex gap-3 flex-wrap"
-            >
-                <Button variant="primary" size="md"
-                    onClick={() => navigate('/problems')}>
-                    Solve More Problems
-                </Button>
-                {stats.reviewsDue > 0 && (
-                    <Button variant="secondary" size="md"
-                        onClick={() => navigate('/review')}>
-                        🧠 Clear Review Queue ({stats.reviewsDue})
-                    </Button>
-                )}
-            </motion.div>
-        </div>
+      <div className="flex items-center justify-center h-[60vh]">
+        <Spinner size="lg" />
+      </div>
     )
+  }
+
+  const dims = report?.dimensions || {}
+  const overall = report?.overall || 0
+
+  return (
+    <div className="max-w-4xl mx-auto px-6 py-8">
+      {/* ── Header ──────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-2xl font-extrabold text-text-primary tracking-tight">
+          Intelligence Report
+        </h1>
+        <p className="text-sm text-text-secondary mt-1">
+          {isPersonalMode
+            ? 'Your personal 6-dimension readiness profile.'
+            : `Your readiness profile within ${teamName}.`}
+        </p>
+      </motion.div>
+
+      {/* ── Overall Score ───────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-surface-1 border border-border-default rounded-2xl p-8 mb-8 text-center"
+      >
+        <p className="text-xs text-text-disabled uppercase tracking-widest mb-3">
+          Overall Readiness
+        </p>
+        <div className="text-6xl font-extrabold font-mono text-text-primary mb-2">
+          {overall}
+          <span className="text-2xl text-text-disabled">/100</span>
+        </div>
+        <p className="text-sm text-text-secondary">
+          {overall < 30 ? 'Just getting started. Keep practicing!' :
+           overall < 60 ? 'Building a solid foundation. Focus on weak areas.' :
+           overall < 80 ? 'Strong preparation. Polish the edges.' :
+           'Interview ready. Go ace it!'}
+        </p>
+      </motion.div>
+
+      {/* ── Radar Chart ─────────────────────────────────── */}
+      {report?.totalSolutions > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-8"
+        >
+          <h2 className="text-sm font-bold text-text-primary mb-4">6D Radar</h2>
+          <div className="h-72">
+            <RadarChart
+              data={DIMENSIONS.map((d) => ({
+                dimension: d.label,
+                score: dims[d.key] || 0,
+              }))}
+            />
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Dimension Cards ─────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+        {DIMENSIONS.map((dim, i) => {
+          const score = dims[dim.key] || 0
+          return (
+            <motion.div
+              key={dim.key}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="bg-surface-1 border border-border-default rounded-xl p-5"
+              style={{ borderTop: `3px solid ${dim.color}` }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{dim.icon}</span>
+                  <h3 className="text-xs font-bold text-text-primary">{dim.label}</h3>
+                </div>
+                <span className="text-lg font-extrabold font-mono" style={{ color: dim.color }}>
+                  {score}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${score}%` }}
+                  transition={{ duration: 0.8, delay: i * 0.05 }}
+                  className="h-full rounded-full"
+                  style={{ backgroundColor: dim.color }}
+                />
+              </div>
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* ── Activity summary ────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="bg-surface-1 border border-border-default rounded-xl p-5"
+      >
+        <h2 className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-4">
+          Activity Summary
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+          {[
+            { label: 'Solutions', value: report?.totalSolutions || 0, icon: '✅' },
+            { label: 'Quizzes', value: report?.quizCount || 0, icon: '🧩' },
+            { label: 'Interviews', value: report?.interviewCount || 0, icon: '💬' },
+            { label: 'Simulations', value: report?.simCount || 0, icon: '⏱' },
+          ].map((s) => (
+            <div key={s.label}>
+              <span className="text-xl">{s.icon}</span>
+              <p className="text-xl font-extrabold font-mono text-text-primary mt-1">{s.value}</p>
+              <p className="text-[10px] text-text-disabled uppercase tracking-wider">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* ── No data state ───────────────────────────────── */}
+      {report?.totalSolutions === 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-12"
+        >
+          <span className="text-4xl mb-4 block">📊</span>
+          <p className="text-sm text-text-secondary">
+            {report?.message || 'Submit solutions to build your intelligence profile.'}
+          </p>
+        </motion.div>
+      )}
+    </div>
+  )
 }

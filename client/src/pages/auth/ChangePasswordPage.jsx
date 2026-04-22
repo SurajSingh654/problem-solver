@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion } from 'framer-motion'
 import { useChangePassword } from '@hooks/useAuth'
-import { useAuthStore } from '@store/useAuthStore'
+import useAuthStore from '@store/useAuthStore'
 import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
 

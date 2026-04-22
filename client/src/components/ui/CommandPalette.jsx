@@ -4,7 +4,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUIStore } from '@store/useUIStore'
-import { useAuthStore } from '@store/useAuthStore'
+import useAuthStore from '@store/useAuthStore'
 import { useProblems } from '@hooks/useProblems'
 import { Badge } from '@components/ui/Badge'
 import { cn } from '@utils/cn'

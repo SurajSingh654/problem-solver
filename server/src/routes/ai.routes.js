@@ -1,43 +1,21 @@
-/**
- * AI ROUTES
- */
-import { Router } from "express";
+import { Router } from 'express'
+import { authenticate } from '../middleware/auth.middleware.js'
+import { requireTeamContext, requireTeamAdmin } from '../middleware/team.middleware.js'
 import {
   reviewSolution,
+  getHint,
+  getWeeklyPlan,
   generateProblemContent,
-  generateHint,
-  generateWeeklyPlan,
-  getAIStatus,
-  triggerBatchEmbedding,
-  getSimilarSolutions,
-  getSimilarProblems,
-} from "../controllers/ai.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
-import { requireAI, aiRateLimit } from "../middleware/ai.middleware.js";
+  findSimilarProblems,
+} from '../controllers/ai.controller.js'
 
-const router = Router();
+const router = Router()
+router.use(authenticate)
 
-// All AI routes require auth
-router.use(requireAuth);
+router.post('/review/:solutionId', requireTeamContext, reviewSolution)
+router.post('/hint/:problemId', requireTeamContext, getHint)
+router.get('/weekly-plan', requireTeamContext, getWeeklyPlan)
+router.post('/generate-content', requireTeamContext, requireTeamAdmin, generateProblemContent)
+router.post('/similar', requireTeamContext, findSimilarProblems)
 
-// Status endpoint — no AI required (tells frontend if AI is available)
-router.get("/status", getAIStatus);
-
-// AI endpoints — require AI enabled + rate limiting
-router.post("/review-solution", requireAI, aiRateLimit, reviewSolution);
-router.post(
-  "/generate-problem-content",
-  requireAI,
-  aiRateLimit,
-  generateProblemContent,
-);
-router.post("/generate-hint", requireAI, aiRateLimit, generateHint);
-router.post("/weekly-plan", requireAI, aiRateLimit, generateWeeklyPlan);
-
-
-// Add these routes
-router.post('/embed-all',                    requireAI, aiRateLimit, triggerBatchEmbedding)
-router.get('/similar-solutions/:solutionId', requireAI, getSimilarSolutions)
-router.get('/similar-problems/:problemId',   requireAI, getSimilarProblems)
-
-export default router;
+export default router

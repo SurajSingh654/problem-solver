@@ -1,75 +1,74 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { problemsApi } from '@services/problems.api.js'
-import { QUERY_KEYS }  from '@utils/constants.js'
-import { toast }       from '@store/useUIStore.js'
+// ============================================================================
+// ProbSolver v3.0 — Problems Hook (Team-Scoped)
+// ============================================================================
 
-export function useProblems(params = {}) {
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@services/api'
+import { useTeamContext } from './useTeamContext'
+
+export function useProblems(filters = {}) {
+  const { teamQueryKey } = useTeamContext()
+  const { category, difficulty, search, page = 1, limit = 20 } = filters
+
   return useQuery({
-    queryKey: [...QUERY_KEYS.PROBLEMS, params],
-    queryFn : async () => {
-      const res = await problemsApi.getAll(params)
-      return res.data.data
+    queryKey: [...teamQueryKey, 'problems', { category, difficulty, search, page, limit }],
+    queryFn: async () => {
+      const params = { page, limit }
+      if (category) params.category = category
+      if (difficulty) params.difficulty = difficulty
+      if (search) params.search = search
+      const res = await api.get('/problems', { params })
+      return res.data
     },
-    staleTime: 60 * 1000,
   })
 }
 
-export function useProblem(id) {
+export function useProblem(problemId) {
+  const { teamQueryKey } = useTeamContext()
+
   return useQuery({
-    queryKey: QUERY_KEYS.PROBLEM(id),
-    queryFn : async () => {
-      const res = await problemsApi.getById(id)
-      return res.data.data
+    queryKey: [...teamQueryKey, 'problem', problemId],
+    queryFn: async () => {
+      const res = await api.get(`/problems/${problemId}`)
+      return res.data.problem
     },
-    enabled : !!id,
-    staleTime: 30 * 1000,
+    enabled: !!problemId,
   })
 }
 
 export function useCreateProblem() {
   const queryClient = useQueryClient()
+  const { teamQueryKey } = useTeamContext()
 
   return useMutation({
-    mutationFn: (data) => problemsApi.create(data),
+    mutationFn: (data) => api.post('/problems', data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PROBLEMS })
-      queryClient.invalidateQueries({ queryKey: ['stats'] })
-      toast.success('Problem added successfully', 'Created')
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to create problem')
+      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, 'problems'] })
     },
   })
 }
 
 export function useUpdateProblem() {
   const queryClient = useQueryClient()
+  const { teamQueryKey } = useTeamContext()
 
   return useMutation({
-    mutationFn: ({ id, data }) => problemsApi.update(id, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PROBLEMS })
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PROBLEM(id) })
-      toast.success('Problem updated')
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to update problem')
+    mutationFn: ({ problemId, data }) => api.put(`/problems/${problemId}`, data),
+    onSuccess: (_, { problemId }) => {
+      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, 'problems'] })
+      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, 'problem', problemId] })
     },
   })
 }
 
 export function useDeleteProblem() {
   const queryClient = useQueryClient()
+  const { teamQueryKey } = useTeamContext()
 
   return useMutation({
-    mutationFn: (id) => problemsApi.delete(id),
+    mutationFn: (problemId) => api.delete(`/problems/${problemId}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PROBLEMS })
-      queryClient.invalidateQueries({ queryKey: ['stats'] })
-      toast.success('Problem deleted')
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to delete problem')
+      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, 'problems'] })
     },
   })
 }

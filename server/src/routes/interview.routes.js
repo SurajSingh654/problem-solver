@@ -1,22 +1,21 @@
-import { Router } from "express";
+import { Router } from 'express'
+import { authenticate } from '../middleware/auth.middleware.js'
+import { optionalTeamContext } from '../middleware/team.middleware.js'
 import {
-  startInterviewSession,
-  getInterviewSession,
-  getMySessions,
-  endInterviewSession,
-  abandonInterviewSession,
-  generateInterviewDebrief,
-} from "../controllers/interview.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
+  startInterview,
+  getInterview,
+  endInterview,
+  getInterviewHistory,
+  getDebrief,
+} from '../controllers/interview.controller.js'
 
-const router = Router();
-router.use(requireAuth);
+const router = Router()
+router.use(authenticate, optionalTeamContext)
 
-router.post("/start", startInterviewSession);
-router.get("/my-sessions", getMySessions);
-router.get("/:id", getInterviewSession);
-router.patch("/:id/end", endInterviewSession);
-router.patch("/:id/abandon", abandonInterviewSession);
-router.post('/:id/debrief', generateInterviewDebrief)
+router.post('/start', startInterview)
+router.get('/:sessionId', getInterview)
+router.post('/:sessionId/end', endInterview)
+router.get('/history/list', getInterviewHistory)
+router.get('/:sessionId/debrief', getDebrief)
 
-export default router;
+export default router

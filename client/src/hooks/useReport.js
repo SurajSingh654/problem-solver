@@ -1,35 +1,44 @@
-import { useQuery } from '@tanstack/react-query'
-import { statsApi } from '@services/stats.api.js'
+// ============================================================================
+// ProbSolver v3.0 — Report Hook (Team-Scoped)
+// ============================================================================
 
-export function useMyStats() {
+import { useQuery } from '@tanstack/react-query'
+import api from '@services/api'
+import { useTeamContext } from './useTeamContext'
+
+export function use6DReport() {
+  const { teamQueryKey } = useTeamContext()
+
   return useQuery({
-    queryKey: ['stats', 'me'],
-    queryFn : async () => {
-      const res = await statsApi.getMyStats()
-      return res.data.data
+    queryKey: [...teamQueryKey, 'report', '6d'],
+    queryFn: async () => {
+      const res = await api.get('/stats/report')
+      return res.data.report
     },
-    staleTime: 60 * 1000,
   })
 }
 
-export function useTeamStats() {
+export function usePersonalStats() {
+  const { teamQueryKey } = useTeamContext()
+
   return useQuery({
-    queryKey: ['stats', 'team'],
-    queryFn : async () => {
-      const res = await statsApi.getTeamStats()
-      return res.data.data
+    queryKey: [...teamQueryKey, 'stats', 'personal'],
+    queryFn: async () => {
+      const res = await api.get('/stats/personal')
+      return res.data.stats
     },
-    staleTime: 60 * 1000,
   })
 }
 
 export function useLeaderboard() {
+  const { teamQueryKey } = useTeamContext()
+
   return useQuery({
-    queryKey: ['stats', 'leaderboard'],
-    queryFn : async () => {
-      const res = await statsApi.getLeaderboard()
-      return res.data.data
+    queryKey: [...teamQueryKey, 'leaderboard'],
+    queryFn: async () => {
+      const res = await api.get('/stats/leaderboard')
+      return res.data.leaderboard
     },
-    staleTime: 60 * 1000,
   })
-}
+}// ── v2 compatibility alias ──────────────────────────────
+export const useTeamStats = usePersonalStats

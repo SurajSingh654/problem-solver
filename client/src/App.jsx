@@ -1,105 +1,287 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+// ============================================================================
+// ProbSolver v3.0 — App Router
+// ============================================================================
+//
+// ROUTING ARCHITECTURE:
+//
+// 1. Public routes: Auth pages — no protection, accessible to anyone.
+//
+// 2. Auth-only routes: Onboarding and password change — require login
+//    but NOT team context (user hasn't chosen a team yet).
+//
+// 3. Main app routes: Require authentication + completed onboarding +
+//    active team context. Wrapped in AppShell (sidebar + topbar).
+//
+// 4. Super Admin routes: Require SUPER_ADMIN globalRole. Separate
+//    layout section so SUPER_ADMIN can access platform tools without
+//    a team context.
+//
+// 5. Lazy loading: Heavy pages (MockInterview, Excalidraw, Showcase)
+//    are lazy-loaded to keep the initial bundle small. Suspense
+//    provides a loading fallback while chunks download.
+//
+// ============================================================================
+
+import { lazy, Suspense } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+// ── Layout ───────────────────────────────────────────────────
 import { AppShell } from '@components/layout/AppShell'
-import { ProtectedRoute } from '@components/layout/ProtectedRoute'
-import { ToastContainer } from '@components/ui/Toast'
-import Dashboard from '@pages/Dashboard'
+import ProtectedRoute from '@components/layout/ProtectedRoute'
+import { Spinner } from '@components/ui/Spinner'
+
+// ── Auth pages (always eager — small bundle) ─────────────────
 import Login from '@pages/auth/Login'
 import Register from '@pages/auth/Register'
-import ReadmePage from '@pages/docs/ReadmePage'
-import SetupPage from '@pages/docs/SetupPage'
-import ProblemsPage from '@pages/problems/ProblemsPage'
-import ProblemDetailPage from '@pages/problems/ProblemDetailPage'
-import SubmitSolutionPage from '@pages/problems/SubmitSolutionPage'
-import EditSolutionPage from '@pages/problems/EditSolutionPage'
-import InterviewSimPage from '@pages/InterviewSimPage'
-import ReviewQueuePage from '@pages/ReviewQueuePage'
-import ReportPage from '@pages/ReportPage'
-import LeaderboardPage from '@pages/LeaderboardPage'
-import ProfilePage from '@pages/ProfilePage'
-import SettingsPage from '@pages/SettingsPage'
-import AdminPage from '@pages/admin/AdminPage'
-import AddProblemPage from '@pages/admin/AddProblemPage'
-import EditProblemPage from '@pages/admin/EditProblemPage'
-import DeployPage from '@pages/docs/DeployPage'
-import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
-import QuizPage from '@pages/QuizPage'
-import ShowcasePage from '@pages/admin/showcase/ShowcasePage'
 import VerifyEmailPage from '@pages/auth/VerifyEmailPage'
 import ForgotPasswordPage from '@pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
-import AdminDashboard from '@pages/AdminDashboard'
-import { useAuthStore } from '@store/useAuthStore'
-import ProductHealthPage from '@pages/admin/ProductHealthPage'
-import MockInterviewPage from '@pages/MockInterviewPage'
+import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
+
+// ── Onboarding (eager — first thing new users see) ───────────
+import OnboardingPage from '@pages/OnboardingPage'
+
+// ── Core pages (eager — frequently accessed) ─────────────────
+import Dashboard from '@pages/Dashboard'
+import LeaderboardPage from '@pages/LeaderboardPage'
+import ReportPage from '@pages/ReportPage'
+import ReviewQueuePage from '@pages/ReviewQueuePage'
+import QuizPage from '@pages/QuizPage'
+import ProfilePage from '@pages/ProfilePage'
+import SettingsPage from '@pages/SettingsPage'
 import InterviewHistoryPage from '@pages/InterviewHistoryPage'
 
-function DashboardPage() {
-  const { user } = useAuthStore()
-  if (user?.role === 'ADMIN') return <AdminDashboard />
-  return <Dashboard />
+// ── Team pages (eager — critical for onboarding flow) ────────
+import TeamManagePage from '@pages/team/TeamManagePage'
+import TeamPendingPage from '@pages/team/TeamPendingPage'
+
+// ── Super Admin (eager — only loaded for SUPER_ADMIN) ────────
+import SuperAdminDashboard from '@pages/superadmin/SuperAdminDashboard'
+
+// ── Heavy pages (lazy — loaded on demand) ────────────────────
+const MockInterviewPage = lazy(() => import('@pages/MockInterviewPage'))
+const InterviewSimPage = lazy(() => import('@pages/InterviewSimPage'))
+
+// ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
+const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
+const AddProblemPage = lazy(() => import('@pages/admin/AddProblemPage'))
+const EditProblemPage = lazy(() => import('@pages/admin/EditProblemPage'))
+const ProductHealthPage = lazy(() => import('@pages/admin/ProductHealthPage'))
+const ShowcasePage = lazy(() => import('@pages/admin/showcase/ShowcasePage'))
+
+// ── Docs (lazy — rarely accessed) ────────────────────────────
+const ReadmePage = lazy(() => import('@pages/docs/ReadmePage'))
+const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
+const DeployPage = lazy(() => import('@pages/docs/DeployPage'))
+
+// ============================================================================
+// QUERY CLIENT
+// ============================================================================
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 2,       // 2 minutes
+      gcTime: 1000 * 60 * 10,         // 10 minutes (garbage collection)
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
+// ============================================================================
+// SUSPENSE FALLBACK
+// ============================================================================
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-[60vh]">
+      <div className="flex flex-col items-center gap-3">
+        <Spinner size="lg" />
+        <p className="text-xs text-text-tertiary">Loading...</p>
+      </div>
+    </div>
+  )
 }
 
+// Wraps lazy-loaded routes in Suspense
+function Lazy({ children }) {
+  return <Suspense fallback={<PageLoader />}>{children}</Suspense>
+}
+
+// ============================================================================
+// APP
+// ============================================================================
 
 export default function App() {
   return (
-    <>
-      <Routes>
-        {/* Public */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
 
-        {/* Protected */}
-        <Route element={
-          <ProtectedRoute>
-            <AppShell />
-          </ProtectedRoute>
-        }>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/problems" element={<ProblemsPage />} />
-          <Route path="/problems/:id" element={<ProblemDetailPage />} />
-          <Route path="/problems/:id/submit" element={<SubmitSolutionPage />} />
-          <Route path="/problems/:id/edit" element={<EditSolutionPage />} />
-          <Route path="/interview" element={<InterviewSimPage />} />
-          <Route path="/mock-interview" element={<MockInterviewPage />} />
-          <Route path="/review" element={<ReviewQueuePage />} />
-          <Route path="/report" element={<ReportPage />} />
-          <Route path="/leaderboard" element={<LeaderboardPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/profile/:username" element={<ProfilePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/docs/readme" element={<ReadmePage />} />
-          <Route path="/docs/setup" element={<SetupPage />} />
-          <Route path="/docs/deploy" element={<DeployPage />} />
-          <Route path="/change-password" element={<ChangePasswordPage />} />
-          <Route path="/quizzes" element={<QuizPage />} />
-          <Route path="/interview-history" element={<InterviewHistoryPage />} />
+          {/* ============================================================ */}
+          {/* PUBLIC ROUTES — No authentication required                   */}
+          {/* ============================================================ */}
+          <Route path="/auth/login" element={<Login />} />
+          <Route path="/auth/register" element={<Register />} />
+          <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
 
-          {/* Admin */}
-          <Route path="/admin" element={
-            <ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>
-          } />
-          <Route path="/admin/problems/new" element={
-            <ProtectedRoute adminOnly><AddProblemPage /></ProtectedRoute>
-          } />
-          <Route path="/admin/problems/:id/edit" element={
-            <ProtectedRoute adminOnly><EditProblemPage /></ProtectedRoute>
-          } />
-          <Route path="/admin/showcase" element={
-            <ProtectedRoute adminOnly><ShowcasePage /></ProtectedRoute>
-          } />
-          <Route path="/admin/analytics" element={
-            <ProtectedRoute adminOnly><ProductHealthPage /></ProtectedRoute>
-          } />
-        </Route>
+          {/* ============================================================ */}
+          {/* AUTH-ONLY ROUTES — Logged in but no team context required    */}
+          {/* These are for users who haven't completed onboarding yet,   */}
+          {/* or need to change their password before accessing the app.  */}
+          {/* ============================================================ */}
+          <Route
+            path="/auth/change-password"
+            element={
+              <ProtectedRoute>
+                <ChangePasswordPage />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute>
+                <OnboardingPage />
+              </ProtectedRoute>
+            }
+          />
 
-      {/* Toast for public pages (login/register) */}
-      <ToastContainer />
-    </>
+          {/* ============================================================ */}
+          {/* SUPER ADMIN ROUTES — Platform-level management              */}
+          {/* Wrapped in AppShell for consistent layout.                  */}
+          {/* SUPER_ADMIN may not have a team context — that's OK.        */}
+          {/* These routes only check globalRole, not team.               */}
+          {/* ============================================================ */}
+          <Route
+            element={
+              <ProtectedRoute requireSuperAdmin>
+                <AppShell />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/super-admin" element={<SuperAdminDashboard />} />
+          </Route>
+
+          {/* ============================================================ */}
+          {/* MAIN APP ROUTES — Require auth + onboarding + team context  */}
+          {/* Every page inside here can rely on req.teamId being set.    */}
+          {/* The AppShell provides sidebar (with team switcher) + topbar */}
+          {/* ============================================================ */}
+          <Route
+            element={
+              <ProtectedRoute requireTeamContext>
+                <AppShell />
+              </ProtectedRoute>
+            }
+          >
+            {/* ── Dashboard ─────────────────────────────────────────── */}
+            <Route index element={<Dashboard />} />
+
+            {/* ── Problems ──────────────────────────────────────────── */}
+            {/* TODO: Replace with dedicated ProblemListPage / ProblemDetailPage */}
+            <Route path="problems" element={<Dashboard />} />
+            <Route path="problems/:problemId" element={<Dashboard />} />
+
+            {/* ── Solutions & Review ────────────────────────────────── */}
+            <Route path="review" element={<ReviewQueuePage />} />
+
+            {/* ── Quizzes ───────────────────────────────────────────── */}
+            <Route path="quizzes" element={<QuizPage />} />
+
+            {/* ── Mock Interview (lazy — heavy: Excalidraw + WS) ────── */}
+            <Route
+              path="mock-interview"
+              element={<Lazy><MockInterviewPage /></Lazy>}
+            />
+
+            {/* ── Interview Simulation (lazy) ───────────────────────── */}
+            <Route
+              path="interview-sim"
+              element={<Lazy><InterviewSimPage /></Lazy>}
+            />
+
+            {/* ── Interview History ─────────────────────────────────── */}
+            <Route path="interview-history" element={<InterviewHistoryPage />} />
+
+            {/* ── Leaderboard (team-only — LeaderboardPage handles    */}
+            {/*    the redirect for individual-mode users internally)  */}
+            <Route path="leaderboard" element={<LeaderboardPage />} />
+
+            {/* ── Intelligence Report ───────────────────────────────── */}
+            <Route path="report" element={<ReportPage />} />
+
+            {/* ── Profile ───────────────────────────────────────────── */}
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="profile/:userId" element={<ProfilePage />} />
+
+            {/* ── Settings ──────────────────────────────────────────── */}
+            <Route path="settings" element={<SettingsPage />} />
+
+            {/* ── Team Management ───────────────────────────────────── */}
+            <Route path="team" element={<TeamManagePage />} />
+            <Route path="team/pending" element={<TeamPendingPage />} />
+
+            {/* ── Team Admin Routes (TEAM_ADMIN or SUPER_ADMIN) ────── */}
+            <Route
+              path="admin"
+              element={
+                <ProtectedRoute requireTeamAdmin>
+                  <Lazy><AdminPage /></Lazy>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/add-problem"
+              element={
+                <ProtectedRoute requireTeamAdmin>
+                  <Lazy><AddProblemPage /></Lazy>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/edit-problem/:problemId"
+              element={
+                <ProtectedRoute requireTeamAdmin>
+                  <Lazy><EditProblemPage /></Lazy>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/analytics"
+              element={
+                <ProtectedRoute requireTeamAdmin>
+                  <Lazy><ProductHealthPage /></Lazy>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/showcase"
+              element={
+                <ProtectedRoute requireTeamAdmin>
+                  <Lazy><ShowcasePage /></Lazy>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ── Documentation (lazy) ──────────────────────────────── */}
+            <Route path="docs/readme" element={<Lazy><ReadmePage /></Lazy>} />
+            <Route path="docs/setup" element={<Lazy><SetupPage /></Lazy>} />
+            <Route path="docs/deploy" element={<Lazy><DeployPage /></Lazy>} />
+          </Route>
+
+          {/* ============================================================ */}
+          {/* CATCH-ALL — Redirect unknown routes to home                 */}
+          {/* ============================================================ */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   )
 }

@@ -1,437 +1,301 @@
-/**
- * WEBSOCKET SERVICE — Real-time communication for AI Mock Interviews
- * Runs alongside Express on the same HTTP server.
- * Handles: JWT auth, message routing, connection management.
- */
-import { WebSocketServer } from "ws";
-import { verifyToken } from "../lib/jwt.js";
-import prisma from "../lib/prisma.js";
-import { handleInterviewChat, generateDebrief } from "./interview.engine.js";
+// ============================================================================
+// ProbSolver v3.0 — WebSocket Service (Team-Scoped)
+// ============================================================================
+//
+// DESIGN DECISIONS:
+//
+// 1. JWT auth on connection: The client sends the JWT as a URL query
+//    parameter (ws://host/ws?token=xxx). We verify it during the
+//    HTTP upgrade, BEFORE the WebSocket connection is established.
+//    Rejected connections never get a socket.
+//
+// 2. Team context on socket: After auth, ws.userId, ws.teamId, and
+//    ws.teamRole are stored on the socket object. Every message
+//    handler and tool execution reads teamId from the socket — never
+//    from the message payload. This prevents a client from spoofing
+//    team context.
+//
+// 3. Tool execution context: The interview engine's function calling
+//    tools (getProblemDetails, getCandidateProfile, searchTeammates,
+//    etc.) all receive a `context` object containing teamId. They
+//    use it in every database query.
+//
+// 4. Heartbeat: 30-second ping/pong to detect dead connections.
+//    Railway terminates idle connections after 60 seconds, so the
+//    heartbeat keeps them alive during interview think-time.
+//
+// ============================================================================
 
-// Store active connections: sessionId → { ws, userId, user }
-const activeConnections = new Map();
+import { WebSocketServer } from 'ws'
+import { verifyToken } from '../lib/jwt.js'
+import { handleInterviewMessage } from './interview.engine.js'
+import prisma from '../lib/prisma.js'
 
-// Store interview handlers: sessionId → InterviewHandler
-const activeInterviews = new Map();
+const HEARTBEAT_INTERVAL = 30000
 
-/**
- * Initialize WebSocket server on the existing HTTP server
- */
-export function initWebSocket(httpServer) {
-  const wss = new WebSocketServer({
-    server: httpServer,
-    path: "/ws/interview",
-  });
+export function setupWebSocket(server) {
+  const wss = new WebSocketServer({ noServer: true })
 
-  console.log("  🔌 WebSocket server initialized at /ws/interview");
-
-  wss.on("connection", async (ws, req) => {
+  // ── HTTP Upgrade: authenticate before accepting ────────
+  server.on('upgrade', (request, socket, head) => {
     try {
-      // ── Extract JWT from query string ──────────────
-      const url = new URL(req.url, `http://${req.headers.host}`);
-      const token = url.searchParams.get("token");
-      const sessionId = url.searchParams.get("sessionId");
+      // Extract token from URL query parameter
+      const url = new URL(request.url, `http://${request.headers.host}`)
+      const token = url.searchParams.get('token')
 
       if (!token) {
-        ws.close(4001, "No authentication token provided");
-        return;
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+        socket.destroy()
+        return
       }
 
-      if (!sessionId) {
-        ws.close(4002, "No session ID provided");
-        return;
-      }
+      // Verify JWT
+      const decoded = verifyToken(token)
 
-      // ── Verify JWT ─────────────────────────────────
-      let decoded;
-      try {
-        decoded = verifyToken(token);
-      } catch (err) {
-        ws.close(4003, "Invalid or expired token");
-        return;
-      }
+      // Attach user context to the request for the connection handler
+      request.userId = decoded.id
+      request.globalRole = decoded.globalRole
+      request.teamId = decoded.currentTeamId || null
+      request.teamRole = decoded.teamRole || null
 
-      // ── Look up user ───────────────────────────────
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
-        select: {
-          id: true,
-          username: true,
-          role: true,
-          currentLevel: true,
-          targetCompanies: true,
-          avatarColor: true,
-        },
-      });
-
-      if (!user) {
-        ws.close(4004, "User not found");
-        return;
-      }
-
-      // ── Verify session belongs to user ─────────────
-      const session = await prisma.interviewSession.findUnique({
-        where: { id: sessionId },
-        include: {
-          problem: {
-            select: {
-              id: true,
-              title: true,
-              difficulty: true,
-              category: true,
-              description: true,
-              tags: true,
-              companyTags: true,
-              realWorldContext: true,
-              adminNotes: true,
-              followUps: {
-                orderBy: { order: "asc" },
-                select: { question: true, difficulty: true, hint: true },
-              },
-            },
-          },
-        },
-      });
-
-      if (!session) {
-        ws.close(4005, "Interview session not found");
-        return;
-      }
-
-      if (session.userId !== user.id) {
-        ws.close(4006, "Session does not belong to this user");
-        return;
-      }
-
-      if (session.status !== "ACTIVE") {
-        ws.close(4007, "Session is not active");
-        return;
-      }
-
-      // ── Connection established ─────────────────────
-      console.log(`[WS] Connected: ${user.username} → session ${sessionId}`);
-
-      // Store connection
-      activeConnections.set(sessionId, { ws, userId: user.id, user });
-
-      // Send connection success
-      sendMessage(ws, {
-        type: "connected",
-        data: {
-          sessionId,
-          userId: user.id,
-          username: user.username,
-          status: session.status,
-        },
-      });
-
-      // ── Handle incoming messages ───────────────────
-      ws.on("message", async (rawData) => {
-        try {
-          const message = JSON.parse(rawData.toString());
-          await handleMessage(sessionId, user, session, message, ws);
-        } catch (err) {
-          console.error(`[WS] Message handling error:`, err.message);
-          sendMessage(ws, {
-            type: "error",
-            data: { message: "Failed to process message: " + err.message },
-          });
-        }
-      });
-
-      // ── Handle disconnection ───────────────────────
-      ws.on("close", (code, reason) => {
-        console.log(`[WS] Disconnected: ${user.username} (code: ${code})`);
-        activeConnections.delete(sessionId);
-      });
-
-      // ── Handle errors ──────────────────────────────
-      ws.on("error", (err) => {
-        console.error(`[WS] Error for ${user.username}:`, err.message);
-        activeConnections.delete(sessionId);
-      });
-
-      // ── Heartbeat to keep connection alive ─────────
-      ws.isAlive = true;
-      ws.on("pong", () => {
-        ws.isAlive = true;
-      });
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request)
+      })
     } catch (err) {
-      console.error("[WS] Connection error:", err.message);
-      ws.close(4999, "Internal server error");
+      console.error('WebSocket auth failed:', err.message)
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+      socket.destroy()
     }
-  });
+  })
 
-  // ── Heartbeat interval — detect dead connections ───
+  // ── Connection handler ─────────────────────────────────
+  wss.on('connection', (ws, request) => {
+    // Store user + team context on the socket
+    ws.userId = request.userId
+    ws.globalRole = request.globalRole
+    ws.teamId = request.teamId
+    ws.teamRole = request.teamRole
+    ws.isAlive = true
+    ws.sessionId = null
+
+    console.log(`🔌 WS connected: user=${ws.userId} team=${ws.teamId}`)
+
+    // ── Heartbeat ──────────────────────────────────────
+    ws.on('pong', () => { ws.isAlive = true })
+
+    // ── Message handler ────────────────────────────────
+    ws.on('message', async (raw) => {
+      try {
+        const message = JSON.parse(raw.toString())
+
+        switch (message.type) {
+          case 'interview:start':
+            await handleStart(ws, message)
+            break
+
+          case 'interview:message':
+            await handleMessage(ws, message)
+            break
+
+          case 'interview:workspace':
+            await handleWorkspace(ws, message)
+            break
+
+          case 'interview:end':
+            await handleEnd(ws, message)
+            break
+
+          default:
+            ws.send(JSON.stringify({
+              type: 'error',
+              error: `Unknown message type: ${message.type}`,
+            }))
+        }
+      } catch (err) {
+        console.error('WS message error:', err)
+        ws.send(JSON.stringify({
+          type: 'error',
+          error: 'Failed to process message.',
+        }))
+      }
+    })
+
+    // ── Disconnect cleanup ─────────────────────────────
+    ws.on('close', () => {
+      console.log(`🔌 WS disconnected: user=${ws.userId}`)
+
+      // Mark session as abandoned if still in progress
+      if (ws.sessionId) {
+        prisma.interviewSession.updateMany({
+          where: {
+            id: ws.sessionId,
+            userId: ws.userId,
+            status: 'IN_PROGRESS',
+          },
+          data: { status: 'ABANDONED' },
+        }).catch(() => {})
+      }
+    })
+  })
+
+  // ── Heartbeat interval ─────────────────────────────────
   const heartbeat = setInterval(() => {
     wss.clients.forEach((ws) => {
       if (!ws.isAlive) {
-        console.log("[WS] Terminating dead connection");
-        return ws.terminate();
+        console.log(`💀 WS dead connection: user=${ws.userId}`)
+        return ws.terminate()
       }
-      ws.isAlive = false;
-      ws.ping();
-    });
-  }, 30000); // every 30 seconds
+      ws.isAlive = false
+      ws.ping()
+    })
+  }, HEARTBEAT_INTERVAL)
 
-  wss.on("close", () => {
-    clearInterval(heartbeat);
-  });
+  wss.on('close', () => clearInterval(heartbeat))
 
-  return wss;
+  console.log('🔌 WebSocket server initialized')
+  return wss
 }
 
-/**
- * Route incoming messages to the appropriate handler
- */
-async function handleMessage(sessionId, user, session, message, ws) {
-  const { type, data } = message;
+// ============================================================================
+// MESSAGE HANDLERS
+// ============================================================================
 
-  switch (type) {
-    case "chat":
-      // User sent a chat message — forward to AI handler
-      await handleChatMessage(sessionId, user, session, data, ws);
-      break;
+async function handleStart(ws, message) {
+  const { sessionId } = message
 
-    case "workspace_update":
-      // User updated their workspace (code, diagram, notes)
-      await handleWorkspaceUpdate(sessionId, data, ws);
-      break;
-
-    case "phase_change":
-      // User manually moved to next phase
-      await handlePhaseChange(sessionId, data, ws);
-      break;
-
-    case "end_interview":
-      // User ended the interview
-      await handleEndInterview(sessionId, user, ws);
-      break;
-
-    case "ping":
-      sendMessage(ws, { type: "pong" });
-      break;
-
-    default:
-      sendMessage(ws, {
-        type: "error",
-        data: { message: `Unknown message type: ${type}` },
-      });
+  if (!sessionId) {
+    ws.send(JSON.stringify({ type: 'error', error: 'Session ID required.' }))
+    return
   }
-}
 
-/**
- * Handle a chat message from the user
- * This is where LangChain will be integrated in Step 3
- */
-async function handleChatMessage(sessionId, user, session, data, ws) {
-  const { content, workspaceSnapshot, currentPhase } = data;
-
-  if (!content || !content.trim()) return;
-
-  // Store user message in database
-  await prisma.interviewMessage.create({
-    data: {
-      sessionId,
-      role: "user",
-      content: content.trim(),
-      workspaceSnapshot: workspaceSnapshot
-        ? JSON.stringify(workspaceSnapshot)
-        : null,
-      phase: currentPhase || null,
+  // ── Verify session belongs to this user ──────────────
+  const session = await prisma.interviewSession.findFirst({
+    where: {
+      id: sessionId,
+      userId: ws.userId,
+      status: 'IN_PROGRESS',
     },
-  });
+    include: {
+      problem: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          category: true,
+          difficulty: true,
+          adminNotes: true,
+          categoryData: true,
+          followUpQuestions: {
+            orderBy: { order: 'asc' },
+          },
+        },
+      },
+    },
+  })
 
-  // Send acknowledgment
-  sendMessage(ws, {
-    type: "message_received",
-    data: { role: "user", content: content.trim() },
-  });
+  if (!session) {
+    ws.send(JSON.stringify({ type: 'error', error: 'Session not found or already ended.' }))
+    return
+  }
 
-  // Show typing indicator
-  sendMessage(ws, {
-    type: "ai_typing",
-    data: { typing: true },
-  });
+  // ── Verify team context matches ──────────────────────
+  // Session's teamId must match the socket's teamId
+  if (session.teamId && session.teamId !== ws.teamId) {
+    ws.send(JSON.stringify({
+      type: 'error',
+      error: 'Team context mismatch. Please refresh and try again.',
+    }))
+    return
+  }
 
-  // Call the interview engine with streaming
-  await handleInterviewChat({
+  ws.sessionId = sessionId
+
+  // ── Build the tool execution context ─────────────────
+  // This context is passed to every function calling tool
+  const toolContext = {
+    userId: ws.userId,
+    teamId: ws.teamId,        // CRITICAL: scopes all tool queries
     sessionId,
-    userId: user.id,
-    userMessage: content.trim(),
-    workspaceSnapshot,
-    currentPhase,
+    problemId: session.problemId,
+    category: session.category,
+    interviewStyle: session.interviewStyle,
+  }
+
+  ws.toolContext = toolContext
+
+  ws.send(JSON.stringify({
+    type: 'interview:started',
+    session: {
+      id: session.id,
+      category: session.category,
+      difficulty: session.difficulty,
+      interviewStyle: session.interviewStyle,
+      problem: session.problem,
+      phases: session.phases,
+    },
+  }))
+
+  // ── Generate initial AI message ──────────────────────
+  await handleInterviewMessage(ws, {
+    type: 'system_init',
     session,
-
-    // Stream chunks to the client
-    sendChunk: (chunk) => {
-      sendMessage(ws, {
-        type: "ai_chunk",
-        data: { chunk },
-      });
-    },
-
-    // Complete message
-    sendComplete: (fullResponse) => {
-      sendMessage(ws, {
-        type: "ai_message",
-        data: {
-          role: "assistant",
-          content: fullResponse,
-          phase: currentPhase,
-        },
-      });
-      sendMessage(ws, {
-        type: "ai_typing",
-        data: { typing: false },
-      });
-    },
-
-    // Error
-    sendError: (errorMessage) => {
-      sendMessage(ws, {
-        type: "ai_message",
-        data: {
-          role: "assistant",
-          content: `I apologize, I encountered an issue. Let me try that again. (${errorMessage})`,
-          phase: currentPhase,
-          error: true,
-        },
-      });
-      sendMessage(ws, {
-        type: "ai_typing",
-        data: { typing: false },
-      });
-    },
-  });
+    toolContext,
+  })
 }
 
-/**
- * Handle workspace updates (code, diagram, notes)
- */
-async function handleWorkspaceUpdate(sessionId, data, ws) {
-  const { workspace } = data;
-
-  if (!workspace) return;
-
-  // Update session workspace in database
-  await prisma.interviewSession.update({
-    where: { id: sessionId },
-    data: { workspace: JSON.stringify(workspace) },
-  });
-
-  sendMessage(ws, {
-    type: "workspace_saved",
-    data: { timestamp: new Date().toISOString() },
-  });
-}
-
-/**
- * Handle phase changes
- */
-async function handlePhaseChange(sessionId, data, ws) {
-  const { phaseName, phases } = data;
-
-  await prisma.interviewSession.update({
-    where: { id: sessionId },
-    data: { phases: JSON.stringify(phases) },
-  });
-
-  // Store phase change as a system message
-  await prisma.interviewMessage.create({
-    data: {
-      sessionId,
-      role: "system",
-      content: `Phase changed to: ${phaseName}`,
-      phase: phaseName,
-    },
-  });
-
-  sendMessage(ws, {
-    type: "phase_updated",
-    data: { phaseName, timestamp: new Date().toISOString() },
-  });
-}
-
-/**
- * Handle ending the interview
- */
-async function handleEndInterview(sessionId, user, ws) {
-  await prisma.interviewSession.update({
-    where: { id: sessionId },
-    data: {
-      status: "COMPLETED",
-      endedAt: new Date(),
-    },
-  });
-
-  await prisma.interviewMessage.create({
-    data: {
-      sessionId,
-      role: "system",
-      content: "Interview ended by candidate",
-    },
-  });
-
-  sendMessage(ws, {
-    type: "interview_ended",
-    data: {
-      sessionId,
-      endedAt: new Date().toISOString(),
-      message: "Interview completed. Generating debrief...",
-    },
-  });
-
-  // Generate AI debrief
-  const debrief = await generateDebrief(sessionId);
-
-  if (debrief) {
-    sendMessage(ws, {
-      type: "debrief_ready",
-      data: { debrief },
-    });
+async function handleMessage(ws, message) {
+  if (!ws.sessionId || !ws.toolContext) {
+    ws.send(JSON.stringify({ type: 'error', error: 'No active session.' }))
+    return
   }
 
-  setTimeout(() => {
-    ws.close(1000, "Interview completed");
-    activeConnections.delete(sessionId);
-  }, 5000);
-}
+  const { content, workspace } = message
 
-/**
- * Send a JSON message through WebSocket
- */
-function sendMessage(ws, message) {
-  if (ws.readyState === 1) {
-    // WebSocket.OPEN
-    ws.send(JSON.stringify(message));
+  if (!content || typeof content !== 'string' || content.trim().length === 0) {
+    ws.send(JSON.stringify({ type: 'error', error: 'Message content required.' }))
+    return
   }
+
+  // ── Store user message ───────────────────────────────
+  await prisma.interviewMessage.create({
+    data: {
+      sessionId: ws.sessionId,
+      role: 'USER',
+      content: content.trim(),
+      workspaceSnapshot: workspace || null,
+    },
+  })
+
+  // ── Pass to interview engine with team context ───────
+  await handleInterviewMessage(ws, {
+    type: 'user_message',
+    content: content.trim(),
+    workspace,
+    toolContext: ws.toolContext,
+  })
 }
 
-/**
- * Get active connection for a session
- */
-export function getConnection(sessionId) {
-  return activeConnections.get(sessionId);
+async function handleWorkspace(ws, message) {
+  if (!ws.sessionId) return
+
+  const { workspace } = message
+
+  // Update session workspace (fire-and-forget)
+  prisma.interviewSession.update({
+    where: { id: ws.sessionId },
+    data: { workspace },
+  }).catch(() => {})
 }
 
-/**
- * Get active interview handler for a session
- */
-export function getInterviewHandler(sessionId) {
-  return activeInterviews.get(sessionId);
-}
+async function handleEnd(ws, message) {
+  if (!ws.sessionId) return
 
-/**
- * Set active interview handler for a session
- */
-export function setInterviewHandler(sessionId, handler) {
-  activeInterviews.set(sessionId, handler);
-}
+  // ── Trigger debrief generation ───────────────────────
+  await handleInterviewMessage(ws, {
+    type: 'end_interview',
+    toolContext: ws.toolContext,
+  })
 
-/**
- * Check if WebSocket is enabled
- */
-export function isWebSocketEnabled() {
-  return true; // Always enabled — no config needed
+  ws.sessionId = null
+  ws.toolContext = null
 }

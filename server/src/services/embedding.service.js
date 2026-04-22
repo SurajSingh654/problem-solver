@@ -161,24 +161,26 @@ export async function embedProblem(problemId) {
 }
 
 // ── Find similar solutions using vector search ─────────
-export async function findSimilarSolutions(solutionId, limit = 5) {
+// ── Find similar solutions using vector search ─────────
+export async function findSimilarSolutions(solutionId, teamId, limit = 5) {
   try {
     const results = await prisma.$queryRawUnsafe(
       `
-      SELECT s.id, s."problemId", s."userId", s."patternIdentified",
-             s."optimizedApproach", s."keyInsight", s."optimizedTime",
-             s."confidenceLevel", s.language,
+      SELECT s.id, s."problemId", s."userId", s.pattern,
+             s."optimizedApproach", s."keyInsight", s."timeComplexity",
+             s.confidence, s.language,
              s.embedding <=> (SELECT embedding FROM solutions WHERE id = $1) AS distance
       FROM solutions s
       WHERE s.id != $1
+        AND s."teamId" = $2
         AND s.embedding IS NOT NULL
       ORDER BY distance ASC
-      LIMIT $2
+      LIMIT $3
     `,
       solutionId,
+      teamId,
       limit,
     );
-
     return results;
   } catch (error) {
     console.error(
@@ -190,7 +192,7 @@ export async function findSimilarSolutions(solutionId, limit = 5) {
 }
 
 // ── Find similar problems using vector search ──────────
-export async function findSimilarProblems(problemId, limit = 5) {
+export async function findSimilarProblems(problemId, teamId, limit = 5) {
   try {
     const results = await prisma.$queryRawUnsafe(
       `
@@ -198,19 +200,17 @@ export async function findSimilarProblems(problemId, limit = 5) {
              p.embedding <=> (SELECT embedding FROM problems WHERE id = $1) AS distance
       FROM problems p
       WHERE p.id != $1
+        AND p."teamId" = $2
+        AND p."isPublished" = true
         AND p.embedding IS NOT NULL
-        AND p."isActive" = true
       ORDER BY distance ASC
-      LIMIT $2
+      LIMIT $3
     `,
       problemId,
+      teamId,
       limit,
     );
-
-    return results.map((r) => ({
-      ...r,
-      tags: JSON.parse(r.tags || "[]"),
-    }));
+    return results;
   } catch (error) {
     console.error("[Embedding] Similar problems search failed:", error.message);
     return [];
@@ -218,27 +218,26 @@ export async function findSimilarProblems(problemId, limit = 5) {
 }
 
 // ── Find solutions similar to a text query ─────────────
-export async function searchSolutionsByText(queryText, limit = 5) {
+export async function searchSolutionsByText(queryText, teamId, limit = 5) {
   try {
     const embedding = await generateEmbedding(queryText);
     if (!embedding) return [];
-
     const vectorStr = `[${embedding.join(",")}]`;
-
     const results = await prisma.$queryRawUnsafe(
       `
-      SELECT s.id, s."problemId", s."userId", s."patternIdentified",
+      SELECT s.id, s."problemId", s."userId", s.pattern,
              s."optimizedApproach", s."keyInsight",
              s.embedding <=> $1::vector AS distance
       FROM solutions s
-      WHERE s.embedding IS NOT NULL
+      WHERE s."teamId" = $2
+        AND s.embedding IS NOT NULL
       ORDER BY distance ASC
-      LIMIT $2
+      LIMIT $3
     `,
       vectorStr,
+      teamId,
       limit,
     );
-
     return results;
   } catch (error) {
     console.error("[Embedding] Text search failed:", error.message);
@@ -249,30 +248,22 @@ export async function searchSolutionsByText(queryText, limit = 5) {
 // ── Batch embed all existing solutions and problems ────
 export async function embedAllExisting() {
   console.log("[Embedding] Starting batch embedding...");
-
-  // Embed problems without embeddings
   const problems = await prisma.$queryRawUnsafe(`
-    SELECT id FROM problems WHERE embedding IS NULL AND "isActive" = true
+    SELECT id FROM problems WHERE embedding IS NULL AND "isPublished" = true
   `);
   console.log(`[Embedding] ${problems.length} problems need embedding`);
-
   for (const p of problems) {
     await embedProblem(p.id);
-    // Small delay to avoid rate limiting
     await new Promise((r) => setTimeout(r, 200));
   }
-
-  // Embed solutions without embeddings
   const solutions = await prisma.$queryRawUnsafe(`
     SELECT id FROM solutions WHERE embedding IS NULL
   `);
   console.log(`[Embedding] ${solutions.length} solutions need embedding`);
-
   for (const s of solutions) {
     await embedSolution(s.id);
     await new Promise((r) => setTimeout(r, 200));
   }
-
   console.log("[Embedding] Batch embedding complete");
 }
 

@@ -1,46 +1,38 @@
-/**
- * STANDARD API RESPONSE HELPERS
- * Every API response uses these helpers for consistency.
- *
- * Success: { success: true,  data: {...},    message: '...' }
- * Error:   { success: false, error: '...',   code: '...' }
- */
+// ============================================================================
+// ProbSolver v3.0 — Response Helpers
+// ============================================================================
 
-export function successResponse(res, data, message = 'Success', statusCode = 200) {
+/**
+ * Send a success response.
+ *
+ * @param {Response} res - Express response object
+ * @param {Object} data - Response payload
+ * @param {number} statusCode - HTTP status (default: 200)
+ */
+export function success(res, data, statusCode = 200) {
   return res.status(statusCode).json({
     success: true,
-    message,
-    data,
+    ...data,
   })
 }
 
-export function createdResponse(res, data, message = 'Created') {
-  return successResponse(res, data, message, 201)
-}
-
-export function errorResponse(res, message, statusCode = 400, code = null) {
-  const body = { success: false, error: message }
-  if (code) body.code = code
-  return res.status(statusCode).json(body)
-}
-
-export function notFoundResponse(res, resource = 'Resource') {
-  return errorResponse(res, `${resource} not found`, 404, 'NOT_FOUND')
-}
-
-export function unauthorizedResponse(res, message = 'Unauthorized') {
-  return errorResponse(res, message, 401, 'UNAUTHORIZED')
-}
-
-export function forbiddenResponse(res, message = 'Forbidden') {
-  return errorResponse(res, message, 403, 'FORBIDDEN')
-}
-
-export function validationErrorResponse(res, errors) {
-  return res.status(422).json({
+/**
+ * Send an error response.
+ *
+ * @param {Response} res - Express response object
+ * @param {string} message - Error message
+ * @param {number} statusCode - HTTP status (default: 400)
+ * @param {string} code - Optional error code for frontend handling
+ */
+export function error(res, message, statusCode = 400, code = undefined) {
+  const payload = {
     success: false,
-    error: 'Validation failed',
-    code: 'VALIDATION_ERROR',
-    errors,
-  })
+    error: message,
+  }
+
+  if (code) {
+    payload.code = code
+  }
+
+  return res.status(statusCode).json(payload)
 }

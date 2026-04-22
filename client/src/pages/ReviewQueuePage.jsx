@@ -13,7 +13,7 @@ import {
 import {
     CONFIDENCE_LEVELS, LANGUAGE_LABELS, PATTERNS,
 } from '@utils/constants'
-import { useAuthStore } from '@store/useAuthStore'
+import useAuthStore from '@store/useAuthStore'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 

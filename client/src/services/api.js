@@ -1,22 +1,27 @@
-/**
- * AXIOS INSTANCE — Configured API client
- * All API calls go through this instance.
- * Handles: base URL, auth headers, token refresh, errors.
- */
+// ============================================================================
+// ProbSolver v3.0 — Axios Instance
+// ============================================================================
+//
+// The interceptor reads the token from localStorage and attaches it.
+// No changes needed for team context — the JWT already contains
+// currentTeamId, and the backend reads it from the token.
+//
+// ============================================================================
+
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
-  timeout: 15000,
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// ── Request interceptor — attach JWT ───────────────────
+// ── Request interceptor: attach JWT ──────────────────────────
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('ps_token')
+    const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -25,20 +30,45 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// ── Response interceptor — handle auth errors ──────────
+// ── Response interceptor: handle auth errors ─────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid — clear auth and redirect
-      localStorage.removeItem('ps_token')
-      localStorage.removeItem('ps_user')
+    const status = error.response?.status
+    const code = error.response?.data?.code
+
+    // Token expired or invalid — force logout
+    if (status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+
       // Only redirect if not already on auth pages
-      if (!window.location.pathname.startsWith('/login') &&
-          !window.location.pathname.startsWith('/register')) {
-        window.location.href = '/login'
+      if (!window.location.pathname.startsWith('/auth')) {
+        window.location.href = '/auth/login'
       }
     }
+
+    // Onboarding required — redirect to onboarding
+    if (status === 403 && code === 'ONBOARDING_REQUIRED') {
+      if (window.location.pathname !== '/onboarding') {
+        window.location.href = '/onboarding'
+      }
+    }
+
+    // Password change required
+    if (status === 403 && code === 'PASSWORD_CHANGE_REQUIRED') {
+      if (window.location.pathname !== '/auth/change-password') {
+        window.location.href = '/auth/change-password'
+      }
+    }
+
+    // No team context
+    if (status === 403 && code === 'NO_TEAM_CONTEXT') {
+      if (window.location.pathname !== '/onboarding') {
+        window.location.href = '/onboarding'
+      }
+    }
+
     return Promise.reject(error)
   }
 )

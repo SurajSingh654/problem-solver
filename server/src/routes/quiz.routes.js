@@ -1,28 +1,15 @@
-import { Router } from "express";
-import {
-  generateQuiz,
-  submitQuizAttempt,
-  analyzeQuizAttempt,
-  getMyAttempts,
-  getAttemptById,
-  getMySubjects,
-} from "../controllers/quiz.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
-import { requireAI, aiRateLimit } from "../middleware/ai.middleware.js";
+import { Router } from 'express'
+import { authenticate } from '../middleware/auth.middleware.js'
+import { optionalTeamContext } from '../middleware/team.middleware.js'
+import { validate } from '../middleware/validate.middleware.js'
+import { generateQuiz, submitQuizAnswers, getQuizHistory, getQuiz } from '../controllers/quiz.controller.js'
 
-const router = Router();
-router.use(requireAuth);
+const router = Router()
+router.use(authenticate, optionalTeamContext)
 
-// Quiz generation (requires AI)
-router.post("/generate", requireAI, aiRateLimit, generateQuiz);
+router.post('/generate', generateQuiz)
+router.post('/:quizId/submit', submitQuizAnswers)
+router.get('/history', getQuizHistory)
+router.get('/:quizId', getQuiz)
 
-// Submit and analyze
-router.post("/submit", submitQuizAttempt);
-router.post("/attempt/:id/analyze", requireAI, aiRateLimit, analyzeQuizAttempt);
-
-// History
-router.get("/my-attempts", getMyAttempts);
-router.get("/attempt/:id", getAttemptById);
-router.get("/subjects", getMySubjects);
-
-export default router;
+export default router

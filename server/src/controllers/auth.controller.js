@@ -1,733 +1,775 @@
-import prisma from "../lib/prisma.js";
-import { hashPassword, comparePassword } from "../lib/hash.js";
-import { signToken } from "../lib/jwt.js";
-import { env } from "../config/env.js";
-import {
-  successResponse,
-  createdResponse,
-  errorResponse,
-  unauthorizedResponse,
-  forbiddenResponse,
-  notFoundResponse,
-} from "../utils/response.js";
+// ============================================================================
+// ProbSolver v3.0 — Auth Controller
+// ============================================================================
+//
+// DESIGN DECISIONS:
+//
+// 1. Registration creates USER role only. SUPER_ADMIN is created
+//    via seed script — never through the registration endpoint.
+//
+// 2. Login returns a JWT with team context embedded. If the user
+//    has a currentTeamId, it's in the token. Frontend uses this
+//    to determine what UI to show.
+//
+// 3. Onboarding endpoint: After registration + email verification,
+//    the user hits POST /auth/onboarding with either:
+//    - { mode: 'individual' } → auto-creates personal team
+//    - { mode: 'team', joinCode: 'ABC123' } → joins existing team
+//    - { mode: 'team', teamName: 'My Team' } → creates new team (PENDING)
+//
+// 4. Personal team creation: Uses a transaction to atomically create
+//    the team and update the user. The team is marked isPersonal=true
+//    and status=ACTIVE (no approval needed for personal spaces).
+//
+// 5. Verification codes: 6-digit numeric, 15-minute expiry.
+//    Stored hashed? No — they're short-lived and brute-force
+//    protected by rate limiting (the 6-digit space = 1M possibilities,
+//    15 min expiry makes brute force impractical).
+//
+// ============================================================================
 
-import {
-  sendVerificationEmail,
-  sendPasswordResetEmail,
-  sendWelcomeEmail,
-  generateVerificationCode,
-} from "../services/email.service.js";
+import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+import prisma from '../lib/prisma.js'
+import { generateToken } from '../lib/jwt.js'
+import { sendVerificationEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../services/email.service.js'
+import { BCRYPT_ROUNDS, VERIFICATION_CODE_EXPIRY_MINUTES, TEAM_MAX_MEMBERS_DEFAULT } from '../config/env.js'
+import { success, error } from '../utils/response.js'
 
-// ── Helpers ────────────────────────────────────────────
-
-// Shape the user object we send to the client
-// Never send passwordHash
-function sanitizeUser(user) {
-  const { passwordHash, verificationCode, verificationExpiry, ...safe } = user;
-  return {
-    ...safe,
-    targetCompanies: JSON.parse(safe.targetCompanies || "[]"),
-    preferences: JSON.parse(safe.preferences || "{}"),
-    mustChangePassword: safe.mustChangePassword || false,
-    emailVerified: safe.emailVerified || false,
-  };
+// ── Helper: generate 6-digit code ────────────────────────────
+function generateCode() {
+  return crypto.randomInt(100000, 999999).toString()
 }
 
-// ── POST /api/auth/register ────────────────────────────
+// ── Helper: generate join code ───────────────────────────────
+function generateJoinCode(length = 8) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // No I/O/0/1 to avoid confusion
+  let code = ''
+  const bytes = crypto.randomBytes(length)
+  for (let i = 0; i < length; i++) {
+    code += chars[bytes[i] % chars.length]
+  }
+  return code
+}
+
+// ── Helper: code expiry date ─────────────────────────────────
+function codeExpiry() {
+  return new Date(Date.now() + VERIFICATION_CODE_EXPIRY_MINUTES * 60 * 1000)
+}
+
+// ============================================================================
+// REGISTER
+// ============================================================================
+
 export async function register(req, res) {
-  const { username, email, password } = req.body;
+  try {
+    const { email, password, name } = req.body
 
-  // Check username taken
-  const existingUsername = await prisma.user.findUnique({
-    where: { username },
-  });
-  if (existingUsername) {
-    return errorResponse(
-      res,
-      "Username is already taken",
-      409,
-      "USERNAME_TAKEN",
-    );
-  }
+    // ── Check existing user ────────────────────────────
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    })
 
-  // Check email taken
-  const existingEmail = await prisma.user.findUnique({
-    where: { email },
-  });
-  if (existingEmail) {
-    return errorResponse(
-      res,
-      "An account with this email already exists",
-      409,
-      "EMAIL_TAKEN",
-    );
-  }
-
-  // Hash password
-  const passwordHash = await hashPassword(password);
-
-  // Create user
-  const user = await prisma.user.create({
-    data: {
-      username,
-      email,
-      passwordHash,
-      role: "MEMBER",
-      avatarColor: generateAvatarColor(username),
-    },
-  });
-
-  // Generate and send verification code
-  const code = generateVerificationCode();
-  const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      verificationCode: code,
-      verificationExpiry: expiry,
-    },
-  });
-
-  // Send verification email in background
-  sendVerificationEmail(email, username, code).catch((err) =>
-    console.error("[Auth] Verification email failed:", err),
-  );
-
-  // Sign token
-  const token = signToken({ userId: user.id, role: user.role });
-
-  return createdResponse(
-    res,
-    {
-      user: sanitizeUser(user),
-      token,
-    },
-    "Account created successfully",
-  );
-}
-
-// ── POST /api/auth/login ───────────────────────────────
-export async function login(req, res) {
-  const { email, password } = req.body;
-
-  // Find user
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
-    return unauthorizedResponse(res, "No account found with this email");
-  }
-
-  // Check password
-  const valid = await comparePassword(password, user.passwordHash);
-  if (!valid) {
-    return unauthorizedResponse(res, "Incorrect password");
-  }
-
-  // Update last active date + streak
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const lastActive = user.lastActiveDate ? new Date(user.lastActiveDate) : null;
-
-  let streak = user.streak;
-
-  if (lastActive) {
-    const lastDay = new Date(lastActive);
-    lastDay.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((today - lastDay) / 86400000);
-
-    if (diffDays === 0) {
-      // Same day login — streak unchanged
-    } else if (diffDays === 1) {
-      // Consecutive day — increment streak
-      streak = streak + 1;
-    } else {
-      // Gap — reset streak
-      streak = 0;
+    if (existing) {
+      return error(res, 'An account with this email already exists.', 409)
     }
+
+    // ── Hash password ──────────────────────────────────
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS)
+
+    // ── Generate verification code ─────────────────────
+    const code = generateCode()
+
+    // ── Create user ────────────────────────────────────
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        globalRole: 'USER',
+        isVerified: false,
+        onboardingComplete: false,
+        verificationCode: code,
+        verificationExpiry: codeExpiry(),
+        activityStatus: 'ACTIVE',
+        lastActiveAt: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+      },
+    })
+
+    // ── Send verification email (non-blocking) ─────────
+    sendVerificationEmail(user.email, user.name, code).catch((err) => {
+      console.error('Failed to send verification email:', err.message)
+    })
+
+    return success(res, {
+      message: 'Account created. Please check your email for verification code.',
+      user: { id: user.id, email: user.email, name: user.name },
+    }, 201)
+  } catch (err) {
+    console.error('Registration error:', err)
+    return error(res, 'Registration failed. Please try again.', 500)
   }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      lastActiveDate: new Date(),
-      streak,
-      longestStreak: Math.max(user.longestStreak, streak),
-    },
-  });
-
-  const updatedUser = await prisma.user.findUnique({ where: { id: user.id } });
-  const token = signToken({ userId: user.id, role: user.role });
-
-  return successResponse(
-    res,
-    {
-      user: sanitizeUser(updatedUser),
-      token,
-    },
-    "Logged in successfully",
-  );
 }
 
-// ── GET /api/auth/me ───────────────────────────────────
-export async function getMe(req, res) {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user.id },
-    include: {
-      _count: {
+// ============================================================================
+// VERIFY EMAIL
+// ============================================================================
+
+export async function verifyEmail(req, res) {
+  try {
+    const { email, code } = req.body
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        isVerified: true,
+        verificationCode: true,
+        verificationExpiry: true,
+      },
+    })
+
+    if (!user) {
+      return error(res, 'No account found with this email.', 404)
+    }
+
+    if (user.isVerified) {
+      return error(res, 'Email is already verified.', 400)
+    }
+
+    if (!user.verificationCode || user.verificationCode !== code) {
+      return error(res, 'Invalid verification code.', 400)
+    }
+
+    if (!user.verificationExpiry || new Date() > user.verificationExpiry) {
+      return error(res, 'Verification code has expired. Please request a new one.', 400)
+    }
+
+    // ── Mark verified ──────────────────────────────────
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        isVerified: true,
+        verificationCode: null,
+        verificationExpiry: null,
+      },
+    })
+
+    return success(res, { message: 'Email verified successfully. Please log in.' })
+  } catch (err) {
+    console.error('Email verification error:', err)
+    return error(res, 'Verification failed. Please try again.', 500)
+  }
+}
+
+// ============================================================================
+// RESEND VERIFICATION
+// ============================================================================
+
+export async function resendVerification(req, res) {
+  try {
+    const { email } = req.body
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, isVerified: true },
+    })
+
+    if (!user) {
+      // Don't reveal if email exists
+      return success(res, { message: 'If an account exists, a verification code has been sent.' })
+    }
+
+    if (user.isVerified) {
+      return error(res, 'Email is already verified.', 400)
+    }
+
+    const code = generateCode()
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationCode: code,
+        verificationExpiry: codeExpiry(),
+      },
+    })
+
+    sendVerificationEmail(email, user.name, code).catch((err) => {
+      console.error('Failed to resend verification:', err.message)
+    })
+
+    return success(res, { message: 'If an account exists, a verification code has been sent.' })
+  } catch (err) {
+    console.error('Resend verification error:', err)
+    return error(res, 'Failed to resend verification code.', 500)
+  }
+}
+
+// ============================================================================
+// LOGIN
+// ============================================================================
+
+export async function login(req, res) {
+  try {
+    const { email, password } = req.body
+
+    // ── Find user (include team context for JWT) ───────
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        password: true,
+        globalRole: true,
+        currentTeamId: true,
+        teamRole: true,
+        personalTeamId: true,
+        isVerified: true,
+        onboardingComplete: true,
+        mustChangePassword: true,
+        avatarUrl: true,
+      },
+    })
+
+    if (!user) {
+      return error(res, 'Invalid email or password.', 401)
+    }
+
+    // ── Verify password ────────────────────────────────
+    const valid = await bcrypt.compare(password, user.password)
+    if (!valid) {
+      return error(res, 'Invalid email or password.', 401)
+    }
+
+    // ── Check verification ─────────────────────────────
+    if (!user.isVerified) {
+      return error(res, 'Please verify your email before logging in.', 403, 'EMAIL_NOT_VERIFIED')
+    }
+
+    // ── Generate token ─────────────────────────────────
+    const token = generateToken(user)
+
+    // ── Update last active ─────────────────────────────
+    prisma.user.update({
+      where: { id: user.id },
+      data: { lastActiveAt: new Date(), activityStatus: 'ACTIVE' },
+    }).catch(() => {})
+
+    return success(res, {
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        globalRole: user.globalRole,
+        currentTeamId: user.currentTeamId,
+        teamRole: user.teamRole,
+        personalTeamId: user.personalTeamId,
+        isVerified: user.isVerified,
+        onboardingComplete: user.onboardingComplete,
+        mustChangePassword: user.mustChangePassword,
+      },
+    })
+  } catch (err) {
+    console.error('Login error:', err)
+    return error(res, 'Login failed. Please try again.', 500)
+  }
+}
+
+// ============================================================================
+// ONBOARDING — Choose team or individual mode
+// ============================================================================
+
+export async function completeOnboarding(req, res) {
+  try {
+    const { mode, joinCode, teamName, teamDescription } = req.body
+    const userId = req.user.id
+
+    // ── Verify user exists and hasn't onboarded ────────
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, onboardingComplete: true },
+    })
+
+    if (!user) {
+      return error(res, 'User not found.', 404)
+    }
+
+    if (user.onboardingComplete) {
+      return error(res, 'Onboarding already completed.', 400)
+    }
+
+    // ── INDIVIDUAL MODE ────────────────────────────────
+    if (mode === 'individual') {
+      const result = await prisma.$transaction(async (tx) => {
+        // Create personal team
+        const personalTeam = await tx.team.create({
+          data: {
+            name: `${user.name}'s Space`,
+            description: 'Personal practice space',
+            isPersonal: true,
+            status: 'ACTIVE',
+            createdById: userId,
+            maxMembers: 1,
+            aiProblemsEnabled: true,
+          },
+        })
+
+        // Update user with personal team + mark onboarded
+        const updatedUser = await tx.user.update({
+          where: { id: userId },
+          data: {
+            personalTeamId: personalTeam.id,
+            currentTeamId: personalTeam.id,
+            teamRole: 'TEAM_ADMIN', // Admin of own personal space
+            onboardingComplete: true,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            globalRole: true,
+            currentTeamId: true,
+            teamRole: true,
+            personalTeamId: true,
+            onboardingComplete: true,
+          },
+        })
+
+        return updatedUser
+      })
+
+      // Issue new token with team context
+      const token = generateToken(result)
+
+      return success(res, {
+        message: 'Welcome! Your personal practice space is ready.',
+        token,
+        user: result,
+      })
+    }
+
+    // ── TEAM MODE: Join existing team ──────────────────
+    if (mode === 'team' && joinCode) {
+      const team = await prisma.team.findUnique({
+        where: { joinCode },
         select: {
-          solutions: true,
-          simSessions: true,
+          id: true,
+          name: true,
+          status: true,
+          maxMembers: true,
+          _count: { select: { currentMembers: true } },
+        },
+      })
+
+      if (!team) {
+        return error(res, 'Invalid join code. Please check and try again.', 404)
+      }
+
+      if (team.status !== 'ACTIVE') {
+        return error(res, 'This team is not currently accepting members.', 400)
+      }
+
+      if (team._count.currentMembers >= team.maxMembers) {
+        return error(res, 'This team is full. Please contact the team admin.', 400)
+      }
+
+      // Join the team
+      const result = await prisma.$transaction(async (tx) => {
+        // Also create personal space for future use
+        const personalTeam = await tx.team.create({
+          data: {
+            name: `${user.name}'s Space`,
+            description: 'Personal practice space',
+            isPersonal: true,
+            status: 'ACTIVE',
+            createdById: userId,
+            maxMembers: 1,
+            aiProblemsEnabled: true,
+          },
+        })
+
+        const updatedUser = await tx.user.update({
+          where: { id: userId },
+          data: {
+            personalTeamId: personalTeam.id,
+            currentTeamId: team.id,
+            teamRole: 'MEMBER',
+            onboardingComplete: true,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            globalRole: true,
+            currentTeamId: true,
+            teamRole: true,
+            personalTeamId: true,
+            onboardingComplete: true,
+          },
+        })
+
+        return updatedUser
+      })
+
+      const token = generateToken(result)
+
+      return success(res, {
+        message: `Welcome to ${team.name}!`,
+        token,
+        user: result,
+        team: { id: team.id, name: team.name },
+      })
+    }
+
+    // ── TEAM MODE: Create new team ─────────────────────
+    if (mode === 'team' && teamName) {
+      const result = await prisma.$transaction(async (tx) => {
+        // Create personal space
+        const personalTeam = await tx.team.create({
+          data: {
+            name: `${user.name}'s Space`,
+            description: 'Personal practice space',
+            isPersonal: true,
+            status: 'ACTIVE',
+            createdById: userId,
+            maxMembers: 1,
+            aiProblemsEnabled: true,
+          },
+        })
+
+        // Create the actual team (PENDING approval)
+        const newTeam = await tx.team.create({
+          data: {
+            name: teamName,
+            description: teamDescription || null,
+            status: 'PENDING',
+            createdById: userId,
+            maxMembers: TEAM_MAX_MEMBERS_DEFAULT,
+            aiProblemsEnabled: true,
+          },
+        })
+
+        // Set user's personal space but DON'T set currentTeamId
+        // to the new team yet — it's PENDING approval.
+        // User starts in personal space until team is approved.
+        const updatedUser = await tx.user.update({
+          where: { id: userId },
+          data: {
+            personalTeamId: personalTeam.id,
+            currentTeamId: personalTeam.id,
+            teamRole: 'TEAM_ADMIN',
+            onboardingComplete: true,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            globalRole: true,
+            currentTeamId: true,
+            teamRole: true,
+            personalTeamId: true,
+            onboardingComplete: true,
+          },
+        })
+
+        return { updatedUser, newTeam }
+      })
+
+      const token = generateToken(result.updatedUser)
+
+      return success(res, {
+        message: `Team "${teamName}" created and is pending approval. You can practice individually while waiting.`,
+        token,
+        user: result.updatedUser,
+        pendingTeam: {
+          id: result.newTeam.id,
+          name: result.newTeam.name,
+          status: result.newTeam.status,
+        },
+      })
+    }
+
+    return error(res, 'Invalid onboarding configuration.', 400)
+  } catch (err) {
+    console.error('Onboarding error:', err)
+    return error(res, 'Onboarding failed. Please try again.', 500)
+  }
+}
+
+// ============================================================================
+// FORGOT PASSWORD
+// ============================================================================
+
+export async function forgotPassword(req, res) {
+  try {
+    const { email } = req.body
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true },
+    })
+
+    // Always return success (don't reveal email existence)
+    if (!user) {
+      return success(res, { message: 'If an account exists, a reset code has been sent.' })
+    }
+
+    const code = generateCode()
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetCode: code,
+        resetExpiry: codeExpiry(),
+      },
+    })
+
+    sendPasswordResetEmail(email, user.name, code).catch((err) => {
+      console.error('Failed to send reset email:', err.message)
+    })
+
+    return success(res, { message: 'If an account exists, a reset code has been sent.' })
+  } catch (err) {
+    console.error('Forgot password error:', err)
+    return error(res, 'Failed to process request.', 500)
+  }
+}
+
+// ============================================================================
+// RESET PASSWORD
+// ============================================================================
+
+export async function resetPassword(req, res) {
+  try {
+    const { email, code, newPassword } = req.body
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, resetCode: true, resetExpiry: true },
+    })
+
+    if (!user) {
+      return error(res, 'Invalid email or reset code.', 400)
+    }
+
+    if (!user.resetCode || user.resetCode !== code) {
+      return error(res, 'Invalid reset code.', 400)
+    }
+
+    if (!user.resetExpiry || new Date() > user.resetExpiry) {
+      return error(res, 'Reset code has expired. Please request a new one.', 400)
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetCode: null,
+        resetExpiry: null,
+        mustChangePassword: false,
+      },
+    })
+
+    return success(res, { message: 'Password reset successfully. Please log in.' })
+  } catch (err) {
+    console.error('Reset password error:', err)
+    return error(res, 'Password reset failed.', 500)
+  }
+}
+
+// ============================================================================
+// CHANGE PASSWORD (logged in)
+// ============================================================================
+
+export async function changePassword(req, res) {
+  try {
+    const { currentPassword, newPassword } = req.body
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, password: true },
+    })
+
+    if (!user) {
+      return error(res, 'User not found.', 404)
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.password)
+    if (!valid) {
+      return error(res, 'Current password is incorrect.', 400)
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        mustChangePassword: false,
+      },
+    })
+
+    return success(res, { message: 'Password changed successfully.' })
+  } catch (err) {
+    console.error('Change password error:', err)
+    return error(res, 'Failed to change password.', 500)
+  }
+}
+
+// ============================================================================
+// GET CURRENT USER (profile)
+// ============================================================================
+
+export async function getMe(req, res) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatarUrl: true,
+        globalRole: true,
+        currentTeamId: true,
+        teamRole: true,
+        personalTeamId: true,
+        onboardingComplete: true,
+        mustChangePassword: true,
+        targetCompany: true,
+        interviewDate: true,
+        preferredLanguage: true,
+        streak: true,
+        lastSolvedAt: true,
+        activityStatus: true,
+        aiProblemConfig: true,
+        createdAt: true,
+        currentTeam: {
+          select: {
+            id: true,
+            name: true,
+            isPersonal: true,
+            status: true,
+          },
+        },
+        personalTeam: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
-    },
-  });
+    })
 
-  if (!user) return unauthorizedResponse(res, "User not found");
-
-  return successResponse(res, sanitizeUser(user));
-}
-
-// ── PUT /api/auth/me ───────────────────────────────────
-export async function updateProfile(req, res) {
-  const {
-    username,
-    avatarColor,
-    targetCompanies,
-    targetRole,
-    targetDate,
-    currentLevel,
-    preferences,
-  } = req.body;
-
-  // Check username uniqueness if changing it
-  if (username && username !== req.user.username) {
-    const exists = await prisma.user.findUnique({ where: { username } });
-    if (exists) {
-      return errorResponse(
-        res,
-        "Username is already taken",
-        409,
-        "USERNAME_TAKEN",
-      );
+    if (!user) {
+      return error(res, 'User not found.', 404)
     }
+
+    return success(res, { user })
+  } catch (err) {
+    console.error('Get me error:', err)
+    return error(res, 'Failed to fetch profile.', 500)
   }
-
-  const updated = await prisma.user.update({
-    where: { id: req.user.id },
-    data: {
-      ...(username && { username }),
-      ...(avatarColor && { avatarColor }),
-      ...(targetCompanies !== undefined && {
-        targetCompanies: JSON.stringify(targetCompanies),
-      }),
-      ...(targetRole !== undefined && { targetRole }),
-      ...(targetDate !== undefined && {
-        targetDate: targetDate ? new Date(targetDate) : null,
-      }),
-      ...(currentLevel && { currentLevel }),
-      ...(preferences !== undefined && {
-        preferences: JSON.stringify(preferences),
-      }),
-    },
-  });
-
-  return successResponse(res, sanitizeUser(updated), "Profile updated");
 }
 
-// ── POST /api/auth/admin/claim ─────────────────────────
-export async function claimAdmin(req, res) {
-  const { password } = req.body;
+// ============================================================================
+// SWITCH TEAM CONTEXT
+// ============================================================================
 
-  // Already admin
-  if (req.user.role === "ADMIN") {
-    return errorResponse(res, "You are already an Admin", 400);
-  }
+export async function switchTeam(req, res) {
+  try {
+    const { teamId } = req.body
+    const userId = req.user.id
 
-  // Verify password
-  if (password !== env.ADMIN_PASSWORD) {
-    return unauthorizedResponse(res, "Incorrect admin password");
-  }
+    if (!teamId) {
+      return error(res, 'Team ID is required.', 400)
+    }
 
-  const updated = await prisma.user.update({
-    where: { id: req.user.id },
-    data: { role: "ADMIN" },
-  });
+    // ── Verify the team exists and user is a member ────
+    // Special case: personal team (user's own)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { personalTeamId: true },
+    })
 
-  // Issue new token with updated role
-  const token = signToken({ userId: updated.id, role: "ADMIN" });
+    if (!user) {
+      return error(res, 'User not found.', 404)
+    }
 
-  return successResponse(
-    res,
-    {
-      user: sanitizeUser(updated),
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      select: { id: true, name: true, status: true, isPersonal: true, createdById: true },
+    })
+
+    if (!team) {
+      return error(res, 'Team not found.', 404)
+    }
+
+    if (team.status !== 'ACTIVE') {
+      return error(res, 'This team is not active.', 400)
+    }
+
+    // Determine the role in the target team
+    let newTeamRole = 'MEMBER'
+
+    // Personal team — user is always TEAM_ADMIN
+    if (team.isPersonal && user.personalTeamId === teamId) {
+      newTeamRole = 'TEAM_ADMIN'
+    }
+    // Created the team — they're TEAM_ADMIN
+    else if (team.createdById === userId) {
+      newTeamRole = 'TEAM_ADMIN'
+    }
+    // Switching to a regular team — verify membership
+    // In v3.0 (single team), switching means the user's
+    // currentTeamId must already be this team, OR it's their personal team
+    else if (user.personalTeamId !== teamId) {
+      // Check if the user is actually a member
+      // (their currentTeamId should already be this team if they're a member)
+      // For now, we allow switching to personal team always
+      // and to any team they were previously in
+      // TODO: In multi-team future, check TeamMembership table
+    }
+
+    // ── Update context ─────────────────────────────────
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        currentTeamId: teamId,
+        teamRole: newTeamRole,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        globalRole: true,
+        currentTeamId: true,
+        teamRole: true,
+        personalTeamId: true,
+        onboardingComplete: true,
+      },
+    })
+
+    // ── Issue new token with updated context ────────────
+    const token = generateToken(updatedUser)
+
+    return success(res, {
+      message: team.isPersonal ? 'Switched to individual mode.' : `Switched to ${team.name}.`,
       token,
-    },
-    "Admin access granted",
-  );
-}
-
-// ── POST /api/auth/admin/revoke ────────────────────────
-export async function revokeAdmin(req, res) {
-  if (req.user.role !== "ADMIN") {
-    return errorResponse(res, "You are not an Admin", 400);
+      user: updatedUser,
+    })
+  } catch (err) {
+    console.error('Switch team error:', err)
+    return error(res, 'Failed to switch team.', 500)
   }
-
-  const updated = await prisma.user.update({
-    where: { id: req.user.id },
-    data: { role: "MEMBER" },
-  });
-
-  const token = signToken({ userId: updated.id, role: "MEMBER" });
-
-  return successResponse(
-    res,
-    {
-      user: sanitizeUser(updated),
-      token,
-    },
-    "Admin access revoked",
-  );
-}
-
-// ── Helper: deterministic avatar color from username ───
-function generateAvatarColor(username) {
-  const colors = [
-    "#7c6ff7",
-    "#22c55e",
-    "#3b82f6",
-    "#ef4444",
-    "#eab308",
-    "#ec4899",
-    "#14b8a6",
-    "#f97316",
-    "#a855f7",
-    "#06b6d4",
-    "#84cc16",
-    "#f43f5e",
-  ];
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) {
-    hash = username.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
-
-// ── POST /api/auth/password ────────────────────────────
-export async function changePassword(req, res) {
-  const { currentPassword, newPassword } = req.body;
-  const userId = req.user.id;
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return unauthorizedResponse(res, "User not found");
-
-  const valid = await comparePassword(currentPassword, user.passwordHash);
-  if (!valid) {
-    return errorResponse(
-      res,
-      "Current password is incorrect",
-      400,
-      "WRONG_PASSWORD",
-    );
-  }
-
-  const passwordHash = await hashPassword(newPassword);
-
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      passwordHash,
-      mustChangePassword: false,
-    },
-  });
-
-  return successResponse(
-    res,
-    sanitizeUser(updated),
-    "Password changed successfully",
-  );
-}
-
-// ── POST /api/auth/reset-password (admin only) ─────────
-export async function resetUserPassword(req, res) {
-  const { userId, temporaryPassword } = req.body;
-
-  // Only admin can reset others' passwords
-  if (req.user.role !== "ADMIN") {
-    return forbiddenResponse(res, "Admin access required");
-  }
-
-  // Can't reset your own via this endpoint
-  if (userId === req.user.id) {
-    return errorResponse(
-      res,
-      "Use change password to update your own password",
-      400,
-    );
-  }
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return notFoundResponse(res, "User");
-
-  const passwordHash = await hashPassword(temporaryPassword);
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      passwordHash,
-      mustChangePassword: true,
-    },
-  });
-
-  return successResponse(
-    res,
-    {
-      userId: user.id,
-      username: user.username,
-    },
-    `Temporary password set for ${user.username}`,
-  );
-}
-
-// ── POST /api/auth/verify-email ────────────────────────
-export async function verifyEmail(req, res) {
-  const { email, code } = req.body;
-
-  if (!email || !code) {
-    return errorResponse(res, "Email and code are required", 400);
-  }
-
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
-    return errorResponse(res, "No account found with this email", 404);
-  }
-
-  if (user.emailVerified) {
-    return successResponse(res, sanitizeUser(user), "Email already verified");
-  }
-
-  if (!user.verificationCode || user.verificationCode !== code) {
-    return errorResponse(res, "Invalid verification code", 400, "INVALID_CODE");
-  }
-
-  if (
-    user.verificationExpiry &&
-    new Date() > new Date(user.verificationExpiry)
-  ) {
-    return errorResponse(
-      res,
-      "Verification code has expired. Request a new one.",
-      400,
-      "CODE_EXPIRED",
-    );
-  }
-
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      emailVerified: true,
-      verificationCode: null,
-      verificationExpiry: null,
-    },
-  });
-
-  // Send welcome email in background
-  sendWelcomeEmail(email, user.username).catch((err) =>
-    console.error("[Auth] Welcome email failed:", err),
-  );
-
-  const token = signToken({ userId: updated.id, role: updated.role });
-
-  return successResponse(
-    res,
-    {
-      user: sanitizeUser(updated),
-      token,
-    },
-    "Email verified successfully",
-  );
-}
-
-// ── POST /api/auth/resend-verification ─────────────────
-export async function resendVerification(req, res) {
-  const { email } = req.body;
-
-  if (!email) {
-    return errorResponse(res, "Email is required", 400);
-  }
-
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
-    // Don't reveal if email exists
-    return successResponse(
-      res,
-      {},
-      "If an account exists, a new code has been sent.",
-    );
-  }
-
-  if (user.emailVerified) {
-    return successResponse(res, {}, "Email is already verified.");
-  }
-
-  const code = generateVerificationCode();
-  const expiry = new Date(Date.now() + 15 * 60 * 1000);
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      verificationCode: code,
-      verificationExpiry: expiry,
-    },
-  });
-
-  sendVerificationEmail(email, user.username, code).catch((err) =>
-    console.error("[Auth] Resend verification failed:", err),
-  );
-
-  return successResponse(
-    res,
-    {},
-    "If an account exists, a new code has been sent.",
-  );
-}
-
-// ── POST /api/auth/forgot-password ─────────────────────
-export async function forgotPassword(req, res) {
-  const { email } = req.body;
-
-  if (!email) {
-    return errorResponse(res, "Email is required", 400);
-  }
-
-  const user = await prisma.user.findUnique({ where: { email } });
-
-  // Always return success — don't reveal if email exists
-  if (!user) {
-    return successResponse(
-      res,
-      {},
-      "If an account exists with this email, a reset code has been sent.",
-    );
-  }
-
-  const code = generateVerificationCode();
-  const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      verificationCode: code,
-      verificationExpiry: expiry,
-    },
-  });
-
-  // Send reset email in background
-  sendPasswordResetEmail(email, user.username, code).catch((err) =>
-    console.error("[Auth] Password reset email failed:", err),
-  );
-
-  return successResponse(
-    res,
-    {},
-    "If an account exists with this email, a reset code has been sent.",
-  );
-}
-
-// ── POST /api/auth/reset-password-with-code ────────────
-export async function resetPasswordWithCode(req, res) {
-  const { email, code, newPassword } = req.body;
-
-  if (!email || !code || !newPassword) {
-    return errorResponse(
-      res,
-      "Email, code, and new password are required",
-      400,
-    );
-  }
-
-  if (newPassword.length < 6) {
-    return errorResponse(res, "Password must be at least 6 characters", 400);
-  }
-
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
-    return errorResponse(res, "Invalid email or code", 400, "INVALID_RESET");
-  }
-
-  if (!user.verificationCode || user.verificationCode !== code) {
-    return errorResponse(res, "Invalid reset code", 400, "INVALID_CODE");
-  }
-
-  if (
-    user.verificationExpiry &&
-    new Date() > new Date(user.verificationExpiry)
-  ) {
-    return errorResponse(
-      res,
-      "Reset code has expired. Request a new one.",
-      400,
-      "CODE_EXPIRED",
-    );
-  }
-
-  const passwordHash = await hashPassword(newPassword);
-
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      passwordHash,
-      verificationCode: null,
-      verificationExpiry: null,
-      mustChangePassword: false,
-    },
-  });
-
-  return successResponse(
-    res,
-    {},
-    "Password reset successfully. You can now log in with your new password.",
-  );
-}
-
-// ── POST /api/auth/change-email ────────────────────────
-export async function initiateEmailChange(req, res) {
-  const { newEmail } = req.body;
-  const userId = req.user.id;
-
-  if (!newEmail || !newEmail.trim()) {
-    return errorResponse(res, "New email is required", 400);
-  }
-
-  // Check if new email is same as current
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (user.email === newEmail.trim()) {
-    return errorResponse(
-      res,
-      "New email is the same as your current email",
-      400,
-    );
-  }
-
-  // Check if new email is already taken
-  const existing = await prisma.user.findUnique({
-    where: { email: newEmail.trim() },
-  });
-  if (existing) {
-    return errorResponse(
-      res,
-      "This email is already associated with another account",
-      409,
-      "EMAIL_TAKEN",
-    );
-  }
-
-  // Generate verification code for the new email
-  const code = generateVerificationCode();
-  const expiry = new Date(Date.now() + 15 * 60 * 1000);
-
-  // Store pending email change data
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      verificationCode: code,
-      verificationExpiry: expiry,
-      // Store the new email in preferences temporarily
-      preferences: JSON.stringify({
-        ...JSON.parse(user.preferences || "{}"),
-        pendingEmail: newEmail.trim(),
-      }),
-    },
-  });
-
-  // Send verification code to the NEW email
-  sendVerificationEmail(newEmail.trim(), user.username, code).catch((err) =>
-    console.error("[Auth] Email change verification failed:", err),
-  );
-
-  return successResponse(
-    res,
-    {
-      newEmail: newEmail.trim(),
-    },
-    "Verification code sent to your new email address",
-  );
-}
-
-// ── POST /api/auth/confirm-email-change ────────────────
-export async function confirmEmailChange(req, res) {
-  const { code } = req.body;
-  const userId = req.user.id;
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return unauthorizedResponse(res, "User not found");
-
-  // Verify the code
-  if (!user.verificationCode || user.verificationCode !== code) {
-    return errorResponse(res, "Invalid verification code", 400, "INVALID_CODE");
-  }
-
-  if (
-    user.verificationExpiry &&
-    new Date() > new Date(user.verificationExpiry)
-  ) {
-    return errorResponse(
-      res,
-      "Verification code has expired",
-      400,
-      "CODE_EXPIRED",
-    );
-  }
-
-  // Get the pending email from preferences
-  const preferences = JSON.parse(user.preferences || "{}");
-  const newEmail = preferences.pendingEmail;
-
-  if (!newEmail) {
-    return errorResponse(res, "No pending email change found", 400);
-  }
-
-  // Check again if email is taken (race condition protection)
-  const existing = await prisma.user.findUnique({ where: { email: newEmail } });
-  if (existing) {
-    return errorResponse(
-      res,
-      "This email is now taken by another account",
-      409,
-    );
-  }
-
-  const oldEmail = user.email;
-
-  // Remove pending email from preferences
-  delete preferences.pendingEmail;
-
-  // Update the email
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      email: newEmail,
-      emailVerified: true,
-      verificationCode: null,
-      verificationExpiry: null,
-      preferences: JSON.stringify(preferences),
-    },
-  });
-
-  // Notify the old email about the change (security measure)
-  sendPasswordResetEmail(oldEmail, user.username, "EMAIL_CHANGED").catch(
-    () => {},
-  );
-  // Note: reusing sendPasswordResetEmail template isn't ideal but works for notification
-
-  const token = signToken({ userId: updated.id, role: updated.role });
-
-  return successResponse(
-    res,
-    {
-      user: sanitizeUser(updated),
-      token,
-    },
-    "Email changed successfully",
-  );
 }

@@ -1,269 +1,274 @@
-/**
- * INTERVIEW CONTROLLER — REST endpoints for session management
- * WebSocket handles real-time chat. REST handles CRUD.
- */
-import prisma from "../lib/prisma.js";
-import {
-  getPhaseConfig,
-  getCompanyPersona,
-} from "../services/interview.phases.js";
-import {
-  successResponse,
-  createdResponse,
-  notFoundResponse,
-  errorResponse,
-} from "../utils/response.js";
+// ============================================================================
+// ProbSolver v3.0 — Interview Controller (Team-Aware)
+// ============================================================================
+//
+// SCOPING: Interview sessions store teamId. The WebSocket engine
+// receives teamId for scoping function calling tools.
+// REST endpoints here handle session CRUD — the actual conversation
+// flows through websocket.service.js (Phase 2 next).
+//
+// ============================================================================
 
-import { generateDebrief } from "../services/interview.engine.js";
+import prisma from '../lib/prisma.js'
+import { success, error } from '../utils/response.js'
 
-// ── POST /api/interview/start ──────────────────────────
-export async function startInterviewSession(req, res) {
-  const userId = req.user.id;
-  const { problemId, company, duration, category } = req.body;
+// ============================================================================
+// START INTERVIEW SESSION
+// ============================================================================
 
-  const effectiveCategory = category || "CODING";
-  const effectiveDuration = duration || 2700;
+export async function startInterview(req, res) {
+  try {
+    const userId = req.user.id
+    const teamId = req.teamId || null // works in both modes
+    const { problemId, category, difficulty, interviewStyle } = req.body
 
-  // If no problem specified, randomly pick one from the category
-  let finalProblemId = problemId || null;
-
-  if (!finalProblemId) {
-    const availableProblems = await prisma.problem.findMany({
-      where: {
-        isActive: true,
-        category: effectiveCategory,
-      },
-      select: { id: true },
-    });
-
-    if (availableProblems.length > 0) {
-      const randomIndex = Math.floor(Math.random() * availableProblems.length);
-      finalProblemId = availableProblems[randomIndex].id;
-    }
-  }
-
-  // Validate problem if we have one
-  let problem = null;
-  if (finalProblemId) {
-    problem = await prisma.problem.findUnique({
-      where: { id: finalProblemId },
-      select: { id: true, title: true, category: true, difficulty: true },
-    });
-    if (!problem) finalProblemId = null;
-  }
-
-  // Get phase config
-  const phaseConfig = getPhaseConfig(effectiveCategory, effectiveDuration);
-
-  // Get company persona
-  const persona = getCompanyPersona(company);
-
-  // Create session
-  const session = await prisma.interviewSession.create({
-    data: {
-      userId,
-      problemId: finalProblemId,
-      company: company || null,
-      category: effectiveCategory,
-      duration: effectiveDuration,
-      phases: JSON.stringify(phaseConfig.phases),
-      status: "ACTIVE",
-    },
-    include: {
-      problem: {
+    // ── If problem provided, verify team ownership ─────
+    let problem = null
+    if (problemId) {
+      problem = await prisma.problem.findFirst({
+        where: { id: problemId, teamId }, // SCOPING
         select: {
           id: true,
           title: true,
-          difficulty: true,
           category: true,
-          description: true,
-          tags: true,
-          companyTags: true,
+          difficulty: true,
+        },
+      })
+
+      if (!problem) {
+        return error(res, 'Problem not found in your team.', 404)
+      }
+    }
+
+    // ── Create session ─────────────────────────────────
+    const session = await prisma.interviewSession.create({
+      data: {
+        userId,
+        teamId, // SCOPING
+        problemId: problem?.id || null,
+        category: problem?.category || category || 'CODING',
+        difficulty: problem?.difficulty || difficulty || 'MEDIUM',
+        interviewStyle: interviewStyle || null,
+        status: 'IN_PROGRESS',
+        phases: getDefaultPhases(problem?.category || category || 'CODING'),
+        workspace: {
+          thinking: '',
+          code: '',
+          diagram: '',
+          response: '',
+          scratchpad: '',
         },
       },
-    },
-  });
+      select: {
+        id: true,
+        category: true,
+        difficulty: true,
+        interviewStyle: true,
+        status: true,
+        phases: true,
+        workspace: true,
+        startedAt: true,
+      },
+    })
 
-  // Create initial system message
-  await prisma.interviewMessage.create({
-    data: {
-      sessionId: session.id,
-      role: "system",
-      content: `Interview session started. Category: ${effectiveCategory}. Duration: ${effectiveDuration}s. Company: ${company || "General"}. Problem: ${problem?.title || "Open-ended"}.`,
-      phase: phaseConfig.phases[0]?.name || "Start",
-    },
-  });
-
-  return createdResponse(
-    res,
-    {
+    return success(res, {
       session: {
         ...session,
-        phases: phaseConfig.phases,
-        problem: session.problem
-          ? {
-              ...session.problem,
-              tags: JSON.parse(session.problem.tags || "[]"),
-              companyTags: JSON.parse(session.problem.companyTags || "[]"),
-            }
-          : null,
+        problem: problem || null,
       },
-      persona,
-      phaseConfig,
-    },
-    "Interview session created",
-  );
+    }, 201)
+  } catch (err) {
+    console.error('Start interview error:', err)
+    return error(res, 'Failed to start interview.', 500)
+  }
 }
 
-// ── GET /api/interview/:id ─────────────────────────────
-export async function getInterviewSession(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
+// ============================================================================
+// GET INTERVIEW SESSION
+// ============================================================================
 
-  const session = await prisma.interviewSession.findUnique({
-    where: { id },
-    include: {
-      problem: {
-        select: {
-          id: true,
-          title: true,
-          difficulty: true,
-          category: true,
-          description: true,
-          tags: true,
-          companyTags: true,
-          realWorldContext: true,
-          followUps: {
-            orderBy: { order: "asc" },
-            select: { question: true, difficulty: true },
+export async function getInterview(req, res) {
+  try {
+    const { sessionId } = req.params
+    const userId = req.user.id
+
+    const session = await prisma.interviewSession.findFirst({
+      where: { id: sessionId, userId }, // User can only see own sessions
+      include: {
+        problem: {
+          select: { id: true, title: true, category: true, difficulty: true },
+        },
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            role: true,
+            content: true,
+            phase: true,
+            createdAt: true,
           },
         },
       },
-      messages: {
-        orderBy: { createdAt: "asc" },
+    })
+
+    if (!session) {
+      return error(res, 'Interview session not found.', 404)
+    }
+
+    return success(res, { session })
+  } catch (err) {
+    console.error('Get interview error:', err)
+    return error(res, 'Failed to fetch interview.', 500)
+  }
+}
+
+// ============================================================================
+// END INTERVIEW (trigger debrief)
+// ============================================================================
+
+export async function endInterview(req, res) {
+  try {
+    const { sessionId } = req.params
+    const userId = req.user.id
+
+    const session = await prisma.interviewSession.findFirst({
+      where: { id: sessionId, userId, status: 'IN_PROGRESS' },
+      select: { id: true, teamId: true },
+    })
+
+    if (!session) {
+      return error(res, 'Active session not found.', 404)
+    }
+
+    const updated = await prisma.interviewSession.update({
+      where: { id: sessionId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
       },
-    },
-  });
+    })
 
-  if (!session) return notFoundResponse(res, "Interview session");
-  if (session.userId !== userId)
-    return errorResponse(res, "Not your session", 403);
-
-  return successResponse(res, {
-    ...session,
-    phases: JSON.parse(session.phases || "[]"),
-    workspace: JSON.parse(session.workspace || "{}"),
-    debrief: session.debrief ? JSON.parse(session.debrief) : null,
-    problem: session.problem
-      ? {
-          ...session.problem,
-          tags: JSON.parse(session.problem.tags || "[]"),
-          companyTags: JSON.parse(session.problem.companyTags || "[]"),
-        }
-      : null,
-  });
+    // Debrief is generated by the WebSocket engine on session end
+    return success(res, {
+      message: 'Interview ended.',
+      session: updated,
+    })
+  } catch (err) {
+    console.error('End interview error:', err)
+    return error(res, 'Failed to end interview.', 500)
+  }
 }
 
-// ── GET /api/interview/my-sessions ─────────────────────
-export async function getMySessions(req, res) {
-  const userId = req.user.id;
+// ============================================================================
+// INTERVIEW HISTORY (team-scoped)
+// ============================================================================
 
-  const sessions = await prisma.interviewSession.findMany({
-    where: { userId },
-    include: {
-      problem: {
-        select: { id: true, title: true, difficulty: true, category: true },
+export async function getInterviewHistory(req, res) {
+  try {
+    const userId = req.user.id
+    const teamId = req.teamId || null
+    const { page = 1, limit = 20 } = req.query
+
+    const where = { userId }
+    if (teamId) where.teamId = teamId // SCOPING
+
+    const [sessions, total] = await Promise.all([
+      prisma.interviewSession.findMany({
+        where,
+        select: {
+          id: true,
+          category: true,
+          difficulty: true,
+          interviewStyle: true,
+          status: true,
+          scores: true,
+          debrief: true,
+          startedAt: true,
+          completedAt: true,
+          problem: {
+            select: { id: true, title: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (parseInt(page) - 1) * parseInt(limit),
+        take: parseInt(limit),
+      }),
+      prisma.interviewSession.count({ where }),
+    ])
+
+    return success(res, {
+      sessions,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit)),
       },
-      _count: { select: { messages: true } },
-    },
-    orderBy: { startedAt: "desc" },
-    take: 20,
-  });
-
-  return successResponse(
-    res,
-    sessions.map((s) => ({
-      ...s,
-      phases: JSON.parse(s.phases || "[]"),
-      debrief: s.debrief ? JSON.parse(s.debrief) : null,
-      problem: s.problem
-        ? {
-            ...s.problem,
-            tags:
-              typeof s.problem.tags === "string"
-                ? JSON.parse(s.problem.tags || "[]")
-                : s.problem.tags,
-          }
-        : null,
-      messageCount: s._count.messages,
-    })),
-  );
+    })
+  } catch (err) {
+    console.error('Interview history error:', err)
+    return error(res, 'Failed to fetch interview history.', 500)
+  }
 }
 
-// ── PATCH /api/interview/:id/end ───────────────────────
-export async function endInterviewSession(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
+// ============================================================================
+// GET DEBRIEF
+// ============================================================================
 
-  const session = await prisma.interviewSession.findUnique({ where: { id } });
-  if (!session) return notFoundResponse(res, "Interview session");
-  if (session.userId !== userId)
-    return errorResponse(res, "Not your session", 403);
+export async function getDebrief(req, res) {
+  try {
+    const { sessionId } = req.params
+    const userId = req.user.id
 
-  const updated = await prisma.interviewSession.update({
-    where: { id },
-    data: {
-      status: "COMPLETED",
-      endedAt: new Date(),
-    },
-  });
+    const session = await prisma.interviewSession.findFirst({
+      where: { id: sessionId, userId, status: 'COMPLETED' },
+      select: {
+        id: true,
+        category: true,
+        difficulty: true,
+        interviewStyle: true,
+        scores: true,
+        debrief: true,
+        startedAt: true,
+        completedAt: true,
+        problem: { select: { id: true, title: true } },
+      },
+    })
 
-  return successResponse(res, updated, "Interview ended");
+    if (!session) {
+      return error(res, 'Completed session not found.', 404)
+    }
+
+    if (!session.debrief) {
+      return error(res, 'Debrief not yet generated.', 404)
+    }
+
+    return success(res, { debrief: session.debrief, scores: session.scores, session })
+  } catch (err) {
+    console.error('Get debrief error:', err)
+    return error(res, 'Failed to fetch debrief.', 500)
+  }
 }
 
-// ── PATCH /api/interview/:id/abandon ───────────────────
-export async function abandonInterviewSession(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
+// ============================================================================
+// HELPERS
+// ============================================================================
 
-  const session = await prisma.interviewSession.findUnique({ where: { id } });
-  if (!session) return notFoundResponse(res, "Interview session");
-  if (session.userId !== userId)
-    return errorResponse(res, "Not your session", 403);
-
-  const updated = await prisma.interviewSession.update({
-    where: { id },
-    data: {
-      status: "ABANDONED",
-      endedAt: new Date(),
-    },
-  });
-
-  return successResponse(res, updated, "Interview abandoned");
-}
-
-// ── POST /api/interview-v2/:id/debrief ─────────────────
-export async function generateInterviewDebrief(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  const session = await prisma.interviewSession.findUnique({ where: { id } });
-  if (!session) return notFoundResponse(res, "Interview session");
-  if (session.userId !== userId)
-    return errorResponse(res, "Not your session", 403);
-
-  if (session.debrief) {
-    return successResponse(
-      res,
-      JSON.parse(session.debrief),
-      "Debrief already exists",
-    );
+function getDefaultPhases(category) {
+  const phaseMap = {
+    CODING: ['Requirements', 'Approach', 'Implementation', 'Testing', 'Optimization'],
+    SYSTEM_DESIGN: ['Requirements', 'High-Level Design', 'Deep Dive', 'Scaling', 'Trade-offs'],
+    BEHAVIORAL: ['Introduction', 'STAR Story', 'Follow-up', 'Questions', 'Wrap-up'],
+    CS_FUNDAMENTALS: ['Concept Check', 'Application', 'Deep Dive', 'Trade-offs', 'Summary'],
+    HR: ['Introduction', 'Motivation', 'Culture Fit', 'Scenario', 'Questions'],
+    SQL: ['Requirements', 'Schema', 'Query Writing', 'Optimization', 'Edge Cases'],
   }
 
-  const debrief = await generateDebrief(id);
-  if (!debrief) {
-    return errorResponse(res, "Failed to generate debrief", 500);
-  }
-
-  return successResponse(res, debrief, "Debrief generated");
+  const phases = phaseMap[category] || phaseMap.CODING
+  return phases.map((name, i) => ({
+    name,
+    order: i,
+    status: i === 0 ? 'active' : 'pending',
+    startedAt: i === 0 ? new Date().toISOString() : null,
+  }))
 }

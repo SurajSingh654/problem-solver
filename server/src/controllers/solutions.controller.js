@@ -1,407 +1,452 @@
-import prisma from "../lib/prisma.js";
-import {
-  successResponse,
-  createdResponse,
-  notFoundResponse,
-  forbiddenResponse,
-  errorResponse,
-} from "../utils/response.js";
-import { embedSolution } from "../services/embedding.service.js";
+// ============================================================================
+// ProbSolver v3.0 — Solutions Controller (Team-Scoped)
+// ============================================================================
+//
+// SCOPING: Every solution belongs to a team. When a team member
+// submits a solution, it's tagged with req.teamId. When listing
+// solutions (for a problem or for a user), we always filter by team.
+//
+// RAG CONTEXT: The AI review fetches similar solutions from the SAME
+// team only — this is the multi-tenant RAG isolation.
+//
+// ============================================================================
 
-// ── Helpers ────────────────────────────────────────────
+import prisma from '../lib/prisma.js'
+import { success, error } from '../utils/response.js'
 
-function parseSolution(s) {
-  return {
-    ...s,
-    followUpAnswers: JSON.parse(s.followUpAnswers || "[]"),
-    reviewDates: JSON.parse(s.reviewDates || "[]"),
-  };
-}
+// ============================================================================
+// SUBMIT SOLUTION
+// ============================================================================
 
-// ── GET /api/solutions  (my solutions) ────────────────
-export async function getMySolutions(req, res) {
-  const solutions = await prisma.solution.findMany({
-    where: { userId: req.user.id },
-    include: {
-      problem: {
-        select: {
-          id: true,
-          title: true,
-          difficulty: true,
-          source: true,
-          tags: true,
-        },
-      },
-    },
-    orderBy: { solvedAt: "desc" },
-  });
+export async function submitSolution(req, res) {
+  try {
+    const teamId = req.teamId
+    const userId = req.user.id
+    const { problemId } = req.params
 
-  return successResponse(
-    res,
-    solutions.map((s) => ({
-      ...parseSolution(s),
-      problem: {
-        ...s.problem,
-        tags: JSON.parse(s.problem.tags || "[]"),
-      },
-    })),
-  );
-}
+    // ── Verify problem belongs to this team ────────────
+    const problem = await prisma.problem.findFirst({
+      where: { id: problemId, teamId },
+      select: { id: true, title: true },
+    })
 
-// ── GET /api/solutions/problem/:problemId ─────────────
-export async function getSolutionsForProblem(req, res) {
-  const { problemId } = req.params;
-
-  const solutions = await prisma.solution.findMany({
-    where: { problemId },
-    include: {
-      user: {
-        select: {
-          username: true,
-          avatarColor: true,
-          currentLevel: true,
-        },
-      },
-      clarityRatings: {
-        include: {
-          fromUser: { select: { username: true, avatarColor: true } },
-        },
-      },
-    },
-    orderBy: { solvedAt: "desc" },
-  });
-
-  return successResponse(res, solutions.map(parseSolution));
-}
-
-// ── POST /api/solutions ────────────────────────────────
-export async function createSolution(req, res) {
-  const userId = req.user.id;
-  const {
-    problemId,
-    patternIdentified,
-    firstInstinct,
-    whyThisPattern,
-    timeToPatternSecs,
-    bruteForceApproach,
-    bruteForceTime,
-    bruteForceSpace,
-    optimizedApproach,
-    optimizedTime,
-    optimizedSpace,
-    predictedTime,
-    predictedSpace,
-    code,
-    language,
-    keyInsight,
-    feynmanExplanation,
-    realWorldConnection,
-    followUpAnswers,
-    confidenceLevel,
-    difficultyFelt,
-    stuckPoints,
-    hintsUsed,
-    isInterviewMode,
-    timeLimitSecs,
-    timeUsedSecs,
-  } = req.body;
-
-  // Check problem exists
-  const problem = await prisma.problem.findUnique({
-    where: { id: problemId },
-  });
-  if (!problem) return notFoundResponse(res, "Problem");
-
-  // Check for existing solution
-  const existing = await prisma.solution.findUnique({
-    where: { problemId_userId: { problemId, userId } },
-  });
-  if (existing) {
-    return errorResponse(
-      res,
-      "You already have a solution for this problem. Use PUT to update it.",
-      409,
-      "ALREADY_EXISTS",
-    );
-  }
-
-  // Calculate review dates using spaced repetition intervals
-  const intervals = [1, 3, 7, 14, 30];
-  const today = new Date();
-  const reviewDates = intervals.map((days) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + days);
-    return d.toISOString();
-  });
-
-  const solution = await prisma.solution.create({
-    data: {
-      problemId,
-      userId,
-      patternIdentified: patternIdentified || null,
-      firstInstinct: firstInstinct || null,
-      whyThisPattern: whyThisPattern || null,
-      timeToPatternSecs: timeToPatternSecs || null,
-      bruteForceApproach: bruteForceApproach || null,
-      bruteForceTime: bruteForceTime || null,
-      bruteForceSpace: bruteForceSpace || null,
-      optimizedApproach: optimizedApproach || null,
-      optimizedTime: optimizedTime || null,
-      optimizedSpace: optimizedSpace || null,
-      predictedTime: predictedTime || null,
-      predictedSpace: predictedSpace || null,
-      code: code || null,
-      language: language || "PYTHON",
-      keyInsight: keyInsight || null,
-      feynmanExplanation: feynmanExplanation || null,
-      realWorldConnection: realWorldConnection || null,
-      followUpAnswers: JSON.stringify(followUpAnswers || []),
-      confidenceLevel: confidenceLevel || 0,
-      difficultyFelt: difficultyFelt || null,
-      stuckPoints: stuckPoints || null,
-      hintsUsed: hintsUsed || false,
-      isInterviewMode: isInterviewMode || false,
-      timeLimitSecs: timeLimitSecs || null,
-      timeUsedSecs: timeUsedSecs || null,
-      reviewDates: JSON.stringify(reviewDates),
-    },
-    include: {
-      user: { select: { username: true, avatarColor: true } },
-      problem: { select: { title: true, difficulty: true } },
-    },
-  });
-
-  // Update user streak
-  await updateStreak(userId);
-
-  // Generate embedding in background (don't block response)
-  embedSolution(solution.id).catch((err) =>
-    console.error("[Embedding] Background embed failed:", err.message),
-  );
-
-  return createdResponse(
-    res,
-    parseSolution(solution),
-    "Solution saved successfully",
-  );
-}
-
-// ── PUT /api/solutions/:id ─────────────────────────────
-export async function updateSolution(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  const existing = await prisma.solution.findUnique({ where: { id } });
-  if (!existing) return notFoundResponse(res, "Solution");
-  if (existing.userId !== userId)
-    return forbiddenResponse(res, "You can only edit your own solutions");
-
-  const {
-    patternIdentified,
-    firstInstinct,
-    whyThisPattern,
-    timeToPatternSecs,
-    bruteForceApproach,
-    bruteForceTime,
-    bruteForceSpace,
-    optimizedApproach,
-    optimizedTime,
-    optimizedSpace,
-    predictedTime,
-    predictedSpace,
-    code,
-    language,
-    keyInsight,
-    feynmanExplanation,
-    realWorldConnection,
-    followUpAnswers,
-    confidenceLevel,
-    difficultyFelt,
-    stuckPoints,
-    hintsUsed,
-  } = req.body;
-
-  const updated = await prisma.solution.update({
-    where: { id },
-    data: {
-      ...(patternIdentified !== undefined && { patternIdentified }),
-      ...(firstInstinct !== undefined && { firstInstinct }),
-      ...(whyThisPattern !== undefined && { whyThisPattern }),
-      ...(timeToPatternSecs !== undefined && { timeToPatternSecs }),
-      ...(bruteForceApproach !== undefined && { bruteForceApproach }),
-      ...(bruteForceTime !== undefined && { bruteForceTime }),
-      ...(bruteForceSpace !== undefined && { bruteForceSpace }),
-      ...(optimizedApproach !== undefined && { optimizedApproach }),
-      ...(optimizedTime !== undefined && { optimizedTime }),
-      ...(optimizedSpace !== undefined && { optimizedSpace }),
-      ...(predictedTime !== undefined && { predictedTime }),
-      ...(predictedSpace !== undefined && { predictedSpace }),
-      ...(code !== undefined && { code }),
-      ...(language !== undefined && { language }),
-      ...(keyInsight !== undefined && { keyInsight }),
-      ...(feynmanExplanation !== undefined && { feynmanExplanation }),
-      ...(realWorldConnection !== undefined && { realWorldConnection }),
-      ...(confidenceLevel !== undefined && { confidenceLevel }),
-      ...(difficultyFelt !== undefined && { difficultyFelt }),
-      ...(stuckPoints !== undefined && { stuckPoints }),
-      ...(hintsUsed !== undefined && { hintsUsed }),
-      ...(followUpAnswers !== undefined && {
-        followUpAnswers: JSON.stringify(followUpAnswers),
-      }),
-    },
-    include: {
-      user: { select: { username: true, avatarColor: true } },
-      problem: { select: { title: true, difficulty: true } },
-    },
-  });
-
-  embedSolution(updated.id).catch(err =>
-  console.error('[Embedding] Background embed failed:', err.message)
-)
-
-  return successResponse(res, parseSolution(updated), "Solution updated");
-}
-
-// ── DELETE /api/solutions/:id ──────────────────────────
-export async function deleteSolution(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  const existing = await prisma.solution.findUnique({ where: { id } });
-  if (!existing) return notFoundResponse(res, "Solution");
-  if (existing.userId !== userId && req.user.role !== "ADMIN") {
-    return forbiddenResponse(res, "You can only delete your own solutions");
-  }
-
-  await prisma.solution.delete({ where: { id } });
-
-  return successResponse(res, { id }, "Solution deleted");
-}
-
-// ── POST /api/solutions/:id/clarity ───────────────────
-export async function rateSolutionClarity(req, res) {
-  const { id } = req.params;
-  const fromUserId = req.user.id;
-  const { score, comment } = req.body;
-
-  const solution = await prisma.solution.findUnique({ where: { id } });
-  if (!solution) return notFoundResponse(res, "Solution");
-
-  // Can't rate your own solution
-  if (solution.userId === fromUserId) {
-    return errorResponse(res, "You can't rate your own solution", 400);
-  }
-
-  const rating = await prisma.clarityRating.upsert({
-    where: { solutionId_fromUserId: { solutionId: id, fromUserId } },
-    update: { score, comment: comment || null },
-    create: { solutionId: id, fromUserId, score, comment: comment || null },
-  });
-
-  return successResponse(res, rating, "Rating saved");
-}
-
-// ── Streak helper ──────────────────────────────────────
-async function updateStreak(userId) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const lastActive = user.lastActiveDate ? new Date(user.lastActiveDate) : null;
-
-  let streak = user.streak;
-
-  if (lastActive) {
-    const last = new Date(lastActive);
-    last.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((today - last) / 86400000);
-    if (diffDays === 0) {
-      // same day — no change
-    } else if (diffDays === 1) {
-      streak++;
-    } else {
-      streak = 1;
+    if (!problem) {
+      return error(res, 'Problem not found in your team.', 404)
     }
+
+    // ── Check for existing solution ────────────────────
+    const existing = await prisma.solution.findUnique({
+      where: {
+        userId_problemId_teamId: { userId, problemId, teamId },
+      },
+      select: { id: true },
+    })
+
+    if (existing) {
+      return error(res, 'You have already submitted a solution. Use the update endpoint.', 409)
+    }
+
+    const {
+      approach,
+      code,
+      language,
+      bruteForce,
+      optimizedApproach,
+      timeComplexity,
+      spaceComplexity,
+      keyInsight,
+      feynmanExplanation,
+      realWorldConnection,
+      confidence,
+      pattern,
+      patternIdentificationTime,
+    } = req.body
+
+    // ── Calculate spaced repetition dates ──────────────
+    const now = new Date()
+    const reviewDays = [1, 3, 7, 14, 30]
+    const reviewDates = reviewDays.map((d) => {
+      const date = new Date(now)
+      date.setDate(date.getDate() + d)
+      return date.toISOString()
+    })
+
+    const solution = await prisma.solution.create({
+      data: {
+        problemId,
+        userId,
+        teamId, // SCOPING: always from middleware
+        approach,
+        code,
+        language,
+        bruteForce,
+        optimizedApproach,
+        timeComplexity,
+        spaceComplexity,
+        keyInsight,
+        feynmanExplanation,
+        realWorldConnection,
+        confidence: confidence || 3,
+        pattern,
+        patternIdentificationTime,
+        reviewDates: reviewDates,
+        nextReviewDate: new Date(now.getTime() + 24 * 60 * 60 * 1000), // +1 day
+      },
+      include: {
+        problem: { select: { id: true, title: true, category: true } },
+        user: { select: { id: true, name: true } },
+      },
+    })
+
+    // ── Update user streak ─────────────────────────────
+    updateStreak(userId).catch(() => {})
+
+    // ── Generate embedding in background ───────────────
+    generateSolutionEmbedding(solution.id).catch(() => {})
+
+    return success(res, { message: 'Solution submitted.', solution }, 201)
+  } catch (err) {
+    console.error('Submit solution error:', err)
+    return error(res, 'Failed to submit solution.', 500)
+  }
+}
+
+// ============================================================================
+// GET SOLUTIONS FOR A PROBLEM (team-scoped)
+// ============================================================================
+
+export async function getProblemSolutions(req, res) {
+  try {
+    const { problemId } = req.params
+    const teamId = req.teamId
+    const userId = req.user.id
+
+    // ── Verify problem belongs to team ─────────────────
+    const problem = await prisma.problem.findFirst({
+      where: { id: problemId, teamId },
+      select: { id: true, title: true },
+    })
+
+    if (!problem) {
+      return error(res, 'Problem not found.', 404)
+    }
+
+    // ── Fetch all team solutions for this problem ──────
+    const solutions = await prisma.solution.findMany({
+      where: {
+        problemId,
+        teamId, // SCOPING: only this team's solutions
+      },
+      include: {
+        user: { select: { id: true, name: true, avatarUrl: true } },
+        clarityRatings: {
+          select: { rating: true, raterId: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // ── Enrich with clarity rating info ────────────────
+    const enriched = solutions.map((s) => {
+      const ratings = s.clarityRatings || []
+      const avgClarity = ratings.length > 0
+        ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+        : null
+      const userRating = ratings.find((r) => r.raterId === userId)
+
+      return {
+        ...s,
+        clarityRatings: undefined,
+        avgClarityRating: avgClarity ? Math.round(avgClarity * 10) / 10 : null,
+        totalRatings: ratings.length,
+        userClarityRating: userRating?.rating || null,
+        isOwn: s.userId === userId,
+      }
+    })
+
+    return success(res, {
+      problem: { id: problem.id, title: problem.title },
+      solutions: enriched,
+      count: enriched.length,
+    })
+  } catch (err) {
+    console.error('Get problem solutions error:', err)
+    return error(res, 'Failed to fetch solutions.', 500)
+  }
+}
+
+// ============================================================================
+// GET USER'S SOLUTIONS (within team)
+// ============================================================================
+
+export async function getUserSolutions(req, res) {
+  try {
+    const teamId = req.teamId
+    const targetUserId = req.params.userId || req.user.id
+    const { page = 1, limit = 20 } = req.query
+
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const take = parseInt(limit)
+
+    const [solutions, total] = await Promise.all([
+      prisma.solution.findMany({
+        where: {
+          userId: targetUserId,
+          teamId, // SCOPING
+        },
+        include: {
+          problem: {
+            select: { id: true, title: true, difficulty: true, category: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.solution.count({
+        where: { userId: targetUserId, teamId },
+      }),
+    ])
+
+    return success(res, {
+      solutions,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit)),
+      },
+    })
+  } catch (err) {
+    console.error('Get user solutions error:', err)
+    return error(res, 'Failed to fetch solutions.', 500)
+  }
+}
+
+// ============================================================================
+// UPDATE SOLUTION
+// ============================================================================
+
+export async function updateSolution(req, res) {
+  try {
+    const { solutionId } = req.params
+    const teamId = req.teamId
+    const userId = req.user.id
+
+    // ── Verify ownership AND team scope ────────────────
+    const existing = await prisma.solution.findFirst({
+      where: { id: solutionId, userId, teamId },
+      select: { id: true },
+    })
+
+    if (!existing) {
+      return error(res, 'Solution not found.', 404)
+    }
+
+    const data = {}
+    const fields = [
+      'approach', 'code', 'language', 'bruteForce', 'optimizedApproach',
+      'timeComplexity', 'spaceComplexity', 'keyInsight', 'feynmanExplanation',
+      'realWorldConnection', 'confidence', 'pattern', 'patternIdentificationTime',
+    ]
+
+    fields.forEach((field) => {
+      if (req.body[field] !== undefined) data[field] = req.body[field]
+    })
+
+    const solution = await prisma.solution.update({
+      where: { id: solutionId },
+      data,
+      include: {
+        problem: { select: { id: true, title: true } },
+      },
+    })
+
+    // Re-generate embedding if content changed
+    if (data.approach || data.code || data.keyInsight) {
+      generateSolutionEmbedding(solution.id).catch(() => {})
+    }
+
+    return success(res, { message: 'Solution updated.', solution })
+  } catch (err) {
+    console.error('Update solution error:', err)
+    return error(res, 'Failed to update solution.', 500)
+  }
+}
+
+// ============================================================================
+// RATE SOLUTION CLARITY (team members rate each other)
+// ============================================================================
+
+export async function rateSolutionClarity(req, res) {
+  try {
+    const { solutionId } = req.params
+    const { rating } = req.body
+    const teamId = req.teamId
+    const raterId = req.user.id
+
+    // ── Verify solution is in this team ────────────────
+    const solution = await prisma.solution.findFirst({
+      where: { id: solutionId, teamId },
+      select: { id: true, userId: true },
+    })
+
+    if (!solution) {
+      return error(res, 'Solution not found.', 404)
+    }
+
+    // Can't rate own solution
+    if (solution.userId === raterId) {
+      return error(res, 'You cannot rate your own solution.', 400)
+    }
+
+    // Upsert rating
+    const clarityRating = await prisma.clarityRating.upsert({
+      where: {
+        raterId_solutionId: { raterId, solutionId },
+      },
+      create: {
+        solutionId,
+        raterId,
+        teamId,
+        rating,
+      },
+      update: {
+        rating,
+      },
+    })
+
+    return success(res, { message: 'Rating saved.', rating: clarityRating })
+  } catch (err) {
+    console.error('Rate clarity error:', err)
+    return error(res, 'Failed to save rating.', 500)
+  }
+}
+
+// ============================================================================
+// REVIEW QUEUE (spaced repetition — team-scoped)
+// ============================================================================
+
+export async function getReviewQueue(req, res) {
+  try {
+    const teamId = req.teamId
+    const userId = req.user.id
+
+    const now = new Date()
+
+    const dueReviews = await prisma.solution.findMany({
+      where: {
+        userId,
+        teamId, // SCOPING
+        nextReviewDate: { lte: now },
+      },
+      include: {
+        problem: {
+          select: { id: true, title: true, difficulty: true, category: true },
+        },
+      },
+      orderBy: { nextReviewDate: 'asc' },
+    })
+
+    const upcoming = await prisma.solution.findMany({
+      where: {
+        userId,
+        teamId,
+        nextReviewDate: { gt: now },
+      },
+      select: {
+        id: true,
+        nextReviewDate: true,
+        problem: {
+          select: { id: true, title: true, difficulty: true },
+        },
+      },
+      orderBy: { nextReviewDate: 'asc' },
+      take: 10,
+    })
+
+    return success(res, {
+      due: dueReviews,
+      dueCount: dueReviews.length,
+      upcoming,
+    })
+  } catch (err) {
+    console.error('Review queue error:', err)
+    return error(res, 'Failed to fetch review queue.', 500)
+  }
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+async function updateStreak(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { lastSolvedAt: true, streak: true },
+  })
+
+  if (!user) return
+
+  const now = new Date()
+  const lastSolved = user.lastSolvedAt
+  let newStreak = user.streak
+
+  if (!lastSolved) {
+    newStreak = 1
   } else {
-    streak = 1;
+    const diffHours = (now - lastSolved) / (1000 * 60 * 60)
+    if (diffHours < 48) {
+      newStreak = user.streak + 1
+    } else {
+      newStreak = 1 // Streak broken
+    }
   }
 
   await prisma.user.update({
     where: { id: userId },
-    data: {
-      streak,
-      longestStreak: Math.max(user.longestStreak, streak),
-      lastActiveDate: new Date(),
-    },
-  });
+    data: { streak: newStreak, lastSolvedAt: now },
+  })
 }
 
-// ── POST /api/solutions/:id/review ────────────────────
-// Called when user completes a review — updates confidence
-// and advances the spaced repetition schedule
-export async function reviewSolution(req, res) {
-  const { id } = req.params;
-  const userId = req.user.id;
-  const { confidenceLevel } = req.body;
+async function generateSolutionEmbedding(solutionId) {
+  try {
+    const { AI_ENABLED } = await import('../config/env.js')
+    if (!AI_ENABLED) return
 
-  const solution = await prisma.solution.findUnique({ where: { id } });
-  if (!solution) return notFoundResponse(res, "Solution");
-  if (solution.userId !== userId)
-    return forbiddenResponse(res, "Not your solution");
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Remove all due/overdue dates, keep future ones
-  const existing = JSON.parse(solution.reviewDates || "[]");
-  const future = existing.filter((d) => {
-    const rd = new Date(d);
-    rd.setHours(0, 0, 0, 0);
-    return rd > today;
-  });
-
-  // Add next review date based on confidence
-  // Low confidence → review sooner, high confidence → review later
-  const intervalMap = { 1: 1, 2: 2, 3: 5, 4: 10, 5: 21 };
-  const days = intervalMap[confidenceLevel] || 3;
-  const next = new Date(today);
-  next.setDate(next.getDate() + days);
-
-  // Only add if we don't already have a review that close
-  const alreadyScheduled = future.some((d) => {
-    const fd = new Date(d);
-    fd.setHours(0, 0, 0, 0);
-    return Math.abs((fd - next) / 86400000) < 2;
-  });
-
-  const newDates = alreadyScheduled
-    ? future
-    : [...future, next.toISOString()].sort();
-
-  const updated = await prisma.solution.update({
-    where: { id },
-    data: {
-      confidenceLevel,
-      reviewDates: JSON.stringify(newDates),
-    },
-    include: {
-      problem: {
-        select: { id: true, title: true, difficulty: true, tags: true },
+    const solution = await prisma.solution.findUnique({
+      where: { id: solutionId },
+      select: {
+        approach: true,
+        code: true,
+        keyInsight: true,
+        pattern: true,
+        problem: { select: { title: true } },
       },
-    },
-  });
+    })
 
-  return successResponse(
-    res,
-    {
-      ...parseSolution(updated),
-      problem: {
-        ...updated.problem,
-        tags: JSON.parse(updated.problem.tags || "[]"),
-      },
-    },
-    "Review saved",
-  );
+    if (!solution) return
+
+    const text = [
+      solution.problem?.title || '',
+      solution.approach || '',
+      solution.keyInsight || '',
+      solution.pattern || '',
+      solution.code ? solution.code.substring(0, 500) : '',
+    ].join(' ')
+
+    const { generateEmbedding } = await import('../services/embedding.service.js')
+    const embedding = await generateEmbedding(text)
+
+    if (embedding) {
+      const vectorStr = `[${embedding.join(',')}]`
+      await prisma.$executeRawUnsafe(
+        `UPDATE solutions SET embedding = $1::vector WHERE id = $2`,
+        vectorStr,
+        solutionId
+      )
+    }
+  } catch (err) {
+    console.error('Solution embedding error:', err.message)
+  }
 }

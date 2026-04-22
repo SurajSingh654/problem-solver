@@ -1,87 +1,49 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { aiApi } from "@services/ai.api.js";
-import { toast } from "@store/useUIStore.js";
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@services/api'
+import { useTeamContext } from './useTeamContext'
 
-// ── AI Status ──────────────────────────────────────────
+export function useAIReview() {
+  const queryClient = useQueryClient()
+  const { teamQueryKey } = useTeamContext()
+
+  return useMutation({
+    mutationFn: (solutionId) => api.post(`/ai/review/${solutionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, 'solutions'] })
+    },
+  })
+}
+
+export function useAIHint() {
+  return useMutation({
+    mutationFn: ({ problemId, level }) =>
+      api.post(`/ai/hint/${problemId}`, { level }),
+  })
+}
+
+export function useWeeklyPlan() {
+  const { teamQueryKey } = useTeamContext()
+
+  return useMutation({
+    mutationFn: () => api.get('/ai/weekly-plan'),
+  })
+}
+
+export function useGenerateContent() {
+  return useMutation({
+    mutationFn: (data) => api.post('/ai/generate-content', data),
+  })
+}
+
+export function useSimilarProblems() {
+  return useMutation({
+    mutationFn: (query) => api.post('/ai/similar', { query }),
+  })
+}// ── v2 compatibility aliases ─────────────────────────────
 export function useAIStatus() {
-  return useQuery({
-    queryKey: ["ai", "status"],
-    queryFn: async () => {
-      const res = await aiApi.getStatus();
-      return res.data.data;
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: false,
-  });
+  const { AI_ENABLED } = { AI_ENABLED: true }
+  return { data: { enabled: AI_ENABLED }, isLoading: false }
 }
-
-// ── Review Solution ────────────────────────────────────
-export function useAIReviewSolution() {
-  return useMutation({
-    mutationFn: (data) => aiApi.reviewSolution(data),
-    onError: (err) => {
-      const code = err.response?.data?.code;
-      if (code === "AI_RATE_LIMITED") {
-        toast.warning("Daily AI limit reached. Try again tomorrow.");
-      } else if (code === "AI_DISABLED") {
-        toast.info("AI features are not enabled yet.");
-      } else {
-        toast.error(
-          err.response?.data?.error || "AI review failed. Try again.",
-        );
-      }
-    },
-  });
-}
-
-// ── Generate Problem Content ───────────────────────────
-export function useAIGenerateProblemContent() {
-  return useMutation({
-    mutationFn: (data) => aiApi.generateProblemContent(data),
-    onError: (err) => {
-      const code = err.response?.data?.code;
-      if (code === "AI_RATE_LIMITED") {
-        toast.warning("Daily AI limit reached. Try again tomorrow.");
-      } else if (code === "AI_DISABLED") {
-        toast.info("AI features are not enabled yet.");
-      } else {
-        toast.error(
-          err.response?.data?.error || "Content generation failed. Try again.",
-        );
-      }
-    },
-  });
-}
-
-// ── Generate Hint ──────────────────────────────────────
-export function useAIGenerateHint() {
-  return useMutation({
-    mutationFn: (data) => aiApi.generateHint(data),
-    onError: (err) => {
-      toast.error(err.response?.data?.error || "Hint generation failed.");
-    },
-  });
-}
-
-// ── Weekly Plan ────────────────────────────────────────
-export function useAIWeeklyPlan() {
-  return useMutation({
-    mutationFn: (data) => aiApi.generateWeeklyPlan(data),
-    onError: (err) => {
-      toast.error(err.response?.data?.error || "Plan generation failed.");
-    },
-  });
-}
-
-export function useSimilarProblems(problemId) {
-  return useQuery({
-    queryKey: ["ai", "similar-problems", problemId],
-    queryFn: async () => {
-      const res = await aiApi.getSimilarProblems(problemId);
-      return res.data.data;
-    },
-    enabled: !!problemId,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-}
+export const useAIGenerateHint = useAIHint
+export const useAIGenerateProblemContent = useGenerateContent
+export const useAIReviewSolution = useAIReview

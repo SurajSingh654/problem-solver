@@ -1,210 +1,240 @@
-/**
- * EMAIL SERVICE — Send transactional emails via Resend
- */
-import { Resend } from "resend";
+// ============================================================================
+// ProbSolver v3.0 — Email Service
+// ============================================================================
+//
+// DESIGN DECISIONS:
+//
+// 1. Resend as the provider: Simple API, good deliverability, free tier
+//    covers development. All emails go through one function (sendEmail)
+//    that handles the Resend API call and graceful degradation.
+//
+// 2. Graceful degradation: If RESEND_API_KEY is not set, emails are
+//    logged to console instead of sent. This means local development
+//    works without Resend configured — you just read codes from logs.
+//
+// 3. HTML emails: Each email type has a branded HTML template with
+//    inline styles (email clients strip <style> tags). Templates use
+//    the ProbSolver brand gradient and clean typography.
+//
+// 4. New templates for v3.0: Team invitation, team approved, team
+//    rejected. These join the existing verification, welcome, and
+//    password reset templates.
+//
+// ============================================================================
 
-let resend = null;
+import { Resend } from 'resend'
+import { RESEND_API_KEY, EMAIL_FROM, EMAIL_ENABLED, CLIENT_URL } from '../config/env.js'
 
-function getClient() {
-  if (!resend) {
-    if (!process.env.RESEND_API_KEY) {
-      console.warn(
-        "[Email] RESEND_API_KEY not set — emails will be logged only",
-      );
-      return null;
-    }
-    resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return resend;
-}
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 
-const FROM = process.env.EMAIL_FROM || "ProbSolver <onboarding@resend.dev>";
+// ── Core send function ───────────────────────────────────────
 
-// ── Send verification code email ───────────────────────
-export async function sendVerificationEmail(to, username, code) {
-  const client = getClient();
-
-  const html = `
-    <div style="font-family: 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <div style="display: inline-block; width: 48px; height: 48px; border-radius: 12px;
-                    background: linear-gradient(135deg, #7c6ff7, #3b82f6);
-                    line-height: 48px; text-align: center; font-size: 20px; color: white;">
-          ⚡
-        </div>
-        <h1 style="font-size: 22px; font-weight: 800; color: #eeeef5; margin: 16px 0 4px;">
-          Verify your email
-        </h1>
-        <p style="font-size: 14px; color: #9999bb; margin: 0;">
-          Welcome to ProbSolver, ${username}!
-        </p>
-      </div>
-
-      <div style="background: #18181f; border: 1px solid rgba(255,255,255,0.09);
-                  border-radius: 16px; padding: 32px; text-align: center; margin-bottom: 24px;">
-        <p style="font-size: 13px; color: #9999bb; margin: 0 0 16px;">
-          Enter this code to verify your email address:
-        </p>
-        <div style="font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 800;
-                    letter-spacing: 8px; color: #7c6ff7; margin: 16px 0;">
-          ${code}
-        </div>
-        <p style="font-size: 12px; color: #55556e; margin: 16px 0 0;">
-          This code expires in 15 minutes.
-        </p>
-      </div>
-
-      <p style="font-size: 12px; color: #55556e; text-align: center;">
-        If you didn't create an account on ProbSolver, you can safely ignore this email.
-      </p>
-    </div>
-  `;
-
-  if (!client) {
-    console.log(`[Email] Verification code for ${to}: ${code}`);
-    console.log("[Email] (Resend not configured — email logged only)");
-    return { success: true, logged: true };
+async function sendEmail(to, subject, html) {
+  if (!EMAIL_ENABLED || !resend) {
+    console.log('\n📧 EMAIL (not sent — no API key):')
+    console.log(`   To:      ${to}`)
+    console.log(`   Subject: ${subject}`)
+    console.log(`   Body:    [HTML email]\n`)
+    return { success: true, simulated: true }
   }
 
   try {
-    const result = await client.emails.send({
-      from: FROM,
+    const result = await resend.emails.send({
+      from: EMAIL_FROM,
       to,
-      subject: `${code} is your ProbSolver verification code`,
+      subject,
       html,
-    });
-
-    console.log(`[Email] Verification sent to ${to}: ${result.id || "ok"}`);
-    return { success: true, id: result.id };
-  } catch (error) {
-    console.error(`[Email] Failed to send to ${to}:`, error.message);
-    return { success: false, error: error.message };
+    })
+    return { success: true, id: result.id }
+  } catch (err) {
+    console.error(`Email send failed to ${to}:`, err.message)
+    throw err
   }
 }
 
-// ── Send password reset code email ─────────────────────
-export async function sendPasswordResetEmail(to, username, code) {
-  const client = getClient();
+// ── Shared template wrapper ──────────────────────────────────
 
-  const html = `
-    <div style="font-family: 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <div style="display: inline-block; width: 48px; height: 48px; border-radius: 12px;
-                    background: linear-gradient(135deg, #ef4444, #eab308);
-                    line-height: 48px; text-align: center; font-size: 20px; color: white;">
-          🔑
-        </div>
-        <h1 style="font-size: 22px; font-weight: 800; color: #eeeef5; margin: 16px 0 4px;">
-          Reset your password
-        </h1>
-        <p style="font-size: 14px; color: #9999bb; margin: 0;">
-          Hi ${username}, we received a password reset request.
-        </p>
-      </div>
+function emailWrapper(content) {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:500px;background:#1a1d27;border-radius:16px;border:1px solid #2a2d3a;overflow:hidden;">
+        <!-- Header -->
+        <tr><td style="background:linear-gradient(135deg,#7c6ff7,#4f8cf7);padding:24px 32px;">
+          <h1 style="margin:0;font-size:20px;font-weight:800;color:#fff;letter-spacing:-0.3px;">ProbSolver</h1>
+        </td></tr>
+        <!-- Content -->
+        <tr><td style="padding:32px;">
+          ${content}
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="padding:16px 32px 24px;border-top:1px solid #2a2d3a;">
+          <p style="margin:0;font-size:11px;color:#6b7280;">
+            ProbSolver — Team Interview Intelligence Platform
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
 
-      <div style="background: #18181f; border: 1px solid rgba(255,255,255,0.09);
-                  border-radius: 16px; padding: 32px; text-align: center; margin-bottom: 24px;">
-        <p style="font-size: 13px; color: #9999bb; margin: 0 0 16px;">
-          Enter this code to reset your password:
-        </p>
-        <div style="font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 800;
-                    letter-spacing: 8px; color: #ef4444; margin: 16px 0;">
-          ${code}
-        </div>
-        <p style="font-size: 12px; color: #55556e; margin: 16px 0 0;">
-          This code expires in 15 minutes. If you didn't request this, ignore this email.
-        </p>
-      </div>
+function codeBlock(code) {
+  return `<div style="background:#0f1117;border:1px solid #2a2d3a;border-radius:12px;padding:20px;text-align:center;margin:20px 0;">
+    <span style="font-size:32px;font-weight:800;letter-spacing:8px;color:#7c6ff7;font-family:monospace;">${code}</span>
+  </div>`
+}
+
+function paragraph(text) {
+  return `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#d1d5db;">${text}</p>`
+}
+
+function heading(text) {
+  return `<h2 style="margin:0 0 16px;font-size:18px;font-weight:700;color:#f3f4f6;">${text}</h2>`
+}
+
+function button(text, url) {
+  return `<div style="text-align:center;margin:24px 0;">
+    <a href="${url}" style="display:inline-block;background:linear-gradient(135deg,#7c6ff7,#4f8cf7);color:#fff;font-size:14px;font-weight:700;padding:12px 32px;border-radius:8px;text-decoration:none;">${text}</a>
+  </div>`
+}
+
+// ============================================================================
+// EMAIL TEMPLATES
+// ============================================================================
+
+// ── Email verification ───────────────────────────────────────
+
+export async function sendVerificationEmail(to, name, code) {
+  const html = emailWrapper(`
+    ${heading(`Welcome, ${name}!`)}
+    ${paragraph('Thanks for signing up for ProbSolver. Enter this code to verify your email:')}
+    ${codeBlock(code)}
+    ${paragraph('This code expires in <strong style="color:#f3f4f6;">15 minutes</strong>.')}
+    ${paragraph('If you didn\'t create this account, you can safely ignore this email.')}
+  `)
+
+  return sendEmail(to, 'Verify your ProbSolver account', html)
+}
+
+// ── Welcome (after verification) ─────────────────────────────
+
+export async function sendWelcomeEmail(to, name) {
+  const html = emailWrapper(`
+    ${heading(`You're in, ${name}!`)}
+    ${paragraph('Your email is verified and your account is ready. You can now:')}
+    ${paragraph('• <strong style="color:#f3f4f6;">Join a team</strong> with a join code from your team admin')}
+    ${paragraph('• <strong style="color:#f3f4f6;">Create a team</strong> and invite your colleagues')}
+    ${paragraph('• <strong style="color:#f3f4f6;">Practice individually</strong> with AI-generated problems')}
+    ${button('Get Started', CLIENT_URL)}
+  `)
+
+  return sendEmail(to, 'Welcome to ProbSolver!', html)
+}
+
+// ── Password reset ───────────────────────────────────────────
+
+export async function sendPasswordResetEmail(to, name, code) {
+  const html = emailWrapper(`
+    ${heading('Password Reset')}
+    ${paragraph(`Hi ${name}, we received a request to reset your password. Enter this code:`)}
+    ${codeBlock(code)}
+    ${paragraph('This code expires in <strong style="color:#f3f4f6;">15 minutes</strong>.')}
+    ${paragraph('If you didn\'t request this, your account is secure — no action needed.')}
+  `)
+
+  return sendEmail(to, 'Reset your ProbSolver password', html)
+}
+
+// ── Team invitation ──────────────────────────────────────────
+
+export async function sendTeamInviteEmail(to, teamName, joinCode, inviteToken) {
+  const joinUrl = `${CLIENT_URL}/join?token=${inviteToken}`
+
+  const html = emailWrapper(`
+    ${heading(`You're invited to ${teamName}`)}
+    ${paragraph('A team on ProbSolver has invited you to join. ProbSolver is a team interview intelligence platform with AI-powered mock interviews, coding practice, and readiness tracking.')}
+    ${paragraph('You can join using either method:')}
+    ${heading('Option 1: Join Code')}
+    ${codeBlock(joinCode)}
+    ${heading('Option 2: Direct Link')}
+    ${button('Join Team', joinUrl)}
+    ${paragraph('If you don\'t have a ProbSolver account yet, you\'ll be asked to create one first.')}
+    ${paragraph('<span style="color:#6b7280;font-size:12px;">This invitation expires in 72 hours.</span>')}
+  `)
+
+  return sendEmail(to, `Join ${teamName} on ProbSolver`, html)
+}
+
+// ── Team approved ────────────────────────────────────────────
+
+export async function sendTeamApprovedEmail(to, name, teamName, joinCode) {
+  const html = emailWrapper(`
+    ${heading('Your team is approved!')}
+    ${paragraph(`Great news, ${name}! Your team <strong style="color:#f3f4f6;">${teamName}</strong> has been approved and is now active.`)}
+    ${paragraph('Share this join code with your team members:')}
+    ${codeBlock(joinCode)}
+    ${paragraph('You\'ve been automatically switched to your new team. You can start adding problems and inviting members right away.')}
+    ${button('Go to Team Dashboard', CLIENT_URL)}
+  `)
+
+  return sendEmail(to, `${teamName} is approved — start inviting!`, html)
+}
+
+// ── Team rejected ────────────────────────────────────────────
+
+export async function sendTeamRejectedEmail(to, name, teamName, reason) {
+  const html = emailWrapper(`
+    ${heading('Team Request Update')}
+    ${paragraph(`Hi ${name}, your team <strong style="color:#f3f4f6;">${teamName}</strong> was not approved.`)}
+    <div style="background:#0f1117;border:1px solid #ef4444;border-radius:12px;padding:16px;margin:16px 0;">
+      <p style="margin:0;font-size:13px;color:#fca5a5;"><strong>Reason:</strong> ${reason}</p>
     </div>
-  `;
+    ${paragraph('You can create a new team request or continue practicing individually.')}
+    ${paragraph('If you believe this was a mistake, please contact the platform administrator.')}
+  `)
 
-  if (!client) {
-    console.log(`[Email] Reset code for ${to}: ${code}`);
-    console.log("[Email] (Resend not configured — email logged only)");
-    return { success: true, logged: true };
-  }
-
-  try {
-    const result = await client.emails.send({
-      from: FROM,
-      to,
-      subject: `${code} — Reset your ProbSolver password`,
-      html,
-    });
-
-    console.log(`[Email] Reset email sent to ${to}: ${result.id || "ok"}`);
-    return { success: true, id: result.id };
-  } catch (error) {
-    console.error(`[Email] Failed to send reset to ${to}:`, error.message);
-    return { success: false, error: error.message };
-  }
+  return sendEmail(to, `Update on ${teamName}`, html)
 }
 
-// ── Send welcome email after verification ──────────────
-export async function sendWelcomeEmail(to, username) {
-  const client = getClient();
+// ── Security notification (email change) ─────────────────────
 
-  const html = `
-    <div style="font-family: 'Inter', system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-      <div style="text-align: center; margin-bottom: 32px;">
-        <div style="display: inline-block; width: 48px; height: 48px; border-radius: 12px;
-                    background: linear-gradient(135deg, #22c55e, #3b82f6);
-                    line-height: 48px; text-align: center; font-size: 20px; color: white;">
-          🎉
-        </div>
-        <h1 style="font-size: 22px; font-weight: 800; color: #eeeef5; margin: 16px 0 4px;">
-          Welcome to ProbSolver!
-        </h1>
-        <p style="font-size: 14px; color: #9999bb; margin: 0;">
-          Your email is verified, ${username}. You're all set.
-        </p>
-      </div>
+export async function sendEmailChangeNotification(to, name) {
+  const html = emailWrapper(`
+    ${heading('Email Address Changed')}
+    ${paragraph(`Hi ${name}, your ProbSolver account email has been changed. If you didn't make this change, please contact the platform administrator immediately.`)}
+  `)
 
-      <div style="background: #18181f; border: 1px solid rgba(255,255,255,0.09);
-                  border-radius: 16px; padding: 24px; margin-bottom: 24px;">
-        <h3 style="font-size: 14px; color: #eeeef5; margin: 0 0 12px;">
-          Here's what to do next:
-        </h3>
-        <div style="font-size: 13px; color: #9999bb; line-height: 2;">
-          📋 Browse problems and start solving<br/>
-          🏗️ Try system design and behavioral questions<br/>
-          🧠 Take a quiz on any subject<br/>
-          ⏱ Run an interview simulation<br/>
-          📊 Check your 6D intelligence report
-        </div>
-      </div>
-
-      <p style="font-size: 12px; color: #55556e; text-align: center;">
-        ProbSolver — Team Interview Intelligence Platform
-      </p>
-    </div>
-  `;
-
-  if (!client) {
-    console.log(`[Email] Welcome email for ${to} (logged only)`);
-    return { success: true, logged: true };
-  }
-
-  try {
-    await client.emails.send({
-      from: FROM,
-      to,
-      subject: `Welcome to ProbSolver, ${username}! 🎉`,
-      html,
-    });
-    return { success: true };
-  } catch (error) {
-    console.error(`[Email] Welcome email failed for ${to}:`, error.message);
-    return { success: false };
-  }
+  return sendEmail(to, 'ProbSolver — Email address changed', html)
 }
 
-// ── Generate a 6-digit verification code ───────────────
-export function generateVerificationCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+// ── Email change verification ────────────────────────────────
+
+export async function sendEmailChangeVerification(to, name, code) {
+  const html = emailWrapper(`
+    ${heading('Verify New Email')}
+    ${paragraph(`Hi ${name}, enter this code to confirm your new email address:`)}
+    ${codeBlock(code)}
+    ${paragraph('This code expires in <strong style="color:#f3f4f6;">15 minutes</strong>.')}
+  `)
+
+  return sendEmail(to, 'Verify your new ProbSolver email', html)
 }
 
-// ── Check if email service is configured ───────────────
-export function isEmailEnabled() {
-  return !!process.env.RESEND_API_KEY;
+// ── Member removed from team ─────────────────────────────────
+
+export async function sendMemberRemovedEmail(to, name, teamName) {
+  const html = emailWrapper(`
+    ${heading('Team Membership Update')}
+    ${paragraph(`Hi ${name}, you have been removed from <strong style="color:#f3f4f6;">${teamName}</strong>. You've been switched to your personal practice space.`)}
+    ${paragraph('Your personal practice data, quizzes, and mock interview history are still intact.')}
+    ${button('Continue Practicing', CLIENT_URL)}
+  `)
+
+  return sendEmail(to, `${teamName} — Membership update`, html)
 }
