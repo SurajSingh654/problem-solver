@@ -118,7 +118,7 @@ export default function ResetPasswordPage() {
                     <p className="text-text-secondary mb-4">
                         No email provided. Start the reset process from the beginning.
                     </p>
-                    <Link to="/forgot-password"
+                    <Link to="/auth/forgot-password"
                         className="text-brand-300 font-semibold hover:text-brand-200">
                         Go to Forgot Password
                     </Link>
@@ -273,7 +273,7 @@ export default function ResetPasswordPage() {
                         {/* Back to login */}
                         <div className="text-center mt-5">
                             <Link
-                                to="/login"
+                                to="/auth/login"
                                 className="text-xs text-brand-300 font-semibold
                            hover:text-brand-200 transition-colors"
                             >

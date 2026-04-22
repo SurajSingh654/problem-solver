@@ -254,7 +254,7 @@ export default function Login() {
                         >
                             Don't have an account?{' '}
                             <Link
-                                to="/register"
+                                to="/auth/register"
                                 className="text-brand-300 font-semibold hover:text-brand-200 transition-colors"
                             >
                                 Create one
@@ -273,7 +273,7 @@ export default function Login() {
                 >
                     Forgot your password?{' '}
                     <Link
-                        to="/forgot-password"
+                        to="/auth/forgot-password"
                         className="text-brand-300 font-semibold hover:text-brand-200 transition-colors"
                     >
                         Reset it here
