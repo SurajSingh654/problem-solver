@@ -86,7 +86,7 @@ export default function VerifyEmailPage() {
 
         setVerifying(true)
         try {
-            await api.post('/auth/verify-email', {
+            const res = await api.post('/auth/verify-email', {
                 email,
                 code: fullCode,
             })
