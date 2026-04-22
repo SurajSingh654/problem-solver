@@ -41,9 +41,9 @@ export default function Sidebar() {
         mainNav = [
             { to: '/super-admin', icon: '⚡', label: 'Platform Dashboard' },
             { to: '/team', icon: '👥', label: 'Manage Teams' },
+            { to: '/settings', icon: '⚙️', label: 'Settings' },
+            { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]
-        // Swagger docs link — external URL, not a route
-        mainNav.push({ to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true })
     } else {
         // Team members & individuals: practice tools
         mainNav = [

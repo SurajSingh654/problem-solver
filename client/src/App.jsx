@@ -75,6 +75,10 @@ const ShowcasePage = lazy(() => import('@pages/admin/showcase/ShowcasePage'))
 const ReadmePage = lazy(() => import('@pages/docs/ReadmePage'))
 const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
 const DeployPage = lazy(() => import('@pages/docs/DeployPage'))
+const ProblemsPage = lazy(() => import('@pages/problems/ProblemsPage'))
+const ProblemDetailPage = lazy(() => import('@pages/problems/ProblemDetailPage'))
+const SubmitSolutionPage = lazy(() => import('@pages/problems/SubmitSolutionPage'))
+const EditSolutionPage = lazy(() => import('@pages/problems/EditSolutionPage'))
 
 // ============================================================================
 // QUERY CLIENT
@@ -186,8 +190,10 @@ export default function App() {
 
             {/* ── Problems ──────────────────────────────────────────── */}
             {/* TODO: Replace with dedicated ProblemListPage / ProblemDetailPage */}
-            <Route path="problems" element={<Dashboard />} />
-            <Route path="problems/:problemId" element={<Dashboard />} />
+            <Route path="problems" element={<Lazy><ProblemsPage /></Lazy>} />
+            <Route path="problems/:problemId" element={<Lazy><ProblemDetailPage /></Lazy>} />
+            <Route path="problems/:problemId/submit" element={<Lazy><SubmitSolutionPage /></Lazy>} />
+            <Route path="problems/:problemId/edit-solution/:solutionId" element={<Lazy><EditSolutionPage /></Lazy>} />
 
             {/* ── Solutions & Review ────────────────────────────────── */}
             <Route path="review" element={<ReviewQueuePage />} />

@@ -87,7 +87,7 @@ function ProfileDropdown({ user, onClose }) {
             {/* User info header */}
             <div className="px-4 py-3 border-b border-border-default">
                 <p className="text-sm font-semibold text-text-primary truncate">
-                    {user?.username}
+                    {user?.name}
                 </p>
                 <p className="text-xs text-text-tertiary truncate mt-0.5">
                     {user?.email}
@@ -147,7 +147,7 @@ export function Topbar() {
     const [profileOpen, setProfileOpen] = useState(false)
     const currentUser = me || user
     const meta = getPageMeta(location.pathname)
-    const countdown = formatCountdown(currentUser?.targetDate)
+    const countdown = formatCountdown(currentUser?.interviewDate)
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -365,8 +365,8 @@ export function Topbar() {
                        border border-transparent hover:border-border-default"
                     >
                         <Avatar
-                            name={currentUser?.username || 'U'}
-                            color={currentUser?.avatarColor || '#7c6ff7'}
+                            name={currentUser?.name || 'U'}
+                            color={currentUser?.avatarUrl || '#7c6ff7'}
                             size="sm"
                         />
                     </button>
