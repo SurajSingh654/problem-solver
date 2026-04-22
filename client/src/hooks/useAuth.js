@@ -31,7 +31,6 @@ export function useRegister() {
     mutationFn: (data) => authApi.register(data),
 
     onSuccess: (res) => {
-
       const { user, token } = res.data.data;
 
       setAuth(user, token);
@@ -57,33 +56,36 @@ export function useRegister() {
 
 // ── Login ──────────────────────────────────────────────
 export function useLogin() {
-  const { setAuth } = useAuthStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data) => authApi.login(data),
-
     onSuccess: (res) => {
+      // v3.0 response format: { success, token, user }
+      const { user, token } = res.data;
 
-      const { user, token } = res.data.data;
+      // v3.0 store: setAuth(token, user) — token first
+      useAuthStore.getState().setAuth(token, user);
 
-      setAuth(user, token);
-      localStorage.setItem("ps_token", token);
       queryClient.setQueryData(QUERY_KEYS.ME, user);
 
-      if (!user.emailVerified) {
+      if (!user.isVerified) {
         toast.info("Please verify your email first");
-        navigate("/verify-email", { state: { email: user.email } });
+        navigate("/auth/verify-email", { state: { email: user.email } });
       } else if (user.mustChangePassword) {
         toast.info("Please set a new password");
-        navigate("/change-password");
+        navigate("/auth/change-password");
+      } else if (
+        !user.onboardingComplete &&
+        user.globalRole !== "SUPER_ADMIN"
+      ) {
+        navigate("/onboarding");
       } else {
-        toast.success(`Welcome back, ${user.username}!`);
+        toast.success(`Welcome back, ${user.name}!`);
         navigate("/");
       }
     },
-
     onError: (err) => {
       console.error("[Login] Error:", err.response?.data);
       const msg = err.response?.data?.error || "Login failed";
@@ -184,41 +186,42 @@ export function useResetUserPassword() {
   });
 }
 
-
 export function useChangeEmail() {
   return useMutation({
     mutationFn: (newEmail) => authApi.initiateEmailChange(newEmail),
     onSuccess: () => {
-      toast.success('Verification code sent to your new email')
+      toast.success("Verification code sent to your new email");
     },
     onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to initiate email change')
+      toast.error(
+        err.response?.data?.error || "Failed to initiate email change",
+      );
     },
-  })
+  });
 }
 
 export function useConfirmEmailChange() {
-  const { setAuth } = useAuthStore()
-  const queryClient = useQueryClient()
+  const { setAuth } = useAuthStore();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (code) => authApi.confirmEmailChange(code),
     onSuccess: (res) => {
-      const { user, token } = res.data.data
-      setAuth(user, token)
-      localStorage.setItem('ps_token', token)
-      queryClient.setQueryData(QUERY_KEYS.ME, user)
-      toast.success('Email changed successfully!')
+      const { user, token } = res.data.data;
+      setAuth(user, token);
+      localStorage.setItem("ps_token", token);
+      queryClient.setQueryData(QUERY_KEYS.ME, user);
+      toast.success("Email changed successfully!");
     },
     onError: (err) => {
-      const code = err.response?.data?.code
-      if (code === 'CODE_EXPIRED') {
-        toast.error('Code expired. Please try again.')
-      } else if (code === 'INVALID_CODE') {
-        toast.error('Invalid code. Please check and try again.')
+      const code = err.response?.data?.code;
+      if (code === "CODE_EXPIRED") {
+        toast.error("Code expired. Please try again.");
+      } else if (code === "INVALID_CODE") {
+        toast.error("Invalid code. Please check and try again.");
       } else {
-        toast.error(err.response?.data?.error || 'Email change failed')
+        toast.error(err.response?.data?.error || "Email change failed");
       }
     },
-  })
+  });
 }
