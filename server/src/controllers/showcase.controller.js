@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma.js'
-import { successResponse } from '../utils/response.js'
+import { success as successResponse } from '../utils/response.js'
 import { isAIEnabled } from '../services/ai.service.js'
 
 // ── GET /api/stats/showcase ────────────────────────────

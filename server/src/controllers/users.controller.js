@@ -1,8 +1,8 @@
 import prisma from "../lib/prisma.js";
 import {
-  successResponse,
+  success,
   notFoundResponse,
-  errorResponse,
+  error,
 } from "../utils/response.js";
 
 function sanitizeUser(u) {
@@ -34,7 +34,7 @@ export async function getUsers(req, res) {
     orderBy: { joinedAt: "asc" },
   });
 
-  return successResponse(
+  return success(
     res,
     users.map((u) => ({
       ...u,
@@ -74,7 +74,7 @@ export async function getUserByUsername(req, res) {
   if (!user) return notFoundResponse(res, "User");
 
   const sanitized = sanitizeUser(user);
-  return successResponse(res, {
+  return success(res, {
     ...sanitized,
     solutions: sanitized.solutions?.map((s) => ({
       ...s,
@@ -97,7 +97,7 @@ export async function deleteUser(req, res) {
 
   // Can't delete yourself
   if (id === requestingUser.id) {
-    return errorResponse(res, "You cannot delete your own account", 400);
+    return error(res, "You cannot delete your own account", 400);
   }
 
   const user = await prisma.user.findUnique({ where: { id } });
@@ -105,11 +105,11 @@ export async function deleteUser(req, res) {
 
   // Can't delete another admin
   if (user.role === "ADMIN") {
-    return errorResponse(res, "Cannot delete an admin account", 400);
+    return error(res, "Cannot delete an admin account", 400);
   }
 
   await prisma.user.delete({ where: { id } });
-  return successResponse(res, { id }, "User deleted");
+  return success(res, { id }, "User deleted");
 }
 
 // ── PATCH /api/users/:id/role ──────────────────────────
@@ -118,12 +118,12 @@ export async function updateUserRole(req, res) {
   const { role } = req.body;
 
   if (!["ADMIN", "MEMBER"].includes(role)) {
-    return errorResponse(res, "Invalid role", 400);
+    return error(res, "Invalid role", 400);
   }
 
   // Can't change your own role
   if (id === req.user.id) {
-    return errorResponse(res, "Use Settings to change your own role", 400);
+    return error(res, "Use Settings to change your own role", 400);
   }
 
   const user = await prisma.user.findUnique({ where: { id } });
@@ -134,7 +134,7 @@ export async function updateUserRole(req, res) {
     data: { role },
   });
 
-  return successResponse(
+  return success(
     res,
     {
       id: updated.id,

@@ -4,7 +4,7 @@
  * Use before any AI endpoint.
  */
 import { isAIEnabled, checkRateLimit } from "../services/ai.service.js";
-import { errorResponse } from "../utils/response.js";
+import { error as errorResponse } from "../utils/response.js";
 
 export function requireAI(req, res, next) {
   if (!isAIEnabled()) {
