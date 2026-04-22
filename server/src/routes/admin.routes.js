@@ -1,22 +1,19 @@
+// ============================================================================
+// ProbSolver v3.0 — Admin Routes
+// ============================================================================
 import { Router } from "express";
+import { authenticate } from "../middleware/auth.middleware.js";
+import { requireAnyAdmin } from "../middleware/superAdmin.middleware.js";
 import {
   getProductHealth,
   analyzeProductHealth,
 } from "../controllers/analytics.controller.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
-import { requireAdmin } from "../middleware/admin.middleware.js";
-import { requireAI, aiRateLimit } from "../middleware/ai.middleware.js";
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireAdmin);
 
-router.get("/product-health", getProductHealth);
-router.post(
-  "/product-health/analyze",
-  requireAI,
-  aiRateLimit,
-  analyzeProductHealth,
-);
+router.use(authenticate);
+
+router.get("/product-health", requireAnyAdmin, getProductHealth);
+router.post("/product-health/analyze", requireAnyAdmin, analyzeProductHealth);
 
 export default router;
