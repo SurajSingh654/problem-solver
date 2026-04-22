@@ -3,7 +3,6 @@
  * Single source of truth for all AI interactions.
  */
 import OpenAI from "openai";
-import { env } from "../config/env.js";
 
 // ── Initialize OpenAI client ───────────────────────────
 let openai = null;
