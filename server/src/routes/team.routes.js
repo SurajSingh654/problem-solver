@@ -65,43 +65,120 @@ router.use(authenticate)
 // TEAM CREATION (any user)
 // ============================================================================
 
-router.post(
-  '/',
-  validate(createTeamSchema),
-  createTeam
-)
+/**
+ * @swagger
+ * /teams:
+ *   post:
+ *     tags: [Teams]
+ *     summary: Create a new team (goes to PENDING)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: Google Prep Squad
+ *               description:
+ *                 type: string
+ *               maxMembers:
+ *                 type: integer
+ *                 example: 20
+ *     responses:
+ *       201:
+ *         description: Team created (pending approval)
+ */
+router.post('/', validate(createTeamSchema), createTeam)
 
 // ============================================================================
 // JOIN / LEAVE (any user)
 // ============================================================================
 
-router.post(
-  '/join',
-  validate(joinTeamSchema),
-  joinTeam
-)
+/**
+ * @swagger
+ * /teams/join:
+ *   post:
+ *     tags: [Teams]
+ *     summary: Join a team by code
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [joinCode]
+ *             properties:
+ *               joinCode:
+ *                 type: string
+ *                 example: ABCD1234
+ *     responses:
+ *       200:
+ *         description: Joined team, returns new token
+ */
+router.post('/join', validate(joinTeamSchema), joinTeam)
 
-router.post(
-  '/leave',
-  requireTeamContext,
-  leaveTeam
-)
+/**
+ * @swagger
+ * /teams/leave:
+ *   post:
+ *     tags: [Teams]
+ *     summary: Leave current team
+ *     responses:
+ *       200:
+ *         description: Left team, switched to personal space
+ */
+router.post('/leave', requireTeamContext, leaveTeam)
 
 // ============================================================================
 // CURRENT TEAM — member operations
 // ============================================================================
 
-router.get(
-  '/current',
-  requireTeamContext,
-  getTeam
-)
+/**
+ * @swagger
+ * /teams/current:
+ *   get:
+ *     tags: [Teams]
+ *     summary: Get current team details
+ *     responses:
+ *       200:
+ *         description: Team details with member count
+ *   put:
+ *     tags: [Teams]
+ *     summary: Update team settings (TEAM_ADMIN)
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               maxMembers:
+ *                 type: integer
+ *               aiProblemsEnabled:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Team updated
+ */
+router.get('/current', requireTeamContext, getTeam)
 
-router.get(
-  '/current/members',
-  requireTeamContext,
-  getTeamMembers
-)
+/**
+ * @swagger
+ * /teams/current/members:
+ *   get:
+ *     tags: [Teams]
+ *     summary: List team members
+ *     responses:
+ *       200:
+ *         description: Array of team members
+ */
+router.get('/current/members', requireTeamContext, getTeamMembers)
 
 // ============================================================================
 // CURRENT TEAM — admin operations
@@ -115,13 +192,30 @@ router.put(
   updateTeam
 )
 
-router.post(
-  '/current/invite',
-  requireTeamContext,
-  requireTeamAdmin,
-  validate(inviteMembersSchema),
-  inviteMembers
-)
+/**
+ * @swagger
+ * /teams/current/invite:
+ *   post:
+ *     tags: [Teams]
+ *     summary: Invite members by email (TEAM_ADMIN)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [emails]
+ *             properties:
+ *               emails:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: ["user1@example.com", "user2@example.com"]
+ *     responses:
+ *       200:
+ *         description: Invitations sent
+ */
+router.post('/current/invite', requireTeamContext, requireTeamAdmin, validate(inviteMembersSchema), inviteMembers)
 
 router.put(
   '/current/members/:memberId/role',
@@ -138,34 +232,90 @@ router.delete(
   removeMember
 )
 
-router.post(
-  '/current/regenerate-code',
-  requireTeamContext,
-  requireTeamAdmin,
-  regenerateJoinCode
-)
+/**
+ * @swagger
+ * /teams/current/regenerate-code:
+ *   post:
+ *     tags: [Teams]
+ *     summary: Regenerate join code (TEAM_ADMIN)
+ *     responses:
+ *       200:
+ *         description: New join code generated
+ */
+router.post('/current/regenerate-code', requireTeamContext, requireTeamAdmin, regenerateJoinCode)
 
 // ============================================================================
 // SUPER ADMIN — platform-level team management
 // ============================================================================
 
-router.get(
-  '/pending',
-  requireSuperAdmin,
-  listPendingTeams
-)
+/**
+ * @swagger
+ * /teams/pending:
+ *   get:
+ *     tags: [Platform]
+ *     summary: List pending teams (SUPER_ADMIN)
+ *     responses:
+ *       200:
+ *         description: Array of pending teams
+ */
+router.get('/pending', requireSuperAdmin, listPendingTeams)
 
-router.get(
-  '/all',
-  requireSuperAdmin,
-  listAllTeams
-)
+/**
+ * @swagger
+ * /teams/all:
+ *   get:
+ *     tags: [Platform]
+ *     summary: List all teams (SUPER_ADMIN)
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, ACTIVE, REJECTED]
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Paginated team list
+ */
+router.get('/all', requireSuperAdmin, listAllTeams)
 
-router.post(
-  '/:teamId/review',
-  requireSuperAdmin,
-  validate(approveTeamSchema),
-  reviewTeam
-)
+/**
+ * @swagger
+ * /teams/{teamId}/review:
+ *   post:
+ *     tags: [Platform]
+ *     summary: Approve or reject a team (SUPER_ADMIN)
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [action]
+ *             properties:
+ *               action:
+ *                 type: string
+ *                 enum: [approve, reject]
+ *               rejectionReason:
+ *                 type: string
+ *                 description: Required if action=reject
+ *     responses:
+ *       200:
+ *         description: Team approved/rejected
+ */
+router.post('/:teamId/review', requireSuperAdmin, validate(approveTeamSchema), reviewTeam)
 
 export default router

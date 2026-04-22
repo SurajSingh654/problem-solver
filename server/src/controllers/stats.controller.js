@@ -42,32 +42,22 @@ export async function getPersonalStats(req, res) {
         where: { userId, teamId },
       }),
 
-      // Breakdown by difficulty
-      prisma.solution
-        .groupBy({
-          by: ["problem"],
-          where: { userId, teamId },
-          _count: true,
-        })
-        .then(async () => {
-          // Use raw query for difficulty grouping via join
-          const rows = await prisma.$queryRaw`
-  SELECT p.difficulty, COUNT(*)::int as count
-  FROM solutions s
-  JOIN problems p ON s."problemId" = p.id
-  WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
-  GROUP BY p.difficulty
-        `;
-          return rows;
-        }),
+      // Breakdown by difficulty (raw SQL for join)
+      prisma.$queryRaw`
+        SELECT p.difficulty, COUNT(*)::int as count
+        FROM solutions s
+        JOIN problems p ON s."problemId" = p.id
+        WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
+        GROUP BY p.difficulty
+      `,
 
       // Breakdown by category
       prisma.$queryRaw`
-  SELECT p.category, COUNT(*)::int as count
-  FROM solutions s
-  JOIN problems p ON s."problemId" = p.id
-  WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
-  GROUP BY p.category
+        SELECT p.category, COUNT(*)::int as count
+        FROM solutions s
+        JOIN problems p ON s."problemId" = p.id
+        WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
+        GROUP BY p.category
       `,
 
       // Average confidence
