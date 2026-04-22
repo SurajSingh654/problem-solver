@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAIReviewSolution } from '@hooks/useAI'
+import { useAIReview } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
 
@@ -66,7 +66,7 @@ function FeedbackList({ icon, title, items, color }) {
 export function AIReviewCard({ solutionId, existingReview }) {
     const [review, setReview] = useState(existingReview || null)
     const [expanded, setExpanded] = useState(!!existingReview)
-    const aiReview = useAIReviewSolution()
+    const aiReview = useAIReview()
 
     async function handleReview() {
         const res = await aiReview.mutateAsync({ solutionId })

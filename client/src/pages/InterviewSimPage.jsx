@@ -6,7 +6,7 @@ import {
     useMySessions, useStartSim, useUseHint,
     useCompleteSession, useAbandonSession
 } from '@hooks/useSim'
-import { useAIGenerateHint, useAIStatus } from '@hooks/useAI'
+import { useAIHint, useAIStatus } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
@@ -439,7 +439,7 @@ function ActiveSimScreen({ session, problem, onComplete, onAbandon }) {
     const abandonMutation = useAbandonSession()
 
     // Add AI hooks
-    const aiHintMutation = useAIGenerateHint()
+    const aiHintMutation = useAIHint()
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
 

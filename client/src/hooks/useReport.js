@@ -1,7 +1,6 @@
 // ============================================================================
-// ProbSolver v3.0 — Report Hook (Team-Scoped)
+// ProbSolver v3.0 — Report Hooks (Team-Scoped)
 // ============================================================================
-
 import { useQuery } from '@tanstack/react-query'
 import api from '@services/api'
 import { useTeamContext } from './useTeamContext'
@@ -40,5 +39,4 @@ export function useLeaderboard() {
       return res.data.leaderboard
     },
   })
-}// ── v2 compatibility alias ──────────────────────────────
-export const useTeamStats = usePersonalStats
+}

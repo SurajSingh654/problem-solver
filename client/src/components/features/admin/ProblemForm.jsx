@@ -8,7 +8,7 @@ import { ChipInput } from '@components/ui/ChipInput'
 import { Input } from '@components/ui/Input'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
-import { useAIGenerateProblemContent, useAIStatus } from '@hooks/useAI'
+import { useGenerateContent, useAIStatus } from '@hooks/useAI'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import { COMPANIES, PATTERNS, SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
@@ -185,7 +185,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const [isPinned, setIsPinned] = useState(initialData?.isPinned || false)
     const [isBlindChallenge, setIsBlindChallenge] = useState(initialData?.isBlindChallenge || false)
 
-    const aiGenerate = useAIGenerateProblemContent()
+    const aiGenerate = useGenerateContent()
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
 

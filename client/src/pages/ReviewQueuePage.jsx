@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useMySolutions, useReviewSolution } from '@hooks/useSolutions'
+import { useMySolutions, useUpdateSolution } from '@hooks/useSolutions'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
@@ -501,7 +501,7 @@ export default function ReviewQueuePage() {
     const [sessionCount, setSessionCount] = useState(0)
 
     const { data: solutions, isLoading } = useMySolutions()
-    const reviewMutation = useReviewSolution()
+    const reviewMutation = useUpdateSolution()
 
     // Categorise solutions
     const { due, upcoming, noReviews } = useMemo(() => {

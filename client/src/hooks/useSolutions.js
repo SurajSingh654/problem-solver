@@ -95,7 +95,7 @@ export function useReviewQueue() {
   });
 }
 
-// ── v2 compatibility: ReviewQueuePage expects flat array of solutions ──
+// Returns flat array of current user's solutions in team
 export function useMySolutions() {
   const { teamQueryKey } = useTeamContext();
 
@@ -107,7 +107,3 @@ export function useMySolutions() {
     },
   });
 }
-
-// ── v2 compatibility aliases ──────────────────────────────
-export const useReviewSolution = useUpdateSolution;
-export const useCreateSolution = useSubmitSolution;

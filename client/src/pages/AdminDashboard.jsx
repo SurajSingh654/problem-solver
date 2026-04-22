@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useTeamStats } from '@hooks/useReport'
+import { usePersonalStats } from '@hooks/useReport'
 import { useProblems } from '@hooks/useProblems'
 import { useUsers } from '@hooks/useUsers'
 import useAuthStore from '@store/useAuthStore'
@@ -126,7 +126,7 @@ export default function AdminDashboard() {
     const navigate = useNavigate()
     const { user } = useAuthStore()
 
-    const { data: teamStats, isLoading: teamLoading } = useTeamStats()
+    const { data: teamStats, isLoading: teamLoading } = usePersonalStats()
     const { data: problemsData } = useProblems({ limit: '200' })
     const { data: users, isLoading: usersLoading } = useUsers()
 

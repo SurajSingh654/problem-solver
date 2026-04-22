@@ -1,3 +1,6 @@
+// ============================================================================
+// ProbSolver v3.0 — Quiz Hooks (Team-Scoped)
+// ============================================================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@services/api'
 import { useTeamContext } from './useTeamContext'
@@ -43,6 +46,4 @@ export function useQuiz(quizId) {
     },
     enabled: !!quizId,
   })
-}// ── v2 compatibility aliases ─────────────────────────────
-export const useMyQuizAttempts = useQuizHistory
-export const useAnalyzeQuiz = useSubmitQuiz
+}

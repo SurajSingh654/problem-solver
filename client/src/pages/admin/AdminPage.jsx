@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useProblems, useDeleteProblem, useUpdateProblem } from '@hooks/useProblems'
 import { useUsers, useDeleteUser, useUpdateUserRole } from '@hooks/useUsers'
 import useAuthStore from '@store/useAuthStore'
-import { useTeamStats } from '@hooks/useReport'
+import { usePersonalStats } from '@hooks/useReport'
 import { Avatar } from '@components/ui/Avatar'
 import { Badge } from '@components/ui/Badge'
 import { Button } from '@components/ui/Button'
@@ -632,7 +632,7 @@ export default function AdminPage() {
     const { data: problemsData, isLoading: problemsLoading } =
         useProblems({ limit: '200' })
     const { data: users, isLoading: usersLoading } = useUsers()
-    const { data: stats } = useTeamStats()
+    const { data: stats } = usePersonalStats()
 
     const deleteProblem = useDeleteProblem()
     const updateProblem = useUpdateProblem()

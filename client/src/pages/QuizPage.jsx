@@ -2,8 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-    useGenerateQuiz, useSubmitQuiz,
-    useAnalyzeQuiz, useMyQuizAttempts
+    useGenerateQuiz, useSubmitQuiz, useQuizHistory
 } from '@hooks/useQuiz'
 import { useAIStatus } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
@@ -161,7 +160,7 @@ function SetupScreen({ onStart }) {
 
     const generateQuiz = useGenerateQuiz()
     const { data: aiStatus } = useAIStatus()
-    const { data: attempts } = useMyQuizAttempts()
+    const { data: attempts } = useQuizHistory()
 
     const recentSubjects = useMemo(() => {
         if (!attempts?.length) return []
@@ -462,7 +461,7 @@ function SetupScreen({ onStart }) {
 
 // ── Quiz history ───────────────────────────────────────
 function QuizHistory() {
-    const { data: attempts, isLoading } = useMyQuizAttempts()
+    const { data: attempts, isLoading } = useQuizHistory()
     if (isLoading || !attempts?.length) return null
 
     return (
@@ -755,7 +754,7 @@ function ActiveQuizScreen({ quizData, onComplete }) {
 // ══════════════════════════════════════════════════════
 function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
     const navigate = useNavigate()
-    const analyzeQuiz = useAnalyzeQuiz()
+    const analyzeQuiz = useSubmitQuiz()
     const [analysis, setAnalysis] = useState(null)
     const [flagged, setFlagged] = useState({}) // { qIndex: reason }
     const [feedback, setFeedback] = useState('')
