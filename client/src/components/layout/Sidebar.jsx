@@ -1,13 +1,6 @@
 // ============================================================================
 // ProbSolver v3.0 — Sidebar with Team Switcher
 // ============================================================================
-//
-// The sidebar now has a team context section at the top that shows
-// the current team name and allows switching between team and
-// personal mode. Navigation items change based on mode.
-//
-// ============================================================================
-
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -25,8 +18,9 @@ export default function Sidebar() {
     if (!user) return null
 
     const isSuperAdmin = user.globalRole === 'SUPER_ADMIN'
-    const isTeamAdmin = user.teamRole === 'TEAM_ADMIN'
+    const isTeamAdmin = !isSuperAdmin && user.teamRole === 'TEAM_ADMIN'
     const isPersonal = user.currentTeamId === user.personalTeamId
+
     const teamName = isPersonal ? 'My Practice' : (user.currentTeam?.name || 'Team')
 
     // ── Handle team switch ─────────────────────────────────
@@ -38,31 +32,42 @@ export default function Sidebar() {
         if (result.success) navigate('/', { replace: true })
     }
 
-    // ── Navigation items based on context ──────────────────
-    const mainNav = [
-        { to: '/', icon: '📊', label: 'Dashboard' },
-        { to: '/problems', icon: '📋', label: 'Problems' },
-        { to: '/review', icon: '🧠', label: 'Review Queue' },
-        { to: '/quizzes', icon: '🧩', label: 'Quizzes' },
-        { to: '/mock-interview', icon: '💬', label: 'Mock Interview' },
-        { to: '/interview-history', icon: '📜', label: 'Interview History' },
-        { to: '/report', icon: '📈', label: 'Intelligence Report' },
-    ]
+    // ── Navigation items based on role ───────────────────────
+    let mainNav = []
+    let adminNav = []
 
-    // Leaderboard only in team mode (not personal)
-    if (!isPersonal) {
-        mainNav.push({ to: '/leaderboard', icon: '🏆', label: 'Leaderboard' })
+    if (isSuperAdmin) {
+        // SUPER_ADMIN: platform management only
+        mainNav = [
+            { to: '/super-admin', icon: '⚡', label: 'Platform Dashboard' },
+            { to: '/team', icon: '👥', label: 'Manage Teams' },
+        ]
+    } else {
+        // Team members & individuals: practice tools
+        mainNav = [
+            { to: '/', icon: '📊', label: 'Dashboard' },
+            { to: '/problems', icon: '📋', label: 'Problems' },
+            { to: '/review', icon: '🧠', label: 'Review Queue' },
+            { to: '/quizzes', icon: '🧩', label: 'Quizzes' },
+            { to: '/mock-interview', icon: '💬', label: 'Mock Interview' },
+            { to: '/interview-history', icon: '📜', label: 'Interview History' },
+            { to: '/report', icon: '📈', label: 'Intelligence Report' },
+        ]
+
+        // Leaderboard only in team mode (not personal)
+        if (!isPersonal) {
+            mainNav.push({ to: '/leaderboard', icon: '🏆', label: 'Leaderboard' })
+        }
+
+        // Team admin tools
+        if (isTeamAdmin) {
+            adminNav = [
+                { to: '/admin', icon: '👑', label: 'Team Admin' },
+                { to: '/admin/add-problem', icon: '➕', label: 'Add Problem' },
+                { to: '/admin/analytics', icon: '📊', label: 'Team Analytics' },
+            ]
+        }
     }
-
-    const adminNav = isTeamAdmin ? [
-        { to: '/admin', icon: '👑', label: 'Team Admin' },
-        { to: '/admin/add-problem', icon: '➕', label: 'Add Problem' },
-        { to: '/admin/analytics', icon: '📊', label: 'Team Analytics' },
-    ] : []
-
-    const superAdminNav = isSuperAdmin ? [
-        { to: '/super-admin', icon: '⚡', label: 'Platform Admin' },
-    ] : []
 
     return (
         <aside className={cn(
@@ -86,76 +91,92 @@ export default function Sidebar() {
                 </span>
             </div>
 
-            {/* ── Team Switcher ─────────────────────────────────── */}
-            <div className="px-3 py-3 border-b border-border-default">
-                <button
-                    onClick={() => setShowSwitcher(!showSwitcher)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
-                     bg-surface-2 border border-border-subtle
-                     hover:border-brand-400/30 transition-all"
-                >
-                    <span className="text-lg">{isPersonal ? '🧠' : '👥'}</span>
-                    <div className="flex-1 text-left min-w-0">
-                        <p className="text-xs font-bold text-text-primary truncate">{teamName}</p>
-                        <p className="text-[10px] text-text-disabled">
-                            {isPersonal ? 'Individual mode' : `${user.teamRole === 'TEAM_ADMIN' ? 'Admin' : 'Member'}`}
-                        </p>
+            {/* ── SUPER_ADMIN badge ────────────────────────────── */}
+            {isSuperAdmin && (
+                <div className="px-3 py-3 border-b border-border-default">
+                    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl
+                                   bg-danger/5 border border-danger/20">
+                        <span className="text-lg">🛡️</span>
+                        <div className="flex-1 text-left min-w-0">
+                            <p className="text-xs font-bold text-text-primary">Platform Admin</p>
+                            <p className="text-[10px] text-danger">Super Administrator</p>
+                        </div>
                     </div>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2" className="text-text-disabled">
-                        <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                </button>
+                </div>
+            )}
 
-                {/* Switcher dropdown */}
-                <AnimatePresence>
-                    {showSwitcher && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            className="mt-2 bg-surface-0 border border-border-default rounded-xl
-                         shadow-lg overflow-hidden"
-                        >
-                            {/* Personal space option */}
-                            {user.personalTeamId && user.currentTeamId !== user.personalTeamId && (
-                                <button
-                                    onClick={() => handleSwitch(user.personalTeamId)}
-                                    disabled={switching}
-                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left
-                             hover:bg-surface-2 transition-colors"
-                                >
-                                    <span className="text-sm">🧠</span>
-                                    <span className="text-xs text-text-secondary">My Practice</span>
-                                </button>
-                            )}
+            {/* ── Team Switcher (not for SUPER_ADMIN) ─────────── */}
+            {!isSuperAdmin && (
+                <div className="px-3 py-3 border-b border-border-default">
+                    <button
+                        onClick={() => setShowSwitcher(!showSwitcher)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+                         bg-surface-2 border border-border-subtle
+                         hover:border-brand-400/30 transition-all"
+                    >
+                        <span className="text-lg">{isPersonal ? '🧠' : '👥'}</span>
+                        <div className="flex-1 text-left min-w-0">
+                            <p className="text-xs font-bold text-text-primary truncate">{teamName}</p>
+                            <p className="text-[10px] text-text-disabled">
+                                {isPersonal ? 'Individual mode' : `${user.teamRole === 'TEAM_ADMIN' ? 'Admin' : 'Member'}`}
+                            </p>
+                        </div>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2" className="text-text-disabled">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
 
-                            {/* Current team (if in personal mode and has a team) */}
-                            {isPersonal && user.currentTeamId !== user.personalTeamId && (
-                                <button
-                                    onClick={() => handleSwitch(user.currentTeamId)}
-                                    disabled={switching}
-                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left
-                             hover:bg-surface-2 transition-colors"
-                                >
-                                    <span className="text-sm">👥</span>
-                                    <span className="text-xs text-text-secondary">{user.currentTeam?.name}</span>
-                                </button>
-                            )}
-
-                            {/* Team management link */}
-                            <button
-                                onClick={() => { setShowSwitcher(false); navigate('/team') }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 text-left
-                           hover:bg-surface-2 transition-colors border-t border-border-subtle"
+                    {/* Switcher dropdown */}
+                    <AnimatePresence>
+                        {showSwitcher && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                className="mt-2 bg-surface-0 border border-border-default rounded-xl
+                             shadow-lg overflow-hidden"
                             >
-                                <span className="text-sm">⚙️</span>
-                                <span className="text-xs text-text-tertiary">Manage Teams</span>
-                            </button>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
+                                {/* Personal space option */}
+                                {user.personalTeamId && user.currentTeamId !== user.personalTeamId && (
+                                    <button
+                                        onClick={() => handleSwitch(user.personalTeamId)}
+                                        disabled={switching}
+                                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left
+                                 hover:bg-surface-2 transition-colors"
+                                    >
+                                        <span className="text-sm">🧠</span>
+                                        <span className="text-xs text-text-secondary">My Practice</span>
+                                    </button>
+                                )}
+
+                                {/* Current team (if in personal mode and has a team) */}
+                                {isPersonal && user.currentTeamId !== user.personalTeamId && (
+                                    <button
+                                        onClick={() => handleSwitch(user.currentTeamId)}
+                                        disabled={switching}
+                                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left
+                                 hover:bg-surface-2 transition-colors"
+                                    >
+                                        <span className="text-sm">👥</span>
+                                        <span className="text-xs text-text-secondary">{user.currentTeam?.name}</span>
+                                    </button>
+                                )}
+
+                                {/* Team management link */}
+                                <button
+                                    onClick={() => { setShowSwitcher(false); navigate('/team') }}
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left
+                               hover:bg-surface-2 transition-colors border-t border-border-subtle"
+                                >
+                                    <span className="text-sm">⚙️</span>
+                                    <span className="text-xs text-text-tertiary">Manage Teams</span>
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            )}
 
             {/* ── Navigation ────────────────────────────────────── */}
             <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
@@ -163,11 +184,13 @@ export default function Sidebar() {
                     <NavLink
                         key={item.to}
                         to={item.to}
-                        end={item.to === '/'}
+                        end={item.to === '/' || item.to === '/super-admin'}
                         className={({ isActive }) => cn(
                             'flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors',
                             isActive
-                                ? 'bg-brand-400/10 text-brand-300 font-bold'
+                                ? isSuperAdmin
+                                    ? 'bg-danger/10 text-danger font-bold'
+                                    : 'bg-brand-400/10 text-brand-300 font-bold'
                                 : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
                         )}
                     >
@@ -176,7 +199,7 @@ export default function Sidebar() {
                     </NavLink>
                 ))}
 
-                {/* Admin section */}
+                {/* Team admin section (not for SUPER_ADMIN) */}
                 {adminNav.length > 0 && (
                     <>
                         <div className="pt-4 pb-1 px-3">
@@ -192,32 +215,6 @@ export default function Sidebar() {
                                     'flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors',
                                     isActive
                                         ? 'bg-warning/10 text-warning font-bold'
-                                        : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
-                                )}
-                            >
-                                <span className="text-sm">{item.icon}</span>
-                                {item.label}
-                            </NavLink>
-                        ))}
-                    </>
-                )}
-
-                {/* Super admin section */}
-                {superAdminNav.length > 0 && (
-                    <>
-                        <div className="pt-4 pb-1 px-3">
-                            <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
-                                Platform
-                            </p>
-                        </div>
-                        {superAdminNav.map((item) => (
-                            <NavLink
-                                key={item.to}
-                                to={item.to}
-                                className={({ isActive }) => cn(
-                                    'flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors',
-                                    isActive
-                                        ? 'bg-danger/10 text-danger font-bold'
                                         : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
                                 )}
                             >
