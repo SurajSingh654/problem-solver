@@ -37,11 +37,13 @@ export default function Sidebar() {
     let adminNav = []
 
     if (isSuperAdmin) {
-        // SUPER_ADMIN: platform management only
+        const apiDocsUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '/api-docs')
         mainNav = [
             { to: '/super-admin', icon: '⚡', label: 'Platform Dashboard' },
             { to: '/team', icon: '👥', label: 'Manage Teams' },
         ]
+        // Swagger docs link — external URL, not a route
+        mainNav.push({ to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true })
     } else {
         // Team members & individuals: practice tools
         mainNav = [
@@ -181,22 +183,42 @@ export default function Sidebar() {
             {/* ── Navigation ────────────────────────────────────── */}
             <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
                 {mainNav.map((item) => (
-                    <NavLink
-                        key={item.to}
-                        to={item.to}
-                        end={item.to === '/' || item.to === '/super-admin'}
-                        className={({ isActive }) => cn(
-                            'flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors',
-                            isActive
-                                ? isSuperAdmin
-                                    ? 'bg-danger/10 text-danger font-bold'
-                                    : 'bg-brand-400/10 text-brand-300 font-bold'
-                                : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
-                        )}
-                    >
-                        <span className="text-sm">{item.icon}</span>
-                        {item.label}
-                    </NavLink>
+                    item.external ? (
+                        <a
+                            key={item.to}
+                            href={item.to}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium
+                                       text-text-tertiary hover:text-text-primary hover:bg-surface-2 transition-colors"
+                        >
+                            <span className="text-sm">{item.icon}</span>
+                            {item.label}
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2" className="ml-auto text-text-disabled">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                        </a>
+                    ) : (
+                        <NavLink
+                            key={item.to}
+                            to={item.to}
+                            end={item.to === '/' || item.to === '/super-admin'}
+                            className={({ isActive }) => cn(
+                                'flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors',
+                                isActive
+                                    ? isSuperAdmin
+                                        ? 'bg-danger/10 text-danger font-bold'
+                                        : 'bg-brand-400/10 text-brand-300 font-bold'
+                                    : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
+                            )}
+                        >
+                            <span className="text-sm">{item.icon}</span>
+                            {item.label}
+                        </NavLink>
+                    )
                 ))}
 
                 {/* Team admin section (not for SUPER_ADMIN) */}

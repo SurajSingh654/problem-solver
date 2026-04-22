@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
-import { Avatar } from '@components/ui/Avatar'
 import { cn } from '@utils/cn'
 import { formatRelativeDate, formatDuration } from '@utils/formatters'
 import api from '@services/api'
@@ -12,16 +11,16 @@ import api from '@services/api'
 // ── Verdict badge ──────────────────────────────────────
 function VerdictBadge({ verdict }) {
     const config = {
-        'Strong Hire': { color: 'bg-success/15 text-success border-success/30', icon: '🏆' },
-        'Hire': { color: 'bg-success/15 text-success border-success/30', icon: '✅' },
-        'Lean Hire': { color: 'bg-brand-400/15 text-brand-300 border-brand-400/30', icon: '🤔' },
-        'Lean No Hire': { color: 'bg-warning/15 text-warning border-warning/30', icon: '📈' },
-        'No Hire': { color: 'bg-danger/15 text-danger border-danger/30', icon: '💪' },
+        'STRONG_HIRE': { color: 'bg-success/15 text-success border-success/30', icon: '🏆', label: 'Strong Hire' },
+        'HIRE': { color: 'bg-success/15 text-success border-success/30', icon: '✅', label: 'Hire' },
+        'LEAN_HIRE': { color: 'bg-brand-400/15 text-brand-300 border-brand-400/30', icon: '🤔', label: 'Lean Hire' },
+        'LEAN_NO_HIRE': { color: 'bg-warning/15 text-warning border-warning/30', icon: '📈', label: 'Lean No Hire' },
+        'NO_HIRE': { color: 'bg-danger/15 text-danger border-danger/30', icon: '💪', label: 'No Hire' },
     }
-    const c = config[verdict] || config['Lean Hire']
+    const c = config[verdict] || config['LEAN_HIRE'] || { color: 'bg-surface-3 text-text-tertiary border-border-default', icon: '—', label: verdict }
     return (
         <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', c.color)}>
-            {c.icon} {verdict}
+            {c.icon} {c.label}
         </span>
     )
 }
@@ -52,7 +51,9 @@ function MiniScore({ score, size = 36 }) {
 // ── Session card ───────────────────────────────────────
 function SessionCard({ session, onClick }) {
     const debrief = session.debrief
+    const scores = session.scores
     const problem = session.problem
+    const overallScore = debrief?.overallScore || scores?.approach || null
 
     return (
         <motion.button
@@ -64,9 +65,8 @@ function SessionCard({ session, onClick }) {
                  hover:border-brand-400/30 hover:-translate-y-0.5
                  hover:shadow-md transition-all duration-200"
         >
-            {/* Score */}
-            {session.overallScore ? (
-                <MiniScore score={session.overallScore} />
+            {overallScore ? (
+                <MiniScore score={overallScore} />
             ) : (
                 <div className="w-9 h-9 rounded-full bg-surface-3 flex items-center justify-center
                         text-xs text-text-disabled flex-shrink-0">
@@ -74,7 +74,6 @@ function SessionCard({ session, onClick }) {
                 </div>
             )}
 
-            {/* Info */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     <span className="text-sm font-semibold text-text-primary truncate">
@@ -84,11 +83,11 @@ function SessionCard({ session, onClick }) {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] text-text-tertiary">
-                        {session.company || 'General'}
+                        {session.interviewStyle || 'Standard'}
                     </span>
                     <span className="text-text-disabled text-[11px]">·</span>
                     <span className="text-[11px] text-text-tertiary">
-                        {formatDuration(session.duration)}
+                        {session.difficulty}
                     </span>
                     <span className="text-text-disabled text-[11px]">·</span>
                     <span className="text-[11px] text-text-disabled">
@@ -97,7 +96,6 @@ function SessionCard({ session, onClick }) {
                 </div>
             </div>
 
-            {/* Status */}
             <Badge
                 variant={session.status === 'COMPLETED' ? 'success' :
                     session.status === 'ABANDONED' ? 'danger' : 'warning'}
@@ -125,7 +123,8 @@ function SessionDetail({ sessionId, onBack }) {
         async function load() {
             try {
                 const res = await api.get(`/interview-v2/${sessionId}`)
-                setSession(res.data.data)
+                // v3.0 returns { success, session }
+                setSession(res.data.session || res.data.data)
             } catch (err) {
                 console.error('Failed to load session:', err)
             } finally {
@@ -150,12 +149,12 @@ function SessionDetail({ sessionId, onBack }) {
 
     const debrief = session.debrief
     const messages = (session.messages || []).filter(m =>
+        m.role === 'USER' || m.role === 'ASSISTANT' ||
         m.role === 'user' || m.role === 'assistant'
     )
 
     return (
         <div className="max-w-[800px] mx-auto">
-            {/* Back button */}
             <button onClick={onBack}
                 className="flex items-center gap-1.5 text-sm text-text-tertiary
                          hover:text-text-primary transition-colors mb-6">
@@ -171,15 +170,14 @@ function SessionDetail({ sessionId, onBack }) {
             {/* Session header */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6">
                 <div className="flex items-center gap-4 flex-wrap">
-                    {session.overallScore && <MiniScore score={session.overallScore} size={48} />}
                     <div className="flex-1">
                         <h2 className="text-base font-bold text-text-primary">
                             {session.problem?.title || `${session.category?.replace('_', ' ')} Interview`}
                         </h2>
                         <div className="flex items-center gap-2 flex-wrap mt-1">
-                            <span className="text-xs text-text-tertiary">{session.company || 'General'}</span>
+                            <span className="text-xs text-text-tertiary">{session.interviewStyle || 'Standard'}</span>
                             <span className="text-text-disabled text-xs">·</span>
-                            <span className="text-xs text-text-tertiary">{formatDuration(session.duration)}</span>
+                            <span className="text-xs text-text-tertiary">{session.difficulty}</span>
                             <span className="text-text-disabled text-xs">·</span>
                             <span className="text-xs text-text-disabled">{formatRelativeDate(session.startedAt)}</span>
                             {debrief?.verdict && <VerdictBadge verdict={debrief.verdict} />}
@@ -188,24 +186,23 @@ function SessionDetail({ sessionId, onBack }) {
                 </div>
             </div>
 
-            {/* Debrief summary (if exists) */}
+            {/* Debrief summary */}
             {debrief && (
                 <div className="bg-surface-1 border border-brand-400/20 rounded-2xl p-5 mb-6">
                     <h3 className="text-sm font-bold text-text-primary mb-4 flex items-center gap-2">
                         <span>📊</span> Debrief
                     </h3>
 
-                    {/* Dimension scores */}
-                    {debrief.dimensions && (
+                    {debrief.scores && (
                         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
-                            {Object.entries(debrief.dimensions).map(([key, dim]) => (
+                            {Object.entries(debrief.scores).map(([key, score]) => (
                                 <div key={key} className="text-center bg-surface-2 rounded-xl p-2.5">
                                     <div className={cn(
                                         'text-lg font-extrabold font-mono',
-                                        dim.score >= 7 ? 'text-success' :
-                                            dim.score >= 5 ? 'text-warning' : 'text-danger'
+                                        score >= 7 ? 'text-success' :
+                                            score >= 5 ? 'text-warning' : 'text-danger'
                                     )}>
-                                        {dim.score}
+                                        {score}
                                     </div>
                                     <p className="text-[9px] text-text-disabled uppercase tracking-wider mt-0.5 capitalize">
                                         {key.replace(/([A-Z])/g, ' $1').trim()}
@@ -215,7 +212,6 @@ function SessionDetail({ sessionId, onBack }) {
                         </div>
                     )}
 
-                    {/* Strengths + Improvements */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                         {debrief.strengths?.length > 0 && (
                             <div className="bg-success/5 border border-success/15 rounded-xl p-3">
@@ -239,11 +235,10 @@ function SessionDetail({ sessionId, onBack }) {
                         )}
                     </div>
 
-                    {/* Next steps */}
-                    {debrief.nextSteps && (
+                    {debrief.summary && (
                         <div className="bg-brand-400/5 border border-brand-400/15 rounded-xl p-3">
-                            <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">Next Steps</p>
-                            <p className="text-xs text-text-secondary leading-relaxed">{debrief.nextSteps}</p>
+                            <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">Summary</p>
+                            <p className="text-xs text-text-secondary leading-relaxed">{debrief.summary}</p>
                         </div>
                     )}
                 </div>
@@ -255,31 +250,33 @@ function SessionDetail({ sessionId, onBack }) {
                     <span>💬</span> Transcript
                     <span className="text-xs font-normal text-text-disabled">({messages.length} messages)</span>
                 </h3>
-
                 <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                    {messages.map((msg, i) => (
-                        <div key={i} className={cn(
-                            'flex gap-3',
-                            msg.role === 'user' ? 'flex-row-reverse' : ''
-                        )}>
-                            <div className={cn(
-                                'w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0 mt-1',
-                                msg.role === 'user'
-                                    ? 'bg-brand-400/20 text-brand-300'
-                                    : 'bg-surface-4 text-text-secondary'
+                    {messages.map((msg, i) => {
+                        const isUser = msg.role === 'USER' || msg.role === 'user'
+                        return (
+                            <div key={i} className={cn(
+                                'flex gap-3',
+                                isUser ? 'flex-row-reverse' : ''
                             )}>
-                                {msg.role === 'user' ? '👤' : '🤖'}
+                                <div className={cn(
+                                    'w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0 mt-1',
+                                    isUser
+                                        ? 'bg-brand-400/20 text-brand-300'
+                                        : 'bg-surface-4 text-text-secondary'
+                                )}>
+                                    {isUser ? '👤' : '🤖'}
+                                </div>
+                                <div className={cn(
+                                    'max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed',
+                                    isUser
+                                        ? 'bg-brand-400/10 border border-brand-400/20 text-text-primary rounded-tr-md'
+                                        : 'bg-surface-2 border border-border-default text-text-secondary rounded-tl-md'
+                                )}>
+                                    {msg.content}
+                                </div>
                             </div>
-                            <div className={cn(
-                                'max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed',
-                                msg.role === 'user'
-                                    ? 'bg-brand-400/10 border border-brand-400/20 text-text-primary rounded-tr-md'
-                                    : 'bg-surface-2 border border-border-default text-text-secondary rounded-tl-md'
-                            )}>
-                                {msg.content}
-                            </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             </div>
         </div>
@@ -298,8 +295,9 @@ export default function InterviewHistoryPage() {
     useEffect(() => {
         async function loadSessions() {
             try {
-                const res = await api.get('/interview-v2/my-sessions')
-                setSessions(res.data.data || [])
+                const res = await api.get('/interview-v2/history/list')
+                // v3.0 returns { success, sessions, pagination }
+                setSessions(res.data.sessions || res.data.data || [])
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
@@ -309,7 +307,6 @@ export default function InterviewHistoryPage() {
         loadSessions()
     }, [])
 
-    // If a session is selected, show detail view
     if (selectedId) {
         return (
             <div className="p-6">
@@ -318,15 +315,13 @@ export default function InterviewHistoryPage() {
         )
     }
 
-    // List view
     const completed = sessions.filter(s => s.status === 'COMPLETED')
     const avgScore = completed.length
-        ? (completed.reduce((sum, s) => sum + (s.overallScore || 0), 0) / completed.length).toFixed(1)
+        ? (completed.reduce((sum, s) => sum + (s.debrief?.overallScore || 0), 0) / completed.length).toFixed(1)
         : null
 
     return (
         <div className="p-6 max-w-[800px] mx-auto">
-            {/* Header */}
             <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -345,7 +340,6 @@ export default function InterviewHistoryPage() {
                 </Button>
             </motion.div>
 
-            {/* Stats summary */}
             {completed.length > 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -353,20 +347,12 @@ export default function InterviewHistoryPage() {
                     className="grid grid-cols-3 gap-3 mb-6"
                 >
                     <div className="bg-surface-1 border border-border-default rounded-xl p-4 text-center">
-                        <div className="text-2xl font-extrabold font-mono text-brand-300">
-                            {sessions.length}
-                        </div>
-                        <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">
-                            Total Sessions
-                        </div>
+                        <div className="text-2xl font-extrabold font-mono text-brand-300">{sessions.length}</div>
+                        <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">Total</div>
                     </div>
                     <div className="bg-surface-1 border border-border-default rounded-xl p-4 text-center">
-                        <div className="text-2xl font-extrabold font-mono text-success">
-                            {completed.length}
-                        </div>
-                        <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">
-                            Completed
-                        </div>
+                        <div className="text-2xl font-extrabold font-mono text-success">{completed.length}</div>
+                        <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">Completed</div>
                     </div>
                     <div className="bg-surface-1 border border-border-default rounded-xl p-4 text-center">
                         <div className={cn(
@@ -375,24 +361,17 @@ export default function InterviewHistoryPage() {
                         )}>
                             {avgScore || '—'}
                         </div>
-                        <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">
-                            Avg Score
-                        </div>
+                        <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">Avg Score</div>
                     </div>
                 </motion.div>
             )}
 
-            {/* Session list */}
             {loading ? (
-                <div className="flex justify-center py-16">
-                    <Spinner size="lg" />
-                </div>
+                <div className="flex justify-center py-16"><Spinner size="lg" /></div>
             ) : sessions.length === 0 ? (
                 <div className="bg-surface-1 border border-border-default rounded-2xl p-12 text-center">
                     <div className="text-4xl mb-4">💬</div>
-                    <h2 className="text-lg font-bold text-text-primary mb-2">
-                        No interviews yet
-                    </h2>
+                    <h2 className="text-lg font-bold text-text-primary mb-2">No interviews yet</h2>
                     <p className="text-sm text-text-tertiary mb-5">
                         Start your first AI mock interview to begin tracking your progress.
                     </p>
@@ -402,7 +381,7 @@ export default function InterviewHistoryPage() {
                 </div>
             ) : (
                 <div className="space-y-2">
-                    {sessions.map((session, i) => (
+                    {sessions.map((session) => (
                         <SessionCard
                             key={session.id}
                             session={session}

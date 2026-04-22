@@ -45,7 +45,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
 import recommendationRoutes from "./routes/recommendations.routes.js";
 // import userRoutes from './routes/users.routes.js'
-// import adminRoutes from './routes/admin.routes.js'
+import adminRoutes from './routes/admin.routes.js'
 
 // ── WebSocket ────────────────────────────────────────────────
 import { setupWebSocket } from "./services/websocket.service.js";
@@ -131,7 +131,7 @@ app.use("/api/ai", aiLimiter, aiRoutes);
 
 // ── Future routes ────────────────────────────────────────────
 // app.use('/api/users', apiLimiter, userRoutes)
-// app.use('/api/admin', apiLimiter, adminRoutes)
+app.use('/api/admin', apiLimiter, adminRoutes)
 
 // ============================================================================
 // WEBSOCKET

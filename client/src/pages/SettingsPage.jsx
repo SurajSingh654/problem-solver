@@ -205,13 +205,32 @@ export default function SettingsPage() {
 
     async function onSave(data) {
         try {
-            await updateProfile.mutateAsync({
+            const payload = {
                 name: data.name || undefined,
                 avatarUrl: avatarColor || undefined,
-                targetCompany: data.targetCompany || null,
-                interviewDate: data.interviewDate || null,
-                preferredLanguage: data.preferredLanguage || null,
-            })
+            }
+
+            // Only include optional fields if they have values
+            // Empty strings cause Zod validation errors
+            if (data.targetCompany && data.targetCompany.trim()) {
+                payload.targetCompany = data.targetCompany.trim()
+            } else {
+                payload.targetCompany = null
+            }
+
+            if (data.interviewDate) {
+                payload.interviewDate = new Date(data.interviewDate).toISOString()
+            } else {
+                payload.interviewDate = null
+            }
+
+            if (data.preferredLanguage && data.preferredLanguage.trim()) {
+                payload.preferredLanguage = data.preferredLanguage.trim()
+            } else {
+                payload.preferredLanguage = null
+            }
+
+            await updateProfile.mutateAsync(payload)
             setSaved(true)
             setTimeout(() => setSaved(false), 2500)
         } catch { /* error handled by hook */ }
