@@ -87,7 +87,8 @@ export async function register(req, res) {
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     // ── Generate verification code ─────────────────────
-    const code = generateCode();
+    const code = generateCode()
+    console.log(`[DEV] Verification code: ${code} for ${email || newEmail || "unknown"}`);
 
     // ── Create user ────────────────────────────────────
     const user = await prisma.user.create({
@@ -243,7 +244,8 @@ export async function resendVerification(req, res) {
       return error(res, "Email is already verified.", 400);
     }
 
-    const code = generateCode();
+    const code = generateCode()
+    console.log(`[DEV] Verification code: ${code} for ${email || newEmail || "unknown"}`);
 
     await prisma.user.update({
       where: { id: user.id },
@@ -595,7 +597,8 @@ export async function forgotPassword(req, res) {
       });
     }
 
-    const code = generateCode();
+    const code = generateCode()
+    console.log(`[DEV] Verification code: ${code} for ${email || newEmail || "unknown"}`);
 
     await prisma.user.update({
       where: { id: user.id },
@@ -903,7 +906,8 @@ export async function updateUnverifiedEmail(req, res) {
     }
 
     // Update email and send new verification code
-    const code = generateCode();
+    const code = generateCode()
+    console.log(`[DEV] Verification code: ${code} for ${email || newEmail || "unknown"}`);
 
     await prisma.user.update({
       where: { id: user.id },
