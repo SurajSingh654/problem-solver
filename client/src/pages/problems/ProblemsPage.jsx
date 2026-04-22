@@ -1,8 +1,11 @@
+// ============================================================================
+// ProbSolver v3.0 — Problems Page (Team-Scoped)
+// ============================================================================
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProblems } from '@hooks/useProblems'
-import useAuthStore from '@store/useAuthStore'
+import { useTeamContext } from '@hooks/useTeamContext'
 import { ProblemCard } from '@components/features/problems/ProblemCard'
 import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
@@ -10,12 +13,12 @@ import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
 import { EmptyState } from '@components/ui/EmptyState'
 import { cn } from '@utils/cn'
-import { DIFFICULTY, SOURCE_LABELS, PATTERNS, PROBLEM_CATEGORIES } from '@utils/constants'
+import { SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
 
 // ── Stats bar ──────────────────────────────────────────
 function StatsBar({ problems }) {
     const total = problems.length
-    const solved = problems.filter(p => p.isSolvedByMe).length
+    const solved = problems.filter(p => p.isSolved).length
     const easy = problems.filter(p => p.difficulty === 'EASY').length
     const medium = problems.filter(p => p.difficulty === 'MEDIUM').length
     const hard = problems.filter(p => p.difficulty === 'HARD').length
@@ -31,66 +34,116 @@ function StatsBar({ problems }) {
     )
 }
 
+// ── List row (alternative view) ────────────────────────
+function ProblemListRow({ problem, index }) {
+    const navigate = useNavigate()
+    const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15, delay: index * 0.02 }}
+            onClick={() => navigate(`/problems/${problem.id}`)}
+            className={cn(
+                'flex items-center gap-4 p-3.5 rounded-xl border cursor-pointer',
+                'transition-all duration-150 hover:-translate-y-px hover:shadow-sm',
+                problem.isSolved
+                    ? 'bg-success/3 border-success/15 hover:border-success/30'
+                    : 'bg-surface-2 border-border-default hover:border-brand-400/30'
+            )}
+        >
+            {/* Solved check */}
+            <div className={cn(
+                'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0',
+                problem.isSolved
+                    ? 'bg-success/15 border border-success/30'
+                    : 'bg-surface-3 border border-border-default'
+            )}>
+                {problem.isSolved && (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                        stroke="#22c55e" strokeWidth="3"
+                        strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                )}
+            </div>
+
+            {/* Title */}
+            <span className="flex-1 text-sm font-semibold text-text-primary truncate">
+                {problem.isPinned && <span className="mr-1.5">📌</span>}
+                {problem.title}
+            </span>
+
+            {/* Badges */}
+            <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+                <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
+                    {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
+                </Badge>
+                {problem.tags?.slice(0, 2).map(t => (
+                    <span key={t} className="text-[11px] text-text-tertiary bg-surface-3
+                                   px-1.5 py-px rounded border border-border-subtle hidden md:inline">
+                        {t}
+                    </span>
+                ))}
+            </div>
+
+            {/* Solved count */}
+            <span className="text-xs text-text-disabled flex-shrink-0 hidden sm:block">
+                {problem.solutionCount || 0} solved
+            </span>
+        </motion.div>
+    )
+}
+
 // ── Main ───────────────────────────────────────────────
 export default function ProblemsPage() {
     const navigate = useNavigate()
-    const { user } = useAuthStore()
-    const isAdmin = user?.role === 'ADMIN'
+    const { isTeamAdmin, isPersonalMode } = useTeamContext()
 
     const [search, setSearch] = useState('')
     const [difficulty, setDifficulty] = useState('')
-    const [source, setSource] = useState('')
+    const [category, setCategory] = useState('')
     const [tag, setTag] = useState('')
     const [showPinned, setShowPinned] = useState(false)
-    const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
+    const [viewMode, setViewMode] = useState('grid')
 
-    const { data, isLoading } = useProblems({ limit: '200' })
+    const { data, isLoading } = useProblems({ limit: 200 })
     const allProblems = data?.problems || []
 
-    const [category, setCategory] = useState('')
-
-    // Client-side filtering (server already handles basic filters,
-    // but we do it client-side here since we fetched all)
+    // Client-side filtering
     const filtered = useMemo(() => {
         let list = [...allProblems]
         if (showPinned) list = list.filter(p => p.isPinned)
         if (difficulty) list = list.filter(p => p.difficulty === difficulty)
-        if (source) list = list.filter(p => p.source === source)
         if (category) list = list.filter(p => p.category === category)
         if (tag) list = list.filter(p =>
-            p.tags.some(t => t.toLowerCase().includes(tag.toLowerCase()))
+            p.tags?.some(t => t.toLowerCase().includes(tag.toLowerCase()))
         )
         if (search) {
             const q = search.toLowerCase()
             list = list.filter(p =>
                 p.title.toLowerCase().includes(q) ||
-                p.tags.some(t => t.toLowerCase().includes(q)) ||
-                (p.companyTags || []).some(c => c.toLowerCase().includes(q))
+                p.tags?.some(t => t.toLowerCase().includes(q))
             )
         }
         return list
-    }, [allProblems, search, difficulty, source, category, tag, showPinned])
+    }, [allProblems, search, difficulty, category, tag, showPinned])
 
-    // Unique sources from available problems
-    const availableSources = useMemo(() => {
-        const s = new Set(allProblems.map(p => p.source))
-        return [...s]
-    }, [allProblems])
-
-    // Available tags
+    // Available tags from problems
     const availableTags = useMemo(() => {
-        const t = new Set(allProblems.flatMap(p => p.tags))
+        const t = new Set(allProblems.flatMap(p => p.tags || []))
         return [...t].slice(0, 20)
     }, [allProblems])
 
-    const hasFilters = difficulty || source || tag || search || showPinned || category
+    const hasFilters = difficulty || tag || search || showPinned || category
 
     function clearFilters() {
         setSearch('')
         setDifficulty('')
-        setSource('')
-        setTag('')
         setCategory('')
+        setTag('')
         setShowPinned(false)
     }
 
@@ -103,14 +156,16 @@ export default function ProblemsPage() {
                         Problems
                     </h1>
                     <p className="text-sm text-text-tertiary">
-                        Practice, solve, and track your progress
+                        {isPersonalMode
+                            ? 'Your personal practice problems'
+                            : 'Team problems — practice, solve, and track your progress'}
                     </p>
                 </div>
-                {isAdmin && (
+                {isTeamAdmin && (
                     <Button
                         variant="primary"
                         size="md"
-                        onClick={() => navigate('/admin/problems/new')}
+                        onClick={() => navigate('/admin/add-problem')}
                     >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" strokeWidth="2.5"
@@ -127,7 +182,7 @@ export default function ProblemsPage() {
             <div className="flex items-center gap-3 mb-4">
                 <div className="flex-1">
                     <Input
-                        placeholder="Search problems, tags, companies…"
+                        placeholder="Search problems, tags…"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         leftIcon={
@@ -140,7 +195,6 @@ export default function ProblemsPage() {
                         }
                     />
                 </div>
-                {/* View toggle */}
                 <div className="flex items-center bg-surface-2 border border-border-default
                         rounded-lg p-1 gap-1 flex-shrink-0">
                     <button
@@ -185,13 +239,10 @@ export default function ProblemsPage() {
             </div>
 
             {/* Filters */}
-            {/* Filters — grouped by type */}
             <div className="bg-surface-1 border border-border-default rounded-xl p-4 mb-4 space-y-3">
-
                 {/* Row 1: Category */}
                 <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
-                     w-16 flex-shrink-0">
+                    <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest w-16 flex-shrink-0">
                         Type
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -214,9 +265,7 @@ export default function ProblemsPage() {
                                     {cat.label}
                                     <span className={cn(
                                         'text-[9px] px-1 py-px rounded-full font-bold',
-                                        category === cat.id
-                                            ? 'bg-white/10'
-                                            : 'bg-surface-4 text-text-disabled'
+                                        category === cat.id ? 'bg-white/10' : 'bg-surface-4 text-text-disabled'
                                     )}>
                                         {count}
                                     </span>
@@ -228,8 +277,7 @@ export default function ProblemsPage() {
 
                 {/* Row 2: Difficulty + Pinned */}
                 <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
-                     w-16 flex-shrink-0">
+                    <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest w-16 flex-shrink-0">
                         Level
                     </span>
                     <div className="flex gap-1.5">
@@ -278,42 +326,14 @@ export default function ProblemsPage() {
                     </div>
                 </div>
 
-                {/* Row 3: Source — only show if multiple sources */}
-                {availableSources.length > 1 && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
-                       w-16 flex-shrink-0">
-                            Source
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                            {availableSources.map(s => (
-                                <button
-                                    key={s}
-                                    onClick={() => setSource(v => v === s ? '' : s)}
-                                    className={cn(
-                                        'inline-flex items-center px-2.5 py-1 rounded-lg',
-                                        'text-[11px] font-semibold border transition-all duration-150',
-                                        source === s
-                                            ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                            : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
-                                    )}
-                                >
-                                    {SOURCE_LABELS[s] || s}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Row 4: Tags — only show if tags exist */}
+                {/* Row 3: Tags */}
                 {availableTags.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest
-                       w-16 flex-shrink-0">
+                        <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest w-16 flex-shrink-0">
                             Tags
                         </span>
                         <div className="flex flex-wrap gap-1.5">
-                            {availableTags.slice(0, 6).map(t => (
+                            {availableTags.slice(0, 8).map(t => (
                                 <button
                                     key={t}
                                     onClick={() => setTag(v => v === t ? '' : t)}
@@ -328,24 +348,19 @@ export default function ProblemsPage() {
                                     {t}
                                 </button>
                             ))}
-                            {availableTags.length > 6 && (
-                                <span className="text-[10px] text-text-disabled self-center">
-                                    +{availableTags.length - 6} more
-                                </span>
-                            )}
                         </div>
                     </div>
                 )}
 
-                {/* Active filters summary + clear */}
+                {/* Active filters summary */}
                 {hasFilters && (
                     <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
                         <StatsBar problems={filtered} />
                         <button
                             onClick={clearFilters}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                   text-xs font-semibold text-danger border border-danger/25
-                   bg-danger/8 hover:bg-danger/15 transition-all"
+                               text-xs font-semibold text-danger border border-danger/25
+                               bg-danger/8 hover:bg-danger/15 transition-all"
                         >
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" strokeWidth="3"
@@ -358,14 +373,12 @@ export default function ProblemsPage() {
                     </div>
                 )}
 
-                {/* No filters — show stats */}
                 {!hasFilters && !isLoading && (
                     <div className="pt-2 border-t border-border-subtle">
                         <StatsBar problems={filtered} />
                     </div>
                 )}
             </div>
-
 
             {/* Content */}
             <div className="mt-4">
@@ -380,16 +393,16 @@ export default function ProblemsPage() {
                         description={
                             hasFilters
                                 ? 'Try adjusting or clearing your filters.'
-                                : isAdmin
+                                : isTeamAdmin
                                     ? 'Get started by adding the first problem.'
-                                    : 'The admin hasn\'t added any problems yet. Check back soon!'
+                                    : 'The team admin hasn\'t added any problems yet. Check back soon!'
                         }
-                        actionLabel={hasFilters ? 'Clear filters' : isAdmin ? 'Add Problem' : undefined}
+                        actionLabel={hasFilters ? 'Clear filters' : isTeamAdmin ? 'Add Problem' : undefined}
                         onAction={
                             hasFilters
                                 ? clearFilters
-                                : isAdmin
-                                    ? () => navigate('/admin/problems/new')
+                                : isTeamAdmin
+                                    ? () => navigate('/admin/add-problem')
                                     : undefined
                         }
                     />
@@ -405,7 +418,6 @@ export default function ProblemsPage() {
                         </AnimatePresence>
                     </motion.div>
                 ) : (
-                    // List view
                     <div className="flex flex-col gap-2">
                         <AnimatePresence mode="popLayout">
                             {filtered.map((problem, i) => (
@@ -416,77 +428,5 @@ export default function ProblemsPage() {
                 )}
             </div>
         </div>
-    )
-}
-
-// ── List row (alternative view) ────────────────────────
-function ProblemListRow({ problem, index }) {
-    const navigate = useNavigate()
-    const {
-        id, title, difficulty, source, tags,
-        isSolvedByMe, totalSolutions, isPinned,
-    } = problem
-
-    const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
-    const SOURCE_COLOR = {
-        LEETCODE: 'text-orange-400', GFG: 'text-green-500',
-        CODECHEF: 'text-amber-600', OTHER: 'text-text-tertiary',
-    }
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.15, delay: index * 0.02 }}
-            onClick={() => navigate(`/problems/${id}`)}
-            className={cn(
-                'flex items-center gap-4 p-3.5 rounded-xl border cursor-pointer',
-                'transition-all duration-150 hover:-translate-y-px hover:shadow-sm',
-                isSolvedByMe
-                    ? 'bg-success/3 border-success/15 hover:border-success/30'
-                    : 'bg-surface-2 border-border-default hover:border-brand-400/30'
-            )}
-        >
-            {/* Solved check */}
-            <div className={cn(
-                'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0',
-                isSolvedByMe
-                    ? 'bg-success/15 border border-success/30'
-                    : 'bg-surface-3 border border-border-default'
-            )}>
-                {isSolvedByMe && (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-                        stroke="#22c55e" strokeWidth="3"
-                        strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                )}
-            </div>
-            {/* Title */}
-            <span className="flex-1 text-sm font-semibold text-text-primary truncate">
-                {isPinned && <span className="mr-1.5">📌</span>}
-                {title}
-            </span>
-            {/* Badges */}
-            <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-                <Badge variant={DIFF_VARIANT[difficulty] || 'brand'} size="xs">
-                    {difficulty.charAt(0) + difficulty.slice(1).toLowerCase()}
-                </Badge>
-                <span className={cn('text-xs font-medium', SOURCE_COLOR[source] || 'text-text-tertiary')}>
-                    {SOURCE_LABELS[source] || source}
-                </span>
-                {tags.slice(0, 2).map(t => (
-                    <span key={t} className="text-[11px] text-text-tertiary bg-surface-3
-                                   px-1.5 py-px rounded border border-border-subtle hidden md:inline">
-                        {t}
-                    </span>
-                ))}
-            </div>
-            {/* Solved count */}
-            <span className="text-xs text-text-disabled flex-shrink-0 hidden sm:block">
-                {totalSolutions} solved
-            </span>
-        </motion.div>
     )
 }
