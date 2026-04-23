@@ -245,7 +245,7 @@ export default function ProductHealthPage() {
             setLoading(true)
             try {
                 const res = await api.get(`/admin/product-health?period=${period}`)
-                setMetrics(res.data.data)
+                setMetrics(res.data)
             } catch (err) {
                 console.error('Failed to load metrics:', err)
             } finally {
@@ -261,7 +261,7 @@ export default function ProductHealthPage() {
         setAnalyzing(true)
         try {
             const res = await api.post('/admin/product-health/analyze', { metrics }, aiConfig)
-            setAnalysis(res.data.data)
+            setAnalysis(res.data)
         } catch (err) {
             console.error('Analysis failed:', err)
         } finally {

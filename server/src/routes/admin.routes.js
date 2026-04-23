@@ -4,6 +4,7 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requireAnyAdmin } from "../middleware/superAdmin.middleware.js";
+import { optionalTeamContext } from "../middleware/team.middleware.js";
 import {
   getProductHealth,
   analyzeProductHealth,
@@ -12,6 +13,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(optionalTeamContext);
 
 router.get("/product-health", requireAnyAdmin, getProductHealth);
 router.post("/product-health/analyze", requireAnyAdmin, analyzeProductHealth);
