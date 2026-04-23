@@ -167,7 +167,9 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
         resolver: zodResolver(schema),
         defaultValues: {
             title: initialData?.title || '',
-            source: initialData?.source || 'LEETCODE',
+            source: initialData?.source === 'MANUAL' || initialData?.source === 'AI_GENERATED'
+                ? 'OTHER'
+                : (initialData?.source || 'OTHER'),
             sourceUrl: initialData?.sourceUrl || '',
             difficulty: initialData?.difficulty || 'MEDIUM',
             category: initialData?.category || 'CODING',
@@ -180,8 +182,15 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     // Uncontrolled state
     const [tags, setTags] = useState(initialData?.tags || [])
     const [companyTags, setCompanyTags] = useState(initialData?.companyTags || [])
-    const [useCases, setUseCases] = useState(initialData?.useCases || [])
-    const [followUps, setFollowUps] = useState(initialData?.followUps || [])
+    const [useCases, setUseCases] = useState(() => {
+        const raw = initialData?.useCases
+        if (!raw) return []
+        if (Array.isArray(raw)) return raw
+        return raw.split('\n').filter(Boolean)
+    })
+    const [followUps, setFollowUps] = useState(
+        initialData?.followUpQuestions || initialData?.followUps || []
+    )
     const [isPinned, setIsPinned] = useState(initialData?.isPinned || false)
     const [isBlindChallenge, setIsBlindChallenge] = useState(initialData?.isBlindChallenge || false)
 
