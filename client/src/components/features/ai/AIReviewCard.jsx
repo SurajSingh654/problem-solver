@@ -69,8 +69,11 @@ export function AIReviewCard({ solutionId, existingReview }) {
     const aiReview = useAIReview()
 
     async function handleReview() {
-        const res = await aiReview.mutateAsync({ solutionId })
-        setReview(res.data.data)
+        // v3.0 FIX: pass solutionId as string, not object
+        // useAIReview expects: mutationFn: (solutionId) => api.post(...)
+        const res = await aiReview.mutateAsync(solutionId)
+        // v3.0 FIX: response is { success, feedback, ragContext }
+        setReview(res.data.feedback || res.data.data || res.data)
         setExpanded(true)
     }
 

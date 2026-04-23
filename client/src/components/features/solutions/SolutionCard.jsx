@@ -1,14 +1,13 @@
+// ============================================================================
+// ProbSolver v3.0 — Solution Card
+// ============================================================================
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Avatar } from '@components/ui/Avatar'
 import { Badge } from '@components/ui/Badge'
-import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
-import { formatRelativeDate, formatDuration } from '@utils/formatters'
-import {
-    LANGUAGE_LABELS, CONFIDENCE_LEVELS,
-    DIFFICULTY_COLORS,
-} from '@utils/constants'
+import { formatRelativeDate } from '@utils/formatters'
+import { LANGUAGE_LABELS, CONFIDENCE_LEVELS } from '@utils/constants'
 
 // ── Code block ─────────────────────────────────────────
 function CodeBlock({ code, language }) {
@@ -33,24 +32,9 @@ function CodeBlock({ code, language }) {
                      flex items-center gap-1.5 transition-colors"
                 >
                     {copied ? (
-                        <>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                stroke="#22c55e" strokeWidth="2.5"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            <span className="text-success">Copied!</span>
-                        </>
+                        <span className="text-success">✓ Copied!</span>
                     ) : (
-                        <>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                            </svg>
-                            Copy
-                        </>
+                        'Copy'
                     )}
                 </button>
             </div>
@@ -67,8 +51,7 @@ function SectionRow({ label, value, mono = false }) {
     if (!value) return null
     return (
         <div>
-            <p className="text-[11px] font-bold text-text-disabled uppercase
-                    tracking-widest mb-1">
+            <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest mb-1">
                 {label}
             </p>
             <p className={cn(
@@ -106,26 +89,29 @@ function ConfidenceDisplay({ level }) {
 // ── Main SolutionCard ──────────────────────────────────
 export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] }) {
     const [expanded, setExpanded] = useState(false)
-    const [tab, setTab] = useState('approach') // 'approach' | 'code' | 'depth'
-
+    const [tab, setTab] = useState('approach')
 
     if (!solution) return null
 
+    // v3 field names
     const {
-        user, solvedAt, language, code,
-        patternIdentified, firstInstinct, whyThisPattern,
-        bruteForceApproach, bruteForceTime, bruteForceSpace,
-        optimizedApproach, optimizedTime, optimizedSpace,
-        keyInsight, feynmanExplanation, realWorldConnection,
-        followUpAnswers, confidenceLevel,
-        stuckPoints, hintsUsed,
-        isInterviewMode, timeUsedSecs,
-        clarityRatings,
+        user,
+        createdAt,
+        language,
+        code,
+        pattern,
+        approach,
+        bruteForce,
+        optimizedApproach,
+        timeComplexity,
+        spaceComplexity,
+        keyInsight,
+        feynmanExplanation,
+        realWorldConnection,
+        confidence,
+        avgClarityRating,
+        totalRatings,
     } = solution
-
-    const avgClarity = clarityRatings?.length
-        ? (clarityRatings.reduce((s, r) => s + r.score, 0) / clarityRatings.length).toFixed(1)
-        : null
 
     const tabs = [
         { id: 'approach', label: 'Approach' },
@@ -150,14 +136,14 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                 onClick={() => setExpanded(v => !v)}
             >
                 <Avatar
-                    name={user?.username || '?'}
-                    color={user?.avatarColor || '#7c6ff7'}
+                    name={user?.name || '?'}
+                    color={user?.avatarUrl || '#7c6ff7'}
                     size="sm"
                 />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold text-text-primary">
-                            {user?.username || 'Unknown'}
+                            {user?.name || 'Unknown'}
                         </span>
                         {isOwn && (
                             <span className="text-[10px] font-bold px-1.5 py-px rounded-full
@@ -165,39 +151,29 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 You
                             </span>
                         )}
-                        {isInterviewMode && (
-                            <span className="text-[10px] font-bold px-1.5 py-px rounded-full
-                               bg-warning/12 text-warning border border-warning/25">
-                                ⏱ Interview mode
-                            </span>
+                        {language && (
+                            <Badge variant="gray" size="xs">
+                                {LANGUAGE_LABELS[language] || language}
+                            </Badge>
                         )}
-                        <Badge variant="gray" size="xs">
-                            {LANGUAGE_LABELS[language] || language}
-                        </Badge>
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         <span className="text-xs text-text-tertiary">
-                            {formatRelativeDate(solvedAt)}
+                            {formatRelativeDate(createdAt)}
                         </span>
-                        {timeUsedSecs && (
+                        {avgClarityRating && (
                             <span className="text-xs text-text-tertiary">
-                                ⏱ {formatDuration(timeUsedSecs)}
+                                ⭐ {avgClarityRating} clarity ({totalRatings})
                             </span>
-                        )}
-                        {avgClarity && (
-                            <span className="text-xs text-text-tertiary">
-                                ⭐ {avgClarity} clarity
-                            </span>
-                        )}
-                        {hintsUsed && (
-                            <span className="text-xs text-text-tertiary">💡 Used hints</span>
                         )}
                     </div>
                 </div>
+
                 {/* Confidence */}
                 <div className="hidden sm:block flex-shrink-0">
-                    <ConfidenceDisplay level={confidenceLevel} />
+                    <ConfidenceDisplay level={confidence} />
                 </div>
+
                 {/* Expand chevron */}
                 <motion.div
                     animate={{ rotate: expanded ? 180 : 0 }}
@@ -245,21 +221,18 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                             <div className="p-4 space-y-4">
                                 {tab === 'approach' && (
                                     <>
-                                        <SectionRow label="Pattern Identified" value={patternIdentified} />
-                                        <SectionRow label="First Instinct" value={firstInstinct} />
-                                        <SectionRow label="Why This Pattern" value={whyThisPattern} />
-                                        {bruteForceApproach && (
+                                        <SectionRow label="Pattern" value={pattern} />
+                                        <SectionRow label="Approach" value={approach} />
+
+                                        {bruteForce && (
                                             <div className="border border-border-subtle rounded-xl p-3 space-y-2">
                                                 <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest">
                                                     Brute Force
                                                 </p>
-                                                <p className="text-sm text-text-secondary">{bruteForceApproach}</p>
-                                                <div className="flex gap-3">
-                                                    {bruteForceTime && <Badge variant="gray" size="xs">⏱ {bruteForceTime}</Badge>}
-                                                    {bruteForceSpace && <Badge variant="gray" size="xs">💾 {bruteForceSpace}</Badge>}
-                                                </div>
+                                                <p className="text-sm text-text-secondary">{bruteForce}</p>
                                             </div>
                                         )}
+
                                         {optimizedApproach && (
                                             <div className="border border-brand-400/20 rounded-xl p-3 space-y-2 bg-brand-400/3">
                                                 <p className="text-[11px] font-bold text-brand-300 uppercase tracking-widest">
@@ -267,13 +240,14 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                                 </p>
                                                 <p className="text-sm text-text-secondary">{optimizedApproach}</p>
                                                 <div className="flex gap-3">
-                                                    {optimizedTime && <Badge variant="brand" size="xs">⏱ {optimizedTime}</Badge>}
-                                                    {optimizedSpace && <Badge variant="brand" size="xs">💾 {optimizedSpace}</Badge>}
+                                                    {timeComplexity && (
+                                                        <Badge variant="brand" size="xs">⏱ {timeComplexity}</Badge>
+                                                    )}
+                                                    {spaceComplexity && (
+                                                        <Badge variant="brand" size="xs">💾 {spaceComplexity}</Badge>
+                                                    )}
                                                 </div>
                                             </div>
-                                        )}
-                                        {stuckPoints && (
-                                            <SectionRow label="Where I got stuck" value={stuckPoints} />
                                         )}
                                     </>
                                 )}
@@ -287,29 +261,6 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                         <SectionRow label="Key Insight" value={keyInsight} />
                                         <SectionRow label="Feynman Explanation" value={feynmanExplanation} />
                                         <SectionRow label="Real World Connection" value={realWorldConnection} />
-                                        {/* Follow-up answers */}
-                                        {followUpAnswers?.length > 0 &&
-                                            problemFollowUps?.length > 0 && (
-                                                <div className="space-y-3">
-                                                    <p className="text-[11px] font-bold text-text-disabled
-                                        uppercase tracking-widest">
-                                                        Follow-up Answers
-                                                    </p>
-                                                    {problemFollowUps.map((fq, i) => {
-                                                        const ans = followUpAnswers[i]
-                                                        if (!ans) return null
-                                                        return (
-                                                            <div key={fq.id}
-                                                                className="bg-surface-3 rounded-xl p-3 space-y-1">
-                                                                <p className="text-xs font-semibold text-text-secondary">
-                                                                    {fq.question}
-                                                                </p>
-                                                                <p className="text-sm text-text-primary">{ans}</p>
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </div>
-                                            )}
                                     </>
                                 )}
                             </div>
