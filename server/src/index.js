@@ -44,7 +44,7 @@ import interviewRoutes from "./routes/interview.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
 import recommendationRoutes from "./routes/recommendations.routes.js";
-// import userRoutes from './routes/users.routes.js'
+import userRoutes from './routes/users.routes.js'
 import adminRoutes from './routes/admin.routes.js'
 
 // ── WebSocket ────────────────────────────────────────────────
@@ -134,7 +134,7 @@ app.use("/api/ai", aiLimiter, aiRoutes);
 
 // ── Future routes ────────────────────────────────────────────
 // TODO: Rewrite users.controller.js for v3.0 schema
-// app.use('/api/users', apiLimiter, userRoutes)
+app.use('/api/users', apiLimiter, userRoutes)
 // TODO: Rewrite analytics.controller.js for v3.0 schema
 app.use('/api/admin', aiLimiter, adminRoutes)
 
