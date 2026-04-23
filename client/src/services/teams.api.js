@@ -1,7 +1,6 @@
 // ============================================================================
 // ProbSolver v3.0 — Teams API Service
 // ============================================================================
-
 import api from './api'
 
 export const teamsApi = {
@@ -29,4 +28,6 @@ export const teamsApi = {
   listPending: () => api.get('/teams/pending'),
   listAll: (params) => api.get('/teams/all', { params }),
   review: (teamId, data) => api.post(`/teams/${teamId}/review`, data),
+  getDetails: (teamId) => api.get(`/teams/${teamId}/details`),
+  deleteTeam: (teamId) => api.delete(`/teams/${teamId}`),
 }

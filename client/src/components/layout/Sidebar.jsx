@@ -40,7 +40,9 @@ export default function Sidebar() {
         const apiDocsUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '/api-docs')
         mainNav = [
             { to: '/super-admin', icon: '⚡', label: 'Platform Dashboard' },
-            { to: '/team', icon: '👥', label: 'Manage Teams' },
+            { to: '/super-admin/teams', icon: '🏢', label: 'All Teams' },
+            { to: '/super-admin/users', icon: '👥', label: 'All Users' },
+            { to: '/super-admin/analytics', icon: '📊', label: 'Platform Analytics' },
             { to: '/settings', icon: '⚙️', label: 'Settings' },
             { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]

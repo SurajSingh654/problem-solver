@@ -54,6 +54,8 @@ import {
   listPendingTeams,
   listAllTeams,
   updateTeam,
+  getTeamDetails,
+  deleteTeam,
 } from '../controllers/team.controller.js'
 
 const router = Router()
@@ -285,6 +287,43 @@ router.get('/pending', requireSuperAdmin, listPendingTeams)
  *         description: Paginated team list
  */
 router.get('/all', requireSuperAdmin, listAllTeams)
+
+
+/**
+ * @swagger
+ * /teams/{teamId}/details:
+ *   get:
+ *     tags: [Platform]
+ *     summary: Get team details with members (SUPER_ADMIN)
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Team details with member list
+ */
+router.get('/:teamId/details', requireSuperAdmin, getTeamDetails)
+
+/**
+ * @swagger
+ * /teams/{teamId}:
+ *   delete:
+ *     tags: [Platform]
+ *     summary: Delete a team (SUPER_ADMIN)
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Team deleted, members moved to individual mode
+ */
+router.delete('/:teamId', requireSuperAdmin, deleteTeam)
 
 /**
  * @swagger

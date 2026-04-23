@@ -79,6 +79,8 @@ const ProblemsPage = lazy(() => import('@pages/problems/ProblemsPage'))
 const ProblemDetailPage = lazy(() => import('@pages/problems/ProblemDetailPage'))
 const SubmitSolutionPage = lazy(() => import('@pages/problems/SubmitSolutionPage'))
 const EditSolutionPage = lazy(() => import('@pages/problems/EditSolutionPage'))
+const AllTeamsPage = lazy(() => import('@pages/superadmin/AllTeamsPage'))
+const AllUsersPage = lazy(() => import('@pages/superadmin/AllUsersPage'))
 
 // ============================================================================
 // QUERY CLIENT
@@ -171,6 +173,9 @@ export default function App() {
             }
           >
             <Route path="/super-admin" element={<SuperAdminDashboard />} />
+            <Route path="/super-admin/teams" element={<Lazy><AllTeamsPage /></Lazy>} />
+            <Route path="/super-admin/users" element={<Lazy><AllUsersPage /></Lazy>} />
+            <Route path="/super-admin/analytics" element={<Lazy><ProductHealthPage /></Lazy>} />
           </Route>
 
           {/* ============================================================ */}
