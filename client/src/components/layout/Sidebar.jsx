@@ -43,7 +43,7 @@ export default function Sidebar() {
             { to: '/super-admin/teams', icon: '🏢', label: 'All Teams' },
             { to: '/super-admin/users', icon: '👥', label: 'All Users' },
             { to: '/super-admin/analytics', icon: '📊', label: 'Platform Analytics' },
-            { to: '/settings', icon: '⚙️', label: 'Settings' },
+            { to: '/super-admin/settings', icon: '⚙️', label: 'Settings' },
             { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]
     } else {
@@ -253,9 +253,9 @@ export default function Sidebar() {
             {/* ── User footer ───────────────────────────────────── */}
             <div className="px-3 py-3 border-t border-border-default">
                 <NavLink
-                    to="/settings"
+                    to={isSuperAdmin ? '/super-admin/settings' : '/settings'}
                     className="flex items-center gap-3 px-3 py-2 rounded-xl
-                     hover:bg-surface-2 transition-colors"
+     hover:bg-surface-2 transition-colors"
                 >
                     <div className="w-7 h-7 rounded-full bg-brand-400/20 flex items-center
                          justify-center text-xs font-bold text-brand-300">

@@ -2,6 +2,7 @@
 // ProbSolver v3.0 — All Users Page (SUPER_ADMIN)
 // ============================================================================
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
@@ -14,6 +15,8 @@ export default function AllUsersPage() {
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
     const [actionLoading, setActionLoading] = useState(null)
+
+    const navigate = useNavigate()
 
     useEffect(() => {
         loadUsers()
@@ -96,7 +99,8 @@ export default function AllUsersPage() {
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     transition={{ delay: i * 0.02 }}
-                                    className="hover:bg-surface-2 transition-colors group"
+                                    onClick={() => navigate(`/super-admin/profile/${u.id}`)}
+                                    className="hover:bg-surface-2 transition-colors group cursor-pointer"
                                 >
                                     <td className="py-3 px-4">
                                         <div className="flex items-center gap-3">

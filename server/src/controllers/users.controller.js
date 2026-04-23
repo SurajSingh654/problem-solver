@@ -71,6 +71,7 @@ export async function getUsers(req, res) {
 }
 
 // ── GET /api/users/:id — get user profile ──────────────
+// ── GET /api/users/:id — get user profile ──────────────
 export async function getUserProfile(req, res) {
   try {
     const { id } = req.params;
@@ -108,8 +109,9 @@ export async function getUserProfile(req, res) {
       return error(res, "User not found.", 404);
     }
 
-    // Only show full profile if same team or SUPER_ADMIN
-    const isSameTeam = user.currentTeamId === req.user.currentTeamId;
+    // Only show full profile if same team, SUPER_ADMIN, or self
+    const isSameTeam =
+      req.user.currentTeamId && user.currentTeamId === req.user.currentTeamId;
     const isSuperAdmin = req.user.globalRole === "SUPER_ADMIN";
     const isSelf = user.id === req.user.id;
 
@@ -124,28 +126,34 @@ export async function getUserProfile(req, res) {
       });
     }
 
-    // Fetch recent solutions if same team
+    // Fetch recent solutions
+    // For SuperAdmin: show solutions from any team
+    // For same-team / self: scope to current team
     let recentSolutions = [];
-    if (isSameTeam || isSelf) {
+    const solutionWhere = { userId: id };
+
+    if (!isSuperAdmin) {
+      // Regular user — scope to their team
       const teamId = req.user.currentTeamId;
-      recentSolutions = await prisma.solution.findMany({
-        where: {
-          userId: id,
-          ...(teamId ? { teamId } : {}),
-        },
-        select: {
-          id: true,
-          confidence: true,
-          pattern: true,
-          createdAt: true,
-          problem: {
-            select: { id: true, title: true, difficulty: true, category: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      });
+      if (teamId) {
+        solutionWhere.teamId = teamId;
+      }
     }
+
+    recentSolutions = await prisma.solution.findMany({
+      where: solutionWhere,
+      select: {
+        id: true,
+        confidence: true,
+        pattern: true,
+        createdAt: true,
+        problem: {
+          select: { id: true, title: true, difficulty: true, category: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
 
     return success(res, {
       user: {

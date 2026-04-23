@@ -1,3 +1,6 @@
+// ============================================================================
+// ProbSolver v3.0 — Profile Page
+// ============================================================================
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUser } from '@hooks/useUsers'
@@ -9,41 +12,42 @@ import { PageSpinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import {
     formatShortDate, formatRelativeDate,
-    formatDuration,
 } from '@utils/formatters'
-import {
-    CONFIDENCE_LEVELS, LANGUAGE_LABELS,
-} from '@utils/constants'
+import { CONFIDENCE_LEVELS } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
-const SOURCE_LABELS = {
-    LEETCODE: 'LeetCode', GFG: 'GFG', CODECHEF: 'CodeChef',
-    INTERVIEWBIT: 'InterviewBit', HACKERRANK: 'HackerRank',
-    CODEFORCES: 'Codeforces', OTHER: 'Other',
+
+// ── Role badge helper ──────────────────────────────────
+function RoleBadge({ globalRole, teamRole }) {
+    if (globalRole === 'SUPER_ADMIN') {
+        return <Badge variant="danger" size="xs">🛡️ Super Admin</Badge>
+    }
+    if (teamRole === 'TEAM_ADMIN') {
+        return <Badge variant="warning" size="xs">👑 Team Admin</Badge>
+    }
+    return <Badge variant="brand" size="xs">👤 Member</Badge>
 }
 
-function LevelBadge({ level }) {
+// ── Activity status badge ──────────────────────────────
+function StatusBadge({ status }) {
     const config = {
-        BEGINNER: { label: 'Beginner', color: 'text-text-secondary bg-surface-3 border-border-default' },
-        INTERMEDIATE: { label: 'Intermediate', color: 'text-info bg-info/10 border-info/25' },
-        ADVANCED: { label: 'Advanced', color: 'text-warning bg-warning/10 border-warning/25' },
+        ACTIVE: 'text-success bg-success/10 border-success/25',
+        INACTIVE: 'text-warning bg-warning/10 border-warning/25',
+        DORMANT: 'text-danger bg-danger/10 border-danger/25',
     }
-    const c = config[level] || config.BEGINNER
     return (
         <span className={cn(
-            'text-xs font-bold px-2.5 py-1 rounded-full border',
-            c.color
+            'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+            config[status] || config.ACTIVE
         )}>
-            {c.label}
+            {status || 'ACTIVE'}
         </span>
     )
 }
 
-// ── Solved problem row ─────────────────────────────────
+// ── Solution row ───────────────────────────────────────
 function SolutionRow({ solution, index, onClick }) {
-    const conf = CONFIDENCE_LEVELS.find(
-        c => c.value === solution.confidenceLevel
-    )
+    const conf = CONFIDENCE_LEVELS.find(c => c.value === solution.confidence)
 
     return (
         <motion.div
@@ -66,28 +70,31 @@ function SolutionRow({ solution, index, onClick }) {
                 </svg>
             </div>
 
-            {/* Title */}
+            {/* Title + meta */}
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-text-primary truncate mb-0.5">
-                    {solution.problem?.title}
+                    {solution.problem?.title || 'Untitled Problem'}
                 </p>
                 <div className="flex items-center gap-2 flex-wrap">
                     <Badge
                         variant={DIFF_VARIANT[solution.problem?.difficulty] || 'brand'}
                         size="xs"
                     >
-                        {solution.problem?.difficulty?.charAt(0) +
-                            solution.problem?.difficulty?.slice(1).toLowerCase()}
+                        {solution.problem?.difficulty
+                            ? solution.problem.difficulty.charAt(0) + solution.problem.difficulty.slice(1).toLowerCase()
+                            : '—'}
                     </Badge>
-                    {solution.patternIdentified && (
-                        <span className="text-[11px] text-brand-300 bg-brand-400/10
-                             border border-brand-400/15 rounded-full px-2 py-px">
-                            {solution.patternIdentified}
+                    {solution.problem?.category && (
+                        <span className="text-[10px] text-text-disabled">
+                            {solution.problem.category.replace('_', ' ')}
                         </span>
                     )}
-                    <span className="text-[11px] text-text-disabled font-mono">
-                        {LANGUAGE_LABELS[solution.language] || solution.language}
-                    </span>
+                    {solution.pattern && (
+                        <span className="text-[11px] text-brand-300 bg-brand-400/10
+                             border border-brand-400/15 rounded-full px-2 py-px">
+                            {solution.pattern}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -97,7 +104,7 @@ function SolutionRow({ solution, index, onClick }) {
                     <span className="text-base" title={conf.label}>{conf.emoji}</span>
                 )}
                 <span className="text-[11px] text-text-disabled font-mono">
-                    {formatRelativeDate(solution.solvedAt)}
+                    {formatRelativeDate(solution.createdAt)}
                 </span>
             </div>
         </motion.div>
@@ -108,15 +115,17 @@ function SolutionRow({ solution, index, onClick }) {
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
 export default function ProfilePage() {
-    const { username } = useParams()
+    const { userId } = useParams()
     const navigate = useNavigate()
     const { user: me } = useAuthStore()
 
-    // If no username param, show own profile
-    const targetUsername = username || me?.username
-    const isOwnProfile = !username || username === me?.username
+    const isMeSuperAdmin = me?.globalRole === 'SUPER_ADMIN'
 
-    const { data: profile, isLoading, isError } = useUser(targetUsername)
+    // If no userId param, show own profile
+    const targetId = userId || me?.id
+    const isOwnProfile = !userId || userId === me?.id
+
+    const { data: profile, isLoading, isError } = useUser(targetId)
 
     if (isLoading) return <PageSpinner />
 
@@ -125,31 +134,30 @@ export default function ProfilePage() {
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
                 <div className="text-5xl">😕</div>
                 <h2 className="text-lg font-bold text-text-primary">User not found</h2>
-                <Button variant="secondary" onClick={() => navigate('/leaderboard')}>
-                    Back to Leaderboard
+                <Button
+                    variant="secondary"
+                    onClick={() => navigate(isMeSuperAdmin ? '/super-admin/users' : '/leaderboard')}
+                >
+                    {isMeSuperAdmin ? 'Back to Users' : 'Back to Leaderboard'}
                 </Button>
             </div>
         )
     }
 
-    const solutions = profile.solutions || []
+    // Limited profile — only id, name, avatarUrl returned (different team, non-admin)
+    const isLimited = !profile.createdAt
+
+    const solutions = profile.recentSolutions || []
     const easy = solutions.filter(s => s.problem?.difficulty === 'EASY').length
     const medium = solutions.filter(s => s.problem?.difficulty === 'MEDIUM').length
     const hard = solutions.filter(s => s.problem?.difficulty === 'HARD').length
 
-    // Language breakdown
-    const langMap = {}
-    solutions.forEach(s => {
-        if (s.language) langMap[s.language] = (langMap[s.language] || 0) + 1
-    })
-    const topLang = Object.entries(langMap).sort(([, a], [, b]) => b - a)[0]
-
     return (
         <div className="p-6 max-w-[800px] mx-auto">
-            {/* Back */}
-            {username && (
+            {/* Back button */}
+            {userId && (
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={() => navigate(isMeSuperAdmin ? '/super-admin/users' : '/leaderboard')}
                     className="flex items-center gap-1.5 text-sm text-text-tertiary
                      hover:text-text-primary transition-colors mb-6"
                 >
@@ -159,27 +167,25 @@ export default function ProfilePage() {
                         <line x1="19" y1="12" x2="5" y2="12" />
                         <polyline points="12 19 5 12 12 5" />
                     </svg>
-                    Back
+                    {isMeSuperAdmin ? 'Back to Users' : 'Back'}
                 </button>
             )}
 
-            {/* Hero */}
+            {/* ── Hero section ──────────────────────────────── */}
             <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="relative rounded-2xl overflow-hidden border border-border-default
                    p-6 mb-6 hero-gradient"
             >
-                {/* Background orb */}
                 <div className="absolute top-[-60px] right-[-60px] w-[240px] h-[240px]
                         rounded-full bg-brand-400/8 blur-[80px] pointer-events-none" />
 
                 <div className="relative z-10 flex items-start gap-5 flex-wrap">
-                    {/* Avatar */}
                     <div className="relative">
                         <Avatar
-                            name={profile.username}
-                            color={profile.avatarColor}
+                            name={profile.name}
+                            color={profile.avatarUrl}
                             size="2xl"
                         />
                         {profile.streak > 0 && (
@@ -191,46 +197,54 @@ export default function ProfilePage() {
                         )}
                     </div>
 
-                    {/* Info */}
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <h1 className="text-xl font-extrabold text-text-primary">
-                                {profile.username}
+                                {profile.name}
                             </h1>
-                            {profile.role === 'ADMIN' && (
-                                <span className="text-xs font-bold px-2 py-px rounded-full
-                                 bg-warning/12 text-warning border border-warning/25">
-                                    ⚡ Admin
-                                </span>
+                            <RoleBadge
+                                globalRole={profile.globalRole}
+                                teamRole={profile.teamRole}
+                            />
+                            {profile.activityStatus && (
+                                <StatusBadge status={profile.activityStatus} />
                             )}
-                            <LevelBadge level={profile.currentLevel} />
                         </div>
 
-                        <p className="text-xs text-text-tertiary mb-3">
-                            Joined {formatShortDate(profile.joinedAt)}
-                        </p>
-
-                        {/* Target companies */}
-                        {profile.targetCompanies?.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mb-3">
-                                {profile.targetCompanies.map(c => (
-                                    <span key={c}
-                                        className="text-[10px] font-semibold text-warning
-                                   bg-warning/10 border border-warning/20
-                                   rounded-full px-2 py-px">
-                                        🏢 {c}
-                                    </span>
-                                ))}
-                            </div>
+                        {/* Email — shown for own profile or SuperAdmin viewing */}
+                        {profile.email && (
+                            <p className="text-xs text-text-tertiary mb-2">
+                                {profile.email}
+                            </p>
                         )}
 
-                        {/* Top language */}
-                        {topLang && (
-                            <p className="text-xs text-text-tertiary">
-                                Primarily codes in{' '}
+                        <p className="text-xs text-text-tertiary mb-3">
+                            Joined {formatShortDate(profile.createdAt)}
+                        </p>
+
+                        {/* Target company */}
+                        {profile.targetCompany && (
+                            <span className="text-[10px] font-semibold text-warning
+                                   bg-warning/10 border border-warning/20
+                                   rounded-full px-2 py-px">
+                                🏢 {profile.targetCompany}
+                            </span>
+                        )}
+
+                        {/* Preferred language */}
+                        {profile.preferredLanguage && (
+                            <p className="text-xs text-text-tertiary mt-2">
+                                Preferred language:{' '}
                                 <span className="font-semibold text-text-secondary">
-                                    {LANGUAGE_LABELS[topLang[0]] || topLang[0]}
+                                    {profile.preferredLanguage}
                                 </span>
+                            </p>
+                        )}
+
+                        {/* Interview date */}
+                        {profile.interviewDate && (
+                            <p className="text-xs text-text-tertiary mt-1">
+                                Interview: {formatShortDate(profile.interviewDate)}
                             </p>
                         )}
                     </div>
@@ -255,121 +269,139 @@ export default function ProfilePage() {
                 </div>
             </motion.div>
 
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                {[
-                    { label: 'Solved', value: profile.solutionCount, color: 'text-brand-300' },
-                    { label: 'Streak', value: `${profile.streak} 🔥`, color: 'text-warning' },
-                    { label: 'Best Streak', value: profile.longestStreak, color: 'text-warning' },
-                    { label: 'Sim Sessions', value: profile.simCount, color: 'text-info' },
-                ].map((s, i) => (
-                    <motion.div
-                        key={s.label}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="bg-surface-1 border border-border-default rounded-xl p-4 text-center"
-                    >
-                        <div className={cn('text-2xl font-extrabold font-mono', s.color)}>
-                            {s.value}
-                        </div>
-                        <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-1">
-                            {s.label}
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
-
-            {/* Difficulty breakdown */}
-            {profile.solutionCount > 0 && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6"
-                >
-                    <h2 className="text-sm font-bold text-text-primary mb-4">
-                        Difficulty Breakdown
-                    </h2>
-                    <div className="flex items-center gap-4">
-                        {[
-                            { label: 'Easy', count: easy, color: 'text-success', bar: 'bg-success' },
-                            { label: 'Medium', count: medium, color: 'text-warning', bar: 'bg-warning' },
-                            { label: 'Hard', count: hard, color: 'text-danger', bar: 'bg-danger' },
-                        ].map(d => (
-                            <div key={d.label} className="flex-1 text-center">
-                                <div className={cn('text-2xl font-extrabold font-mono', d.color)}>
-                                    {d.count}
-                                </div>
-                                <div className="text-[10px] text-text-disabled uppercase tracking-wider my-1">
-                                    {d.label}
-                                </div>
-                                <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{
-                                            width: profile.solutionCount
-                                                ? `${(d.count / profile.solutionCount) * 100}%`
-                                                : '0%'
-                                        }}
-                                        transition={{ duration: 0.7, ease: 'easeOut' }}
-                                        className={cn('h-full rounded-full', d.bar)}
-                                    />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </motion.div>
+            {/* ── Limited profile message ────────────────── */}
+            {isLimited && (
+                <div className="bg-surface-1 border border-border-default rounded-2xl p-10 text-center">
+                    <div className="text-3xl mb-3">🔒</div>
+                    <p className="text-sm font-semibold text-text-primary mb-1">
+                        Limited profile
+                    </p>
+                    <p className="text-xs text-text-tertiary">
+                        This user is not in your team. Only basic info is visible.
+                    </p>
+                </div>
             )}
 
-            {/* Solutions list */}
-            <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-            >
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-sm font-bold text-text-primary flex items-center gap-2">
-                        <span>✅</span> Solved Problems
-                        <Badge variant="brand" size="xs">{solutions.length}</Badge>
-                    </h2>
-                </div>
-
-                {solutions.length === 0 ? (
-                    <div className="bg-surface-1 border border-border-default rounded-2xl
-                          p-10 text-center">
-                        <div className="text-3xl mb-3">🌱</div>
-                        <p className="text-sm font-semibold text-text-primary mb-1">
-                            No solutions yet
-                        </p>
-                        <p className="text-xs text-text-tertiary">
-                            {isOwnProfile
-                                ? 'Start solving problems to build your profile!'
-                                : `${profile.username} hasn't solved any problems yet.`}
-                        </p>
-                        {isOwnProfile && (
-                            <Button
-                                variant="primary" size="sm"
-                                className="mt-4"
-                                onClick={() => navigate('/problems')}
+            {/* ── Full profile sections (only when not limited) ── */}
+            {!isLimited && (
+                <>
+                    {/* Stats grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                        {[
+                            { label: 'Solved', value: profile.solutionCount || 0, color: 'text-brand-300' },
+                            { label: 'Streak', value: `${profile.streak || 0} 🔥`, color: 'text-warning' },
+                            { label: 'Sim Sessions', value: profile.simCount || 0, color: 'text-info' },
+                            { label: 'Interviews', value: profile.interviewCount || 0, color: 'text-success' },
+                        ].map((s, i) => (
+                            <motion.div
+                                key={s.label}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.05 }}
+                                className="bg-surface-1 border border-border-default rounded-xl p-4 text-center"
                             >
-                                Browse Problems
-                            </Button>
-                        )}
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {solutions.map((sol, i) => (
-                            <SolutionRow
-                                key={sol.id}
-                                solution={sol}
-                                index={i}
-                                onClick={() => navigate(`/problems/${sol.problemId}`)}
-                            />
+                                <div className={cn('text-2xl font-extrabold font-mono', s.color)}>
+                                    {s.value}
+                                </div>
+                                <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-1">
+                                    {s.label}
+                                </div>
+                            </motion.div>
                         ))}
                     </div>
-                )}
-            </motion.div>
+
+                    {/* Difficulty breakdown */}
+                    {solutions.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6"
+                        >
+                            <h2 className="text-sm font-bold text-text-primary mb-4">
+                                Difficulty Breakdown
+                            </h2>
+                            <div className="flex items-center gap-4">
+                                {[
+                                    { label: 'Easy', count: easy, color: 'text-success', bar: 'bg-success' },
+                                    { label: 'Medium', count: medium, color: 'text-warning', bar: 'bg-warning' },
+                                    { label: 'Hard', count: hard, color: 'text-danger', bar: 'bg-danger' },
+                                ].map(d => (
+                                    <div key={d.label} className="flex-1 text-center">
+                                        <div className={cn('text-2xl font-extrabold font-mono', d.color)}>
+                                            {d.count}
+                                        </div>
+                                        <div className="text-[10px] text-text-disabled uppercase tracking-wider my-1">
+                                            {d.label}
+                                        </div>
+                                        <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                                            <motion.div
+                                                initial={{ width: 0 }}
+                                                animate={{
+                                                    width: solutions.length
+                                                        ? `${(d.count / solutions.length) * 100}%`
+                                                        : '0%'
+                                                }}
+                                                transition={{ duration: 0.7, ease: 'easeOut' }}
+                                                className={cn('h-full rounded-full', d.bar)}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* Recent solutions */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                                <span>✅</span> Recent Solutions
+                                <Badge variant="brand" size="xs">{solutions.length}</Badge>
+                            </h2>
+                        </div>
+
+                        {solutions.length === 0 ? (
+                            <div className="bg-surface-1 border border-border-default rounded-2xl
+                                  p-10 text-center">
+                                <div className="text-3xl mb-3">🌱</div>
+                                <p className="text-sm font-semibold text-text-primary mb-1">
+                                    No solutions yet
+                                </p>
+                                <p className="text-xs text-text-tertiary">
+                                    {isOwnProfile
+                                        ? 'Start solving problems to build your profile!'
+                                        : `${profile.name} hasn't solved any problems yet.`}
+                                </p>
+                                {isOwnProfile && !isMeSuperAdmin && (
+                                    <Button
+                                        variant="primary" size="sm"
+                                        className="mt-4"
+                                        onClick={() => navigate('/problems')}
+                                    >
+                                        Browse Problems
+                                    </Button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {solutions.map((sol, i) => (
+                                    <SolutionRow
+                                        key={sol.id}
+                                        solution={sol}
+                                        index={i}
+                                        onClick={() => navigate(`/problems/${sol.problem?.id}`)}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </motion.div>
+                </>
+            )}
         </div>
     )
 }

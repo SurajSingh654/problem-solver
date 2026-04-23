@@ -20,6 +20,27 @@ export default function LeaderboardPage() {
   const { teamName, isPersonalMode, user } = useTeamContext()
   const { data: leaderboard, isLoading } = useLeaderboard()
 
+  // ── Redirect SUPER_ADMIN (no leaderboard for platform admins) ──
+  if (user?.globalRole === 'SUPER_ADMIN') {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-20 text-center">
+        <span className="text-4xl mb-4 block">🛡️</span>
+        <h1 className="text-xl font-bold text-text-primary mb-2">
+          Leaderboard is a team feature
+        </h1>
+        <p className="text-sm text-text-secondary mb-6">
+          Platform administrators don't participate in team rankings.
+        </p>
+        <button
+          onClick={() => navigate('/super-admin')}
+          className="text-sm font-bold text-brand-300 hover:text-brand-200"
+        >
+          Back to Dashboard →
+        </button>
+      </div>
+    )
+  }
+
   // ── Redirect individual-mode users ───────────────────
   if (isPersonalMode) {
     return (

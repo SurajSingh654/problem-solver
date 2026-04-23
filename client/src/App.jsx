@@ -176,6 +176,10 @@ export default function App() {
             <Route path="/super-admin/teams" element={<Lazy><AllTeamsPage /></Lazy>} />
             <Route path="/super-admin/users" element={<Lazy><AllUsersPage /></Lazy>} />
             <Route path="/super-admin/analytics" element={<Lazy><ProductHealthPage /></Lazy>} />
+            {/* SuperAdmin also needs profile + settings within their layout */}
+            <Route path="/super-admin/profile/:userId" element={<ProfilePage />} />
+            <Route path="/super-admin/profile" element={<ProfilePage />} />
+            <Route path="/super-admin/settings" element={<SettingsPage />} />
           </Route>
 
           {/* ============================================================ */}

@@ -8,20 +8,20 @@ export function useUsers() {
     queryKey: QUERY_KEYS.USERS,
     queryFn: async () => {
       const res = await usersApi.getAll();
-      return res.data.data;
+      return res.data;
     },
     staleTime: 60 * 1000,
   });
 }
 
-export function useUser(username) {
+export function useUser(userId) {
   return useQuery({
-    queryKey: QUERY_KEYS.USER(username),
+    queryKey: QUERY_KEYS.USER(userId),
     queryFn: async () => {
-      const res = await usersApi.getByUsername(username);
-      return res.data.data;
+      const res = await usersApi.getById(userId);
+      return res.data.user;
     },
-    enabled: !!username,
+    enabled: !!userId,
     staleTime: 60 * 1000,
   });
 }
