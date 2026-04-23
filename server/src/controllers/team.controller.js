@@ -886,13 +886,28 @@ export async function getTeamDetails(req, res) {
 // DELETE TEAM (SUPER_ADMIN)
 // ============================================================================
 
+// ============================================================================
+// DELETE TEAM (SUPER_ADMIN)
+// ============================================================================
+
 export async function deleteTeam(req, res) {
   try {
     const { teamId } = req.params;
 
     const team = await prisma.team.findUnique({
       where: { id: teamId },
-      select: { id: true, name: true, isPersonal: true },
+      select: {
+        id: true,
+        name: true,
+        isPersonal: true,
+        _count: {
+          select: {
+            currentMembers: true,
+            problems: true,
+            solutions: true,
+          },
+        },
+      },
     });
 
     if (!team) {
@@ -910,7 +925,7 @@ export async function deleteTeam(req, res) {
     // Switch all team members to their personal spaces
     const members = await prisma.user.findMany({
       where: { currentTeamId: teamId },
-      select: { id: true, personalTeamId: true },
+      select: { id: true, personalTeamId: true, teamRole: true },
     });
 
     for (const member of members) {
@@ -923,11 +938,12 @@ export async function deleteTeam(req, res) {
       });
     }
 
-    // Soft delete the team
+    // Soft delete the team (Prisma middleware converts to update { deletedAt })
+    // Problems and solutions remain in DB but are orphaned (archived)
     await prisma.team.delete({ where: { id: teamId } });
 
     return success(res, {
-      message: `Team "${team.name}" deleted. ${members.length} member(s) moved to individual mode.`,
+      message: `Team "${team.name}" deleted. ${members.length} member(s) moved to individual mode. ${team._count.problems} problems and ${team._count.solutions} solutions archived.`,
     });
   } catch (err) {
     console.error("Delete team error:", err);

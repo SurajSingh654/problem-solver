@@ -96,7 +96,7 @@ export default function AllUsersPage() {
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     transition={{ delay: i * 0.02 }}
-                                    className="hover:bg-surface-2 transition-colors"
+                                    className="hover:bg-surface-2 transition-colors group"
                                 >
                                     <td className="py-3 px-4">
                                         <div className="flex items-center gap-3">
@@ -149,15 +149,15 @@ export default function AllUsersPage() {
                                     </td>
                                     <td className="py-3 px-4">
                                         {u.globalRole !== 'SUPER_ADMIN' && (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
+                                            <button
                                                 onClick={() => handleDelete(u.id, u.name)}
                                                 disabled={actionLoading === u.id}
-                                                className="text-danger hover:text-danger opacity-0 group-hover:opacity-100"
+                                                className="text-xs font-bold text-text-disabled
+                                                           hover:text-danger transition-colors
+                                                           px-2 py-1 rounded-lg hover:bg-danger/10"
                                             >
-                                                Delete
-                                            </Button>
+                                                {actionLoading === u.id ? '...' : 'Delete'}
+                                            </button>
                                         )}
                                     </td>
                                 </motion.tr>

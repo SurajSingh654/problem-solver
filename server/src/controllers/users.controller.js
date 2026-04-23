@@ -176,6 +176,7 @@ export async function getUserProfile(req, res) {
 }
 
 // ── DELETE /api/users/:id — remove user (admin) ────────
+// ── DELETE /api/users/:id — remove user (admin) ────────
 export async function deleteUser(req, res) {
   try {
     const { id } = req.params;
@@ -186,7 +187,14 @@ export async function deleteUser(req, res) {
 
     const user = await prisma.user.findFirst({
       where: { id },
-      select: { id: true, name: true, globalRole: true },
+      select: {
+        id: true,
+        name: true,
+        globalRole: true,
+        currentTeamId: true,
+        personalTeamId: true,
+        teamRole: true,
+      },
     });
 
     if (!user) {
@@ -197,11 +205,57 @@ export async function deleteUser(req, res) {
       return error(res, "Cannot delete a super admin account.", 400);
     }
 
-    // Soft delete
+    // If user is in a team (not personal space), check if they're the only admin
+    if (user.currentTeamId && user.currentTeamId !== user.personalTeamId) {
+      if (user.teamRole === "TEAM_ADMIN") {
+        const otherAdmins = await prisma.user.count({
+          where: {
+            currentTeamId: user.currentTeamId,
+            teamRole: "TEAM_ADMIN",
+            id: { not: id },
+          },
+        });
+
+        if (otherAdmins === 0) {
+          // Try to promote the first available member
+          const nextMember = await prisma.user.findFirst({
+            where: {
+              currentTeamId: user.currentTeamId,
+              id: { not: id },
+            },
+            select: { id: true, name: true },
+          });
+
+          if (nextMember) {
+            await prisma.user.update({
+              where: { id: nextMember.id },
+              data: { teamRole: "TEAM_ADMIN" },
+            });
+          }
+          // If no members left, the team becomes empty (that's fine)
+        }
+      }
+
+      // Remove user from team before deleting
+      await prisma.user.update({
+        where: { id },
+        data: {
+          currentTeamId: user.personalTeamId || null,
+          teamRole: null,
+        },
+      });
+    }
+
+    // Soft delete the user (Prisma middleware converts to update { deletedAt })
     await prisma.user.delete({ where: { id } });
 
+    // Also soft delete their personal space
+    if (user.personalTeamId) {
+      await prisma.team.delete({ where: { id: user.personalTeamId } });
+    }
+
     return success(res, {
-      message: `${user.name} has been removed.`,
+      message: `${user.name} has been deleted.`,
       id,
     });
   } catch (err) {
@@ -209,7 +263,6 @@ export async function deleteUser(req, res) {
     return error(res, "Failed to delete user.", 500);
   }
 }
-
 // ── PATCH /api/users/:id/role — update team role ───────
 export async function updateUserRole(req, res) {
   try {
