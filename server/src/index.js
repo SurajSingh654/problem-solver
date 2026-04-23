@@ -46,6 +46,7 @@ import statsRoutes from "./routes/stats.routes.js";
 import recommendationRoutes from "./routes/recommendations.routes.js";
 import userRoutes from './routes/users.routes.js'
 import adminRoutes from './routes/admin.routes.js'
+import platformRoutes from './routes/platform.routes.js'
 
 // ── WebSocket ────────────────────────────────────────────────
 import { setupWebSocket } from "./services/websocket.service.js";
@@ -128,6 +129,7 @@ app.use("/api/sim", apiLimiter, simRoutes);
 app.use("/api/interview-v2", apiLimiter, interviewRoutes);
 app.use("/api/stats", apiLimiter, statsRoutes);
 app.use("/api/recommendations", apiLimiter, recommendationRoutes);
+app.use('/api/platform', platformRoutes)
 
 // ── AI (stricter rate limit — expensive operations) ──────────
 app.use("/api/ai", aiLimiter, aiRoutes);

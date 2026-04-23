@@ -794,6 +794,43 @@ model Competition {
 }
 
 // ============================================================================
+// PLATFORM ANALYSIS (SuperAdmin AI Reports)
+// ============================================================================
+/// Stores AI-generated platform health analysis reports.
+///
+/// Generated on-demand by SUPER_ADMIN. The latest report is displayed
+/// on the Platform Analytics page and survives page refreshes, navigation,
+/// and logouts. Historical reports are kept for trend comparison.
+model PlatformAnalysis {
+  id String @id @default(cuid())
+
+  // ── Who generated it ───────────────────────────────
+  generatedById String
+  
+  // ── Analysis content ───────────────────────────────
+  // Full AI response: healthScore, executiveSummary, insights,
+  // trends, recommendations, risks
+  content Json
+
+  // ── Metrics snapshot ───────────────────────────────
+  // The raw metrics that were sent to AI for analysis.
+  // Stored so we can compare what the AI was looking at.
+  metricsSnapshot Json?
+
+  // ── Config ─────────────────────────────────────────
+  period Int @default(30)
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+
+  // ── Indexes ────────────────────────────────────────
+  // Fetch latest analysis quickly
+  @@index([createdAt(sort: Desc)])
+
+  @@map("platform_analyses")
+}
+
+// ============================================================================
 // COMPETITION ENTRY (FUTURE)
 // ============================================================================
 
