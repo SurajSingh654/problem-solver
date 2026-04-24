@@ -87,7 +87,7 @@ function ConfidencePicker({ value, onChange }) {
 // ── Review modal ───────────────────────────────────────
 function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const navigate = useNavigate()
-    const [confidence, setConfidence] = useState(solution.confidenceLevel || 0)
+    const [confidence, setConfidence] = useState(solution.confidence || 0)
 
     const intervalMap = { 1: 1, 2: 2, 3: 5, 4: 10, 5: 21 }
     const nextDays = intervalMap[confidence]
@@ -132,11 +132,11 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     {solution.problem?.difficulty?.charAt(0) +
                                         solution.problem?.difficulty?.slice(1).toLowerCase()}
                                 </Badge>
-                                {solution.patternIdentified && (
+                                {solution.pattern && (
                                     <span className="text-xs text-brand-300 bg-brand-400/10
-                                   border border-brand-400/20 rounded-full
-                                   px-2 py-px font-medium">
-                                        {solution.patternIdentified}
+                   border border-brand-400/20 rounded-full
+                   px-2 py-px font-medium">
+                                        {solution.pattern}
                                     </span>
                                 )}
                                 <Badge variant="gray" size="xs">
@@ -147,7 +147,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 {solution.problem?.title}
                             </h2>
                             <p className="text-xs text-text-tertiary mt-1">
-                                Solved {formatRelativeDate(solution.solvedAt)}
+                                Solved {formatRelativeDate(solution.createdAt)}
                             </p>
                         </div>
                         <button
@@ -172,11 +172,11 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                         {solution.optimizedApproach && (
                             <RecapRow icon="⚡" label="Optimized Approach" value={solution.optimizedApproach} />
                         )}
-                        {solution.optimizedTime && (
+                        {solution.timeComplexity && (
                             <RecapRow
                                 icon="📊"
                                 label="Complexity"
-                                value={`Time: ${solution.optimizedTime}${solution.optimizedSpace ? `  ·  Space: ${solution.optimizedSpace}` : ''}`}
+                                value={`Time: ${solution.timeComplexity}${solution.spaceComplexity ? `  ·  Space: ${solution.spaceComplexity}` : ''}`}
                                 mono
                             />
                         )}
@@ -294,7 +294,7 @@ function RecapRow({ icon, label, value, mono = false }) {
 // ── Due card ───────────────────────────────────────────
 function DueCard({ solution, index, onReview }) {
     const dueInfo = getDueInfo(solution.reviewDates)
-    const prevConf = CONFIDENCE_LEVELS.find(c => c.value === solution.confidenceLevel)
+    const prevConf = CONFIDENCE_LEVELS.find(c => c.value === solution.confidence)
 
     return (
         <motion.div
@@ -338,10 +338,10 @@ function DueCard({ solution, index, onReview }) {
                                     {solution.problem?.difficulty?.charAt(0) +
                                         solution.problem?.difficulty?.slice(1).toLowerCase()}
                                 </Badge>
-                                {solution.patternIdentified && (
+                                {solution.pattern && (
                                     <span className="text-[11px] text-brand-300 bg-brand-400/10
-                                   border border-brand-400/15 rounded-full px-2 py-px">
-                                        {solution.patternIdentified}
+                   border border-brand-400/15 rounded-full px-2 py-px">
+                                        {solution.pattern}
                                     </span>
                                 )}
                                 {solution.language && (
@@ -367,9 +367,9 @@ function DueCard({ solution, index, onReview }) {
 
                     {/* Stats row */}
                     <div className="flex items-center gap-4 text-xs text-text-tertiary mb-4 flex-wrap">
-                        <span>Solved {formatRelativeDate(solution.solvedAt)}</span>
-                        {solution.optimizedTime && (
-                            <span className="font-mono">{solution.optimizedTime}</span>
+                        <span>Solved {formatRelativeDate(solution.createdAt)}</span>
+                        {solution.timeComplexity && (
+                            <span className="font-mono">{solution.timeComplexity}</span>
                         )}
                         {prevConf && (
                             <span className="flex items-center gap-1">
@@ -542,8 +542,8 @@ export default function ReviewQueuePage() {
     async function handleSaveReview(confidenceLevel) {
         if (!reviewing) return
         await reviewMutation.mutateAsync({
-            id: reviewing.id,
-            confidenceLevel,
+            solutionId: reviewing.id,
+            data: { confidence: confidenceLevel },
         })
         const newReviewed = [...reviewed, reviewing.id]
         setReviewed(newReviewed)

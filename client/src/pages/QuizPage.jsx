@@ -156,16 +156,17 @@ function SetupScreen({ onStart }) {
     const [difficulty, setDifficulty] = useState('MEDIUM')
     const [count, setCount] = useState(10)
     const [context, setContext] = useState('')
-    const [timerMins, setTimerMins] = useState(0) // 0 = no timer
+    const [timerMins, setTimerMins] = useState(0)
 
     const generateQuiz = useGenerateQuiz()
     const { data: aiStatus } = useAIStatus()
-    const { data: attempts } = useQuizHistory()
+    const { data: historyData } = useQuizHistory()
+    const pastQuizzes = historyData?.quizzes || []
 
     const recentSubjects = useMemo(() => {
-        if (!attempts?.length) return []
+        if (!pastQuizzes.length) return []
         const seen = new Set()
-        return attempts
+        return pastQuizzes
             .filter(a => {
                 if (seen.has(a.subject)) return false
                 seen.add(a.subject)
@@ -174,10 +175,10 @@ function SetupScreen({ onStart }) {
             .slice(0, 6)
             .map(a => ({
                 subject: a.subject,
-                bestScore: a.percentage,
+                bestScore: a.score,
                 difficulty: a.difficulty,
             }))
-    }, [attempts])
+    }, [pastQuizzes])
 
     async function handleGenerate() {
         if (!subject.trim()) return
@@ -189,7 +190,7 @@ function SetupScreen({ onStart }) {
                 context: context.trim() || undefined,
             })
             onStart({
-                ...res.data.data,
+                ...res.data.data.quiz,
                 subject: subject.trim(),
                 difficulty,
                 timerSecs: timerMins > 0 ? timerMins * 60 : null,
@@ -461,8 +462,10 @@ function SetupScreen({ onStart }) {
 
 // ── Quiz history ───────────────────────────────────────
 function QuizHistory() {
-    const { data: attempts, isLoading } = useQuizHistory()
-    if (isLoading || !attempts?.length) return null
+    const { data: historyData, isLoading } = useQuizHistory()
+    const quizzes = historyData?.quizzes || []
+
+    if (isLoading || !quizzes.length) return null
 
     return (
         <motion.div
@@ -475,7 +478,7 @@ function QuizHistory() {
                 <span>📊</span> Past Quizzes
             </h2>
             <div className="space-y-2">
-                {attempts.slice(0, 8).map((a, i) => (
+                {quizzes.slice(0, 8).map((a, i) => (
                     <motion.div
                         key={a.id}
                         initial={{ opacity: 0, x: -8 }}
@@ -487,11 +490,11 @@ function QuizHistory() {
                         <div className={cn(
                             'w-10 h-10 rounded-xl flex items-center justify-center',
                             'text-sm font-extrabold font-mono flex-shrink-0',
-                            a.percentage >= 80 ? 'bg-success/12 text-success' :
-                                a.percentage >= 60 ? 'bg-warning/12 text-warning' :
+                            a.score >= 80 ? 'bg-success/12 text-success' :
+                                a.score >= 60 ? 'bg-warning/12 text-warning' :
                                     'bg-danger/12 text-danger'
                         )}>
-                            {a.percentage}%
+                            {a.score}%
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-text-primary truncate">
@@ -508,7 +511,7 @@ function QuizHistory() {
                                     {a.difficulty}
                                 </Badge>
                                 <span className="text-[11px] text-text-disabled">
-                                    {a.score}/{a.total} · {formatRelativeDate(a.completedAt)}
+                                    {a.score}% · {formatRelativeDate(a.completedAt)}
                                 </span>
                             </div>
                         </div>
@@ -1155,13 +1158,11 @@ export default function QuizPage() {
 
         try {
             const res = await submitQuiz.mutateAsync({
-                subject: quizData.subject,
-                difficulty: quizData.difficulty,
-                questions: quizData.questions,
+                quizId: quizData.id,
                 answers: result.answers,
-                timeUsedSecs: result.timeUsedSecs,
+                timeSpent: result.timeUsedSecs,
             })
-            setAttemptId(res.data.data.id)
+            setAttemptId(res.data.data.result?.quizId || quizData.id)
         } catch { }
 
         setScreen('results')
