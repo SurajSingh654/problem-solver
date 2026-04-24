@@ -56,13 +56,11 @@ export async function requireTeamContext(req, res, next) {
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        error: "Authentication required.",
+        error: { message: "Authentication required.", code: "AUTH_REQUIRED" },
       });
     }
 
     // ── SUPER_ADMIN team override ────────────────────────
-    // Platform admins can pass ?teamId=xxx to view any team's data.
-    // This powers the admin dashboard's "browse teams" feature.
     if (req.user.globalRole === "SUPER_ADMIN") {
       const overrideTeamId = req.query.teamId || req.headers["x-team-id"];
 
@@ -75,7 +73,7 @@ export async function requireTeamContext(req, res, next) {
         if (!team) {
           return res.status(404).json({
             success: false,
-            error: "Team not found.",
+            error: { message: "Team not found.", code: "TEAM_NOT_FOUND" },
           });
         }
 
@@ -85,8 +83,6 @@ export async function requireTeamContext(req, res, next) {
       }
 
       // SUPER_ADMIN without team override
-      // If they have a currentTeamId (e.g. they also belong to a team), use it.
-      // Otherwise, reject — team-scoped endpoints need a real team ID.
       if (req.user.currentTeamId) {
         const team = await prisma.team.findUnique({
           where: { id: req.user.currentTeamId },
@@ -100,12 +96,13 @@ export async function requireTeamContext(req, res, next) {
         }
       }
 
-      // No valid team context — reject with a clear error
       return res.status(400).json({
         success: false,
-        error:
-          "This endpoint requires a team context. Pass ?teamId=xxx to specify a team.",
-        code: "SUPER_ADMIN_NEEDS_TEAM_OVERRIDE",
+        error: {
+          message:
+            "This endpoint requires a team context. Pass ?teamId=xxx to specify a team.",
+          code: "SUPER_ADMIN_NEEDS_TEAM_OVERRIDE",
+        },
       });
     }
 
@@ -115,15 +112,14 @@ export async function requireTeamContext(req, res, next) {
     if (!teamId) {
       return res.status(403).json({
         success: false,
-        error:
-          "No team selected. Please join a team or switch to individual mode.",
-        code: "NO_TEAM_CONTEXT",
+        error: {
+          message:
+            "No team selected. Please join a team or switch to individual mode.",
+          code: "NO_TEAM_CONTEXT",
+        },
       });
     }
 
-    // ── Verify team is active ────────────────────────────
-    // This DB check catches: team was rejected/deleted after the
-    // JWT was issued, or team status changed since last login.
     const team = await prisma.team.findUnique({
       where: { id: teamId },
       select: { id: true, status: true, isPersonal: true },
@@ -132,30 +128,36 @@ export async function requireTeamContext(req, res, next) {
     if (!team) {
       return res.status(403).json({
         success: false,
-        error: "Your team no longer exists. Please join another team.",
-        code: "TEAM_NOT_FOUND",
+        error: {
+          message: "Your team no longer exists. Please join another team.",
+          code: "TEAM_NOT_FOUND",
+        },
       });
     }
 
     if (team.status !== "ACTIVE") {
       return res.status(403).json({
         success: false,
-        error:
-          "Your team is not active. It may be pending approval or has been deactivated.",
-        code: "TEAM_NOT_ACTIVE",
+        error: {
+          message:
+            "Your team is not active. It may be pending approval or has been deactivated.",
+          code: "TEAM_NOT_ACTIVE",
+        },
       });
     }
 
     req.teamId = team.id;
     req.teamStatus = team.status;
     req.isPersonalTeam = team.isPersonal;
-
     next();
   } catch (err) {
     console.error("Team context middleware error:", err);
     return res.status(500).json({
       success: false,
-      error: "Failed to verify team context.",
+      error: {
+        message: "Failed to verify team context.",
+        code: "INTERNAL_ERROR",
+      },
     });
   }
 }
@@ -185,11 +187,10 @@ export function requireTeamAdmin(req, res, next) {
   if (!req.user) {
     return res.status(401).json({
       success: false,
-      error: "Authentication required.",
+      error: { message: "Authentication required.", code: "AUTH_REQUIRED" },
     });
   }
 
-  // SUPER_ADMIN can admin any team
   if (req.user.globalRole === "SUPER_ADMIN") {
     return next();
   }
@@ -197,8 +198,10 @@ export function requireTeamAdmin(req, res, next) {
   if (req.user.teamRole !== "TEAM_ADMIN") {
     return res.status(403).json({
       success: false,
-      error: "This action requires team administrator access.",
-      code: "TEAM_ADMIN_REQUIRED",
+      error: {
+        message: "This action requires team administrator access.",
+        code: "TEAM_ADMIN_REQUIRED",
+      },
     });
   }
 
@@ -230,11 +233,10 @@ export async function requireTeamMember(req, res, next) {
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        error: "Authentication required.",
+        error: { message: "Authentication required.", code: "AUTH_REQUIRED" },
       });
     }
 
-    // SUPER_ADMIN can access any team
     if (req.user.globalRole === "SUPER_ADMIN") {
       req.teamId = req.params.teamId;
       return next();
@@ -245,20 +247,20 @@ export async function requireTeamMember(req, res, next) {
     if (!targetTeamId) {
       return res.status(400).json({
         success: false,
-        error: "Team ID is required.",
+        error: { message: "Team ID is required.", code: "MISSING_TEAM_ID" },
       });
     }
 
-    // Check if the user's current team matches the target
     if (req.user.currentTeamId !== targetTeamId) {
       return res.status(403).json({
         success: false,
-        error: "You are not a member of this team.",
-        code: "NOT_TEAM_MEMBER",
+        error: {
+          message: "You are not a member of this team.",
+          code: "NOT_TEAM_MEMBER",
+        },
       });
     }
 
-    // Verify the team exists and is active
     const team = await prisma.team.findUnique({
       where: { id: targetTeamId },
       select: { id: true, status: true },
@@ -267,7 +269,10 @@ export async function requireTeamMember(req, res, next) {
     if (!team || team.status !== "ACTIVE") {
       return res.status(404).json({
         success: false,
-        error: "Team not found or not active.",
+        error: {
+          message: "Team not found or not active.",
+          code: "TEAM_NOT_FOUND",
+        },
       });
     }
 
@@ -277,7 +282,10 @@ export async function requireTeamMember(req, res, next) {
     console.error("Team member middleware error:", err);
     return res.status(500).json({
       success: false,
-      error: "Failed to verify team membership.",
+      error: {
+        message: "Failed to verify team membership.",
+        code: "INTERNAL_ERROR",
+      },
     });
   }
 }

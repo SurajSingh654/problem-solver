@@ -14,7 +14,6 @@ export function useGenerateQuiz() {
 export function useSubmitQuiz() {
   const queryClient = useQueryClient()
   const { teamQueryKey } = useTeamContext()
-
   return useMutation({
     mutationFn: ({ quizId, answers, timeSpent }) =>
       api.post(`/quizzes/${quizId}/submit`, { answers, timeSpent }),
@@ -27,12 +26,11 @@ export function useSubmitQuiz() {
 
 export function useQuizHistory(page = 1) {
   const { teamQueryKey } = useTeamContext()
-
   return useQuery({
     queryKey: [...teamQueryKey, 'quiz-history', page],
     queryFn: async () => {
       const res = await api.get('/quizzes/history', { params: { page } })
-      return res.data
+      return res.data.data
     },
   })
 }
@@ -42,7 +40,7 @@ export function useQuiz(quizId) {
     queryKey: ['quiz', quizId],
     queryFn: async () => {
       const res = await api.get(`/quizzes/${quizId}`)
-      return res.data.quiz
+      return res.data.data.quiz
     },
     enabled: !!quizId,
   })

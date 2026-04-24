@@ -17,7 +17,7 @@ export function useStartSim() {
   return useMutation({
     mutationFn: (data) => simApi.start(data),
     onError: (err) => {
-      toast.error(err.response?.data?.error || "Failed to start session");
+      toast.error(err.response?.data?.error?.message || "Failed to start session");
     },
   });
 }
@@ -37,7 +37,7 @@ export function useCompleteSession() {
       queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
     onError: (err) => {
-      toast.error(err.response?.data?.error || "Failed to save session");
+      toast.error(err.response?.data?.error?.message || "Failed to save session");
     },
   });
 }

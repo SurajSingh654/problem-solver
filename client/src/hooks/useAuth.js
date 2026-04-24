@@ -1,13 +1,18 @@
 // ============================================================================
-// ProbSolver v3.0 — Auth Hooks (v2 compatible)
+// ProbSolver v3.0 — Auth Hooks
 // ============================================================================
-
+//
+// RESPONSE CONTRACT: All API responses follow { success, data, meta }
+// Hooks read: res.data.data.fieldName
+//
+// ============================================================================
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../services/auth.api.js";
 import useAuthStore from "../store/useAuthStore.js";
 import { toast } from "../store/useUIStore.js";
 import { QUERY_KEYS } from "../utils/constants.js";
+import { extractErrorMessage } from "../services/api.js";
 
 // ── Get current user (protected pages) ────────────────
 export function useMe() {
@@ -17,8 +22,7 @@ export function useMe() {
     queryKey: QUERY_KEYS.ME,
     queryFn: async () => {
       const res = await authApi.getMe();
-      // v3.0 returns { success, user } — not nested in .data
-      return res.data.user || res.data.data;
+      return res.data.data.user;
     },
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
@@ -33,15 +37,13 @@ export function useRegister() {
   return useMutation({
     mutationFn: (data) => authApi.register(data),
     onSuccess: (res) => {
-      // v3.0 registration does NOT return a token — user must verify email first
-      const data = res.data;
+      const { user } = res.data.data;
       toast.info("Check your email for a verification code");
-      navigate("/auth/verify-email", { state: { email: data.user?.email } });
+      navigate("/auth/verify-email", { state: { email: user?.email } });
     },
     onError: (err) => {
       console.error("[Register] Error:", err.response?.data);
-      const msg = err.response?.data?.error || "Registration failed";
-      toast.error(msg, "Error");
+      toast.error(extractErrorMessage(err));
     },
   });
 }
@@ -54,10 +56,8 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data) => authApi.login(data),
     onSuccess: (res) => {
-      // v3.0 response: { success, token, user }
-      const { user, token } = res.data;
+      const { user, token } = res.data.data;
 
-      // v3.0 store: setAuth(token, user) — token first
       useAuthStore.getState().setAuth(token, user);
       queryClient.setQueryData(QUERY_KEYS.ME, user);
 
@@ -79,14 +79,11 @@ export function useLogin() {
     },
     onError: (err) => {
       console.error("[Login] Error:", err.response?.data);
-      const code = err.response?.data?.code;
-      const msg = err.response?.data?.error || "Login failed";
+      const code = err.response?.data?.error?.code;
+      const msg = extractErrorMessage(err);
 
-      // Server rejects unverified users — redirect to verification
       if (code === "EMAIL_NOT_VERIFIED") {
         toast.info("Please verify your email first");
-        // We need the email to resend verification — get it from the login form
-        // The navigate state passes the email to VerifyEmailPage
         const email = err.config?.data
           ? JSON.parse(err.config.data)?.email
           : null;
@@ -94,7 +91,7 @@ export function useLogin() {
         return;
       }
 
-      toast.error(msg, "Error");
+      toast.error(msg);
     },
   });
 }
@@ -105,7 +102,6 @@ export function useLogout() {
   const queryClient = useQueryClient();
 
   return () => {
-    // v3.0 store method is 'logout', not 'clearAuth'
     useAuthStore.getState().logout();
     queryClient.clear();
     navigate("/auth/login");
@@ -120,36 +116,13 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: (data) => authApi.updateProfile(data),
     onSuccess: (res) => {
-      // v3.0 returns { success, message, user }
-      const user = res.data.user || res.data.data;
+      const { user } = res.data.data;
       useAuthStore.getState().updateUser(user);
       queryClient.setQueryData(QUERY_KEYS.ME, user);
       toast.success("Profile updated");
     },
     onError: (err) => {
-      toast.error(err.response?.data?.error || "Update failed");
-    },
-  });
-}
-
-// ── Claim admin (v2 — may not exist in v3.0, kept for compatibility) ──
-export function useClaimAdmin() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (password) => authApi.claimAdmin(password),
-    onSuccess: (res) => {
-      const data = res.data;
-      const user = data.user || data.data?.user;
-      const token = data.token || data.data?.token;
-      if (token && user) {
-        useAuthStore.getState().setAuth(token, user);
-        queryClient.setQueryData(QUERY_KEYS.ME, user);
-      }
-      toast.success("Admin access granted", "Role Updated");
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.error || "Incorrect password");
+      toast.error(extractErrorMessage(err));
     },
   });
 }
@@ -163,8 +136,7 @@ export function useChangePassword() {
       toast.success("Password changed successfully");
     },
     onError: (err) => {
-      const msg = err.response?.data?.error || "Failed to change password";
-      toast.error(msg);
+      toast.error(extractErrorMessage(err));
     },
   });
 }
@@ -174,10 +146,10 @@ export function useResetUserPassword() {
   return useMutation({
     mutationFn: (data) => authApi.resetPassword(data),
     onSuccess: (res) => {
-      toast.success(res.data.message || "Temporary password set");
+      toast.success(res.data.data.message || "Temporary password set");
     },
     onError: (err) => {
-      toast.error(err.response?.data?.error || "Failed to reset password");
+      toast.error(extractErrorMessage(err));
     },
   });
 }
@@ -190,9 +162,7 @@ export function useChangeEmail() {
       toast.success("Verification code sent to your new email");
     },
     onError: (err) => {
-      toast.error(
-        err.response?.data?.error || "Failed to initiate email change",
-      );
+      toast.error(extractErrorMessage(err));
     },
   });
 }
@@ -204,9 +174,7 @@ export function useConfirmEmailChange() {
   return useMutation({
     mutationFn: (code) => authApi.confirmEmailChange(code),
     onSuccess: (res) => {
-      const data = res.data;
-      const user = data.user || data.data?.user;
-      const token = data.token || data.data?.token;
+      const { user, token } = res.data.data;
       if (token && user) {
         useAuthStore.getState().setAuth(token, user);
         queryClient.setQueryData(QUERY_KEYS.ME, user);
@@ -214,8 +182,7 @@ export function useConfirmEmailChange() {
       toast.success("Email changed successfully!");
     },
     onError: (err) => {
-      const msg = err.response?.data?.error || "Email change failed";
-      toast.error(msg);
+      toast.error(extractErrorMessage(err));
     },
   });
 }

@@ -47,7 +47,10 @@ export function authenticate(req, res, next) {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         success: false,
-        error: "Authentication required. Please log in.",
+        error: {
+          message: "Authentication required. Please log in.",
+          code: "AUTH_REQUIRED",
+        },
       });
     }
 
@@ -56,13 +59,15 @@ export function authenticate(req, res, next) {
     if (!token) {
       return res.status(401).json({
         success: false,
-        error: "Authentication token missing.",
+        error: {
+          message: "Authentication token missing.",
+          code: "TOKEN_MISSING",
+        },
       });
     }
 
     const decoded = verifyToken(token);
 
-    // ── Attach user context to request ───────────────────
     req.user = {
       id: decoded.id,
       globalRole: decoded.globalRole,
@@ -70,40 +75,43 @@ export function authenticate(req, res, next) {
       teamRole: decoded.teamRole,
     };
 
-    // ── Background activity update (fire-and-forget) ─────
-    // Non-blocking: don't await, don't fail the request.
-    // Updates lastActiveAt and recomputes activityStatus.
-    updateActivity(decoded.id).catch(() => {
-      // Silently ignore — this is best-effort tracking.
-      // If the user is soft-deleted, this will fail (that's fine).
-    });
+    updateActivity(decoded.id).catch(() => {});
 
     next();
   } catch (err) {
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({
         success: false,
-        error: "Session expired. Please log in again.",
+        error: {
+          message: "Session expired. Please log in again.",
+          code: "TOKEN_EXPIRED",
+        },
       });
     }
 
     if (err.name === "TokenVersionError") {
       return res.status(401).json({
         success: false,
-        error: "Session outdated. Please log in again.",
+        error: {
+          message: "Session outdated. Please log in again.",
+          code: "TOKEN_OUTDATED",
+        },
       });
     }
 
     if (err.name === "JsonWebTokenError") {
       return res.status(401).json({
         success: false,
-        error: "Invalid authentication token.",
+        error: {
+          message: "Invalid authentication token.",
+          code: "TOKEN_INVALID",
+        },
       });
     }
 
     return res.status(500).json({
       success: false,
-      error: "Authentication failed.",
+      error: { message: "Authentication failed.", code: "AUTH_ERROR" },
     });
   }
 }
@@ -152,14 +160,10 @@ export function optionalAuth(req, res, next) {
  * Usage: router.get('/endpoint', authenticate, requireOnboarding, handler)
  */
 export function requireOnboarding(req, res, next) {
-  // SUPER_ADMIN bypasses onboarding check — they don't go through
-  // the team/individual selection flow
   if (req.user.globalRole === "SUPER_ADMIN") {
     return next();
   }
 
-  // We need to check the database here because onboardingComplete
-  // is NOT in the JWT (it's a one-time flag, not worth the payload)
   prisma.user
     .findUnique({
       where: { id: req.user.id },
@@ -169,15 +173,17 @@ export function requireOnboarding(req, res, next) {
       if (!user) {
         return res.status(401).json({
           success: false,
-          error: "User not found.",
+          error: { message: "User not found.", code: "USER_NOT_FOUND" },
         });
       }
 
       if (!user.onboardingComplete) {
         return res.status(403).json({
           success: false,
-          error: "Please complete onboarding first.",
-          code: "ONBOARDING_REQUIRED",
+          error: {
+            message: "Please complete onboarding first.",
+            code: "ONBOARDING_REQUIRED",
+          },
         });
       }
 
@@ -186,7 +192,10 @@ export function requireOnboarding(req, res, next) {
     .catch(() => {
       return res.status(500).json({
         success: false,
-        error: "Failed to verify onboarding status.",
+        error: {
+          message: "Failed to verify onboarding status.",
+          code: "INTERNAL_ERROR",
+        },
       });
     });
 }
@@ -207,15 +216,17 @@ export function requirePasswordChanged(req, res, next) {
       if (!user) {
         return res.status(401).json({
           success: false,
-          error: "User not found.",
+          error: { message: "User not found.", code: "USER_NOT_FOUND" },
         });
       }
 
       if (user.mustChangePassword) {
         return res.status(403).json({
           success: false,
-          error: "You must change your password before continuing.",
-          code: "PASSWORD_CHANGE_REQUIRED",
+          error: {
+            message: "You must change your password before continuing.",
+            code: "PASSWORD_CHANGE_REQUIRED",
+          },
         });
       }
 
@@ -224,7 +235,10 @@ export function requirePasswordChanged(req, res, next) {
     .catch(() => {
       return res.status(500).json({
         success: false,
-        error: "Failed to verify password status.",
+        error: {
+          message: "Failed to verify password status.",
+          code: "INTERNAL_ERROR",
+        },
       });
     });
 }

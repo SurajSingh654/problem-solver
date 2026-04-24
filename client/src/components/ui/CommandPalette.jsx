@@ -90,7 +90,7 @@ export function CommandPalette() {
         const api = (await import('@services/api')).default
         const res = await api.get('/problems', { params: { page: 1, limit: 200 } })
         if (!cancelled) {
-          setAllProblems(res.data.problems || [])
+          setAllProblems(res.data.data.problems || [])
         }
       } catch {
         // Silently fail — command palette search is best-effort

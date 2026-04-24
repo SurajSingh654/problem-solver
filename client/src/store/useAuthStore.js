@@ -66,20 +66,17 @@ const useAuthStore = create((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api.post("/auth/switch-team", { teamId });
-      const { token, user } = res.data;
-
+      const { token, user } = res.data.data;
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
-      // v3.0 FIX: Clear pending team on any team switch
       localStorage.removeItem("pendingTeam");
       set({ token, user, isAuthenticated: true, isLoading: false });
-
-      return { success: true, message: res.data.message };
+      return { success: true, message: res.data.data.message };
     } catch (err) {
       set({ isLoading: false });
       return {
         success: false,
-        error: err.response?.data?.error || "Failed to switch team.",
+        error: err.response?.data?.error?.message || "Failed to switch team.",
       };
     }
   },
@@ -89,31 +86,23 @@ const useAuthStore = create((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api.post("/auth/onboarding", data);
-      const { token, user } = res.data;
-
+      const { token, user, pendingTeam } = res.data.data;
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
-
-      // v3.0 FIX: Store pending team info for TeamManagePage/Dashboard
-      if (res.data.pendingTeam) {
-        localStorage.setItem(
-          "pendingTeam",
-          JSON.stringify(res.data.pendingTeam),
-        );
+      if (pendingTeam) {
+        localStorage.setItem("pendingTeam", JSON.stringify(pendingTeam));
       }
-
       set({ token, user, isAuthenticated: true, isLoading: false });
-
       return {
         success: true,
-        message: res.data.message,
-        pendingTeam: res.data.pendingTeam,
+        message: res.data.data.message,
+        pendingTeam,
       };
     } catch (err) {
       set({ isLoading: false });
       return {
         success: false,
-        error: err.response?.data?.error || "Onboarding failed.",
+        error: err.response?.data?.error?.message || "Onboarding failed.",
       };
     }
   },
@@ -122,10 +111,8 @@ const useAuthStore = create((set, get) => ({
   refreshUser: async () => {
     try {
       const res = await api.get("/auth/me");
-      const user = res.data.user;
+      const user = res.data.data.user;
       localStorage.setItem("user", JSON.stringify(user));
-
-      // v3.0 FIX: If user was switched to a team (approval), clear pending
       const pending = localStorage.getItem("pendingTeam");
       if (
         pending &&
@@ -134,7 +121,6 @@ const useAuthStore = create((set, get) => ({
       ) {
         localStorage.removeItem("pendingTeam");
       }
-
       set({ user });
     } catch {
       get().logout();

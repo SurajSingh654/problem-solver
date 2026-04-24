@@ -1,7 +1,6 @@
 // ============================================================================
 // ProbSolver v3.0 — Problems Hook (Team-Scoped)
 // ============================================================================
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@services/api'
 import { useTeamContext } from './useTeamContext'
@@ -18,19 +17,18 @@ export function useProblems(filters = {}) {
       if (difficulty) params.difficulty = difficulty
       if (search) params.search = search
       const res = await api.get('/problems', { params })
-      return res.data
+      return res.data.data
     },
   })
 }
 
 export function useProblem(problemId) {
   const { teamQueryKey } = useTeamContext()
-
   return useQuery({
     queryKey: [...teamQueryKey, 'problem', problemId],
     queryFn: async () => {
       const res = await api.get(`/problems/${problemId}`)
-      return res.data.problem
+      return res.data.data.problem
     },
     enabled: !!problemId,
   })
@@ -39,7 +37,6 @@ export function useProblem(problemId) {
 export function useCreateProblem() {
   const queryClient = useQueryClient()
   const { teamQueryKey } = useTeamContext()
-
   return useMutation({
     mutationFn: (data) => api.post('/problems', data),
     onSuccess: () => {
@@ -51,7 +48,6 @@ export function useCreateProblem() {
 export function useUpdateProblem() {
   const queryClient = useQueryClient()
   const { teamQueryKey } = useTeamContext()
-
   return useMutation({
     mutationFn: ({ problemId, data }) => api.put(`/problems/${problemId}`, data),
     onSuccess: (_, { problemId }) => {
@@ -64,7 +60,6 @@ export function useUpdateProblem() {
 export function useDeleteProblem() {
   const queryClient = useQueryClient()
   const { teamQueryKey } = useTeamContext()
-
   return useMutation({
     mutationFn: (problemId) => api.delete(`/problems/${problemId}`),
     onSuccess: () => {

@@ -269,7 +269,7 @@ export default function SuperAdminAnalyticsPage() {
             setLoading(true)
             try {
                 const res = await api.get(`/platform/health?period=${period}`)
-                setMetrics(res.data)
+                setMetrics(res.data.data)
             } catch (err) {
                 console.error('Failed to load platform metrics:', err)
             } finally {
@@ -284,8 +284,8 @@ export default function SuperAdminAnalyticsPage() {
         async function fetchAnalysis() {
             try {
                 const res = await api.get('/platform/health/analysis')
-                if (res.data.analysis) {
-                    setAnalysis(res.data.analysis)
+                if (res.data.data.analysis) {
+                    setAnalysis(res.data.data.analysis)
                 }
             } catch (err) {
                 console.error('Failed to load saved analysis:', err)
@@ -302,7 +302,7 @@ export default function SuperAdminAnalyticsPage() {
         setAnalyzing(true)
         try {
             const res = await api.post('/platform/health/analyze', { metrics }, AI_TIMEOUT)
-            setAnalysis(res.data)
+           setAnalysis(res.data.data)
         } catch (err) {
             console.error('Analysis failed:', err)
         } finally {

@@ -25,7 +25,7 @@ export default function AllUsersPage() {
     async function loadUsers() {
         try {
             const res = await api.get('/users')
-            setUsers(res.data.users || [])
+            setUsers(res.data.data.users || [])
         } catch (err) {
             console.error('Failed to load users:', err)
         } finally {

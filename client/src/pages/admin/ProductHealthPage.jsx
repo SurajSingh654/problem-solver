@@ -245,7 +245,7 @@ export default function ProductHealthPage() {
             setLoading(true)
             try {
                 const res = await api.get(`/admin/product-health?period=${period}`)
-                setMetrics(res.data)
+                setMetrics(res.data.data)
             } catch (err) {
                 console.error('Failed to load metrics:', err)
             } finally {

@@ -8,7 +8,7 @@ export function useUsers() {
     queryKey: QUERY_KEYS.USERS,
     queryFn: async () => {
       const res = await usersApi.getAll();
-      return res.data;
+      return res.data.data;
     },
     staleTime: 60 * 1000,
   });
@@ -19,7 +19,7 @@ export function useUser(userId) {
     queryKey: QUERY_KEYS.USER(userId),
     queryFn: async () => {
       const res = await usersApi.getById(userId);
-      return res.data.user;
+      return res.data.data.user;
     },
     enabled: !!userId,
     staleTime: 60 * 1000,
@@ -36,7 +36,7 @@ export function useDeleteUser() {
       toast.success('Member removed')
     },
     onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to remove member')
+      toast.error(err.response?.data?.error?.message || 'Failed to remove member')
     },
   })
 }
@@ -47,10 +47,10 @@ export function useUpdateUserRole() {
     mutationFn: ({ id, role }) => usersApi.updateRole(id, role),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS })
-      toast.success(res.data.message || 'Role updated')
+      toast.success(res.data.data.message || 'Role updated')
     },
     onError: (err) => {
-      toast.error(err.response?.data?.error || 'Failed to update role')
+      toast.error(err.response?.data?.error?.message || 'Failed to update role')
     },
   })
 }
