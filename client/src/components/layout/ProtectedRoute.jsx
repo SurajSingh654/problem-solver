@@ -1,19 +1,35 @@
 // ============================================================================
-// ProbSolver v3.0 — Protected Route
+// ProbSolver v3.0 — Route Guards
 // ============================================================================
 //
-// Multi-layered protection:
-// 1. Must be authenticated (has valid token)
-// 2. Must be verified (email verified)
-// 3. Must have completed onboarding (chose team/individual)
-// 4. Must not need password change
-// 5. Optionally: must be SUPER_ADMIN or TEAM_ADMIN
+// ARCHITECTURE:
+//
+// Each guard checks ONE thing and either renders children or redirects.
+// Guards compose via nesting in App.jsx:
+//
+//   <RequireAuth>                    ← has valid token?
+//     <RequireSuperAdmin>            ← is SUPER_ADMIN?
+//       <AppShell />                 ← SuperAdmin layout
+//     </RequireSuperAdmin>
+//   </RequireAuth>
+//
+// This follows Single Responsibility Principle — each guard is
+// independently testable and understandable.
+//
+// CRITICAL DESIGN RULE:
+// SuperAdmin routes and team routes are COMPLETELY ISOLATED.
+// SuperAdmin never enters the team layout group.
+// Team users never enter the SuperAdmin layout group.
+// This eliminates the entire class of "wrong hooks firing" bugs.
 //
 // ============================================================================
-
 import { Navigate, useLocation } from 'react-router-dom'
 import useAuthStore from '@store/useAuthStore'
 
+/**
+ * Legacy ProtectedRoute — maintained for backward compatibility.
+ * New routes should use the individual guards below instead.
+ */
 export default function ProtectedRoute({
     children,
     requireSuperAdmin = false,
@@ -35,17 +51,17 @@ export default function ProtectedRoute({
 
     // ── Must complete onboarding ─────────────────────────
     if (!user.onboardingComplete && location.pathname !== '/onboarding') {
-        // SUPER_ADMIN doesn't need onboarding
         if (user.globalRole !== 'SUPER_ADMIN') {
             return <Navigate to="/onboarding" replace />
         }
     }
 
-    // ── Role checks ──────────────────────────────────────
+    // ── SuperAdmin guard ─────────────────────────────────
     if (requireSuperAdmin && user.globalRole !== 'SUPER_ADMIN') {
         return <Navigate to="/" replace />
     }
 
+    // ── Team admin guard ─────────────────────────────────
     if (requireTeamAdmin) {
         const isAdmin = user.globalRole === 'SUPER_ADMIN' || user.teamRole === 'TEAM_ADMIN'
         if (!isAdmin) {
@@ -53,11 +69,13 @@ export default function ProtectedRoute({
         }
     }
 
-    // ── Team context required ────────────────────────────
-    // ── Team context required ────────────────────────────
-    if (requireTeamContext && !user.currentTeamId) {
-        // SUPER_ADMIN doesn't need team context — they manage the platform
-        if (user.globalRole !== 'SUPER_ADMIN') {
+    // ── Team context guard (STRICT — no SuperAdmin bypass) ──
+    if (requireTeamContext) {
+        if (!user.currentTeamId) {
+            // SuperAdmin should never reach team routes — redirect to their dashboard
+            if (user.globalRole === 'SUPER_ADMIN') {
+                return <Navigate to="/super-admin" replace />
+            }
             return <Navigate to="/onboarding" replace />
         }
     }

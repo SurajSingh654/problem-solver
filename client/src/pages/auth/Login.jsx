@@ -70,10 +70,15 @@ export default function Login() {
                 return
             }
             if (user?.mustChangePassword) {
-                navigate('/change-password', { replace: true })
+                navigate('/auth/change-password', { replace: true })
                 return
             }
-            navigate('/', { replace: true })
+            // Route to the correct entry point based on role
+            if (user?.globalRole === 'SUPER_ADMIN') {
+                navigate('/super-admin', { replace: true })
+            } else {
+                navigate('/', { replace: true })
+            }
         }
     }, [isAuthenticated, navigate])
 

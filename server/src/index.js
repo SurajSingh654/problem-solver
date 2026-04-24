@@ -2,6 +2,12 @@
 // ProbSolver v3.0 — Server Entry Point
 // ============================================================================
 //
+// ARCHITECTURE:
+//
+// API Versioning: All routes live under /api/v1/. Unversioned /api/
+// aliases point to v1 for backward compatibility. When v2 is needed,
+// mount v2 routers alongside v1 — both coexist during migration.
+//
 // MIDDLEWARE ORDER:
 // 1. Security headers (Helmet)
 // 2. CORS
@@ -15,12 +21,10 @@
 // 10. Global error handler
 //
 // ============================================================================
-
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { createServer } from "http";
-
 import { PORT, CLIENT_URL, IS_PRODUCTION, NODE_ENV } from "./config/env.js";
 import prisma from "./lib/prisma.js";
 import { errorHandler } from "./middleware/error.middleware.js";
@@ -44,9 +48,9 @@ import interviewRoutes from "./routes/interview.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
 import recommendationRoutes from "./routes/recommendations.routes.js";
-import userRoutes from './routes/users.routes.js'
-import adminRoutes from './routes/admin.routes.js'
-import platformRoutes from './routes/platform.routes.js'
+import userRoutes from "./routes/users.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
+import platformRoutes from "./routes/platform.routes.js";
 
 // ── WebSocket ────────────────────────────────────────────────
 import { setupWebSocket } from "./services/websocket.service.js";
@@ -54,12 +58,11 @@ import { setupWebSocket } from "./services/websocket.service.js";
 // ============================================================================
 // APP SETUP
 // ============================================================================
-
 const app = express();
 const server = createServer(app);
 
-// v3.0 FIX: Railway runs behind a reverse proxy — required for rate limiter
-app.set('trust proxy', 1)
+// Railway runs behind a reverse proxy — required for rate limiter
+app.set("trust proxy", 1);
 
 // ── 1. Security headers ──────────────────────────────────────
 app.use(
@@ -97,7 +100,6 @@ setupQueryLogging(prisma);
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================
-
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -105,51 +107,76 @@ app.get("/health", (req, res) => {
     uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
     version: "3.0.0",
+    apiVersions: ["v1"],
   });
 });
 
 // ============================================================================
-// API ROUTES (with rate limiting)
+// API v1 ROUTES
+// ============================================================================
+// All routes are mounted under /api/v1/ as the canonical path.
+// Unversioned /api/ aliases are provided for backward compatibility
+// and will be deprecated in a future release.
+//
+// Route categories:
+// ── Auth: registration, login, verification, password management
+// ── Platform: SuperAdmin-only platform-wide endpoints
+// ── Teams: team creation, joining, management
+// ── Content: problems, solutions (team-scoped)
+// ── Practice: quizzes, simulations, mock interviews (team-scoped)
+// ── Intelligence: stats, recommendations, AI features (team-scoped)
+// ── Admin: team-admin analytics (team-scoped)
+// ── Users: user profiles, management
 // ============================================================================
 
-// ── Auth (stricter rate limit on login/register/forgot) ──────
-app.use("/api/auth/login", authLimiter);
-app.use("/api/auth/register", authLimiter);
-app.use("/api/auth/forgot-password", authLimiter);
-app.use("/api/auth", authRoutes);
+function mountRoutes(prefix) {
+  // ── Auth (stricter rate limit on login/register/forgot) ──
+  app.use(`${prefix}/auth/login`, authLimiter);
+  app.use(`${prefix}/auth/register`, authLimiter);
+  app.use(`${prefix}/auth/forgot-password`, authLimiter);
+  app.use(`${prefix}/auth`, authRoutes);
 
-// ── Teams ────────────────────────────────────────────────────
-app.use("/api/teams", apiLimiter, teamRoutes);
+  // ── Platform (SuperAdmin only — no team context) ─────────
+  app.use(`${prefix}/platform`, aiLimiter, platformRoutes);
 
-// ── Core features (standard rate limit) ──────────────────────
-app.use("/api/problems", apiLimiter, problemRoutes);
-app.use("/api/solutions", apiLimiter, solutionRoutes);
-app.use("/api/quizzes", apiLimiter, quizRoutes);
-app.use("/api/sim", apiLimiter, simRoutes);
-app.use("/api/interview-v2", apiLimiter, interviewRoutes);
-app.use("/api/stats", apiLimiter, statsRoutes);
-app.use("/api/recommendations", apiLimiter, recommendationRoutes);
-app.use('/api/platform', platformRoutes)
+  // ── Teams ────────────────────────────────────────────────
+  app.use(`${prefix}/teams`, apiLimiter, teamRoutes);
 
-// ── AI (stricter rate limit — expensive operations) ──────────
-app.use("/api/ai", aiLimiter, aiRoutes);
+  // ── Content (team-scoped) ────────────────────────────────
+  app.use(`${prefix}/problems`, apiLimiter, problemRoutes);
+  app.use(`${prefix}/solutions`, apiLimiter, solutionRoutes);
 
-// ── Future routes ────────────────────────────────────────────
-// TODO: Rewrite users.controller.js for v3.0 schema
-app.use('/api/users', apiLimiter, userRoutes)
-// TODO: Rewrite analytics.controller.js for v3.0 schema
-app.use('/api/admin', aiLimiter, adminRoutes)
+  // ── Practice (team-scoped) ───────────────────────────────
+  app.use(`${prefix}/quizzes`, apiLimiter, quizRoutes);
+  app.use(`${prefix}/sim`, apiLimiter, simRoutes);
+  app.use(`${prefix}/interview-v2`, apiLimiter, interviewRoutes);
+
+  // ── Intelligence (team-scoped) ───────────────────────────
+  app.use(`${prefix}/stats`, apiLimiter, statsRoutes);
+  app.use(`${prefix}/recommendations`, apiLimiter, recommendationRoutes);
+  app.use(`${prefix}/ai`, aiLimiter, aiRoutes);
+
+  // ── Admin (team-admin analytics) ─────────────────────────
+  app.use(`${prefix}/admin`, aiLimiter, adminRoutes);
+
+  // ── Users ────────────────────────────────────────────────
+  app.use(`${prefix}/users`, apiLimiter, userRoutes);
+}
+
+// Canonical versioned routes
+mountRoutes("/api/v1");
+
+// Backward-compatible unversioned aliases (same routers, no duplication)
+mountRoutes("/api");
 
 // ============================================================================
 // WEBSOCKET
 // ============================================================================
-
 setupWebSocket(server);
 
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
-
 // ── 404 handler ──────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({
@@ -164,10 +191,10 @@ app.use(errorHandler);
 // ============================================================================
 // START SERVER
 // ============================================================================
-
 async function start() {
   try {
     console.log("\n⚡ ProbSolver v3.0\n");
+
     console.log("📡 Connecting to database...");
     await prisma.$connect();
     console.log("✅ Database connected\n");
@@ -177,23 +204,27 @@ async function start() {
       console.log(`   Environment: ${NODE_ENV}`);
       console.log(`   Client URL:  ${CLIENT_URL}`);
       console.log(`   Health:      http://localhost:${PORT}/health`);
-      console.log(`\n   Routes:`);
+      console.log(`\n   API v1 Routes:`);
       console.log(
-        `   ├── /api/auth         (register, login, verify, onboarding)`,
+        `   ├── /api/v1/auth         (register, login, verify, onboarding)`,
       );
+      console.log(`   ├── /api/v1/platform     (SuperAdmin: health, analysis)`);
       console.log(
-        `   ├── /api/teams        (create, join, leave, invite, manage)`,
+        `   ├── /api/v1/teams        (create, join, leave, invite, manage)`,
       );
-      console.log(`   ├── /api/problems     (CRUD, team-scoped)`);
-      console.log(`   ├── /api/solutions    (submit, review queue)`);
-      console.log(`   ├── /api/quizzes      (AI generation, history)`);
-      console.log(`   ├── /api/sim          (timer sessions)`);
-      console.log(`   ├── /api/interview-v2 (AI mock interviews)`);
-      console.log(`   ├── /api/ai           (review, hints, coaching)`);
-      console.log(`   ├── /api/stats        (personal, leaderboard, 6D)`);
-      console.log(`   ├── /api/recommendations`);
-      console.log(`   ├── /api-docs         (Swagger UI)`);
-      console.log(`   └── /health\n`);
+      console.log(`   ├── /api/v1/problems     (CRUD, team-scoped)`);
+      console.log(`   ├── /api/v1/solutions    (submit, review queue)`);
+      console.log(`   ├── /api/v1/quizzes      (AI generation, history)`);
+      console.log(`   ├── /api/v1/sim          (timer sessions)`);
+      console.log(`   ├── /api/v1/interview-v2 (AI mock interviews)`);
+      console.log(`   ├── /api/v1/ai           (review, hints, coaching)`);
+      console.log(`   ├── /api/v1/stats        (personal, leaderboard, 6D)`);
+      console.log(`   ├── /api/v1/recommendations`);
+      console.log(`   ├── /api/v1/users        (profiles, management)`);
+      console.log(`   ├── /api/v1/admin        (team analytics)`);
+      console.log(`   ├── /api-docs            (Swagger UI)`);
+      console.log(`   └── /health`);
+      console.log(`\n   Backward-compatible aliases at /api/* → /api/v1/*\n`);
     });
   } catch (err) {
     console.error("❌ Failed to start server:", err);
@@ -204,10 +235,8 @@ async function start() {
 // ============================================================================
 // GRACEFUL SHUTDOWN
 // ============================================================================
-
 async function shutdown(signal) {
   console.log(`\n🛑 ${signal} received. Shutting down gracefully...`);
-
   server.close(async () => {
     console.log("   HTTP server closed.");
     await prisma.$disconnect();
@@ -215,7 +244,6 @@ async function shutdown(signal) {
     console.log("   Goodbye.\n");
     process.exit(0);
   });
-
   setTimeout(() => {
     console.error("   Forced exit after timeout.");
     process.exit(1);

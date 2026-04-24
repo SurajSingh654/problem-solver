@@ -1,13 +1,21 @@
 // ============================================================================
-// ProbSolver v3.0 — Axios Instance
+// ProbSolver v3.0 — API Client
 // ============================================================================
 //
-// The interceptor reads the token from localStorage and attaches it.
-// No changes needed for team context — the JWT already contains
-// currentTeamId, and the backend reads it from the token.
+// ARCHITECTURE:
+//
+// Single Axios instance with interceptors for:
+// 1. Auto-attach JWT token from localStorage
+// 2. Handle 401 (expired token) → force logout
+// 3. Handle 403 codes → redirect to appropriate page
+// 4. Structured error extraction for consistent error handling
+//
+// VERSIONING:
+// Base URL points to /api which aliases to /api/v1 on the server.
+// When v2 is available, create a separate apiV2 instance pointing
+// to /api/v2 — or update VITE_API_URL to /api/v2.
 //
 // ============================================================================
-
 import axios from 'axios'
 
 const api = axios.create({
@@ -30,42 +38,60 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// ── Response interceptor: handle auth errors ─────────────────
+// ── Response interceptor: centralized error handling ─────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status
     const code = error.response?.data?.code
 
-    // Token expired or invalid — force logout
+    // Token expired or invalid — force logout and redirect
     if (status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-
-      // Only redirect if not already on auth pages
       if (!window.location.pathname.startsWith('/auth')) {
         window.location.href = '/auth/login'
       }
+      return Promise.reject(error)
     }
 
-    // Onboarding required — redirect to onboarding
-    if (status === 403 && code === 'ONBOARDING_REQUIRED') {
-      if (window.location.pathname !== '/onboarding') {
-        window.location.href = '/onboarding'
+    // 403 with specific codes — redirect to appropriate page
+    if (status === 403) {
+      switch (code) {
+        case 'ONBOARDING_REQUIRED':
+          if (window.location.pathname !== '/onboarding') {
+            window.location.href = '/onboarding'
+          }
+          break
+        case 'PASSWORD_CHANGE_REQUIRED':
+          if (window.location.pathname !== '/auth/change-password') {
+            window.location.href = '/auth/change-password'
+          }
+          break
+        case 'NO_TEAM_CONTEXT':
+          // Don't redirect SuperAdmin to onboarding — they don't need a team
+          // This case should not happen with proper route isolation,
+          // but is a safety net.
+          {
+            const user = JSON.parse(localStorage.getItem('user') || 'null')
+            if (user?.globalRole === 'SUPER_ADMIN') {
+              if (!window.location.pathname.startsWith('/super-admin')) {
+                window.location.href = '/super-admin'
+              }
+            } else if (window.location.pathname !== '/onboarding') {
+              window.location.href = '/onboarding'
+            }
+          }
+          break
       }
     }
 
-    // Password change required
-    if (status === 403 && code === 'PASSWORD_CHANGE_REQUIRED') {
-      if (window.location.pathname !== '/auth/change-password') {
-        window.location.href = '/auth/change-password'
-      }
-    }
-
-    // No team context
-    if (status === 403 && code === 'NO_TEAM_CONTEXT') {
-      if (window.location.pathname !== '/onboarding') {
-        window.location.href = '/onboarding'
+    // 400 with SUPER_ADMIN_NEEDS_TEAM_OVERRIDE — SuperAdmin hit a team endpoint
+    // This shouldn't happen with proper route isolation but is a safety net.
+    if (status === 400 && code === 'SUPER_ADMIN_NEEDS_TEAM_OVERRIDE') {
+      const currentPath = window.location.pathname
+      if (!currentPath.startsWith('/super-admin')) {
+        window.location.href = '/super-admin'
       }
     }
 
