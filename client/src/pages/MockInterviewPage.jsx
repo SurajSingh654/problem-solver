@@ -74,7 +74,11 @@ function SetupScreen({ onStart }) {
                 category,
                 duration: duration * 60,
             })
-            onStart(res.data.data)
+            onStart({
+                ...res.data.data,
+                duration: duration * 60,
+                company,
+            })
         } catch (err) {
             console.error('Failed to start interview:', err)
         } finally {
@@ -630,6 +634,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 
     const session = sessionData.session
     const persona = sessionData.persona
+    const interviewDuration = sessionData.duration || 2700 // fallback 45 min
     const phases = session.phases || sessionData.phaseConfig?.phases || []
 
     // ── WebSocket connection ─────────────────────────
@@ -642,59 +647,63 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 
         ws.onopen = () => {
             setConnected(true)
+            // Tell server which session this connection is for
+            ws.send(JSON.stringify({
+                type: 'interview:start',
+                sessionId: session.id,
+            }))
         }
 
         ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data)
-
-            switch (msg.type) {
-                case 'connected':
-                    // Send initial greeting request
-                    setTimeout(() => {
-                        ws.send(JSON.stringify({
-                            type: 'chat',
-                            data: {
+            try {
+                const msg = JSON.parse(event.data)
+                switch (msg.type) {
+                    case 'interview:started':
+                    case 'connected':
+                        // Send initial greeting request
+                        setTimeout(() => {
+                            ws.send(JSON.stringify({
+                                type: 'interview:message',
                                 content: 'Hi, I\'m ready to start the interview.',
-                                currentPhase: phases[0]?.name,
-                            },
-                        }))
-                    }, 500)
-                    break
-
-                case 'ai_typing':
-                    setIsTyping(msg.data.typing)
-                    if (msg.data.typing) setStreamingMsg('')
-                    break
-
-                case 'ai_chunk':
-                    setStreamingMsg(prev => prev + msg.data.chunk)
-                    break
-
-                case 'ai_message':
-                    setStreamingMsg('')
-                    setMessages(prev => [...prev, {
-                        role: 'assistant',
-                        content: msg.data.content,
-                    }])
-                    break
-
-                case 'message_received':
-                    setMessages(prev => [...prev, {
-                        role: 'user',
-                        content: msg.data.content,
-                    }])
-                    break
-
-                case 'interview_ended':
-                    break
-
-                case 'debrief_ready':
-                    onDebrief(msg.data.debrief)
-                    break
-
-                case 'error':
-                    console.error('[WS] Error:', msg.data.message)
-                    break
+                                workspace: {},
+                            }))
+                        }, 500)
+                        break
+                    case 'ai_typing':
+                        setIsTyping(msg.data?.typing ?? false)
+                        if (msg.data?.typing) setStreamingMsg('')
+                        break
+                    case 'ai_chunk':
+                        setStreamingMsg(prev => prev + (msg.data?.chunk || msg.chunk || ''))
+                        break
+                    case 'ai_message':
+                        setStreamingMsg('')
+                        setMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: msg.data?.content || msg.content || '',
+                        }])
+                        break
+                    case 'message_received':
+                        setMessages(prev => [...prev, {
+                            role: 'user',
+                            content: msg.data?.content || msg.content || '',
+                        }])
+                        break
+                    case 'interview:ended':
+                    case 'interview_ended':
+                        break
+                    case 'debrief_ready':
+                    case 'interview:debrief':
+                        onDebrief(msg.data?.debrief || msg.debrief || msg.data)
+                        break
+                    case 'error':
+                        console.error('[WS] Error:', msg.error || msg.data?.message || 'Unknown error')
+                        break
+                    default:
+                        console.log('[WS] Unknown message type:', msg.type)
+                }
+            } catch (err) {
+                console.error('[WS] Failed to parse message:', err)
             }
         }
 
@@ -721,12 +730,9 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
         if (!input.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
 
         wsRef.current.send(JSON.stringify({
-            type: 'chat',
-            data: {
-                content: input.trim(),
-                workspaceSnapshot: workspace,
-                currentPhase: phases[0]?.name,
-            },
+            type: 'interview:message',
+            content: input.trim(),
+            workspace: workspace,
         }))
 
         setInput('')
@@ -736,7 +742,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
     // ── End interview ────────────────────────────────
     function handleEnd() {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'end_interview' }))
+            wsRef.current.send(JSON.stringify({ type: 'interview:end' }))
         }
         setShowEndConfirm(false)
     }
@@ -749,8 +755,8 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
         saveTimerRef.current = setTimeout(() => {
             if (wsRef.current?.readyState === WebSocket.OPEN) {
                 wsRef.current.send(JSON.stringify({
-                    type: 'workspace_update',
-                    data: { workspace: newWorkspace },
+                    type: 'interview:workspace',
+                    workspace: newWorkspace,
                 }))
             }
         }, 3000)
@@ -761,7 +767,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
             {/* Timer bar */}
             <InterviewTimer
                 startedAt={session.startedAt}
-                duration={session.duration}
+                duration={interviewDuration}
                 phases={phases}
             />
 

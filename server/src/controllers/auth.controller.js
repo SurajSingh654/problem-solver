@@ -915,7 +915,7 @@ export async function updateUnverifiedEmail(req, res) {
     // Update email and send new verification code
     const code = generateCode();
     console.log(
-      `[DEV] Verification code: ${code} for ${email || currentEmail || "unknown"}`,
+      `[DEV] Verification code: ${code} for ${newEmail || currentEmail || "unknown"}`,
     );
 
     await prisma.user.update({

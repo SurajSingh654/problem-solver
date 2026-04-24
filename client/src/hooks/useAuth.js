@@ -22,7 +22,11 @@ export function useMe() {
     queryKey: QUERY_KEYS.ME,
     queryFn: async () => {
       const res = await authApi.getMe();
-      return res.data.data.user;
+      const user = res.data.data.user;
+      // Sync fresh server data back to auth store
+      // This ensures currentTeam, streak, etc. stay current
+      useAuthStore.getState().updateUser(user);
+      return user;
     },
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,

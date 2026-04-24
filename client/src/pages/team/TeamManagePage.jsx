@@ -70,8 +70,8 @@ export default function TeamManagePage() {
                 teamsApi.getCurrent(),
                 teamsApi.getMembers(),
             ])
-            setTeam(teamRes.data.team)
-            setMembers(membersRes.data.members)
+            setTeam(teamRes.data.data.team || teamRes.data.data)
+            setMembers(membersRes.data.data.members || [])
         } catch (err) {
             console.error('Load team error:', err)
         } finally {
@@ -87,13 +87,13 @@ export default function TeamManagePage() {
         setActionLoading('join')
         try {
             const res = await teamsApi.join(joinCode.trim())
-            const { token, user: updatedUser } = res.data
+            const { token, user: updatedUser } = res.data.data
             useAuthStore.getState().setAuth(token, updatedUser)
             // v3.0 FIX: Clear pending team on successful join
             localStorage.removeItem('pendingTeam')
             navigate('/', { replace: true })
         } catch (err) {
-            setJoinError(err.response?.data?.error || 'Failed to join team.')
+            setJoinError(err.response?.data?.error?.message || 'Failed to join team.')
         } finally {
             setActionLoading(null)
         }
@@ -108,11 +108,11 @@ export default function TeamManagePage() {
                 name: createName.trim(),
                 description: createDesc.trim() || undefined,
             })
-            setCreateResult({ success: true, message: res.data.message })
+            setCreateResult({ success: true, message: res.data.data.message })
             setCreateName('')
             setCreateDesc('')
         } catch (err) {
-            setCreateResult({ success: false, message: err.response?.data?.error || 'Failed to create team.' })
+            setCreateResult({ success: false, message: err.response?.data?.error?.message || 'Failed to create team.' })
         } finally {
             setActionLoading(null)
         }
@@ -168,7 +168,7 @@ export default function TeamManagePage() {
         setActionLoading('leave')
         try {
             const res = await teamsApi.leave()
-            const { token, user: updatedUser } = res.data
+            const { token, user: updatedUser } = res.data.data
             useAuthStore.getState().setAuth(token, updatedUser)
             navigate('/', { replace: true })
         } catch (err) {
@@ -183,7 +183,7 @@ export default function TeamManagePage() {
         setActionLoading('regen')
         try {
             const res = await teamsApi.regenerateCode()
-            setTeam((prev) => ({ ...prev, joinCode: res.data.joinCode }))
+            setTeam((prev) => ({ ...prev, joinCode: res.data.data.joinCode }))
         } catch (err) {
             console.error('Regenerate code error:', err)
         } finally {
