@@ -124,7 +124,7 @@ function SessionDetail({ sessionId, onBack }) {
             try {
                 const res = await api.get(`/interview-v2/${sessionId}`)
                 // v3.0 returns { success, session }
-                setSession(res.data.session || res.data.data)
+                setSession(res.data.data.session)
             } catch (err) {
                 console.error('Failed to load session:', err)
             } finally {
@@ -297,7 +297,7 @@ export default function InterviewHistoryPage() {
             try {
                 const res = await api.get('/interview-v2/history/list')
                 // v3.0 returns { success, sessions, pagination }
-                setSessions(res.data.sessions || res.data.data || [])
+                setSessions(res.data.data.sessions || [])
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
