@@ -88,9 +88,7 @@ export async function register(req, res) {
 
     // ── Generate verification code ─────────────────────
     const code = generateCode();
-    console.log(
-      `[DEV] Verification code: ${code} for ${email ||  "unknown"}`,
-    );
+    console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
 
     // ── Create user ────────────────────────────────────
     const user = await prisma.user.create({
@@ -289,6 +287,9 @@ export async function login(req, res) {
         globalRole: true,
         currentTeamId: true,
         teamRole: true,
+        currentTeam: {
+          select: { id: true, name: true, isPersonal: true },
+        },
         personalTeamId: true,
         isVerified: true,
         onboardingComplete: true,
@@ -338,6 +339,7 @@ export async function login(req, res) {
         globalRole: user.globalRole,
         currentTeamId: user.currentTeamId,
         teamRole: user.teamRole,
+        currentTeam: user.currentTeam || null,
         personalTeamId: user.personalTeamId,
         isVerified: user.isVerified,
         onboardingComplete: user.onboardingComplete,
@@ -600,9 +602,7 @@ export async function forgotPassword(req, res) {
     }
 
     const code = generateCode();
-    console.log(
-      `[DEV] Verification code: ${code} for ${email ||  "unknown"}`,
-    );
+    console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
 
     await prisma.user.update({
       where: { id: user.id },
@@ -848,6 +848,9 @@ export async function switchTeam(req, res) {
         globalRole: true,
         currentTeamId: true,
         teamRole: true,
+        currentTeam: {
+          select: { id: true, name: true, isPersonal: true },
+        },
         personalTeamId: true,
         onboardingComplete: true,
       },

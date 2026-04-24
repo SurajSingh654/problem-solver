@@ -452,7 +452,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                         })
 
                                         // v3.0 FIX: response is { data: { success, content: {...} } }
-                                        const content = res.data?.content || res.data?.data || res.data
+                                        const content = res.data.data.content
 
                                         if (content.description) {
                                             setValue('description', content.description)

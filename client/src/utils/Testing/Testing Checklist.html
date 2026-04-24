@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>ProbSolver v3&period;0 &mdash; End-to-End Test Checklist</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+            
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-light">
+            <p>INPUT
+title
+ProbSolver v3.0 — End-to-End Test Checklist
+content</p>
+<h1 id="probsolver-v30--end-to-end-test-checklist">ProbSolver v3.0 — End-to-End Test Checklist</h1>
+<blockquote>
+<p><strong>Instructions:</strong> Test in order. Keep browser DevTools Console open throughout.
+Mark each item: ✅ Pass | ❌ Fail (describe error) | ⚠️ Visual issue
+After completing all phases, report results.</p>
+</blockquote>
+<hr>
+<h2 id="pre-test-setup">Pre-Test Setup</h2>
+<ul class="contains-task-list">
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> Clear browser localStorage (DevTools → Application → Local Storage → Clear)</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> Open DevTools Console tab (filter to Errors only)</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> Have SuperAdmin credentials ready (seeded account)</li>
+<li class="task-list-item enabled"><input class="task-list-item-checkbox"type="checkbox"> Have Team Admin credentials ready (registered account with approved team)</li>
+</ul>
+<hr>
+<h2 id="phase-1-superadmin-flow">Phase 1: SuperAdmin Flow</h2>
+<h3 id="11--login--dashboard">1.1 — Login &amp; Dashboard</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Login as SuperAdmin → lands on <code>/super-admin</code> (NOT <code>/</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Console: zero 400/500 errors</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Stats cards show numbers (Total Users, Active Teams, etc.)</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Pending teams section renders (shows teams or &quot;No pending requests&quot;)</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Quick links clickable: All Teams, All Users, Analytics, API Docs</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="12--all-users">1.2 — All Users</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6</td>
+<td>Navigate to All Users via sidebar</td>
+<td></td>
+</tr>
+<tr>
+<td>7</td>
+<td>Table shows users with: name, email, role badge, solved count, status, joined date</td>
+<td></td>
+</tr>
+<tr>
+<td>8</td>
+<td>Click user row → navigates to <code>/super-admin/profile/:userId</code></td>
+<td></td>
+</tr>
+<tr>
+<td>9</td>
+<td>Profile shows: name, role badge, email, stats, recent solutions</td>
+<td></td>
+</tr>
+<tr>
+<td>10</td>
+<td>&quot;Back to Users&quot; button → returns to All Users</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="13--all-teams">1.3 — All Teams</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11</td>
+<td>Navigate to All Teams via sidebar</td>
+<td></td>
+</tr>
+<tr>
+<td>12</td>
+<td>Teams list shows with status badges (Active/Pending/Rejected)</td>
+<td></td>
+</tr>
+<tr>
+<td>13</td>
+<td>Click team name → expands with member list and join code</td>
+<td></td>
+</tr>
+<tr>
+<td>14</td>
+<td>Filter tabs work: All, Active, Pending, Rejected</td>
+<td></td>
+</tr>
+<tr>
+<td>15</td>
+<td>(If pending team exists) Approve → team moves to Active tab</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="14--platform-analytics">1.4 — Platform Analytics</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>16</td>
+<td>Navigate to Platform Analytics via sidebar</td>
+<td></td>
+</tr>
+<tr>
+<td>17</td>
+<td>Overview stats cards load (Total Users, Active, Teams, etc.)</td>
+<td></td>
+</tr>
+<tr>
+<td>18</td>
+<td>User Funnel section renders with bars and percentages</td>
+<td></td>
+</tr>
+<tr>
+<td>19</td>
+<td>Weekly Trends charts render (solutions + registrations per week)</td>
+<td></td>
+</tr>
+<tr>
+<td>20</td>
+<td>Engagement + Team Health sections render</td>
+<td></td>
+</tr>
+<tr>
+<td>21</td>
+<td>Feature Adoption bars render with percentages</td>
+<td></td>
+</tr>
+<tr>
+<td>22</td>
+<td>AI Usage &amp; Cost section shows call counts and estimated cost</td>
+<td></td>
+</tr>
+<tr>
+<td>23</td>
+<td>Content Volume section shows totals</td>
+<td></td>
+</tr>
+<tr>
+<td>24</td>
+<td>Click &quot;AI Analysis&quot; → wait → analysis appears with health score</td>
+<td></td>
+</tr>
+<tr>
+<td>25</td>
+<td>Navigate away → come back → analysis still visible (persisted)</td>
+<td></td>
+</tr>
+<tr>
+<td>26</td>
+<td>Period selector (7d / 30d / 90d) changes metrics</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="15--superadmin-settings">1.5 — SuperAdmin Settings</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>27</td>
+<td>Click avatar (top-right) → &quot;Settings&quot; → navigates to <code>/super-admin/settings</code></td>
+<td></td>
+</tr>
+<tr>
+<td>28</td>
+<td>Profile section shows name, email, avatar color picker</td>
+<td></td>
+</tr>
+<tr>
+<td>29</td>
+<td>NO &quot;Team&quot; section shown (SuperAdmin doesn't have team info here)</td>
+<td></td>
+</tr>
+<tr>
+<td>30</td>
+<td>Change display name → Save → toast &quot;Profile updated&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>31</td>
+<td>Email Verified shows &quot;Yes&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>32</td>
+<td>Account section shows &quot;Super Administrator&quot; role</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="16--superadmin-profile">1.6 — SuperAdmin Profile</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>33</td>
+<td>Click avatar (top-right) → &quot;My Profile&quot; → navigates to <code>/super-admin/profile</code></td>
+<td></td>
+</tr>
+<tr>
+<td>34</td>
+<td>Shows SuperAdmin name with &quot;🛡️ Super Admin&quot; badge</td>
+<td></td>
+</tr>
+<tr>
+<td>35</td>
+<td>Shows email address</td>
+<td></td>
+</tr>
+<tr>
+<td>36</td>
+<td>Stats section shows zeros (SuperAdmin has no solutions)</td>
+<td></td>
+</tr>
+<tr>
+<td>37</td>
+<td>&quot;No solutions yet&quot; empty state renders cleanly</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="17--command-palette-superadmin">1.7 — Command Palette (SuperAdmin)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>38</td>
+<td>Press ⌘K (or Ctrl+K) → palette opens</td>
+<td></td>
+</tr>
+<tr>
+<td>39</td>
+<td>Shows &quot;Platform&quot; group: Dashboard, All Teams, All Users, Analytics, Settings</td>
+<td></td>
+</tr>
+<tr>
+<td>40</td>
+<td>Does NOT show: Problems, Review Queue, Quizzes, Mock Interview</td>
+<td></td>
+</tr>
+<tr>
+<td>41</td>
+<td>Type &quot;users&quot; → filters to &quot;All Users&quot; → press Enter → navigates</td>
+<td></td>
+</tr>
+<tr>
+<td>42</td>
+<td>Press ESC → palette closes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="18--topbar-superadmin">1.8 — Topbar (SuperAdmin)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43</td>
+<td>Page title updates on each navigation (Platform Dashboard, All Users, etc.)</td>
+<td></td>
+</tr>
+<tr>
+<td>44</td>
+<td>Crumb shows &quot;Platform&quot; for SuperAdmin pages</td>
+<td></td>
+</tr>
+<tr>
+<td>45</td>
+<td>Theme toggle (sun/moon) works</td>
+<td></td>
+</tr>
+<tr>
+<td>46</td>
+<td>Docs link works</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="19--edge-cases-superadmin">1.9 — Edge Cases (SuperAdmin)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>47</td>
+<td>Manually navigate to <code>/problems</code> → redirected to <code>/super-admin</code></td>
+<td></td>
+</tr>
+<tr>
+<td>48</td>
+<td>Manually navigate to <code>/leaderboard</code> → redirected to <code>/super-admin</code></td>
+<td></td>
+</tr>
+<tr>
+<td>49</td>
+<td>Manually navigate to <code>/review</code> → redirected to <code>/super-admin</code></td>
+<td></td>
+</tr>
+<tr>
+<td>50</td>
+<td>Refresh any SuperAdmin page → stays on that page, no errors</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="phase-2-team-admin-flow">Phase 2: Team Admin Flow</h2>
+<h3 id="20--login">2.0 — Login</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>51</td>
+<td>Logout SuperAdmin</td>
+<td></td>
+</tr>
+<tr>
+<td>52</td>
+<td>Login as Team Admin → lands on <code>/</code> (Dashboard)</td>
+<td></td>
+</tr>
+<tr>
+<td>53</td>
+<td>Console: zero errors</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="21--dashboard">2.1 — Dashboard</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>54</td>
+<td>Shows team name in header (e.g., &quot;Google SQAD Dashboard&quot;)</td>
+<td></td>
+</tr>
+<tr>
+<td>55</td>
+<td>Stats cards: Problems Solved, Streak, Reviews Due, Avg Confidence</td>
+<td></td>
+</tr>
+<tr>
+<td>56</td>
+<td>Quick actions: Problems, Mock Interview, Take Quiz, Report</td>
+<td></td>
+</tr>
+<tr>
+<td>57</td>
+<td>If pending team banner existed → no longer shows (team is approved)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="22--problems-empty--create--view">2.2 — Problems (empty → create → view)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>58</td>
+<td>Navigate to Problems → shows empty state &quot;No problems yet&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>59</td>
+<td>&quot;Add Problem&quot; button visible (you're admin)</td>
+<td></td>
+</tr>
+<tr>
+<td>60</td>
+<td>Click &quot;Add Problem&quot; → navigates to add form</td>
+<td></td>
+</tr>
+<tr>
+<td>61</td>
+<td>Fill: Title &quot;Two Sum&quot;, Category &quot;Coding&quot;, Difficulty &quot;Easy&quot;, Tag &quot;array&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>62</td>
+<td>Click &quot;Create Problem&quot; → redirects to Admin page</td>
+<td></td>
+</tr>
+<tr>
+<td>63</td>
+<td>Go to Problems → &quot;Two Sum&quot; card appears</td>
+<td></td>
+</tr>
+<tr>
+<td>64</td>
+<td>Category filter shows &quot;Coding&quot; with count badge</td>
+<td></td>
+</tr>
+<tr>
+<td>65</td>
+<td>Difficulty filter shows &quot;Easy&quot; with count badge</td>
+<td></td>
+</tr>
+<tr>
+<td>66</td>
+<td>Grid/List view toggle works</td>
+<td></td>
+</tr>
+<tr>
+<td>67</td>
+<td>Search &quot;two&quot; → filters to show &quot;Two Sum&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>68</td>
+<td>Search &quot;xyz&quot; → shows &quot;No problems match&quot; empty state</td>
+<td></td>
+</tr>
+<tr>
+<td>69</td>
+<td>Clear filters works</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="23--problem-detail">2.3 — Problem Detail</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>70</td>
+<td>Click &quot;Two Sum&quot; card → navigates to detail page</td>
+<td></td>
+</tr>
+<tr>
+<td>71</td>
+<td>Title, difficulty badge, category badge display correctly</td>
+<td></td>
+</tr>
+<tr>
+<td>72</td>
+<td>&quot;Submit Solution&quot; button visible</td>
+<td></td>
+</tr>
+<tr>
+<td>73</td>
+<td>&quot;Edit Problem&quot; button visible (admin)</td>
+<td></td>
+</tr>
+<tr>
+<td>74</td>
+<td>Team Solutions shows &quot;No solutions yet&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>75</td>
+<td>Follow-up questions section (if any) renders</td>
+<td></td>
+</tr>
+<tr>
+<td>76</td>
+<td>Back to Problems button works</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="24--submit-solution">2.4 — Submit Solution</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>77</td>
+<td>Click &quot;Submit Solution&quot; on problem detail</td>
+<td></td>
+</tr>
+<tr>
+<td>78</td>
+<td>Step indicator shows 3 steps</td>
+<td></td>
+</tr>
+<tr>
+<td>79</td>
+<td>Step 1: Pattern selector → select &quot;Array / Hashing&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>80</td>
+<td>Click Next → moves to Step 2</td>
+<td></td>
+</tr>
+<tr>
+<td>81</td>
+<td>Step 2: Write approach text, add code in Monaco editor</td>
+<td></td>
+</tr>
+<tr>
+<td>82</td>
+<td>Click Next → moves to Step 3</td>
+<td></td>
+</tr>
+<tr>
+<td>83</td>
+<td>Step 3: Add key insight, set confidence to 4 (Pretty solid)</td>
+<td></td>
+</tr>
+<tr>
+<td>84</td>
+<td>Click &quot;Save Solution&quot; → redirects to problem detail</td>
+<td></td>
+</tr>
+<tr>
+<td>85</td>
+<td>Your solution now appears under &quot;Team Solutions&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>86</td>
+<td>Solution shows: approach, code, pattern, confidence emoji</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="25--ai-review-if-ai-enabled">2.5 — AI Review (if AI enabled)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>87</td>
+<td>On problem detail, AI Review card appears for your solution</td>
+<td></td>
+</tr>
+<tr>
+<td>88</td>
+<td>Click &quot;Get AI Review&quot; → loading → review appears</td>
+<td></td>
+</tr>
+<tr>
+<td>89</td>
+<td>Review shows: score, strengths, gaps, improvement tip</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="26--review-queue">2.6 — Review Queue</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>90</td>
+<td>Navigate to Review Queue</td>
+<td></td>
+</tr>
+<tr>
+<td>91</td>
+<td>Shows &quot;All caught up&quot; (review dates are in future)</td>
+<td></td>
+</tr>
+<tr>
+<td>92</td>
+<td>Stat cards: Due Today (0), Done Today (0), Upcoming, Total Tracked (1)</td>
+<td></td>
+</tr>
+<tr>
+<td>93</td>
+<td>If &quot;How it works&quot; section shows for new users → renders 3 steps</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="27--quiz">2.7 — Quiz</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>94</td>
+<td>Navigate to Quizzes</td>
+<td></td>
+</tr>
+<tr>
+<td>95</td>
+<td>Subject input + suggested subjects render</td>
+<td></td>
+</tr>
+<tr>
+<td>96</td>
+<td>Type &quot;JavaScript&quot;, select Medium, 5 questions</td>
+<td></td>
+</tr>
+<tr>
+<td>97</td>
+<td>Click &quot;Generate Quiz&quot; → loading → quiz starts</td>
+<td></td>
+</tr>
+<tr>
+<td>98</td>
+<td>Question shows with 4 options (A, B, C, D)</td>
+<td></td>
+</tr>
+<tr>
+<td>99</td>
+<td>Select an answer → option highlights</td>
+<td></td>
+</tr>
+<tr>
+<td>100</td>
+<td>Navigation dots work (click to jump to question)</td>
+<td></td>
+</tr>
+<tr>
+<td>101</td>
+<td>Next/Previous buttons work</td>
+<td></td>
+</tr>
+<tr>
+<td>102</td>
+<td>Scratchpad opens/closes</td>
+<td></td>
+</tr>
+<tr>
+<td>103</td>
+<td>Click &quot;Submit Quiz&quot; → results screen</td>
+<td></td>
+</tr>
+<tr>
+<td>104</td>
+<td>Score, accuracy, time display correctly</td>
+<td></td>
+</tr>
+<tr>
+<td>105</td>
+<td>Question review: correct (green) / incorrect (red) markers</td>
+<td></td>
+</tr>
+<tr>
+<td>106</td>
+<td>Explanations show for each question</td>
+<td></td>
+</tr>
+<tr>
+<td>107</td>
+<td>Click &quot;AI Analysis&quot; → analysis loads with weak areas + advice</td>
+<td></td>
+</tr>
+<tr>
+<td>108</td>
+<td>Click &quot;Take Another Quiz&quot; → returns to setup</td>
+<td></td>
+</tr>
+<tr>
+<td>109</td>
+<td>&quot;Past Quizzes&quot; section shows your completed quiz</td>
+<td></td>
+</tr>
+<tr>
+<td>110</td>
+<td>&quot;Recently Practiced&quot; shows &quot;JavaScript&quot; with score</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="28--leaderboard">2.8 — Leaderboard</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>111</td>
+<td>Navigate to Leaderboard</td>
+<td></td>
+</tr>
+<tr>
+<td>112</td>
+<td>Shows you with rank #1 (only member with solutions)</td>
+<td></td>
+</tr>
+<tr>
+<td>113</td>
+<td>Podium renders (even with just 1 person)</td>
+<td></td>
+</tr>
+<tr>
+<td>114</td>
+<td>Table shows: Rank, Member, Solved, Hard, Streak, Confidence</td>
+<td></td>
+</tr>
+<tr>
+<td>115</td>
+<td>Click your row → navigates to <code>/profile/:userId</code></td>
+<td></td>
+</tr>
+<tr>
+<td>116</td>
+<td>Profile shows your stats and &quot;Two Sum&quot; in recent solutions</td>
+<td></td>
+</tr>
+<tr>
+<td>117</td>
+<td>Back button returns to leaderboard</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="29--intelligence-report">2.9 — Intelligence Report</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>118</td>
+<td>Navigate to Intelligence Report</td>
+<td></td>
+</tr>
+<tr>
+<td>119</td>
+<td>Radar chart or dimension scores render</td>
+<td></td>
+</tr>
+<tr>
+<td>120</td>
+<td>6 dimensions listed with scores (may be low with 1 solution)</td>
+<td></td>
+</tr>
+<tr>
+<td>121</td>
+<td>Overall readiness score shows</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="210--interview-history">2.10 — Interview History</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>122</td>
+<td>Navigate to Interview History</td>
+<td></td>
+</tr>
+<tr>
+<td>123</td>
+<td>Shows &quot;No interviews yet&quot; with &quot;Start Interview&quot; button</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="211--mock-interview-optional--uses-ai-credits">2.11 — Mock Interview (optional — uses AI credits)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>124</td>
+<td>Navigate to Mock Interview</td>
+<td></td>
+</tr>
+<tr>
+<td>125</td>
+<td>Select: category, difficulty, interview style</td>
+<td></td>
+</tr>
+<tr>
+<td>126</td>
+<td>Click Start → WebSocket connects → AI sends first message</td>
+<td></td>
+</tr>
+<tr>
+<td>127</td>
+<td>Type a response → AI streams reply</td>
+<td></td>
+</tr>
+<tr>
+<td>128</td>
+<td>Workspace panel (Code/Diagram/Notes tabs) accessible</td>
+<td></td>
+</tr>
+<tr>
+<td>129</td>
+<td>End interview → debrief generates with scores</td>
+<td></td>
+</tr>
+<tr>
+<td>130</td>
+<td>Go to Interview History → session appears with verdict</td>
+<td></td>
+</tr>
+<tr>
+<td>131</td>
+<td>Click session → transcript shows with all messages</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="212--team-admin-panel">2.12 — Team Admin Panel</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>132</td>
+<td>Navigate to Team Admin (sidebar)</td>
+<td></td>
+</tr>
+<tr>
+<td>133</td>
+<td>Stats: Problems count, Members count, Solutions count, Pinned count</td>
+<td></td>
+</tr>
+<tr>
+<td>134</td>
+<td>Problems tab: &quot;Two Sum&quot; shows with category badge, difficulty, solution count</td>
+<td></td>
+</tr>
+<tr>
+<td>135</td>
+<td>Search problems works</td>
+<td></td>
+</tr>
+<tr>
+<td>136</td>
+<td>Pin toggle: click 📌 → problem becomes pinned → pin count updates</td>
+<td></td>
+</tr>
+<tr>
+<td>137</td>
+<td>Hide toggle: click &quot;Visible&quot; → changes to &quot;Hidden&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>138</td>
+<td>Edit: click ✏️ → navigates to edit page with pre-filled data</td>
+<td></td>
+</tr>
+<tr>
+<td>139</td>
+<td>Edit page: change title → Save → returns to admin, title updated</td>
+<td></td>
+</tr>
+<tr>
+<td>140</td>
+<td>Members tab: shows your name with &quot;Admin&quot; badge and &quot;you&quot; tag</td>
+<td></td>
+</tr>
+<tr>
+<td>141</td>
+<td>Members tab: shows email, streak, activity status, joined date</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="213--team-admin-analytics">2.13 — Team Admin Analytics</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>142</td>
+<td>Navigate to Team Analytics (sidebar)</td>
+<td></td>
+</tr>
+<tr>
+<td>143</td>
+<td>Metrics load: Members, Solutions, Problems, AI Adoption</td>
+<td></td>
+</tr>
+<tr>
+<td>144</td>
+<td>Engagement funnel renders</td>
+<td></td>
+</tr>
+<tr>
+<td>145</td>
+<td>Solutions per week chart renders</td>
+<td></td>
+</tr>
+<tr>
+<td>146</td>
+<td>Feature adoption bars render</td>
+<td></td>
+</tr>
+<tr>
+<td>147</td>
+<td>Content coverage shows category distribution</td>
+<td></td>
+</tr>
+<tr>
+<td>148</td>
+<td>Click &quot;AI Analysis&quot; → report generates</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="214--settings-team-admin">2.14 — Settings (Team Admin)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>149</td>
+<td>Navigate to Settings</td>
+<td></td>
+</tr>
+<tr>
+<td>150</td>
+<td>Profile section: name, avatar color picker</td>
+<td></td>
+</tr>
+<tr>
+<td>151</td>
+<td>Team section shows: team name, role &quot;Team Admin&quot;, &quot;Manage&quot; button</td>
+<td></td>
+</tr>
+<tr>
+<td>152</td>
+<td>Interview Goals: target company, interview date, preferred language</td>
+<td></td>
+</tr>
+<tr>
+<td>153</td>
+<td>Set target company &quot;Google&quot; + future interview date → Save</td>
+<td></td>
+</tr>
+<tr>
+<td>154</td>
+<td>Return to Dashboard → interview countdown shows</td>
+<td></td>
+</tr>
+<tr>
+<td>155</td>
+<td>Change Password section: enter current + new → &quot;Update Password&quot; appears</td>
+<td></td>
+</tr>
+<tr>
+<td>156</td>
+<td>Change Email section: enter new email → &quot;Send Verification Code&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>157</td>
+<td>Appearance: theme toggle works</td>
+<td></td>
+</tr>
+<tr>
+<td>158</td>
+<td>Account info: role, email verified (Yes), member since date</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="215--command-palette-team-admin">2.15 — Command Palette (Team Admin)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>159</td>
+<td>Press ⌘K → palette opens</td>
+<td></td>
+</tr>
+<tr>
+<td>160</td>
+<td>&quot;Navigate&quot; group: Dashboard, Problems, Review Queue, etc.</td>
+<td></td>
+</tr>
+<tr>
+<td>161</td>
+<td>&quot;Admin&quot; group: Admin Panel, Add Problem, Team Analytics</td>
+<td></td>
+</tr>
+<tr>
+<td>162</td>
+<td>Type &quot;two&quot; → &quot;Two Sum&quot; appears in Problems section</td>
+<td></td>
+</tr>
+<tr>
+<td>163</td>
+<td>Click &quot;Two Sum&quot; → navigates to problem detail</td>
+<td></td>
+</tr>
+<tr>
+<td>164</td>
+<td>Solved indicator (✓) shows next to &quot;Two Sum&quot;</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="phase-3-individual-mode-new-user">Phase 3: Individual Mode (New User)</h2>
+<h3 id="30--registration">3.0 — Registration</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>165</td>
+<td>Open incognito/new browser</td>
+<td></td>
+</tr>
+<tr>
+<td>166</td>
+<td>Navigate to <code>/auth/register</code></td>
+<td></td>
+</tr>
+<tr>
+<td>167</td>
+<td>Fill: name, email, password → click Register</td>
+<td></td>
+</tr>
+<tr>
+<td>168</td>
+<td>Redirects to email verification page</td>
+<td></td>
+</tr>
+<tr>
+<td>169</td>
+<td>Enter 6-digit code → verify → auto-login</td>
+<td></td>
+</tr>
+<tr>
+<td>170</td>
+<td>Redirects to onboarding page</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="31--onboarding-individual">3.1 — Onboarding (Individual)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>171</td>
+<td>Onboarding shows 3 options: Join Team, Create Team, Solo</td>
+<td></td>
+</tr>
+<tr>
+<td>172</td>
+<td>Select &quot;Solo&quot; / Individual mode</td>
+<td></td>
+</tr>
+<tr>
+<td>173</td>
+<td>Redirects to Dashboard</td>
+<td></td>
+</tr>
+<tr>
+<td>174</td>
+<td>Dashboard shows &quot;Your Dashboard&quot; (not a team name)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="32--individual-mode-basics">3.2 — Individual Mode Basics</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>175</td>
+<td>Sidebar shows &quot;My Practice&quot; in team switcher</td>
+<td></td>
+</tr>
+<tr>
+<td>176</td>
+<td>Sidebar does NOT show &quot;Leaderboard&quot;</td>
+<td></td>
+</tr>
+<tr>
+<td>177</td>
+<td>Problems page shows empty state</td>
+<td></td>
+</tr>
+<tr>
+<td>178</td>
+<td>Quiz works (generate + take + results)</td>
+<td></td>
+</tr>
+<tr>
+<td>179</td>
+<td>Settings shows &quot;Individual Mode&quot; in team section</td>
+<td></td>
+</tr>
+<tr>
+<td>180</td>
+<td>Settings shows &quot;Join Team&quot; button</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="phase-4-cross-cutting-checks">Phase 4: Cross-Cutting Checks</h2>
+<h3 id="41--console-errors">4.1 — Console Errors</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>181</td>
+<td>SuperAdmin flow: zero red console errors throughout</td>
+<td></td>
+</tr>
+<tr>
+<td>182</td>
+<td>Team Admin flow: zero red console errors throughout</td>
+<td></td>
+</tr>
+<tr>
+<td>183</td>
+<td>Individual mode: zero red console errors throughout</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="42--page-refresh-resilience">4.2 — Page Refresh Resilience</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>184</td>
+<td>Refresh SuperAdmin Dashboard → stays on page, data reloads</td>
+<td></td>
+</tr>
+<tr>
+<td>185</td>
+<td>Refresh Problems page → stays on page, problems reload</td>
+<td></td>
+</tr>
+<tr>
+<td>186</td>
+<td>Refresh Problem Detail → stays on page, problem loads</td>
+<td></td>
+</tr>
+<tr>
+<td>187</td>
+<td>Refresh Quiz (mid-quiz) → returns to setup (acceptable)</td>
+<td></td>
+</tr>
+<tr>
+<td>188</td>
+<td>Refresh Settings → stays on page, form repopulates</td>
+<td></td>
+</tr>
+<tr>
+<td>189</td>
+<td>Refresh Platform Analytics → analysis still shows (persisted)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="43--theme">4.3 — Theme</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>190</td>
+<td>Toggle dark → light → dark</td>
+<td></td>
+</tr>
+<tr>
+<td>191</td>
+<td>All pages readable in both themes</td>
+<td></td>
+</tr>
+<tr>
+<td>192</td>
+<td>No invisible text or broken borders in light mode</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="results-summary">Results Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Total Tests</th>
+<th>Pass</th>
+<th>Fail</th>
+<th>Visual Issues</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. SuperAdmin</td>
+<td>50</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2. Team Admin</td>
+<td>114</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>3. Individual</td>
+<td>16</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4. Cross-Cutting</td>
+<td>12</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>TOTAL</strong></td>
+<td><strong>192</strong></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="failures-to-fix">Failures to fix:</h3>
+<ol>
+<li></li>
+<li></li>
+<li></li>
+</ol>
+<h3 id="visual-issues-to-address">Visual issues to address:</h3>
+<ol>
+<li></li>
+<li></li>
+<li></li>
+</ol>
+<h3 id="console-errors-observed">Console errors observed:</h3>
+<ol>
+<li></li>
+<li></li>
+<li></li>
+</ol>
+
+            
+            
+        </body>
+        </html>

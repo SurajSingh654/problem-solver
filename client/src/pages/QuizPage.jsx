@@ -550,8 +550,11 @@ function ActiveQuizScreen({ quizData, onComplete }) {
     function handleSubmit() {
         const timeUsed = Math.round((Date.now() - startTime) / 1000)
         const gradedAnswers = questions.map((q, i) => ({
-            selected: answers[i] ?? -1,
-            correct: (answers[i] ?? -1) === q.correctIndex,
+            selected: answers[i] ?? null,
+            correct: answers[i] != null && (
+                answers[i] === q.correctIndex ||
+                answers[i] === q.correctAnswer
+            ),
         }))
         onComplete({ answers: gradedAnswers, timeUsedSecs: timeUsed })
     }
@@ -658,39 +661,46 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                     <FormattedText text={question.question} />
                 </div>
 
-                {/* Options */}
+                {/* Options — handles both array and object {A:"...",B:"..."} formats */}
                 <div className="space-y-2.5">
-                    {question.options.map((option, i) => {
-                        const isSelected = answers[currentQ] === i
+                    {(() => {
+                        const isObj = !Array.isArray(question.options)
+                        const entries = isObj
+                            ? Object.entries(question.options)
+                            : question.options.map((opt, idx) => [String.fromCharCode(65 + idx), opt])
 
-                        return (
-                            <button
-                                key={i}
-                                type="button"
-                                onClick={() => handleSelect(i)}
-                                className={cn(
-                                    'w-full flex items-start gap-3 p-4 rounded-xl border',
-                                    'text-left transition-all duration-150',
-                                    isSelected
-                                        ? 'bg-brand-400/8 border-brand-400/50'
-                                        : 'bg-surface-2 border-border-default hover:border-brand-400/30 hover:bg-brand-400/3',
-                                )}
-                            >
-                                <div className={cn(
-                                    'w-7 h-7 rounded-lg flex items-center justify-center',
-                                    'text-xs font-bold flex-shrink-0 border mt-0.5',
-                                    isSelected
-                                        ? 'bg-brand-400/20 border-brand-400/50 text-brand-300'
-                                        : 'bg-surface-3 border-border-default text-text-disabled'
-                                )}>
-                                    {String.fromCharCode(65 + i)}
-                                </div>
-                                <div className="text-sm leading-relaxed pt-0.5 text-text-secondary flex-1">
-                                    <FormattedText text={option} />
-                                </div>
-                            </button>
-                        )
-                    })}
+                        return entries.map(([key, value], i) => {
+                            const selectKey = isObj ? key : i
+                            const isSelected = answers[currentQ] === selectKey
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => handleSelect(selectKey)}
+                                    className={cn(
+                                        'w-full flex items-start gap-3 p-4 rounded-xl border',
+                                        'text-left transition-all duration-150',
+                                        isSelected
+                                            ? 'bg-brand-400/8 border-brand-400/50'
+                                            : 'bg-surface-2 border-border-default hover:border-brand-400/30 hover:bg-brand-400/3',
+                                    )}
+                                >
+                                    <div className={cn(
+                                        'w-7 h-7 rounded-lg flex items-center justify-center',
+                                        'text-xs font-bold flex-shrink-0 border mt-0.5',
+                                        isSelected
+                                            ? 'bg-brand-400/20 border-brand-400/50 text-brand-300'
+                                            : 'bg-surface-3 border-border-default text-text-disabled'
+                                    )}>
+                                        {key}
+                                    </div>
+                                    <div className="text-sm leading-relaxed pt-0.5 text-text-secondary flex-1">
+                                        <FormattedText text={value} />
+                                    </div>
+                                </button>
+                            )
+                        })
+                    })()}
                 </div>
 
                 {/* Scratchpad toggle */}
@@ -959,33 +969,43 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                                         </div>
                                     </div>
 
-                                    {/* Options with results */}
+                                    {/* Options with results — handles both array and object formats */}
                                     <div className="space-y-1.5 ml-9">
-                                        {q.options.map((opt, oi) => {
-                                            const isUserAnswer = answer?.selected === oi
-                                            const isCorrectOpt = oi === q.correctIndex
-                                            return (
-                                                <div key={oi} className={cn(
-                                                    'text-xs px-3 py-2 rounded-lg flex items-start gap-2',
-                                                    isCorrectOpt
-                                                        ? 'bg-success/10 text-success font-semibold'
-                                                        : isUserAnswer
-                                                            ? 'bg-danger/10 text-danger line-through'
-                                                            : 'text-text-tertiary'
-                                                )}>
-                                                    <span className="font-bold flex-shrink-0 mt-px">
-                                                        {String.fromCharCode(65 + oi)}.
-                                                    </span>
-                                                    <FormattedText text={opt} />
-                                                    {isCorrectOpt && (
-                                                        <span className="ml-auto flex-shrink-0 text-success">✓</span>
-                                                    )}
-                                                    {isUserAnswer && !isCorrectOpt && (
-                                                        <span className="ml-auto flex-shrink-0 text-danger">✗</span>
-                                                    )}
-                                                </div>
-                                            )
-                                        })}
+                                        {(() => {
+                                            const isObj = !Array.isArray(q.options)
+                                            const entries = isObj
+                                                ? Object.entries(q.options)
+                                                : q.options.map((opt, idx) => [String.fromCharCode(65 + idx), opt])
+
+                                            return entries.map(([key, value], oi) => {
+                                                const selectKey = isObj ? key : oi
+                                                const isUserAnswer = answer?.selected === selectKey
+                                                const isCorrectOpt = isObj
+                                                    ? key === q.correctAnswer
+                                                    : oi === q.correctIndex
+                                                return (
+                                                    <div key={key} className={cn(
+                                                        'text-xs px-3 py-2 rounded-lg flex items-start gap-2',
+                                                        isCorrectOpt
+                                                            ? 'bg-success/10 text-success font-semibold'
+                                                            : isUserAnswer
+                                                                ? 'bg-danger/10 text-danger line-through'
+                                                                : 'text-text-tertiary'
+                                                    )}>
+                                                        <span className="font-bold flex-shrink-0 mt-px">
+                                                            {key}.
+                                                        </span>
+                                                        <FormattedText text={value} />
+                                                        {isCorrectOpt && (
+                                                            <span className="ml-auto flex-shrink-0 text-success">✓</span>
+                                                        )}
+                                                        {isUserAnswer && !isCorrectOpt && (
+                                                            <span className="ml-auto flex-shrink-0 text-danger">✗</span>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })
+                                        })()}
                                     </div>
 
                                     {/* Explanation */}

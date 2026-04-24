@@ -634,7 +634,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 
     // ── WebSocket connection ─────────────────────────
     useEffect(() => {
-        const token = localStorage.getItem('ps_token')
+        const token = localStorage.getItem('token')
         const wsUrl = `${getWsUrl()}?token=${token}&sessionId=${session.id}`
 
         const ws = new WebSocket(wsUrl)
@@ -1114,9 +1114,6 @@ export default function MockInterviewPage() {
                         sessionData={sessionData}
                         onNewInterview={handleNewInterview}
                     />
-                    <Button variant="ghost" size="md" onClick={() => navigate('/interview-history')}>
-                        View All Interviews
-                    </Button>
                 </motion.div>
             )}
         </AnimatePresence>
