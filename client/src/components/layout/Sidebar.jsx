@@ -43,6 +43,7 @@ export default function Sidebar() {
             { to: '/super-admin/teams', icon: '🏢', label: 'All Teams' },
             { to: '/super-admin/users', icon: '👥', label: 'All Users' },
             { to: '/super-admin/analytics', icon: '📊', label: 'Platform Analytics' },
+            { to: '/super-admin/showcase', icon: '🎪', label: 'Showcase' },
             { to: '/super-admin/settings', icon: '⚙️', label: 'Settings' },
             { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]

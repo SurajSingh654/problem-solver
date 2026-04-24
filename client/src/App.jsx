@@ -84,6 +84,7 @@ const AllTeamsPage = lazy(() => import('@pages/superadmin/AllTeamsPage'))
 const AllUsersPage = lazy(() => import('@pages/superadmin/AllUsersPage'))
 const SuperAdminAnalyticsPage = lazy(() => import('@pages/superadmin/SuperAdminAnalyticsPage'))
 
+
 // ============================================================================
 // QUERY CLIENT
 // ============================================================================
@@ -190,6 +191,7 @@ export default function App() {
             <Route path="/super-admin/profile/:userId" element={<ProfilePage />} />
             <Route path="/super-admin/profile" element={<ProfilePage />} />
             <Route path="/super-admin/settings" element={<SettingsPage />} />
+            <Route path="/super-admin/showcase" element={<Lazy><ShowcasePage /></Lazy>} />
           </Route>
 
           {/* ============================================================ */}
