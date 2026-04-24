@@ -5,10 +5,10 @@
 // ENVELOPE CONTRACT:
 //
 // Success: { success: true, data: {...}, meta?: {...} }
-// Error:   { success: false, error: { message, code?, details? } }
+// Error:   { success: false, error: { message, code?, requestId?, details? } }
 //
-// Every controller uses these helpers. Every client reads res.data.data
-// for the payload. No exceptions.
+// Error responses automatically include the request ID from req.requestId.
+// This enables end-to-end tracing: client error toast → server logs.
 //
 // ============================================================================
 
@@ -33,6 +33,7 @@ export function success(res, data = {}, statusCode = 200, meta = undefined) {
 
 /**
  * Send an error response with standardized envelope.
+ * Automatically includes requestId from the request object.
  *
  * @param {Response} res - Express response object
  * @param {string} message - Human-readable error message
@@ -47,9 +48,22 @@ export function error(
   code = undefined,
   details = undefined,
 ) {
+  const requestId = res.req?.requestId;
+
   const errorObj = { message };
   if (code) errorObj.code = code;
+  if (requestId) errorObj.requestId = requestId;
   if (details) errorObj.details = details;
+
+  // Log server errors with context
+  if (statusCode >= 500) {
+    console.error(`[${requestId || "no-id"}] ${statusCode} ${message}`, {
+      url: res.req?.originalUrl,
+      method: res.req?.method,
+      userId: res.req?.user?.id,
+    });
+  }
+
   return res.status(statusCode).json({
     success: false,
     error: errorObj,

@@ -12,7 +12,7 @@ import { authApi } from "../services/auth.api.js";
 import useAuthStore from "../store/useAuthStore.js";
 import { toast } from "../store/useUIStore.js";
 import { QUERY_KEYS } from "../utils/constants.js";
-import { extractErrorMessage } from "../services/api.js";
+import { extractErrorMessage, extractRequestId } from "../services/api.js";
 
 // ── Get current user (protected pages) ────────────────
 export function useMe() {
@@ -47,7 +47,9 @@ export function useRegister() {
     },
     onError: (err) => {
       console.error("[Register] Error:", err.response?.data);
-      toast.error(extractErrorMessage(err));
+      const msg = extractErrorMessage(err);
+      const requestId = extractRequestId(err);
+      toast.error(requestId ? `${msg} (ref: ${requestId})` : msg);
     },
   });
 }
@@ -95,7 +97,8 @@ export function useLogin() {
         return;
       }
 
-      toast.error(msg);
+      const requestId = extractRequestId(err);
+      toast.error(requestId ? `${msg} (ref: ${requestId})` : msg);
     },
   });
 }

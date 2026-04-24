@@ -7,8 +7,9 @@
 // Success: { success: true, data: {...}, meta?: {...} }
 //   → Hooks read: res.data.data.fieldName
 //
-// Error: { success: false, error: { message, code?, details? } }
+// Error: { success: false, error: { message, code?, requestId?, details? } }
 //   → Hooks read: err.response?.data?.error?.message
+//   → RequestId available for support/debugging
 //
 // ============================================================================
 import axios from "axios";
@@ -33,24 +34,29 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// ── Helper: extract error message from standardized envelope ──
-function extractErrorMessage(error) {
+// ── Helper: extract error info from standardized envelope ────
+export function extractErrorMessage(error) {
   const data = error.response?.data;
   if (!data) return "Network error";
-
-  // New envelope: { error: { message, code } }
   if (data.error?.message) return data.error.message;
-
-  // Legacy fallback: { error: "string" }
   if (typeof data.error === "string") return data.error;
-
   return "An unexpected error occurred";
 }
 
-function extractErrorCode(error) {
+export function extractErrorCode(error) {
   const data = error.response?.data;
   if (data?.error?.code) return data.error.code;
   if (data?.code) return data.code;
+  return null;
+}
+
+export function extractRequestId(error) {
+  const data = error.response?.data;
+  // From error envelope
+  if (data?.error?.requestId) return data.error.requestId;
+  // From response header
+  if (error.response?.headers?.["x-request-id"])
+    return error.response.headers["x-request-id"];
   return null;
 }
 
@@ -105,11 +111,17 @@ api.interceptors.response.use(
       }
     }
 
+    // Log server errors with request ID for debugging
+    if (status >= 500) {
+      const requestId = extractRequestId(error);
+      const message = extractErrorMessage(error);
+      console.error(
+        `[Server Error] ${message}${requestId ? ` (${requestId})` : ""}`,
+      );
+    }
+
     return Promise.reject(error);
   },
 );
-
-// Export helper for use in hooks/components
-export { extractErrorMessage, extractErrorCode };
 
 export default api;

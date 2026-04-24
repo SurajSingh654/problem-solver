@@ -1,15 +1,25 @@
 // ============================================================================
 // ProbSolver v3.0 — Global Error Handler
 // ============================================================================
+//
+// Every unhandled error includes the request ID in the response
+// so users can report it and we can trace it in logs.
+//
+// ============================================================================
 import { IS_PRODUCTION } from "../config/env.js";
 
-/**
- * Express global error handler.
- * Must have 4 parameters (err, req, res, next) for Express to recognize it.
- * All errors follow the standard envelope: { success, error: { message, code } }
- */
 export function errorHandler(err, req, res, next) {
-  console.error("Unhandled error:", err);
+  const requestId = req.requestId || "unknown";
+
+  // Log with request ID for traceability
+  console.error(`[${requestId}] Unhandled error:`, {
+    message: err.message,
+    code: err.code,
+    stack: IS_PRODUCTION ? undefined : err.stack,
+    url: req.originalUrl,
+    method: req.method,
+    userId: req.user?.id,
+  });
 
   // ── Prisma known errors ────────────────────────────
   if (err.code === "P2002") {
@@ -18,6 +28,7 @@ export function errorHandler(err, req, res, next) {
       error: {
         message: "A record with this data already exists.",
         code: "DUPLICATE_RECORD",
+        requestId,
       },
     });
   }
@@ -28,6 +39,7 @@ export function errorHandler(err, req, res, next) {
       error: {
         message: "Record not found.",
         code: "NOT_FOUND",
+        requestId,
       },
     });
   }
@@ -39,6 +51,7 @@ export function errorHandler(err, req, res, next) {
       error: {
         message: "Invalid JSON in request body.",
         code: "INVALID_JSON",
+        requestId,
       },
     });
   }
@@ -50,6 +63,7 @@ export function errorHandler(err, req, res, next) {
       error: {
         message: "Request body too large. Maximum size is 10MB.",
         code: "PAYLOAD_TOO_LARGE",
+        requestId,
       },
     });
   }
@@ -62,6 +76,7 @@ export function errorHandler(err, req, res, next) {
         ? "An unexpected error occurred."
         : err.message || "An unexpected error occurred.",
       code: "INTERNAL_ERROR",
+      requestId,
     },
   });
 }

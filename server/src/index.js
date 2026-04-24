@@ -28,6 +28,7 @@ import { createServer } from "http";
 import { PORT, CLIENT_URL, IS_PRODUCTION, NODE_ENV } from "./config/env.js";
 import prisma from "./lib/prisma.js";
 import { errorHandler } from "./middleware/error.middleware.js";
+import { requestIdMiddleware } from "./middleware/requestId.middleware.js";
 import {
   apiLimiter,
   authLimiter,
@@ -84,11 +85,14 @@ app.use(
   }),
 );
 
-// ── 3. Body parsing ──────────────────────────────────────────
+// ── 3. Body parsing ──────────────────────────────────────
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// ── 4. Request logging ───────────────────────────────────────
+// ── 4. Request ID (before logger so IDs appear in logs) ──
+app.use(requestIdMiddleware);
+
+// ── 5. Request logging ───────────────────────────────────
 app.use(IS_PRODUCTION ? prodLogger : devLogger);
 
 // ── 5. Swagger API docs ─────────────────────────────────────
