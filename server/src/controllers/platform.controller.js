@@ -260,10 +260,30 @@ export async function getPlatformHealth(req, res) {
     const registrationsPerWeek = getWeeksData(recentUsers, "createdAt", 8);
 
     // ═══════════════════════════════════════════════
-    // FEATURE ADOPTION (% of active users)
+    // AI USAGE (computed first — reused in feature adoption)
     // ═══════════════════════════════════════════════
-    const activeUserCount = Math.max(activeInPeriod, 1);
+    const [aiReviewCount, aiQuizAnalysisCount] = await Promise.all([
+      prisma.solution.count({ where: { aiFeedback: { not: null } } }),
+      prisma.quizAttempt.count({ where: { aiAnalysis: { not: null } } }),
+    ]);
 
+    const aiQuizCount = totalQuizzes;
+    const aiInterviewCount = totalInterviews;
+    const totalAICalls =
+      aiReviewCount + aiQuizCount + aiInterviewCount + aiQuizAnalysisCount;
+
+    const estimatedTokens =
+      aiReviewCount * 800 +
+      aiQuizCount * 1500 +
+      aiInterviewCount * 3000 +
+      aiQuizAnalysisCount * 600;
+    const estimatedCost = parseFloat(
+      ((estimatedTokens / 1000000) * 0.15).toFixed(2),
+    );
+
+    // ═══════════════════════════════════════════════
+    // FEATURE ADOPTION (% of all users)
+    // ═══════════════════════════════════════════════
     const featureAdoption = {
       problemSolving: {
         users: solvedAtLeastOne,
@@ -286,48 +306,14 @@ export async function getPlatformHealth(req, res) {
         label: "Timed Simulations",
       },
       aiReviews: {
-        total: await prisma.solution.count({
-          where: { aiFeedback: { not: null } },
-        }),
+        total: aiReviewCount,
         rate:
           totalSolutions > 0
-            ? Math.round(
-                ((await prisma.solution.count({
-                  where: { aiFeedback: { not: null } },
-                })) /
-                  totalSolutions) *
-                  100,
-              )
+            ? Math.round((aiReviewCount / totalSolutions) * 100)
             : 0,
         label: "AI Solution Reviews",
       },
     };
-
-    // ═══════════════════════════════════════════════
-    // AI USAGE
-    // ═══════════════════════════════════════════════
-    const aiReviewCount = await prisma.solution.count({
-      where: { aiFeedback: { not: null } },
-    });
-    const aiQuizCount = totalQuizzes;
-    const aiInterviewCount = totalInterviews;
-    const aiQuizAnalysisCount = await prisma.quizAttempt.count({
-      where: { aiAnalysis: { not: null } },
-    });
-
-    const totalAICalls =
-      aiReviewCount + aiQuizCount + aiInterviewCount + aiQuizAnalysisCount;
-
-    // Rough cost estimate (configurable, rough averages)
-    // Reviews: ~800 tokens avg, Quizzes: ~1500 tokens, Interviews: ~3000 tokens per session
-    const estimatedTokens =
-      aiReviewCount * 800 +
-      aiQuizCount * 1500 +
-      aiInterviewCount * 3000 +
-      aiQuizAnalysisCount * 600;
-    const estimatedCost = parseFloat(
-      ((estimatedTokens / 1000000) * 0.15).toFixed(2),
-    ); // $0.15 per 1M tokens for gpt-4o-mini
 
     // ═══════════════════════════════════════════════
     // GROWTH INDICATORS
