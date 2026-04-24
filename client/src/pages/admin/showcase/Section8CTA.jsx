@@ -29,9 +29,9 @@ export default function Section8CTA() {
                             </span>
                         </h2>
                         <p className="text-base text-white/55 max-w-lg mx-auto leading-relaxed mb-10">
-                            Stop grinding random problems with no feedback.
-                            Start practicing with AI that coaches you, teammates that challenge you,
-                            and data that tells you when you're actually ready.
+                            Join thousands of students and professionals who are preparing smarter.
+                            AI that coaches you personally, teammates that challenge your thinking,
+                            and a 6D intelligence engine that tells you exactly when you're interview-ready.
                         </p>
                     </motion.div>
 
@@ -121,7 +121,7 @@ export default function Section8CTA() {
                             v3.0 · Built with React, Express, Prisma, pgvector, GPT-4o & WebSocket
                         </p>
                         <p className="text-[10px] text-white/20 mt-2">
-                            AI-Powered Interview Intelligence Platform
+                            The Complete Interview Preparation & Intelligence Platform
                         </p>
                     </motion.div>
                 </div>

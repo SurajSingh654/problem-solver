@@ -79,8 +79,8 @@ export default function Section2Features() {
                     gradient="from-brand-300 to-blue-400"
                 />
                 <SectionDesc>
-                    Not just coding problems. ProbSolver covers the complete interview loop
-                    with AI-powered coaching, team collaboration, and data-driven readiness tracking.
+                    Every interview round. Every skill dimension. AI-powered coaching, team collaboration,
+                    spaced repetition, and data-driven readiness tracking — all in one platform.
                 </SectionDesc>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -16,9 +16,10 @@ export default function Section5Teams() {
                     gradient="from-success to-blue-400"
                 />
                 <SectionDesc>
-                    Interview prep shouldn't be a solo grind. ProbSolver is built for teams —
-                    study groups, college cohorts, or company interview squads. See how others
-                    think, learn from their approaches, and hold each other accountable.
+                    Interview preparation is more effective when you learn with others. ProbSolver
+                    is built for study groups, college cohorts, and company interview squads.
+                    See different perspectives, learn from each other, build communication skills,
+                    and hold each other accountable.
                 </SectionDesc>
 
                 {/* Two modes */}

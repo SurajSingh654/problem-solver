@@ -41,11 +41,11 @@ export default function Section1Hero({ stats }) {
                         className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white
                        tracking-tight leading-[1.1] mb-6"
                     >
-                        Stop grinding LeetCode.
+                        Prepare smarter, not harder.
                         <br />
                         <span className="bg-gradient-to-r from-brand-300 via-blue-400 to-success
-                             bg-clip-text text-transparent">
-                            Start getting ready.
+     bg-clip-text text-transparent">
+                            Crack any interview with confidence.
                         </span>
                     </motion.h1>
 
@@ -56,9 +56,9 @@ export default function Section1Hero({ stats }) {
                         transition={{ delay: 0.2 }}
                         className="text-lg sm:text-xl text-white/55 max-w-2xl mb-10 leading-relaxed"
                     >
-                        ProbSolver covers every interview round — Coding, System Design, Behavioral,
-                        HR, SQL, CS Fundamentals — with AI that coaches you personally, teams that
-                        learn together, and data that measures your actual readiness.
+                        The complete interview preparation platform — from coding to system design
+                        to behavioral to HR. AI that coaches you personally, teams that learn together,
+                        and a 6-dimension intelligence engine that tells you exactly when you're ready.
                     </motion.p>
 
                     {/* CTA buttons */}
