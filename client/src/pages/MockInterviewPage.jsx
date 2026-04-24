@@ -44,7 +44,7 @@ function getWsUrl() {
 // ══════════════════════════════════════════════════════
 function SetupScreen({ onStart }) {
     const { user } = useAuthStore()
-    const [company, setCompany] = useState('Google')
+    const [company, setCompany] = useState('ALGORITHM_FOCUSED')
     const [category, setCategory] = useState('CODING')
     const [duration, setDuration] = useState(45)
     const [problemId, setProblemId] = useState(null)
@@ -55,7 +55,6 @@ function SetupScreen({ onStart }) {
     const problems = (problemsData?.problems || []).filter(p =>
         !category || p.category === category
     )
-
     const filtered = filter
         ? problems.filter(p =>
             p.title.toLowerCase().includes(filter.toLowerCase())
@@ -70,7 +69,7 @@ function SetupScreen({ onStart }) {
         try {
             const res = await api.post('/interview-v2/start', {
                 problemId: problemId || undefined,
-                company,
+                interviewStyle: company,
                 category,
                 duration: duration * 60,
             })
@@ -123,7 +122,6 @@ function SetupScreen({ onStart }) {
                 <p className="text-xs text-text-tertiary mb-3">
                     Each style simulates a different interview culture — pick what matches where you're applying
                 </p>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                     {INTERVIEW_STYLES.map(s => (
                         <button
@@ -155,8 +153,6 @@ function SetupScreen({ onStart }) {
                         </button>
                     ))}
                 </div>
-
-                {/* Or type a specific company */}
                 <div>
                     <p className="text-[10px] text-text-disabled mb-1.5">
                         Or type a specific company — we'll match the closest interview style
@@ -176,18 +172,15 @@ function SetupScreen({ onStart }) {
                 </div>
             </motion.div>
 
-            {/* Category + Duration — side by side */}
+            {/* Category + Duration */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                {/* Category */}
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.08 }}
                     className="bg-surface-1 border border-border-default rounded-2xl p-5"
                 >
-                    <h2 className="text-sm font-bold text-text-primary mb-3">
-                        Interview type
-                    </h2>
+                    <h2 className="text-sm font-bold text-text-primary mb-3">Interview type</h2>
                     <div className="space-y-1.5">
                         {PROBLEM_CATEGORIES.filter(c =>
                             ['CODING', 'SYSTEM_DESIGN', 'BEHAVIORAL', 'CS_FUNDAMENTALS', 'SQL'].includes(c.id)
@@ -210,16 +203,13 @@ function SetupScreen({ onStart }) {
                     </div>
                 </motion.div>
 
-                {/* Duration */}
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                     className="bg-surface-1 border border-border-default rounded-2xl p-5"
                 >
-                    <h2 className="text-sm font-bold text-text-primary mb-3">
-                        Duration
-                    </h2>
+                    <h2 className="text-sm font-bold text-text-primary mb-3">Duration</h2>
                     <div className="space-y-1.5">
                         {DURATIONS.map(d => (
                             <button
@@ -241,7 +231,7 @@ function SetupScreen({ onStart }) {
                 </motion.div>
             </div>
 
-            {/* Problem selection (optional) */}
+            {/* Problem selection */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -254,70 +244,36 @@ function SetupScreen({ onStart }) {
                         <span className="ml-1.5 text-xs font-normal text-text-disabled">optional</span>
                     </h2>
                     {problemId && (
-                        <button
-                            onClick={() => setProblemId(null)}
-                            className="text-[10px] text-danger hover:text-danger/80 font-semibold transition-colors"
-                        >
+                        <button onClick={() => setProblemId(null)}
+                            className="text-[10px] text-danger hover:text-danger/80 font-semibold transition-colors">
                             Clear
                         </button>
                     )}
                 </div>
-
                 {selectedProblem ? (
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-brand-400/8
-                          border border-brand-400/25">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-brand-400/8 border border-brand-400/25">
                         <span className="text-lg">📋</span>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-text-primary truncate">
-                                {selectedProblem.title}
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <Badge
-                                    variant={
-                                        selectedProblem.difficulty === 'EASY' ? 'easy' :
-                                            selectedProblem.difficulty === 'HARD' ? 'hard' : 'medium'
-                                    }
-                                    size="xs"
-                                >
-                                    {selectedProblem.difficulty}
-                                </Badge>
-                            </div>
+                            <p className="text-sm font-semibold text-text-primary truncate">{selectedProblem.title}</p>
+                            <Badge variant={selectedProblem.difficulty === 'EASY' ? 'easy' : selectedProblem.difficulty === 'HARD' ? 'hard' : 'medium'} size="xs">
+                                {selectedProblem.difficulty}
+                            </Badge>
                         </div>
                     </div>
                 ) : (
                     <>
                         <input
-                            type="text"
-                            value={filter}
-                            onChange={e => setFilter(e.target.value)}
+                            type="text" value={filter} onChange={e => setFilter(e.target.value)}
                             placeholder="Search problems or leave empty for open-ended interview…"
-                            className="w-full bg-surface-3 border border-border-strong rounded-xl
-                         text-sm text-text-primary placeholder:text-text-tertiary
-                         px-3.5 py-2.5 outline-none mb-3
-                         focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                            className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-tertiary px-3.5 py-2.5 outline-none mb-3 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                         />
                         {filtered.length > 0 && filter && (
                             <div className="max-h-[200px] overflow-y-auto space-y-1">
                                 {filtered.slice(0, 6).map(p => (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => { setProblemId(p.id); setFilter('') }}
-                                        className="w-full flex items-center gap-3 p-2.5 rounded-xl border
-                               bg-surface-2 border-border-default text-left
-                               hover:border-brand-400/30 transition-all"
-                                    >
-                                        <span className="text-sm font-semibold text-text-primary truncate flex-1">
-                                            {p.title}
-                                        </span>
-                                        <Badge
-                                            variant={
-                                                p.difficulty === 'EASY' ? 'easy' :
-                                                    p.difficulty === 'HARD' ? 'hard' : 'medium'
-                                            }
-                                            size="xs"
-                                        >
-                                            {p.difficulty}
-                                        </Badge>
+                                    <button key={p.id} onClick={() => { setProblemId(p.id); setFilter('') }}
+                                        className="w-full flex items-center gap-3 p-2.5 rounded-xl border bg-surface-2 border-border-default text-left hover:border-brand-400/30 transition-all">
+                                        <span className="text-sm font-semibold text-text-primary truncate flex-1">{p.title}</span>
+                                        <Badge variant={p.difficulty === 'EASY' ? 'easy' : p.difficulty === 'HARD' ? 'hard' : 'medium'} size="xs">{p.difficulty}</Badge>
                                     </button>
                                 ))}
                             </div>
@@ -338,16 +294,11 @@ function SetupScreen({ onStart }) {
                 transition={{ delay: 0.14 }}
                 className="bg-surface-1 border border-brand-400/20 rounded-2xl p-5"
             >
-                {/* Session preview */}
                 <div className="flex items-center gap-4 mb-5 pb-5 border-b border-border-default">
-                    <Avatar
-                        name={persona?.label || 'Interviewer'}
-                        color="#7c6ff7"
-                        size="md"
-                    />
+                    <Avatar name={persona?.label || 'Interviewer'} color="#7c6ff7" size="md" />
                     <div className="flex-1">
                         <p className="text-sm font-bold text-text-primary">
-                            {INTERVIEW_STYLES.find(s => s.id === company)?.label || company} Interview
+                            {persona?.label || company} Interview
                         </p>
                         <p className="text-xs text-text-tertiary">
                             {PROBLEM_CATEGORIES.find(c => c.id === category)?.label} · {duration} minutes
@@ -359,12 +310,8 @@ function SetupScreen({ onStart }) {
                         <p className="text-[10px] text-text-disabled">GPT-4o</p>
                     </div>
                 </div>
-
-                {/* What to expect */}
                 <div className="mb-5">
-                    <p className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-2">
-                        What to expect
-                    </p>
+                    <p className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-2">What to expect</p>
                     <div className="grid grid-cols-2 gap-2">
                         {[
                             { icon: '🗣', text: 'Natural conversation' },
@@ -372,26 +319,14 @@ function SetupScreen({ onStart }) {
                             { icon: '💻', text: 'Code + diagram workspace' },
                             { icon: '📊', text: 'Detailed debrief at end' },
                         ].map(item => (
-                            <div key={item.text}
-                                className="flex items-center gap-2 text-xs text-text-tertiary
-                              bg-surface-2 rounded-lg px-3 py-2">
-                                <span>{item.icon}</span>
-                                {item.text}
+                            <div key={item.text} className="flex items-center gap-2 text-xs text-text-tertiary bg-surface-2 rounded-lg px-3 py-2">
+                                <span>{item.icon}</span>{item.text}
                             </div>
                         ))}
                     </div>
                 </div>
-
-                <Button
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    loading={loading}
-                    onClick={handleStart}
-                >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.5"
-                        strokeLinecap="round" strokeLinejoin="round">
+                <Button variant="primary" size="lg" fullWidth loading={loading} onClick={handleStart}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="5 3 19 12 5 21 5 3" />
                     </svg>
                     Start Interview
@@ -402,7 +337,7 @@ function SetupScreen({ onStart }) {
 }
 
 // ── Timer component ────────────────────────────────────
-function InterviewTimer({ startedAt, duration, phases, currentPhase, onPhaseChange }) {
+function InterviewTimer({ startedAt, duration, phases }) {
     const [elapsed, setElapsed] = useState(0)
 
     useEffect(() => {
@@ -419,56 +354,42 @@ function InterviewTimer({ startedAt, duration, phases, currentPhase, onPhaseChan
     const isLow = remaining <= 300
     const isCritical = remaining <= 60
 
-    // Find current phase based on elapsed time
-    let cumulativeTime = 0
-    let activePhaseIdx = 0
-    for (let i = 0; i < phases.length; i++) {
-        cumulativeTime += phases[i].duration
-        if (elapsed < cumulativeTime) { activePhaseIdx = i; break }
-        if (i === phases.length - 1) activePhaseIdx = i
-    }
+    // Phases from server don't have duration — distribute evenly
+    const phaseCount = phases.length || 1
+    const phaseDuration = duration / phaseCount
+    const activePhaseIdx = Math.min(Math.floor(elapsed / phaseDuration), phaseCount - 1)
 
     return (
         <div className="flex items-center gap-3 px-4 py-2 bg-surface-1 border-b border-border-default">
-            {/* Timer */}
             <div className={cn(
                 'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold',
                 isCritical ? 'bg-danger/15 text-danger animate-pulse' :
                     isLow ? 'bg-warning/15 text-warning' :
                         'bg-surface-3 text-text-primary'
             )}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="2.5"
-                    strokeLinecap="round" strokeLinejoin="round">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="12 6 12 12 16 14" />
                 </svg>
                 {mins}:{secs}
             </div>
-
-            {/* Phase indicators */}
             <div className="flex-1 flex items-center gap-1">
                 {phases.map((phase, i) => (
-                    <button
+                    <div
                         key={phase.name}
-                        onClick={() => onPhaseChange?.(phase.name)}
                         className={cn(
                             'flex-1 h-1.5 rounded-full transition-all',
-                            i < activePhaseIdx ? 'bg-success' :
-                                i === activePhaseIdx ? (isCritical ? 'bg-danger' : isLow ? 'bg-warning' : 'bg-brand-400') :
+                            phase.status === 'completed' ? 'bg-success' :
+                                phase.status === 'active' ? (isCritical ? 'bg-danger' : isLow ? 'bg-warning' : 'bg-brand-400') :
                                     'bg-surface-4'
                         )}
-                        title={`${phase.name} (${Math.round(phase.duration / 60)}min)`}
+                        title={phase.name}
                     />
                 ))}
             </div>
-
-            {/* Current phase label */}
             <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">
-                {phases[activePhaseIdx]?.name || 'Interview'}
+                {phases.find(p => p.status === 'active')?.name || phases[activePhaseIdx]?.name || 'Interview'}
             </span>
-
-            {/* Progress % */}
             <span className="text-[10px] font-mono text-text-disabled">
                 {Math.round(pct)}%
             </span>
@@ -483,10 +404,7 @@ function MessageBubble({ message }) {
         <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className={cn(
-                'flex gap-3 max-w-[85%]',
-                isUser ? 'ml-auto flex-row-reverse' : ''
-            )}
+            className={cn('flex gap-3 max-w-[85%]', isUser ? 'ml-auto flex-row-reverse' : '')}
         >
             <div className={cn(
                 'w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-1',
@@ -510,14 +428,11 @@ function MessageBubble({ message }) {
 function TypingIndicator() {
     return (
         <div className="flex gap-3 max-w-[85%]">
-            <div className="w-7 h-7 rounded-full bg-surface-4 flex items-center justify-center text-xs flex-shrink-0">
-                🤖
-            </div>
+            <div className="w-7 h-7 rounded-full bg-surface-4 flex items-center justify-center text-xs flex-shrink-0">🤖</div>
             <div className="bg-surface-2 border border-border-default rounded-2xl rounded-tl-md px-4 py-3">
                 <div className="flex gap-1">
                     {[0, 1, 2].map(i => (
-                        <motion.div
-                            key={i}
+                        <motion.div key={i}
                             animate={{ opacity: [0.3, 1, 0.3] }}
                             transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
                             className="w-2 h-2 rounded-full bg-text-disabled"
@@ -532,7 +447,6 @@ function TypingIndicator() {
 // ── Workspace tabs ─────────────────────────────────────
 function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
     const [activeTab, setActiveTab] = useState('thinking')
-
     const tabs = {
         CODING: ['thinking', 'code', 'scratchpad'],
         SYSTEM_DESIGN: ['thinking', 'diagram', 'notes'],
@@ -541,9 +455,7 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
         SQL: ['thinking', 'code', 'scratchpad'],
         HR: ['thinking', 'response'],
     }
-
     const availableTabs = tabs[category] || tabs.CODING
-
     const tabConfig = {
         thinking: { label: 'Thinking', icon: '🧠' },
         code: { label: 'Code', icon: '💻' },
@@ -552,43 +464,29 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
         response: { label: 'Response', icon: '✍️' },
         scratchpad: { label: 'Scratchpad', icon: '📋' },
     }
-
     function updateWorkspace(field, value) {
         onWorkspaceChange({ ...workspace, [field]: value })
     }
-
     return (
         <div className="flex flex-col h-full">
-            {/* Tab bar */}
             <div className="flex items-center gap-1 px-3 py-2 border-b border-border-default bg-surface-1/50">
                 {availableTabs.map(tab => {
                     const config = tabConfig[tab]
                     return (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
+                        <button key={tab} onClick={() => setActiveTab(tab)}
                             className={cn(
                                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
-                                activeTab === tab
-                                    ? 'bg-brand-400/15 text-brand-300'
-                                    : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
-                            )}
-                        >
-                            <span className="text-xs">{config.icon}</span>
-                            {config.label}
+                                activeTab === tab ? 'bg-brand-400/15 text-brand-300' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
+                            )}>
+                            <span className="text-xs">{config.icon}</span>{config.label}
                         </button>
                     )
                 })}
             </div>
-
-            {/* Tab content */}
             <div className="flex-1 overflow-hidden" style={{ position: 'relative' }}>
                 {activeTab === 'diagram' ? (
                     <div style={{ position: 'absolute', inset: 0 }}>
-                        <ExcalidrawEditor
-                            onChange={val => updateWorkspace('diagram', val)}
-                            initialData={workspace.diagram}
-                        />
+                        <ExcalidrawEditor onChange={val => updateWorkspace('diagram', val)} initialData={workspace.diagram} />
                     </div>
                 ) : (
                     <textarea
@@ -598,15 +496,12 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
                             activeTab === 'thinking' ? 'Write your approach and thought process here...' :
                                 activeTab === 'code' ? '// Write your code here...' :
                                     activeTab === 'response' ? 'Write your structured response here...' :
-                                        activeTab === 'scratchpad' ? 'Rough calculations, notes...' :
-                                            'Your notes...'
+                                        activeTab === 'scratchpad' ? 'Rough calculations, notes...' : 'Your notes...'
                         }
                         className={cn(
                             'w-full h-full bg-surface-0 text-sm text-text-primary',
                             'placeholder:text-text-disabled px-4 py-3 outline-none resize-none',
-                            activeTab === 'code' || activeTab === 'scratchpad'
-                                ? 'font-mono text-xs leading-relaxed'
-                                : 'leading-relaxed'
+                            activeTab === 'code' || activeTab === 'scratchpad' ? 'font-mono text-xs leading-relaxed' : 'leading-relaxed'
                         )}
                     />
                 )}
@@ -616,7 +511,7 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
 }
 
 // ══════════════════════════════════════════════════════
-// CHAT SCREEN — Full implementation
+// CHAT SCREEN
 // ══════════════════════════════════════════════════════
 function ChatScreen({ sessionData, onEnd, onDebrief }) {
     const { user } = useAuthStore()
@@ -631,23 +526,29 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
     const wsRef = useRef(null)
     const chatEndRef = useRef(null)
     const inputRef = useRef(null)
+    const streamingMsgRef = useRef('')
 
     const session = sessionData.session
-    const persona = sessionData.persona
-    const interviewDuration = sessionData.duration || 2700 // fallback 45 min
-    const phases = session.phases || sessionData.phaseConfig?.phases || []
+    const interviewDuration = sessionData.duration || 2700
+    const interviewStyle = sessionData.company || session.interviewStyle || 'Standard'
+    const persona = INTERVIEW_STYLES.find(s => s.id === interviewStyle)
+    const personaName = persona?.label || interviewStyle
+    const phases = session.phases || []
+
+    // ── Keep streaming ref in sync ───────────────────
+    useEffect(() => {
+        streamingMsgRef.current = streamingMsg
+    }, [streamingMsg])
 
     // ── WebSocket connection ─────────────────────────
     useEffect(() => {
         const token = localStorage.getItem('token')
         const wsUrl = `${getWsUrl()}?token=${token}&sessionId=${session.id}`
-
         const ws = new WebSocket(wsUrl)
         wsRef.current = ws
 
         ws.onopen = () => {
             setConnected(true)
-            // Tell server which session this connection is for
             ws.send(JSON.stringify({
                 type: 'interview:start',
                 sessionId: session.id,
@@ -657,62 +558,64 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data)
+
                 switch (msg.type) {
+                    // Server acknowledged session — AI will generate first message
                     case 'interview:started':
-                    case 'connected':
-                        // Send initial greeting request
-                        setTimeout(() => {
-                            ws.send(JSON.stringify({
-                                type: 'interview:message',
-                                content: 'Hi, I\'m ready to start the interview.',
-                                workspace: {},
-                            }))
-                        }, 500)
+                        setIsTyping(true)
                         break
-                    case 'ai_typing':
-                        setIsTyping(msg.data?.typing ?? false)
-                        if (msg.data?.typing) setStreamingMsg('')
+
+                    // AI is streaming a token
+                    case 'interview:token':
+                        setIsTyping(false)
+                        setStreamingMsg(prev => prev + (msg.content || ''))
                         break
-                    case 'ai_chunk':
-                        setStreamingMsg(prev => prev + (msg.data?.chunk || msg.chunk || ''))
-                        break
-                    case 'ai_message':
+
+                    // AI finished one complete message
+                    case 'interview:done':
+                        if (streamingMsgRef.current) {
+                            const finalContent = streamingMsgRef.current
+                            setMessages(prev => [...prev, {
+                                role: 'assistant',
+                                content: finalContent,
+                            }])
+                        }
                         setStreamingMsg('')
-                        setMessages(prev => [...prev, {
-                            role: 'assistant',
-                            content: msg.data?.content || msg.content || '',
-                        }])
+                        streamingMsgRef.current = ''
+                        setIsTyping(false)
                         break
-                    case 'message_received':
-                        setMessages(prev => [...prev, {
-                            role: 'user',
-                            content: msg.data?.content || msg.content || '',
-                        }])
+
+                    // Debrief is being generated
+                    case 'interview:debrief_generating':
+                        setIsTyping(true)
                         break
-                    case 'interview:ended':
-                    case 'interview_ended':
-                        break
-                    case 'debrief_ready':
+
+                    // Debrief is ready
                     case 'interview:debrief':
-                        onDebrief(msg.data?.debrief || msg.debrief || msg.data)
+                        setIsTyping(false)
+                        onDebrief(msg.debrief)
                         break
+
+                    // Server error
                     case 'error':
-                        console.error('[WS] Error:', msg.error || msg.data?.message || 'Unknown error')
+                        console.error('[WS] Server error:', msg.error)
+                        setIsTyping(false)
                         break
+
                     default:
-                        console.log('[WS] Unknown message type:', msg.type)
+                        console.log('[WS] Unhandled message type:', msg.type, msg)
                 }
             } catch (err) {
                 console.error('[WS] Failed to parse message:', err)
             }
         }
 
-        ws.onclose = (event) => {
+        ws.onclose = () => {
             setConnected(false)
         }
 
         ws.onerror = (err) => {
-            console.error('[WS] Error:', err)
+            console.error('[WS] Connection error:', err)
         }
 
         return () => {
@@ -729,13 +632,20 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
     function sendMessage() {
         if (!input.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
 
+        const content = input.trim()
+
+        // Optimistic: show user message immediately
+        setMessages(prev => [...prev, { role: 'user', content }])
+
+        // Send to server
         wsRef.current.send(JSON.stringify({
             type: 'interview:message',
-            content: input.trim(),
-            workspace: workspace,
+            content,
+            workspace,
         }))
 
         setInput('')
+        setIsTyping(true)
         inputRef.current?.focus()
     }
 
@@ -745,6 +655,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
             wsRef.current.send(JSON.stringify({ type: 'interview:end' }))
         }
         setShowEndConfirm(false)
+        setIsTyping(true)
     }
 
     // ── Workspace auto-save ──────────────────────────
@@ -764,24 +675,19 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 
     return (
         <div className="flex flex-col h-[calc(100vh-60px)]">
-            {/* Timer bar */}
-            <InterviewTimer
-                startedAt={session.startedAt}
-                duration={interviewDuration}
-                phases={phases}
-            />
+            <InterviewTimer startedAt={session.startedAt} duration={interviewDuration} phases={phases} />
 
-            {/* Main content — chat + workspace */}
             <div className="flex-1 flex overflow-hidden">
-
-                {/* Chat panel — left */}
+                {/* Chat panel */}
                 <div className="flex flex-col w-full lg:w-1/2 border-r border-border-default">
                     {/* Interviewer header */}
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border-default bg-surface-1/50">
-                        <Avatar name={persona?.name || 'AI'} color="#7c6ff7" size="sm" />
+                        <Avatar name={personaName} color="#7c6ff7" size="sm" />
                         <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-text-primary">{persona?.name}</p>
-                            <p className="text-[10px] text-text-tertiary">{session.company} · {session.category?.replace('_', ' ')}</p>
+                            <p className="text-xs font-bold text-text-primary">{personaName}</p>
+                            <p className="text-[10px] text-text-tertiary">
+                                {interviewStyle} · {session.category?.replace('_', ' ')}
+                            </p>
                         </div>
                         <div className="flex items-center gap-2">
                             {connected && (
@@ -790,11 +696,8 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                                     Live
                                 </span>
                             )}
-                            <button
-                                onClick={() => setShowEndConfirm(true)}
-                                className="text-[10px] text-text-disabled hover:text-danger transition-colors
-                           px-2 py-1 rounded-lg border border-border-default hover:border-danger/30"
-                            >
+                            <button onClick={() => setShowEndConfirm(true)}
+                                className="text-[10px] text-text-disabled hover:text-danger transition-colors px-2 py-1 rounded-lg border border-border-default hover:border-danger/30">
                                 End
                             </button>
                         </div>
@@ -816,32 +719,17 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                     <div className="px-4 py-3 border-t border-border-default bg-surface-1/50">
                         <div className="flex gap-2">
                             <textarea
-                                ref={inputRef}
-                                value={input}
+                                ref={inputRef} value={input}
                                 onChange={e => setInput(e.target.value)}
                                 onKeyDown={e => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault()
-                                        sendMessage()
-                                    }
+                                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
                                 }}
                                 placeholder="Type your response... (Enter to send, Shift+Enter for new line)"
                                 rows={2}
-                                className="flex-1 bg-surface-3 border border-border-strong rounded-xl
-                           text-sm text-text-primary placeholder:text-text-disabled
-                           px-3.5 py-2.5 outline-none resize-none
-                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                className="flex-1 bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                             />
-                            <Button
-                                variant="primary"
-                                size="md"
-                                disabled={!input.trim() || !connected}
-                                onClick={sendMessage}
-                                className="self-end"
-                            >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2.5"
-                                    strokeLinecap="round" strokeLinejoin="round">
+                            <Button variant="primary" size="md" disabled={!input.trim() || !connected} onClick={sendMessage} className="self-end">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <line x1="22" y1="2" x2="11" y2="13" />
                                     <polygon points="22 2 15 22 11 13 2 9 22 2" />
                                 </svg>
@@ -850,13 +738,9 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                     </div>
                 </div>
 
-                {/* Workspace panel — right (hidden on mobile) */}
+                {/* Workspace panel */}
                 <div className="hidden lg:flex flex-col w-1/2">
-                    <WorkspacePanel
-                        category={session.category}
-                        workspace={workspace}
-                        onWorkspaceChange={handleWorkspaceChange}
-                    />
+                    <WorkspacePanel category={session.category} workspace={workspace} onWorkspaceChange={handleWorkspaceChange} />
                 </div>
             </div>
 
@@ -864,33 +748,17 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
             <AnimatePresence>
                 {showEndConfirm && (
                     <>
-                        <motion.div
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-overlay bg-black/60 backdrop-blur-sm"
-                            onClick={() => setShowEndConfirm(false)}
-                        />
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-overlay bg-black/60 backdrop-blur-sm" onClick={() => setShowEndConfirm(false)} />
                         <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-surface-2 border border-border-strong rounded-2xl p-6 w-full max-w-sm"
-                            >
+                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                                className="bg-surface-2 border border-border-strong rounded-2xl p-6 w-full max-w-sm">
                                 <div className="text-3xl mb-3 text-center">🏁</div>
-                                <h3 className="text-base font-bold text-text-primary text-center mb-2">
-                                    End this interview?
-                                </h3>
-                                <p className="text-sm text-text-tertiary text-center mb-5">
-                                    The AI will generate a detailed debrief with scores and feedback.
-                                </p>
+                                <h3 className="text-base font-bold text-text-primary text-center mb-2">End this interview?</h3>
+                                <p className="text-sm text-text-tertiary text-center mb-5">The AI will generate a detailed debrief with scores and feedback.</p>
                                 <div className="flex gap-3">
-                                    <Button variant="ghost" size="md" fullWidth
-                                        onClick={() => setShowEndConfirm(false)}>
-                                        Continue
-                                    </Button>
-                                    <Button variant="primary" size="md" fullWidth onClick={handleEnd}>
-                                        End & Get Debrief
-                                    </Button>
+                                    <Button variant="ghost" size="md" fullWidth onClick={() => setShowEndConfirm(false)}>Continue</Button>
+                                    <Button variant="primary" size="md" fullWidth onClick={handleEnd}>End & Get Debrief</Button>
                                 </div>
                             </motion.div>
                         </div>
@@ -907,48 +775,38 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 function DebriefScreen({ debrief, sessionData, onNewInterview }) {
     const navigate = useNavigate()
 
-    const verdictColors = {
-        'Strong Hire': 'text-success',
-        'Hire': 'text-success',
-        'Lean Hire': 'text-brand-300',
-        'Lean No Hire': 'text-warning',
-        'No Hire': 'text-danger',
+    // Server sends STRONG_HIRE, NO_HIRE etc. — handle both formats
+    const verdictConfig = {
+        'STRONG_HIRE': { color: 'text-success', emoji: '🏆', label: 'Strong Hire' },
+        'HIRE': { color: 'text-success', emoji: '✅', label: 'Hire' },
+        'LEAN_HIRE': { color: 'text-brand-300', emoji: '🤔', label: 'Lean Hire' },
+        'LEAN_NO_HIRE': { color: 'text-warning', emoji: '📈', label: 'Lean No Hire' },
+        'NO_HIRE': { color: 'text-danger', emoji: '💪', label: 'No Hire' },
+        // Legacy format support
+        'Strong Hire': { color: 'text-success', emoji: '🏆', label: 'Strong Hire' },
+        'Hire': { color: 'text-success', emoji: '✅', label: 'Hire' },
+        'Lean Hire': { color: 'text-brand-300', emoji: '🤔', label: 'Lean Hire' },
+        'Lean No Hire': { color: 'text-warning', emoji: '📈', label: 'Lean No Hire' },
+        'No Hire': { color: 'text-danger', emoji: '💪', label: 'No Hire' },
     }
 
-    const verdictEmoji = {
-        'Strong Hire': '🏆',
-        'Hire': '✅',
-        'Lean Hire': '🤔',
-        'Lean No Hire': '📈',
-        'No Hire': '💪',
-    }
+    const verdict = verdictConfig[debrief.verdict] || { color: 'text-text-primary', emoji: '📊', label: debrief.verdict }
+
+    // Scores can be in debrief.scores or at top level
+    const scores = debrief.scores || {}
 
     return (
         <div className="p-6 max-w-[750px] mx-auto">
             {/* Header */}
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-center mb-8"
-            >
-                <div className="text-5xl mb-3">{verdictEmoji[debrief.verdict] || '📊'}</div>
-                <h1 className="text-2xl font-extrabold text-text-primary mb-1">
-                    Interview Complete
-                </h1>
-                <p className={cn(
-                    'text-lg font-bold',
-                    verdictColors[debrief.verdict] || 'text-text-primary'
-                )}>
-                    {debrief.verdict}
-                </p>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center mb-8">
+                <div className="text-5xl mb-3">{verdict.emoji}</div>
+                <h1 className="text-2xl font-extrabold text-text-primary mb-1">Interview Complete</h1>
+                <p className={cn('text-lg font-bold', verdict.color)}>{verdict.label}</p>
             </motion.div>
 
             {/* Overall score */}
-            <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6 text-center"
-            >
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6 text-center">
                 <div className="text-4xl font-extrabold font-mono text-brand-300 mb-1">
                     {debrief.overallScore}/10
                 </div>
@@ -956,36 +814,22 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
             </motion.div>
 
             {/* Dimension scores */}
-            {debrief.dimensions && (
-                <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05 }}
-                    className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6"
-                >
-                    <h3 className="text-sm font-bold text-text-primary mb-4">Dimension Scores</h3>
-                    <div className="space-y-3">
-                        {Object.entries(debrief.dimensions).map(([key, dim]) => (
-                            <div key={key}>
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs text-text-secondary capitalize">
-                                        {key.replace(/([A-Z])/g, ' $1').trim()}
-                                    </span>
-                                    <span className="text-xs font-bold text-text-primary">{dim.score}/10</span>
+            {Object.keys(scores).length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+                    className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6">
+                    <h3 className="text-sm font-bold text-text-primary mb-4">Scores</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        {Object.entries(scores).map(([key, score]) => (
+                            <div key={key} className="text-center bg-surface-2 rounded-xl p-2.5">
+                                <div className={cn(
+                                    'text-lg font-extrabold font-mono',
+                                    score >= 7 ? 'text-success' : score >= 5 ? 'text-warning' : 'text-danger'
+                                )}>
+                                    {score}
                                 </div>
-                                <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden mb-1">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${dim.score * 10}%` }}
-                                        transition={{ duration: 0.7, delay: 0.2 }}
-                                        className={cn(
-                                            'h-full rounded-full',
-                                            dim.score >= 7 ? 'bg-success' :
-                                                dim.score >= 5 ? 'bg-warning' : 'bg-danger'
-                                        )}
-                                    />
-                                </div>
-                                <p className="text-[11px] text-text-tertiary">{dim.feedback}</p>
+                                <p className="text-[9px] text-text-disabled uppercase tracking-wider mt-0.5 capitalize">
+                                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </p>
                             </div>
                         ))}
                     </div>
@@ -995,15 +839,9 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
             {/* Strengths + Improvements */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 {debrief.strengths?.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, x: -12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="bg-success/5 border border-success/20 rounded-2xl p-5"
-                    >
-                        <h3 className="text-xs font-bold text-success uppercase tracking-widest mb-3">
-                            ✅ Strengths
-                        </h3>
+                    <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
+                        className="bg-success/5 border border-success/20 rounded-2xl p-5">
+                        <h3 className="text-xs font-bold text-success uppercase tracking-widest mb-3">✅ Strengths</h3>
                         <div className="space-y-2">
                             {debrief.strengths.map((s, i) => (
                                 <p key={i} className="text-xs text-text-secondary flex items-start gap-2">
@@ -1014,15 +852,9 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                     </motion.div>
                 )}
                 {debrief.improvements?.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="bg-warning/5 border border-warning/20 rounded-2xl p-5"
-                    >
-                        <h3 className="text-xs font-bold text-warning uppercase tracking-widest mb-3">
-                            🔧 Areas to Improve
-                        </h3>
+                    <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
+                        className="bg-warning/5 border border-warning/20 rounded-2xl p-5">
+                        <h3 className="text-xs font-bold text-warning uppercase tracking-widest mb-3">🔧 Areas to Improve</h3>
                         <div className="space-y-2">
                             {debrief.improvements.map((s, i) => (
                                 <p key={i} className="text-xs text-text-secondary flex items-start gap-2">
@@ -1034,29 +866,35 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                 )}
             </div>
 
-            {/* Next steps */}
-            {debrief.nextSteps && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
-                    className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6"
-                >
-                    <h3 className="text-xs font-bold text-brand-300 uppercase tracking-widest mb-2">
-                        🎯 Next Steps
-                    </h3>
-                    <p className="text-sm text-text-secondary leading-relaxed">{debrief.nextSteps}</p>
+            {/* Key moments */}
+            {debrief.keyMoments?.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+                    className="bg-info/5 border border-info/20 rounded-2xl p-5 mb-6">
+                    <h3 className="text-xs font-bold text-info uppercase tracking-widest mb-3">💡 Key Moments</h3>
+                    <div className="space-y-2">
+                        {debrief.keyMoments.map((m, i) => (
+                            <p key={i} className="text-xs text-text-secondary flex items-start gap-2">
+                                <span className="text-info flex-shrink-0 mt-0.5">→</span> {m}
+                            </p>
+                        ))}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Summary */}
+            {debrief.summary && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+                    className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6">
+                    <h3 className="text-xs font-bold text-brand-300 uppercase tracking-widest mb-2">📝 Summary</h3>
+                    <p className="text-sm text-text-secondary leading-relaxed">{debrief.summary}</p>
                 </motion.div>
             )}
 
             {/* Actions */}
             <div className="flex gap-3 flex-wrap">
-                <Button variant="primary" size="md" onClick={onNewInterview}>
-                    New Interview
-                </Button>
-                <Button variant="ghost" size="md" onClick={() => navigate('/')}>
-                    Back to Dashboard
-                </Button>
+                <Button variant="primary" size="md" onClick={onNewInterview}>New Interview</Button>
+                <Button variant="secondary" size="md" onClick={() => navigate('/interview-history')}>View History</Button>
+                <Button variant="ghost" size="md" onClick={() => navigate('/')}>Back to Dashboard</Button>
             </div>
         </div>
     )
@@ -1081,7 +919,6 @@ export default function MockInterviewPage() {
     }
 
     function handleEnd() {
-        // If no debrief received via WebSocket, go back to setup
         if (!debrief) {
             setScreen('setup')
             setSessionData(null)
@@ -1097,29 +934,18 @@ export default function MockInterviewPage() {
     return (
         <AnimatePresence mode="wait">
             {screen === 'setup' && (
-                <motion.div key="setup"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <motion.div key="setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <SetupScreen onStart={handleStart} />
                 </motion.div>
             )}
             {screen === 'chat' && sessionData && (
-                <motion.div key="chat"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <ChatScreen
-                        sessionData={sessionData}
-                        onEnd={handleEnd}
-                        onDebrief={handleDebrief}
-                    />
+                <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <ChatScreen sessionData={sessionData} onEnd={handleEnd} onDebrief={handleDebrief} />
                 </motion.div>
             )}
             {screen === 'debrief' && debrief && (
-                <motion.div key="debrief"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <DebriefScreen
-                        debrief={debrief}
-                        sessionData={sessionData}
-                        onNewInterview={handleNewInterview}
-                    />
+                <motion.div key="debrief" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <DebriefScreen debrief={debrief} sessionData={sessionData} onNewInterview={handleNewInterview} />
                 </motion.div>
             )}
         </AnimatePresence>
