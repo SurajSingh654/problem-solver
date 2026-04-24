@@ -2,16 +2,14 @@ import { useState, useEffect } from 'react'
 import { Spinner } from '@components/ui/Spinner'
 import api from '@services/api'
 
-import Section1Problem from './Section1Problem'
-import Section2Vision from './Section2Vision'
-import Section3Features from './Section3Features'
-import Section4Architecture from './Section4Architecture'
-import Section5AIPipeline from './Section5AIPipeline'
-import Section6Metrics from './Section6Metrics'
-import Section7Roadmap from './Section7Roadmap'
-import Section8Competitive from './Section8Competitive'
-import Section9Specs from './Section9Specs'
-import Section10CTA from './Section10CTA'
+import Section1Hero from './Section1Hero'
+import Section2Features from './Section2Features'
+import Section3AI from './Section3AI'
+import Section4Compare from './Section4Compare'
+import Section5Teams from './Section5Teams'
+import Section6Technical from './Section6Technical'
+import Section7Stats from './Section7Stats'
+import Section8CTA from './Section8CTA'
 
 export default function ShowcasePage() {
     const [stats, setStats] = useState(null)
@@ -44,16 +42,14 @@ export default function ShowcasePage() {
 
     return (
         <div className="min-h-screen">
-            <Section1Problem />
-            <Section2Vision stats={stats} />
-            <Section3Features stats={stats} />
-            <Section4Architecture />
-            <Section5AIPipeline stats={stats} />
-            <Section6Metrics stats={stats} />
-            <Section7Roadmap />
-            <Section8Competitive />
-            <Section9Specs stats={stats} />
-            <Section10CTA />
+            <Section1Hero stats={stats} />
+            <Section2Features />
+            <Section3AI stats={stats} />
+            <Section4Compare />
+            <Section5Teams />
+            <Section6Technical stats={stats} />
+            <Section7Stats stats={stats} />
+            <Section8CTA />
         </div>
     )
 }
