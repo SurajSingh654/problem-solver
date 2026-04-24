@@ -488,16 +488,14 @@ export async function getShowcaseStats(req, res) {
     });
 
     return success(res, {
-      data: {
-        totalProblems,
-        totalSolutions,
-        totalQuizzes,
-        totalSims,
-        totalUsers: totalMembers,
-        problemsByCategory: catMap,
-        problemsByDifficulty: diffMap,
-        aiEnabled: !!(await import("../config/env.js")).AI_ENABLED,
-      },
+      totalProblems,
+      totalSolutions,
+      totalQuizzes,
+      totalSims,
+      totalUsers: totalMembers,
+      problemsByCategory: catMap,
+      problemsByDifficulty: diffMap,
+      aiEnabled: !!(await import("../config/env.js")).AI_ENABLED,
     });
   } catch (err) {
     console.error("Showcase stats error:", err);

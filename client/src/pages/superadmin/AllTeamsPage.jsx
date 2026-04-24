@@ -29,7 +29,7 @@ export default function AllTeamsPage() {
             const params = { limit: 100 }
             if (filter) params.status = filter
             const res = await teamsApi.listAll(params)
-            setTeams(res.data.teams || [])
+            setTeams(res.data.data.teams || [])
         } catch (err) {
             console.error('Failed to load teams:', err)
         } finally {
@@ -47,7 +47,7 @@ export default function AllTeamsPage() {
         setDetailLoading(true)
         try {
             const res = await teamsApi.getDetails(teamId)
-            setTeamDetail(res.data)
+            setTeamDetail(res.data.data)
         } catch (err) {
             console.error('Failed to load team detail:', err)
         } finally {

@@ -330,7 +330,7 @@ export default function AdminPage() {
         if (tab === 'members' && members.length === 0) {
             setMembersLoading(true)
             teamsApi.getMembers()
-                .then(res => setMembers(res.data.members || []))
+                .then(res => setMembers(res.data.data.members || []))
                 .catch(err => console.error('Failed to load members:', err))
                 .finally(() => setMembersLoading(false))
         }

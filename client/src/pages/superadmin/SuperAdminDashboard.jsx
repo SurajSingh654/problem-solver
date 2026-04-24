@@ -30,8 +30,8 @@ export default function SuperAdminDashboard() {
                     teamsApi.listPending(),
                     api.get('/stats/platform'),
                 ])
-                setPendingTeams(pending.data.teams)
-                setPlatformStats(stats.data.platform)
+                setPendingTeams(pending.data.data.teams || [])
+                setPlatformStats(stats.data.data.platform || null)
             } catch (err) {
                 console.error('Dashboard load error:', err)
             } finally {
