@@ -5,32 +5,34 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUIStore } from '@store/useUIStore'
 import useAuthStore from '@store/useAuthStore'
-import { useProblems } from '@hooks/useProblems'
 import { Badge } from '@components/ui/Badge'
 import { cn } from '@utils/cn'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
-function useCommands(isAdmin, navigate, close) {
+// ── Commands for team members ──────────────────────────
+function useTeamCommands(isTeamAdmin, navigate, close) {
   return [
     {
       group: 'Navigate',
       items: [
         { label: 'Dashboard', shortcut: 'G D', icon: '🏠', action: () => { navigate('/'); close() } },
         { label: 'Problems', shortcut: 'G P', icon: '📋', action: () => { navigate('/problems'); close() } },
-        { label: 'Interview Sim', shortcut: 'G I', icon: '⏱️', action: () => { navigate('/interview'); close() } },
+        { label: 'Mock Interview', shortcut: 'G I', icon: '💬', action: () => { navigate('/mock-interview'); close() } },
         { label: 'Review Queue', shortcut: 'G R', icon: '🧠', action: () => { navigate('/review'); close() } },
+        { label: 'Quizzes', shortcut: 'G Q', icon: '🧩', action: () => { navigate('/quizzes'); close() } },
         { label: 'My Report', shortcut: 'G E', icon: '📊', action: () => { navigate('/report'); close() } },
         { label: 'Leaderboard', shortcut: 'G L', icon: '🏆', action: () => { navigate('/leaderboard'); close() } },
         { label: 'My Profile', shortcut: 'G U', icon: '👤', action: () => { navigate('/profile'); close() } },
         { label: 'Settings', shortcut: 'G S', icon: '⚙️', action: () => { navigate('/settings'); close() } },
       ],
     },
-    ...(isAdmin ? [{
+    ...(isTeamAdmin ? [{
       group: 'Admin',
       items: [
-        { label: 'Admin Panel', icon: '🔐', action: () => { navigate('/admin'); close() } },
-        { label: 'Add Problem', icon: '➕', action: () => { navigate('/admin/problems/new'); close() } },
+        { label: 'Admin Panel', icon: '👑', action: () => { navigate('/admin'); close() } },
+        { label: 'Add Problem', icon: '➕', action: () => { navigate('/admin/add-problem'); close() } },
+        { label: 'Team Analytics', icon: '📊', action: () => { navigate('/admin/analytics'); close() } },
       ],
     }] : []),
     {
@@ -43,22 +45,64 @@ function useCommands(isAdmin, navigate, close) {
   ]
 }
 
+// ── Commands for SuperAdmin ────────────────────────────
+function useSuperAdminCommands(navigate, close) {
+  return [
+    {
+      group: 'Platform',
+      items: [
+        { label: 'Platform Dashboard', shortcut: 'G D', icon: '⚡', action: () => { navigate('/super-admin'); close() } },
+        { label: 'All Teams', shortcut: 'G T', icon: '🏢', action: () => { navigate('/super-admin/teams'); close() } },
+        { label: 'All Users', shortcut: 'G U', icon: '👥', action: () => { navigate('/super-admin/users'); close() } },
+        { label: 'Platform Analytics', shortcut: 'G A', icon: '📊', action: () => { navigate('/super-admin/analytics'); close() } },
+        { label: 'Settings', shortcut: 'G S', icon: '⚙️', action: () => { navigate('/super-admin/settings'); close() } },
+        { label: 'My Profile', icon: '👤', action: () => { navigate('/super-admin/profile'); close() } },
+      ],
+    },
+  ]
+}
+
 export function CommandPalette() {
   const { commandPaletteOpen, closeCommandPalette } = useUIStore()
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const isAdmin = user?.role === 'ADMIN'
+
+  const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
+  const isTeamAdmin = user?.teamRole === 'TEAM_ADMIN'
 
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef(null)
   const listRef = useRef(null)
 
-  // Fetch problems for search
-  const { data: problemsData } = useProblems({ limit: '200' })
-  const allProblems = problemsData?.problems || []
+  // Only fetch problems for team users — SuperAdmin has no team context
+  const shouldLoadProblems = !isSuperAdmin && commandPaletteOpen
+  const [allProblems, setAllProblems] = useState([])
 
-  const commands = useCommands(isAdmin, navigate, closeCommandPalette)
+  useEffect(() => {
+    if (!shouldLoadProblems) {
+      setAllProblems([])
+      return
+    }
+    let cancelled = false
+    async function load() {
+      try {
+        const api = (await import('@services/api')).default
+        const res = await api.get('/problems', { params: { page: 1, limit: 200 } })
+        if (!cancelled) {
+          setAllProblems(res.data.problems || [])
+        }
+      } catch {
+        // Silently fail — command palette search is best-effort
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [shouldLoadProblems])
+
+  const commands = isSuperAdmin
+    ? useSuperAdminCommands(navigate, closeCommandPalette)
+    : useTeamCommands(isTeamAdmin, navigate, closeCommandPalette)
 
   // Build results — split into nav commands and problem results
   const { navGroups, problemResults } = useMemo(() => {
@@ -78,17 +122,16 @@ export function CommandPalette() {
       }))
       .filter(group => group.items.length > 0)
 
-    // Filter problems
-    const problemResults = allProblems
+    // Filter problems (only for team users)
+    const problemResults = isSuperAdmin ? [] : allProblems
       .filter(p =>
         p.title.toLowerCase().includes(q) ||
-        p.tags?.some(t => t.toLowerCase().includes(q)) ||
-        p.companyTags?.some(c => c.toLowerCase().includes(q))
+        p.tags?.some(t => t.toLowerCase().includes(q))
       )
       .slice(0, 6)
 
     return { navGroups, problemResults }
-  }, [query, commands, allProblems])
+  }, [query, commands, allProblems, isSuperAdmin])
 
   // Flat list for keyboard nav — nav items first, then problems
   const flatItems = useMemo(() => {
@@ -122,6 +165,7 @@ export function CommandPalette() {
         return
       }
       if (!commandPaletteOpen) return
+
       if (e.key === 'Escape') {
         closeCommandPalette()
       } else if (e.key === 'ArrowDown') {
@@ -190,7 +234,10 @@ export function CommandPalette() {
                   type="text"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Search pages, problems, actions…"
+                  placeholder={isSuperAdmin
+                    ? "Search pages, actions…"
+                    : "Search pages, problems, actions…"
+                  }
                   className="flex-1 bg-transparent outline-none text-sm
                              text-text-primary placeholder:text-text-tertiary
                              caret-brand-400"
@@ -267,7 +314,7 @@ export function CommandPalette() {
                       </div>
                     ))}
 
-                    {/* Problem results */}
+                    {/* Problem results (team users only) */}
                     {problemResults.length > 0 && (
                       <div className="mb-1">
                         <p className="px-4 py-1.5 text-[10px] font-bold
@@ -299,11 +346,11 @@ export function CommandPalette() {
                               <div className={cn(
                                 'w-7 h-7 flex-shrink-0 flex items-center justify-center',
                                 'rounded-lg text-base',
-                                problem.isSolvedByMe
+                                problem.isSolved
                                   ? 'bg-success/15'
                                   : 'bg-surface-3'
                               )}>
-                                {problem.isSolvedByMe ? (
+                                {problem.isSolved ? (
                                   <svg width="13" height="13" viewBox="0 0 24 24"
                                     fill="none" stroke="#22c55e" strokeWidth="3"
                                     strokeLinecap="round" strokeLinejoin="round">
@@ -313,7 +360,6 @@ export function CommandPalette() {
                                   <span className="text-sm">📋</span>
                                 )}
                               </div>
-
                               {/* Title + tags */}
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium truncate">{problem.title}</p>
@@ -326,7 +372,6 @@ export function CommandPalette() {
                                   ))}
                                 </div>
                               </div>
-
                               {/* Difficulty badge */}
                               <Badge
                                 variant={DIFF_VARIANT[problem.difficulty] || 'brand'}
@@ -365,7 +410,7 @@ export function CommandPalette() {
                     <span>{hint.label}</span>
                   </div>
                 ))}
-                {allProblems.length > 0 && (
+                {!isSuperAdmin && allProblems.length > 0 && (
                   <span className="ml-auto text-[11px] text-text-disabled">
                     {allProblems.length} problems indexed
                   </span>
