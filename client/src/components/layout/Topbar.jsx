@@ -24,6 +24,13 @@ const PAGE_META = {
     '/settings': { title: 'Settings', crumb: 'Account' },
     '/docs/readme': { title: 'README', crumb: 'Docs' },
     '/docs/setup': { title: 'Setup Guide', crumb: 'Docs' },
+    // SuperAdmin pages
+    '/super-admin': { title: 'Platform Dashboard', crumb: 'Platform' },
+    '/super-admin/teams': { title: 'All Teams', crumb: 'Platform' },
+    '/super-admin/users': { title: 'All Users', crumb: 'Platform' },
+    '/super-admin/analytics': { title: 'Platform Analytics', crumb: 'Platform' },
+    '/super-admin/settings': { title: 'Settings', crumb: 'Account' },
+    '/super-admin/profile': { title: 'My Profile', crumb: 'Account' },
 }
 
 function getPageMeta(pathname) {
@@ -35,6 +42,7 @@ function getPageMeta(pathname) {
         if (parts[3] === 'submit') return { title: 'Submit Solution', crumb: 'Problems' }
         return { title: 'Problem Detail', crumb: 'Problems' }
     }
+    if (pathname.startsWith('/super-admin/profile/')) return { title: 'User Profile', crumb: 'Platform' }
     if (pathname.startsWith('/profile/')) return { title: 'Profile', crumb: 'Progress' }
     if (pathname.startsWith('/admin/')) return { title: 'Admin', crumb: 'Admin' }
     return { title: 'ProbSolver', crumb: '' }
@@ -44,6 +52,10 @@ function getPageMeta(pathname) {
 function ProfileDropdown({ user, onClose }) {
     const logout = useLogout()
     const navigate = useNavigate()
+
+    const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
+    const profilePath = isSuperAdmin ? '/super-admin/profile' : '/profile'
+    const settingsPath = isSuperAdmin ? '/super-admin/settings' : '/settings'
 
     const items = [
         {
@@ -56,7 +68,7 @@ function ProfileDropdown({ user, onClose }) {
                     <circle cx="12" cy="7" r="4" />
                 </svg>
             ),
-            action: () => { navigate('/profile'); onClose() },
+            action: () => { navigate(profilePath); onClose() },
         },
         {
             label: 'Settings',
@@ -68,7 +80,7 @@ function ProfileDropdown({ user, onClose }) {
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
             ),
-            action: () => { navigate('/settings'); onClose() },
+            action: () => { navigate(settingsPath); onClose() },
         },
     ]
 
@@ -93,7 +105,6 @@ function ProfileDropdown({ user, onClose }) {
                     {user?.email}
                 </p>
             </div>
-
             {/* Menu items */}
             <div className="p-1.5">
                 {items.map(item => (
@@ -109,7 +120,6 @@ function ProfileDropdown({ user, onClose }) {
                     </button>
                 ))}
             </div>
-
             {/* Logout */}
             <div className="p-1.5 border-t border-border-default">
                 <button
