@@ -261,7 +261,7 @@ export default function ProductHealthPage() {
         setAnalyzing(true)
         try {
             const res = await api.post('/admin/product-health/analyze', { metrics }, aiConfig)
-            setAnalysis(res.data)
+            setAnalysis(res.data.data)
         } catch (err) {
             console.error('Analysis failed:', err)
         } finally {
