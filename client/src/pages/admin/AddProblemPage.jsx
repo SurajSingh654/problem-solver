@@ -184,12 +184,12 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
     )
 }
 
-// ── AI Generate Screen ─────────────────────────────────
 function AIGenerateScreen({ onBack }) {
     const navigate = useNavigate()
     const [category, setCategory] = useState('CODING')
     const [count, setCount] = useState(3)
     const [difficulty, setDifficulty] = useState('auto')
+    const [customMix, setCustomMix] = useState({ easy: 2, medium: 2, hard: 1 })
     const [targetCompany, setTargetCompany] = useState('')
     const [focusAreas, setFocusAreas] = useState('')
     const [generated, setGenerated] = useState(null)
@@ -199,12 +199,26 @@ function AIGenerateScreen({ onBack }) {
     const generateAI = useGenerateProblemsAI()
     const createProblem = useCreateProblem()
 
+    const totalCustom = (customMix.easy || 0) + (customMix.medium || 0) + (customMix.hard || 0)
+
     async function handleGenerate() {
+        let finalCount = count
+        let finalDifficulty = difficulty
+
+        if (difficulty === 'custom') {
+            finalCount = totalCustom
+            if (finalCount === 0) {
+                toast.error('Select at least 1 problem')
+                return
+            }
+            finalDifficulty = `custom:${customMix.easy || 0}E,${customMix.medium || 0}M,${customMix.hard || 0}H`
+        }
+
         try {
             const res = await generateAI.mutateAsync({
                 category,
-                count,
-                difficulty,
+                count: finalCount,
+                difficulty: finalDifficulty,
                 targetCompany: targetCompany.trim() || undefined,
                 focusAreas: focusAreas.trim() || undefined,
             })
@@ -223,13 +237,13 @@ function AIGenerateScreen({ onBack }) {
                 description: problem.description || '',
                 difficulty: problem.difficulty || 'MEDIUM',
                 category: problem.category || category,
-                source: problem.source === 'LEETCODE' || problem.source === 'GFG' ||
-                    problem.source === 'HACKERRANK' || problem.source === 'CODECHEF' ||
-                    problem.source === 'INTERVIEWBIT'
+                source: ['LEETCODE', 'GFG', 'HACKERRANK', 'CODECHEF', 'INTERVIEWBIT'].includes(problem.source)
                     ? problem.source : 'OTHER',
-                sourceUrl: problem.sourceUrl || '',
+                categoryData: {
+                    sourceUrl: problem.sourceUrl || '',
+                    companyTags: problem.companyTags || [],
+                },
                 tags: problem.tags || [],
-                companyTags: problem.companyTags || [],
                 realWorldContext: problem.realWorldContext || '',
                 useCases: problem.useCases || '',
                 adminNotes: problem.adminNotes || '',
@@ -244,8 +258,6 @@ function AIGenerateScreen({ onBack }) {
 
             await createProblem.mutateAsync(data)
             toast.success(`"${problem.title}" added to team`)
-
-            // Remove from generated list
             setGenerated(prev => prev.filter((_, i) => i !== index))
         } catch {
             toast.error('Failed to add problem')
@@ -264,6 +276,8 @@ function AIGenerateScreen({ onBack }) {
             await handleApprove(generated[i], 0)
         }
     }
+
+    const displayCount = difficulty === 'custom' ? totalCustom : count
 
     return (
         <div className="space-y-6">
@@ -314,46 +328,24 @@ function AIGenerateScreen({ onBack }) {
                         </div>
                     </div>
 
-                    {/* Count */}
-                    <div>
-                        <label className="block text-sm font-semibold text-text-primary mb-2">
-                            Number of Problems
-                        </label>
-                        <div className="flex gap-2">
-                            {[1, 2, 3, 5].map(n => (
-                                <button
-                                    key={n}
-                                    onClick={() => setCount(n)}
-                                    className={cn(
-                                        'flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all',
-                                        count === n
-                                            ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
-                                            : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
-                                    )}
-                                >
-                                    {n}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
                     {/* Difficulty */}
                     <div>
                         <label className="block text-sm font-semibold text-text-primary mb-2">
                             Difficulty
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 mb-3">
                             {[
-                                { id: 'auto', label: 'Auto (AI decides)', color: 'brand' },
-                                { id: 'EASY', label: 'Easy', color: 'success' },
-                                { id: 'MEDIUM', label: 'Medium', color: 'warning' },
-                                { id: 'HARD', label: 'Hard', color: 'danger' },
+                                { id: 'auto', label: 'Auto', color: 'brand' },
+                                { id: 'EASY', label: 'All Easy', color: 'success' },
+                                { id: 'MEDIUM', label: 'All Medium', color: 'warning' },
+                                { id: 'HARD', label: 'All Hard', color: 'danger' },
+                                { id: 'custom', label: 'Custom Mix', color: 'info' },
                             ].map(d => (
                                 <button
                                     key={d.id}
                                     onClick={() => setDifficulty(d.id)}
                                     className={cn(
-                                        'flex-1 py-2.5 rounded-xl border text-xs font-bold transition-all',
+                                        'px-4 py-2.5 rounded-xl border text-xs font-bold transition-all',
                                         difficulty === d.id
                                             ? `bg-${d.color}/12 border-${d.color}/35 text-${d.color}`
                                             : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
@@ -364,13 +356,93 @@ function AIGenerateScreen({ onBack }) {
                             ))}
                         </div>
                         {difficulty === 'auto' && (
-                            <p className="text-[10px] text-text-disabled mt-2">
-                                AI will analyze your team's current performance and pick appropriate difficulty levels
+                            <p className="text-[10px] text-text-disabled">
+                                AI will analyze your team's performance and pick appropriate difficulty levels
                             </p>
+                        )}
+                        {difficulty === 'custom' && (
+                            <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                                <p className="text-xs text-text-tertiary mb-3">
+                                    Specify how many of each difficulty
+                                </p>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {[
+                                        { key: 'easy', label: 'Easy', color: 'text-success' },
+                                        { key: 'medium', label: 'Medium', color: 'text-warning' },
+                                        { key: 'hard', label: 'Hard', color: 'text-danger' },
+                                    ].map(d => (
+                                        <div key={d.key} className="text-center">
+                                            <label className={cn('text-xs font-bold block mb-2', d.color)}>
+                                                {d.label}
+                                            </label>
+                                            <div className="flex items-center gap-2 justify-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCustomMix(prev => ({
+                                                        ...prev,
+                                                        [d.key]: Math.max(0, (prev[d.key] || 0) - 1)
+                                                    }))}
+                                                    className="w-8 h-8 rounded-lg bg-surface-3 border border-border-default
+                                                       text-text-secondary hover:border-border-strong transition-all
+                                                       flex items-center justify-center text-sm font-bold"
+                                                >
+                                                    −
+                                                </button>
+                                                <span className="text-base font-extrabold font-mono text-text-primary w-6 text-center">
+                                                    {customMix[d.key] || 0}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCustomMix(prev => ({
+                                                        ...prev,
+                                                        [d.key]: Math.min(5, (prev[d.key] || 0) + 1)
+                                                    }))}
+                                                    className="w-8 h-8 rounded-lg bg-surface-3 border border-border-default
+                                                       text-text-secondary hover:border-border-strong transition-all
+                                                       flex items-center justify-center text-sm font-bold"
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className={cn(
+                                    'text-xs font-bold text-center mt-3 pt-3 border-t border-border-subtle',
+                                    totalCustom > 0 ? 'text-brand-300' : 'text-text-disabled'
+                                )}>
+                                    Total: {totalCustom} problem{totalCustom !== 1 ? 's' : ''}
+                                </p>
+                            </div>
                         )}
                     </div>
 
-                    {/* Optional: target company + focus */}
+                    {/* Count — only when NOT custom mix */}
+                    {difficulty !== 'custom' && (
+                        <div>
+                            <label className="block text-sm font-semibold text-text-primary mb-2">
+                                Number of Problems
+                            </label>
+                            <div className="flex gap-2">
+                                {[1, 2, 3, 5].map(n => (
+                                    <button
+                                        key={n}
+                                        onClick={() => setCount(n)}
+                                        className={cn(
+                                            'flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all',
+                                            count === n
+                                                ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
+                                                : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
+                                        )}
+                                    >
+                                        {n}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Advanced options */}
                     <details className="group">
                         <summary className="text-xs text-text-tertiary cursor-pointer
                               hover:text-text-secondary transition-colors flex items-center gap-1.5">
@@ -424,10 +496,11 @@ function AIGenerateScreen({ onBack }) {
                         size="lg"
                         fullWidth
                         loading={generateAI.isPending}
+                        disabled={difficulty === 'custom' && totalCustom === 0}
                         onClick={handleGenerate}
                     >
                         {generateAI.isPending ? (
-                            `AI is generating ${count} problem${count > 1 ? 's' : ''}...`
+                            `AI is generating ${displayCount} problem${displayCount > 1 ? 's' : ''}...`
                         ) : (
                             <>
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -437,7 +510,8 @@ function AIGenerateScreen({ onBack }) {
                                     <path d="M2 17l10 5 10-5" />
                                     <path d="M2 12l10 5 10-5" />
                                 </svg>
-                                Generate {count} Problem{count > 1 ? 's' : ''}
+                                Generate {displayCount} Problem{displayCount > 1 ? 's' : ''}
+                                {difficulty === 'custom' && ` (${customMix.easy || 0}E · ${customMix.medium || 0}M · ${customMix.hard || 0}H)`}
                             </>
                         )}
                     </Button>
@@ -451,7 +525,6 @@ function AIGenerateScreen({ onBack }) {
                     animate={{ opacity: 1 }}
                     className="space-y-4"
                 >
-                    {/* Results header */}
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
@@ -459,9 +532,7 @@ function AIGenerateScreen({ onBack }) {
                                 AI Generated {generated.length} Problem{generated.length !== 1 ? 's' : ''}
                             </h2>
                             {reasoning && (
-                                <p className="text-xs text-text-tertiary mt-1 max-w-xl">
-                                    {reasoning}
-                                </p>
+                                <p className="text-xs text-text-tertiary mt-1 max-w-xl">{reasoning}</p>
                             )}
                         </div>
                         <div className="flex gap-2">
@@ -476,23 +547,16 @@ function AIGenerateScreen({ onBack }) {
                         </div>
                     </div>
 
-                    {/* Problem cards */}
                     {generated.length === 0 ? (
                         <div className="bg-surface-1 border border-success/25 rounded-2xl p-10 text-center">
                             <div className="text-4xl mb-3">✅</div>
-                            <h3 className="text-base font-bold text-text-primary mb-2">
-                                All problems added!
-                            </h3>
-                            <p className="text-sm text-text-tertiary mb-5">
-                                Your team can now start practicing.
-                            </p>
+                            <h3 className="text-base font-bold text-text-primary mb-2">All problems added!</h3>
+                            <p className="text-sm text-text-tertiary mb-5">Your team can now start practicing.</p>
                             <div className="flex gap-3 justify-center">
-                                <Button variant="primary" size="md"
-                                    onClick={() => setGenerated(null)}>
+                                <Button variant="primary" size="md" onClick={() => setGenerated(null)}>
                                     Generate More
                                 </Button>
-                                <Button variant="secondary" size="md"
-                                    onClick={() => navigate('/admin')}>
+                                <Button variant="secondary" size="md" onClick={() => navigate('/admin')}>
                                     Go to Admin
                                 </Button>
                             </div>

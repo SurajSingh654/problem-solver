@@ -356,13 +356,25 @@ For each problem:
 - Include 3 progressive follow-up questions (basic → optimization → complex joins)`,
   };
 
-  const difficultyInstruction =
-    data.difficulty === "auto"
-      ? `Analyze the team context below and choose appropriate difficulty levels.
+  let difficultyInstruction;
+  if (data.difficulty === "auto") {
+    difficultyInstruction = `Analyze the team context below and choose appropriate difficulty levels.
 If the team is new or has low solve rates, lean toward EASY and MEDIUM.
 If the team is experienced, include more MEDIUM and HARD.
-Mix difficulties for variety.`
-      : `All problems should be ${data.difficulty} difficulty.`;
+Mix difficulties for variety.`;
+  } else if (data.difficulty.startsWith("custom:")) {
+    const parts = data.difficulty.replace("custom:", "").split(",");
+    const easy = parseInt(parts[0]) || 0;
+    const medium = parseInt(parts[1]) || 0;
+    const hard = parseInt(parts[2]) || 0;
+    difficultyInstruction = `Generate exactly this difficulty mix:
+- ${easy} EASY problem${easy !== 1 ? "s" : ""}
+- ${medium} MEDIUM problem${medium !== 1 ? "s" : ""}
+- ${hard} HARD problem${hard !== 1 ? "s" : ""}
+Total: ${easy + medium + hard} problems. Follow this distribution exactly.`;
+  } else {
+    difficultyInstruction = `All problems should be ${data.difficulty} difficulty.`;
+  }
 
   const system = `You are an expert interview preparation curriculum designer.
 Your job is to generate high-quality interview problems that progressively build skills.

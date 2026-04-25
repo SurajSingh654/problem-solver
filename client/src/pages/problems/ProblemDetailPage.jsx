@@ -161,6 +161,44 @@ export default function ProblemDetailPage() {
                 <h1 className="text-2xl font-extrabold text-text-primary mb-4 leading-tight">
                     {title}
                 </h1>
+                {/* External link — for problems from LeetCode, GFG, etc. */}
+                {problem.categoryData?.sourceUrl && (
+                    <a
+                        href={problem.categoryData.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
+           bg-brand-400/10 border border-brand-400/25
+           text-sm font-semibold text-brand-300 hover:text-brand-200
+           hover:bg-brand-400/15 transition-all mb-4"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                        Solve on {problem.source !== 'MANUAL' && problem.source !== 'AI_GENERATED'
+                            ? problem.source.replace('_', ' ')
+                            : 'External Site'}
+                    </a>
+                )}
+
+                {/* Company tags */}
+                {problem.categoryData?.companyTags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                        {problem.categoryData.companyTags.map(c => (
+                            <span key={c}
+                                className="text-[10px] font-semibold text-warning
+               bg-warning/10 border border-warning/20
+               rounded-full px-2.5 py-0.5">
+                                🏢 {c}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
 
                 {/* Quick stats */}
                 <div className="flex items-center gap-3 flex-wrap mb-5">
