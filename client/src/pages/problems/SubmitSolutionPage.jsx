@@ -1,98 +1,63 @@
 // ============================================================================
-// ProbSolver v3.0 — Submit Solution Page
+// ProbSolver v3.0 — Submit Solution Page (Redesigned)
+// ============================================================================
+//
+// Single-page form that adapts to:
+// 1. External-link problems (coding) — "solve there, reflect here"
+// 2. On-platform problems (all other categories) — full response here
+//
+// AI handles complexity analysis. No manual time/space input.
+// Category-specific field labels come from categoryForms.js config.
+//
 // ============================================================================
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
 import { useSubmitSolution } from '@hooks/useSolutions'
-import { SolutionTabs } from '@components/features/solutions/SolutionTabs'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
 import { CodeEditor } from '@components/ui/CodeEditor'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
+import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import { PATTERNS, CONFIDENCE_LEVELS, PROBLEM_CATEGORIES } from '@utils/constants'
 import { getCategoryForm } from '@utils/categoryForms'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
-// ── Step indicator ─────────────────────────────────────
-function StepIndicator({ current, steps, onStepClick, completedSteps }) {
+// ── Section wrapper ────────────────────────────────────
+function FormSection({ icon, title, hint, children, className }) {
     return (
-        <div className="flex items-center gap-0 mb-8">
-            {steps.map((step, i) => {
-                const isActive = step.id === current
-                const isCompleted = completedSteps.has(step.id)
-                const isPast = step.id < current
-                const isClickable = isPast || isCompleted
-
-                return (
-                    <div key={step.id} className="flex items-center flex-1">
-                        <button
-                            type="button"
-                            onClick={() => isClickable && onStepClick(step.id)}
-                            disabled={!isClickable && !isActive}
-                            className={cn(
-                                'flex flex-col items-center gap-1.5 flex-1 transition-all',
-                                isClickable ? 'cursor-pointer' : 'cursor-default'
-                            )}
-                        >
-                            <div className={cn(
-                                'w-9 h-9 rounded-full flex items-center justify-center',
-                                'text-sm font-bold border-2 transition-all duration-200',
-                                isActive
-                                    ? 'bg-brand-400 border-brand-400 text-white shadow-glow-sm scale-110'
-                                    : isCompleted || isPast
-                                        ? 'bg-success/15 border-success text-success'
-                                        : 'bg-surface-3 border-border-default text-text-disabled'
-                            )}>
-                                {isCompleted && !isActive ? (
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="3"
-                                        strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                ) : (
-                                    <span>{step.icon}</span>
-                                )}
-                            </div>
-                            <span className={cn(
-                                'text-[11px] font-semibold hidden sm:block',
-                                isActive ? 'text-brand-300' :
-                                    isPast || isCompleted ? 'text-success' : 'text-text-disabled'
-                            )}>
-                                {step.label}
-                            </span>
-                        </button>
-                        {i < steps.length - 1 && (
-                            <div className={cn(
-                                'h-0.5 flex-1 mx-1 rounded-full transition-all duration-300',
-                                step.id < current ? 'bg-success' : 'bg-surface-4'
-                            )} />
-                        )}
-                    </div>
-                )
-            })}
+        <div className={cn(
+            'bg-surface-1 border border-border-default rounded-2xl p-5',
+            className
+        )}>
+            <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
+                        justify-center text-base flex-shrink-0 mt-0.5">
+                    {icon}
+                </div>
+                <div>
+                    <h3 className="text-sm font-bold text-text-primary">{title}</h3>
+                    {hint && <p className="text-xs text-text-tertiary mt-0.5">{hint}</p>}
+                </div>
+            </div>
+            {children}
         </div>
     )
 }
 
-// ── Pattern / Topic selector ───────────────────────────
+// ── Pattern selector ───────────────────────────────────
 function PatternSelector({ config, value, onChange }) {
-    const hasSuggestions = config.suggestions?.length > 0
-    const suggestions = hasSuggestions ? config.suggestions : PATTERNS.map(p => p.label)
+    const suggestions = config.suggestions?.length > 0
+        ? config.suggestions
+        : PATTERNS.map(p => p.label)
 
     return (
         <div>
-            <label className="block text-sm font-semibold text-text-primary mb-1.5">
-                {config.label}
-            </label>
-            <p className="text-xs text-text-tertiary mb-3">
-                {config.placeholder}
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                 {suggestions.map(s => (
                     <button
                         key={s}
@@ -103,7 +68,7 @@ function PatternSelector({ config, value, onChange }) {
                             'transition-all duration-150',
                             value === s
                                 ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30 hover:text-text-primary'
+                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
                         )}
                     >
                         {s}
@@ -115,306 +80,41 @@ function PatternSelector({ config, value, onChange }) {
                 placeholder="Or type custom..."
                 value={!suggestions.includes(value) ? value : ''}
                 onChange={e => onChange(e.target.value)}
-                className="w-full mt-3 bg-surface-3 border border-border-strong rounded-xl
+                className="w-full bg-surface-3 border border-border-strong rounded-xl
                    text-sm text-text-primary placeholder:text-text-tertiary
                    px-3.5 py-2.5 outline-none
-                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                   transition-all duration-150"
+                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
             />
         </div>
     )
 }
 
-// ── Rich field with icon header ────────────────────────
-function RichField({ icon, label, hint, placeholder, content, onChange, minHeight = '100px' }) {
+// ── Confidence picker ──────────────────────────────────
+function ConfidencePicker({ value, onChange }) {
     return (
-        <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
-            <div className="flex items-start gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
-                        justify-center text-base flex-shrink-0 mt-0.5">
-                    {icon}
-                </div>
-                <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-0.5">{label}</h3>
-                    {hint && <p className="text-xs text-text-tertiary leading-relaxed">{hint}</p>}
-                </div>
-            </div>
-            <RichTextEditor
-                placeholder={placeholder}
-                content={content}
-                onChange={onChange}
-                minHeight={minHeight}
-            />
-        </div>
-    )
-}
-
-// ── Step 1: Category-aware first step ──────────────────
-function StepOne({ formConfig, data, onChange }) {
-    const fields = formConfig.fields
-    return (
-        <div className="space-y-6">
-            {fields.patternIdentified?.show && (
-                <PatternSelector
-                    config={formConfig.fields.patternIdentified}
-                    value={data.pattern || ''}
-                    onChange={val => onChange({ ...data, pattern: val })}
-                />
-            )}
-            {fields.patternReasoning?.show && (
-                <RichTextEditor
-                    label={fields.patternReasoning.label}
-                    hint={fields.patternReasoning.hint}
-                    placeholder={fields.patternReasoning.placeholder}
-                    content={data.approach || ''}
-                    onChange={val => onChange({ ...data, approach: val })}
-                    minHeight="120px"
-                    optional
-                />
-            )}
-        </div>
-    )
-}
-
-// ── Step 2: Solutions or Action or Detail ──────────────
-function StepTwo({ formConfig, data, onChange, solutions, setSolutions, commonNotes, setCommonNotes }) {
-    if (formConfig.showSolutionTabs) {
-        return (
-            <SolutionTabs
-                solutions={solutions}
-                onChange={setSolutions}
-                commonNotes={commonNotes}
-                onNotesChange={setCommonNotes}
-                config={formConfig.solutionTabConfig}
-            />
-        )
-    }
-
-    if (formConfig.showActionSection) {
-        const actionConfig = formConfig.actionField
-        return (
-            <div className="space-y-5">
-                <RichField
-                    icon="🎯"
-                    label={actionConfig.label}
-                    hint={actionConfig.hint}
-                    placeholder={actionConfig.placeholder}
-                    content={data.approach || ''}
-                    onChange={val => onChange({ ...data, approach: val })}
-                    minHeight="200px"
-                />
-                <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
-                    <RichTextEditor
-                        label="Additional Notes"
-                        optional
-                        placeholder="Any extra context, links, or thoughts..."
-                        content={commonNotes || ''}
-                        onChange={setCommonNotes}
-                        minHeight="80px"
-                    />
-                </div>
-            </div>
-        )
-    }
-
-    if (formConfig.showDetailSection) {
-        const detailConfig = formConfig.detailField
-        return (
-            <div className="space-y-5">
-                <RichField
-                    icon="🔍"
-                    label={detailConfig.label}
-                    hint={detailConfig.hint}
-                    placeholder={detailConfig.placeholder}
-                    content={data.approach || ''}
-                    onChange={val => onChange({ ...data, approach: val })}
-                    minHeight="200px"
-                />
-                <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
-                    <RichTextEditor
-                        label="Additional Notes"
-                        optional
-                        placeholder="Any extra context, references, or thoughts..."
-                        content={commonNotes || ''}
-                        onChange={setCommonNotes}
-                        minHeight="80px"
-                    />
-                </div>
-            </div>
-        )
-    }
-
-    // HR / default
-    return (
-        <div className="space-y-5">
-            <RichField
-                icon="💬"
-                label="Your Response"
-                hint="Write your complete, polished answer. Be authentic and specific."
-                placeholder="Write your answer here..."
-                content={data.approach || ''}
-                onChange={val => onChange({ ...data, approach: val })}
-                minHeight="200px"
-            />
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
-                <RichTextEditor
-                    label="Preparation Notes"
-                    optional
-                    placeholder="Research notes, key points to remember..."
-                    content={commonNotes || ''}
-                    onChange={setCommonNotes}
-                    minHeight="80px"
-                />
-            </div>
-        </div>
-    )
-}
-
-// ── Step 3: Reflection ─────────────────────────────────
-function StepThree({ formConfig, data, onChange, followUpQuestions }) {
-    const fields = formConfig.fields
-
-    return (
-        <div className="space-y-6">
-            {/* Key Insight */}
-            {fields.keyInsight?.show && (
-                <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
-                    <div className="flex items-start gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
-                            justify-center text-base flex-shrink-0 mt-0.5">
-                            💡
-                        </div>
-                        <div>
-                            <h3 className="text-sm font-bold text-text-primary mb-0.5">
-                                {fields.keyInsight.label}
-                            </h3>
-                            <p className="text-xs text-text-tertiary leading-relaxed">
-                                {fields.keyInsight.hint}
-                            </p>
-                        </div>
-                    </div>
-                    <textarea
-                        rows={2}
-                        value={data.keyInsight || ''}
-                        onChange={e => onChange({ ...data, keyInsight: e.target.value })}
-                        placeholder={fields.keyInsight.placeholder}
-                        className="w-full bg-surface-3 border border-border-strong rounded-xl
-                       text-sm text-text-primary placeholder:text-text-tertiary
-                       px-3.5 py-2.5 outline-none resize-none
-                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                       transition-all duration-150"
-                    />
-                </div>
-            )}
-
-            {/* Feynman explanation */}
-            {fields.simpleExplanation?.show && (
-                <RichField
-                    icon="🗣"
-                    label={fields.simpleExplanation.label}
-                    placeholder={fields.simpleExplanation.placeholder}
-                    content={data.feynmanExplanation || ''}
-                    onChange={val => onChange({ ...data, feynmanExplanation: val })}
-                />
-            )}
-
-            {/* Real world connection */}
-            {fields.challenges?.show && (
-                <RichField
-                    icon="🌍"
-                    label={fields.challenges.label}
-                    placeholder={fields.challenges.placeholder}
-                    content={data.realWorldConnection || ''}
-                    onChange={val => onChange({ ...data, realWorldConnection: val })}
-                    minHeight="80px"
-                />
-            )}
-
-            {/* Confidence */}
-            <div>
-                <label className="block text-sm font-semibold text-text-primary mb-1">
-                    Confidence Level
-                </label>
-                <p className="text-xs text-text-tertiary mb-3">
-                    How well do you understand this right now?
-                </p>
-                <div className="flex gap-3 flex-wrap">
-                    {CONFIDENCE_LEVELS.map(c => (
-                        <button
-                            key={c.value}
-                            type="button"
-                            onClick={() => onChange({ ...data, confidence: c.value })}
-                            className={cn(
-                                'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
-                                'transition-all duration-150 min-w-[80px]',
-                                data.confidence === c.value
-                                    ? 'bg-brand-400/15 border-brand-400/40 scale-105'
-                                    : 'bg-surface-3 border-border-default hover:border-border-strong'
-                            )}
-                        >
-                            <span className="text-2xl">{c.emoji}</span>
-                            <span className={cn(
-                                'text-[10px] font-bold text-center leading-tight',
-                                data.confidence === c.value ? c.color : 'text-text-tertiary'
-                            )}>
-                                {c.label}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Follow-up questions */}
-            {formConfig.showFollowUps && followUpQuestions?.length > 0 && (
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-semibold text-text-primary mb-0.5">
-                            Follow-up Questions
-                        </label>
-                        <p className="text-xs text-text-tertiary">
-                            Answer as many as you can — these deepen your understanding.
-                        </p>
-                    </div>
-                    {followUpQuestions.map((fq, i) => (
-                        <div key={fq.id || i}
-                            className="bg-surface-2 border border-border-default rounded-xl p-4 space-y-3">
-                            <div className="flex items-start gap-3">
-                                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-3
-                                 border border-border-default flex items-center
-                                 justify-center text-xs font-bold text-text-tertiary mt-0.5">
-                                    {i + 1}
-                                </span>
-                                <div className="flex-1">
-                                    <div className="flex items-start justify-between gap-2 mb-1">
-                                        <p className="text-sm font-medium text-text-primary leading-relaxed">
-                                            {fq.question}
-                                        </p>
-                                        <Badge
-                                            variant={DIFF_VARIANT[fq.difficulty] || 'brand'}
-                                            size="xs"
-                                            className="flex-shrink-0"
-                                        >
-                                            {fq.difficulty?.charAt(0) + fq.difficulty?.slice(1).toLowerCase()}
-                                        </Badge>
-                                    </div>
-                                    {fq.hint && (
-                                        <details className="mb-2">
-                                            <summary className="text-xs text-brand-300 cursor-pointer
-                                          hover:text-brand-200 transition-colors w-fit">
-                                                💡 Show hint
-                                            </summary>
-                                            <p className="text-xs text-text-secondary mt-1.5 bg-surface-3
-                                    border border-border-subtle rounded-lg p-2.5">
-                                                {fq.hint}
-                                            </p>
-                                        </details>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+        <div className="flex gap-3 flex-wrap">
+            {CONFIDENCE_LEVELS.map(c => (
+                <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => onChange(c.value)}
+                    className={cn(
+                        'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
+                        'transition-all duration-150 min-w-[80px]',
+                        value === c.value
+                            ? 'bg-brand-400/15 border-brand-400/40 scale-105'
+                            : 'bg-surface-3 border-border-default hover:border-border-strong'
+                    )}
+                >
+                    <span className="text-2xl">{c.emoji}</span>
+                    <span className={cn(
+                        'text-[10px] font-bold text-center leading-tight',
+                        value === c.value ? c.color : 'text-text-tertiary'
+                    )}>
+                        {c.label}
+                    </span>
+                </button>
+            ))}
         </div>
     )
 }
@@ -425,8 +125,6 @@ function StepThree({ formConfig, data, onChange, followUpQuestions }) {
 export default function SubmitSolutionPage() {
     const { problemId } = useParams()
     const navigate = useNavigate()
-    const [step, setStep] = useState(1)
-    const [completedSteps, setCompleted] = useState(new Set())
 
     const { data: problem, isLoading } = useProblem(problemId)
     const submitSolution = useSubmitSolution()
@@ -434,79 +132,50 @@ export default function SubmitSolutionPage() {
     const category = problem?.category || 'CODING'
     const formConfig = getCategoryForm(category)
     const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
+    const hasExternalLink = !!problem?.categoryData?.sourceUrl
+    const fields = formConfig.fields
 
-    // ── Form state (v3 field names) ────────────────────
-    const [formData, setFormData] = useState({
-        pattern: '',
-        approach: '',
-        keyInsight: '',
-        feynmanExplanation: '',
-        realWorldConnection: '',
-        confidence: 0,
-    })
+    // ── Form state ─────────────────────────────────────
+    const [code, setCode] = useState('')
+    const [language, setLanguage] = useState(localStorage.getItem('ps_last_language') || 'PYTHON')
+    const [approach, setApproach] = useState('')
+    const [pattern, setPattern] = useState('')
+    const [keyInsight, setKeyInsight] = useState('')
+    const [feynmanExplanation, setFeynmanExplanation] = useState('')
+    const [realWorldConnection, setRealWorldConnection] = useState('')
+    const [confidence, setConfidence] = useState(0)
 
-    const [solutions, setSolutions] = useState([{
-        type: 'BRUTE_FORCE',
-        approach: '',
-        timeComplexity: '',
-        spaceComplexity: '',
-        code: '',
-        language: localStorage.getItem('ps_last_language') || 'PYTHON',
-    }])
-
-    const [commonNotes, setCommonNotes] = useState('')
-
-    function updateFormData(updates) {
-        setFormData(prev => ({ ...prev, ...updates }))
-    }
-
-    function markComplete(stepId) {
-        setCompleted(prev => new Set([...prev, stepId]))
-    }
-
-    function goNext() {
-        markComplete(step)
-        if (step < formConfig.steps.length) {
-            setStep(s => s + 1)
-            window.scrollTo({ top: 0, behavior: 'smooth' })
-        }
-    }
-
-    function goPrev() {
-        if (step > 1) {
-            setStep(s => s - 1)
-            window.scrollTo({ top: 0, behavior: 'smooth' })
-        }
-    }
-
+    // ── Submit ─────────────────────────────────────────
     async function onSubmit() {
-        const optimized = solutions.find(s => s.type === 'OPTIMIZED' || s.type === 'DEEP_DIVE')
-        const brute = solutions.find(s => s.type === 'BRUTE_FORCE' || s.type === 'HIGH_LEVEL')
-        const bestSol = optimized || solutions[0]
-        const language = bestSol?.language || 'PYTHON'
+        if (confidence === 0) {
+            toast.error('Please set your confidence level')
+            return
+        }
+
         localStorage.setItem('ps_last_language', language)
 
-        // v3.0: Map form state to v3 solution schema
         const data = {
-            approach: formData.approach || optimized?.approach || bestSol?.approach || null,
-            code: bestSol?.code || null,
-            language,
-            bruteForce: brute?.approach || null,
-            optimizedApproach: optimized?.approach || null,
-            timeComplexity: optimized?.timeComplexity || bestSol?.timeComplexity || null,
-            spaceComplexity: optimized?.spaceComplexity || bestSol?.spaceComplexity || null,
-            keyInsight: formData.keyInsight || null,
-            feynmanExplanation: formData.feynmanExplanation || null,
-            realWorldConnection: formData.realWorldConnection || commonNotes || null,
-            confidence: formData.confidence || 3,
-            pattern: formData.pattern || null,
+            approach: approach || null,
+            code: code || null,
+            language: code ? language : null,
+            pattern: pattern || null,
+            keyInsight: keyInsight || null,
+            feynmanExplanation: feynmanExplanation || null,
+            realWorldConnection: realWorldConnection || null,
+            confidence,
+            // AI will analyze these from the code
+            timeComplexity: null,
+            spaceComplexity: null,
+            bruteForce: null,
+            optimizedApproach: approach || null,
         }
 
         try {
             await submitSolution.mutateAsync({ problemId, data })
+            toast.success('Solution submitted! AI will analyze it.')
             navigate(`/problems/${problemId}`)
         } catch {
-            // error toast handled by mutation
+            // error handled by mutation
         }
     }
 
@@ -522,9 +191,6 @@ export default function SubmitSolutionPage() {
             </div>
         )
     }
-
-    const isLastStep = step === formConfig.steps.length
-    const currentStepMeta = formConfig.steps[step - 1]
 
     return (
         <div className="p-6 max-w-[800px] mx-auto">
@@ -546,114 +212,300 @@ export default function SubmitSolutionPage() {
 
             {/* Problem header */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6">
-                <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
-                                {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
-                            </Badge>
-                            {catInfo && (
-                                <span className={cn(
-                                    'text-[10px] font-bold px-2 py-0.5 rounded-full border',
-                                    catInfo.bg
-                                )}>
-                                    {catInfo.icon} {catInfo.label}
-                                </span>
-                            )}
-                        </div>
-                        <h2 className="text-base font-bold text-text-primary">
-                            {problem.title}
-                        </h2>
-                    </div>
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
+                        {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
+                    </Badge>
+                    {catInfo && (
+                        <span className={cn(
+                            'text-[10px] font-bold px-2 py-0.5 rounded-full border',
+                            catInfo.bg
+                        )}>
+                            {catInfo.icon} {catInfo.label}
+                        </span>
+                    )}
+                    {problem.source && !['MANUAL', 'AI_GENERATED'].includes(problem.source) && (
+                        <span className="text-[10px] font-bold text-text-disabled bg-surface-3
+                           border border-border-subtle rounded-full px-2 py-px">
+                            {problem.source}
+                        </span>
+                    )}
                 </div>
+                <h2 className="text-base font-bold text-text-primary mb-2">
+                    {problem.title}
+                </h2>
+
+                {/* External link — prominent for coding problems */}
+                {hasExternalLink && (
+                    <a
+                        href={problem.categoryData.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
+                       bg-brand-400/10 border border-brand-400/25
+                       text-sm font-semibold text-brand-300 hover:text-brand-200
+                       hover:bg-brand-400/15 transition-all"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                        Solve on {problem.source || 'External Site'} →
+                    </a>
+                )}
             </div>
 
-            {/* Form card */}
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-6">
-                <StepIndicator
-                    current={step}
-                    steps={formConfig.steps}
-                    onStepClick={setStep}
-                    completedSteps={completedSteps}
-                />
+            {/* Info banner for external-link problems */}
+            {hasExternalLink && (
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-info/5 border border-info/20 rounded-xl p-4 mb-6
+                     flex items-start gap-3"
+                >
+                    <span className="text-lg flex-shrink-0">💡</span>
+                    <div>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">
+                            Solve first, then reflect here
+                        </p>
+                        <p className="text-xs text-text-tertiary leading-relaxed">
+                            Click the link above to solve the problem on {problem.source || 'the external site'}.
+                            Once done, come back and paste your code below. AI will analyze your solution's
+                            complexity, quality, and suggest optimizations.
+                        </p>
+                    </div>
+                </motion.div>
+            )}
 
-                <div className="mb-6">
-                    <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
-                        <span>{currentStepMeta.icon}</span>
-                        {currentStepMeta.label}
-                    </h2>
-                    <p className="text-sm text-text-tertiary mt-0.5">
-                        {currentStepMeta.desc}
-                    </p>
-                </div>
+            {/* Form sections */}
+            <div className="space-y-5">
 
-                <div className="relative">
-                    {step === 1 && (
-                        <StepOne
-                            formConfig={formConfig}
-                            data={formData}
-                            onChange={updateFormData}
+                {/* Section 1: Code (for coding/SQL categories or any external link) */}
+                {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
+                    <FormSection
+                        icon="💻"
+                        title={hasExternalLink ? "Paste Your Solution Code" : (formConfig.solutionTabConfig?.codeLabel || "Your Code")}
+                        hint={hasExternalLink
+                            ? "Paste the code you submitted. AI will analyze complexity and suggest optimizations."
+                            : "Write or paste your solution code."
+                        }
+                    >
+                        {/* Language selector */}
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                            {['PYTHON', 'JAVASCRIPT', 'JAVA', 'CPP', 'TYPESCRIPT', 'GO', 'SQL'].map(lang => (
+                                <button
+                                    key={lang}
+                                    type="button"
+                                    onClick={() => setLanguage(lang)}
+                                    className={cn(
+                                        'px-2.5 py-1 rounded-lg border text-[10px] font-bold transition-all',
+                                        language === lang
+                                            ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
+                                            : 'bg-surface-3 border-border-default text-text-disabled hover:text-text-tertiary'
+                                    )}
+                                >
+                                    {lang === 'CPP' ? 'C++' : lang === 'JAVASCRIPT' ? 'JS' : lang === 'TYPESCRIPT' ? 'TS' : lang}
+                                </button>
+                            ))}
+                        </div>
+                        <CodeEditor
+                            value={code}
+                            onChange={setCode}
+                            language={language?.toLowerCase() === 'cpp' ? 'cpp' : language?.toLowerCase() || 'python'}
+                            placeholder={formConfig.solutionTabConfig?.codePlaceholder || "// Paste your solution here..."}
+                            minHeight="200px"
                         />
-                    )}
-                    {step === 2 && (
-                        <StepTwo
-                            formConfig={formConfig}
-                            data={formData}
-                            onChange={updateFormData}
-                            solutions={solutions}
-                            setSolutions={setSolutions}
-                            commonNotes={commonNotes}
-                            setCommonNotes={setCommonNotes}
-                        />
-                    )}
-                    {step === 3 && (
-                        <StepThree
-                            formConfig={formConfig}
-                            data={formData}
-                            onChange={updateFormData}
-                            followUpQuestions={problem.followUpQuestions}
-                        />
-                    )}
-                </div>
+                        <p className="text-[10px] text-text-disabled mt-2">
+                            🤖 AI will automatically analyze time/space complexity and suggest optimizations
+                        </p>
+                    </FormSection>
+                )}
 
-                {/* Navigation */}
-                <div className="flex items-center justify-between mt-8 pt-6
-                        border-t border-border-default">
+                {/* Section 2: Approach / Response */}
+                <FormSection
+                    icon={category === 'BEHAVIORAL' ? '🎯' : category === 'HR' ? '💬' : '📝'}
+                    title={
+                        category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response')
+                            : category === 'HR' ? 'Your Answer'
+                                : category === 'SYSTEM_DESIGN' ? 'Your Design'
+                                    : category === 'CS_FUNDAMENTALS' ? 'Your Explanation'
+                                        : 'Your Approach'
+                    }
+                    hint={
+                        hasExternalLink
+                            ? 'Explain your thought process. How did you arrive at your solution? What alternatives did you consider?'
+                            : category === 'BEHAVIORAL'
+                                ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.')
+                                : category === 'SYSTEM_DESIGN'
+                                    ? 'Describe your architecture — components, data flow, APIs, trade-offs.'
+                                    : category === 'CS_FUNDAMENTALS'
+                                        ? 'Explain the concept clearly. Start with "what", then "why", then "how".'
+                                        : 'Describe your approach step by step.'
+                    }
+                >
+                    <RichTextEditor
+                        content={approach}
+                        onChange={setApproach}
+                        placeholder={
+                            hasExternalLink
+                                ? 'Explain your approach: what pattern did you use, why, what alternatives you considered...'
+                                : fields.patternReasoning?.placeholder || 'Write your approach here...'
+                        }
+                        minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'}
+                    />
+                </FormSection>
+
+                {/* Section 3: Pattern / Topic identification */}
+                {fields.patternIdentified?.show && (
+                    <FormSection
+                        icon="🧩"
+                        title={fields.patternIdentified.label || 'Pattern Identified'}
+                        hint={fields.patternIdentified.placeholder}
+                    >
+                        <PatternSelector
+                            config={fields.patternIdentified}
+                            value={pattern}
+                            onChange={setPattern}
+                        />
+                    </FormSection>
+                )}
+
+                {/* Section 4: Key Insight */}
+                {fields.keyInsight?.show && (
+                    <FormSection
+                        icon="💡"
+                        title={fields.keyInsight.label || 'Key Insight'}
+                        hint={fields.keyInsight.hint}
+                        className="bg-brand-400/3 border-brand-400/20"
+                    >
+                        <textarea
+                            rows={2}
+                            value={keyInsight}
+                            onChange={e => setKeyInsight(e.target.value)}
+                            placeholder={fields.keyInsight.placeholder || 'The one thing that makes this click...'}
+                            className="w-full bg-surface-3 border border-border-strong rounded-xl
+                           text-sm text-text-primary placeholder:text-text-tertiary
+                           px-3.5 py-2.5 outline-none resize-none
+                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                        />
+                    </FormSection>
+                )}
+
+                {/* Section 5: Feynman Explanation */}
+                {fields.simpleExplanation?.show && (
+                    <FormSection
+                        icon="🗣"
+                        title={fields.simpleExplanation.label || 'Explain It Simply'}
+                        hint="Can you explain this to someone who doesn't know the topic?"
+                    >
+                        <RichTextEditor
+                            content={feynmanExplanation}
+                            onChange={setFeynmanExplanation}
+                            placeholder={fields.simpleExplanation.placeholder || 'Explain in simple terms...'}
+                            minHeight="100px"
+                        />
+                    </FormSection>
+                )}
+
+                {/* Section 6: Challenges / Real-world connection */}
+                {fields.challenges?.show && (
+                    <FormSection
+                        icon="🌍"
+                        title={fields.challenges.label || 'Challenges & Real-World Connection'}
+                    >
+                        <RichTextEditor
+                            content={realWorldConnection}
+                            onChange={setRealWorldConnection}
+                            placeholder={fields.challenges.placeholder || 'What was challenging? How does this connect to real-world software?'}
+                            minHeight="80px"
+                        />
+                    </FormSection>
+                )}
+
+                {/* Section 7: Confidence */}
+                <FormSection
+                    icon="📊"
+                    title="Confidence Level"
+                    hint="Be honest — this drives your spaced repetition schedule"
+                >
+                    <ConfidencePicker value={confidence} onChange={setConfidence} />
+                </FormSection>
+
+                {/* Follow-up questions (read-only reference) */}
+                {problem.followUpQuestions?.length > 0 && (
+                    <FormSection
+                        icon="🧠"
+                        title="Follow-up Questions"
+                        hint="Think about these as you solve — they deepen your understanding"
+                    >
+                        <div className="space-y-2.5">
+                            {problem.followUpQuestions.map((fq, i) => (
+                                <div key={fq.id || i}
+                                    className="flex items-start gap-3 bg-surface-2 border border-border-subtle
+                                  rounded-xl p-3">
+                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-3
+                                     border border-border-default flex items-center
+                                     justify-center text-xs font-bold text-text-tertiary">
+                                        {i + 1}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <p className="text-xs font-medium text-text-primary leading-relaxed">
+                                                {fq.question}
+                                            </p>
+                                            <Badge variant={DIFF_VARIANT[fq.difficulty] || 'brand'}
+                                                size="xs" className="flex-shrink-0">
+                                                {fq.difficulty}
+                                            </Badge>
+                                        </div>
+                                        {fq.hint && (
+                                            <details className="mt-1.5">
+                                                <summary className="text-[10px] text-brand-300 cursor-pointer
+                                              hover:text-brand-200 transition-colors w-fit">
+                                                    💡 Show hint
+                                                </summary>
+                                                <p className="text-[10px] text-text-tertiary mt-1 bg-surface-3
+                                          border border-border-subtle rounded-lg p-2">
+                                                    {fq.hint}
+                                                </p>
+                                            </details>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </FormSection>
+                )}
+            </div>
+
+            {/* Submit bar */}
+            <div className="sticky bottom-0 bg-surface-0/90 backdrop-blur-lg border-t
+                  border-border-default mt-6 -mx-6 px-6 py-4">
+                <div className="max-w-[800px] mx-auto flex items-center justify-between">
                     <Button
                         type="button"
                         variant="ghost"
                         size="md"
-                        onClick={goPrev}
-                        disabled={step === 1}
+                        onClick={() => navigate(`/problems/${problemId}`)}
                     >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="19" y1="12" x2="5" y2="12" />
-                            <polyline points="12 19 5 12 12 5" />
-                        </svg>
-                        Back
+                        Cancel
                     </Button>
 
-                    <div className="flex items-center gap-2">
-                        {formConfig.steps.map(s => (
-                            <div key={s.id} className={cn(
-                                'rounded-full transition-all duration-200',
-                                s.id === step
-                                    ? 'w-6 h-2 bg-brand-400'
-                                    : completedSteps.has(s.id)
-                                        ? 'w-2 h-2 bg-success'
-                                        : 'w-2 h-2 bg-surface-4'
-                            )} />
-                        ))}
-                    </div>
-
-                    {isLastStep ? (
+                    <div className="flex items-center gap-3">
+                        {confidence === 0 && (
+                            <span className="text-xs text-text-disabled hidden sm:block">
+                                Set confidence to submit
+                            </span>
+                        )}
                         <Button
                             type="button"
                             variant="primary"
-                            size="md"
+                            size="lg"
                             loading={submitSolution.isPending}
+                            disabled={confidence === 0}
                             onClick={onSubmit}
                         >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -661,24 +513,9 @@ export default function SubmitSolutionPage() {
                                 strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12" />
                             </svg>
-                            Save Solution
+                            Submit Solution
                         </Button>
-                    ) : (
-                        <Button
-                            type="button"
-                            variant="primary"
-                            size="md"
-                            onClick={goNext}
-                        >
-                            Next
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="2.5"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="5" y1="12" x2="19" y2="12" />
-                                <polyline points="12 5 19 12 12 19" />
-                            </svg>
-                        </Button>
-                    )}
+                    </div>
                 </div>
             </div>
         </div>
