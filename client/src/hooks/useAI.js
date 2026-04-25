@@ -44,6 +44,12 @@ export function useSimilarProblems() {
   });
 }
 
+export function useGenerateProblemsAI() {
+  return useMutation({
+    mutationFn: (data) => api.post("/ai/generate-problems", data),
+  });
+}
+
 // Returns AI feature availability status
 export function useAIStatus() {
   return { data: { enabled: true }, isLoading: false };

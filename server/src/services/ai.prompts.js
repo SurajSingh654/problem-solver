@@ -302,3 +302,118 @@ Identify patterns in what they got wrong and give specific study advice.`;
 
   return { system, user };
 }
+
+// ── AI Problem Generation (Batch) ─────────────────────
+export function problemGenerationPrompt(data) {
+  const categoryInstructions = {
+    CODING: `Generate coding/algorithm interview problems.
+For each problem:
+- Find a REAL problem from popular platforms (LeetCode, GeeksForGeeks, HackerRank, CodeChef, InterviewBit)
+- Include the EXACT URL to the problem on that platform
+- Include the full problem description, constraints, and examples
+- Include company tags (which companies ask this problem)
+- Include relevant algorithm/data structure tags
+- The problem should be solvable in 20-45 minutes
+- Include 3 progressive follow-up questions (Easy → Medium → Hard)`,
+
+    SYSTEM_DESIGN: `Generate system design interview problems.
+For each problem:
+- Create a realistic system to design (e.g., "Design WhatsApp", "Design URL Shortener")
+- Include scale requirements (users, QPS, storage)
+- Include specific features to cover
+- Include constraints and non-functional requirements
+- Include 3 progressive follow-up questions about scaling, trade-offs, and edge cases`,
+
+    BEHAVIORAL: `Generate behavioral interview questions.
+For each problem:
+- Create a question that tests specific leadership/teamwork competencies
+- Include context about what the interviewer is really assessing
+- Include guidance on STAR format for answering
+- Include 3 follow-up probing questions an interviewer might ask
+- Cover different competencies: leadership, conflict resolution, failure handling, teamwork, initiative`,
+
+    CS_FUNDAMENTALS: `Generate CS fundamentals interview questions.
+For each problem:
+- Cover core CS topics: Operating Systems, Computer Networks, DBMS, OOP
+- Include conceptual questions that test deep understanding, not just memorization
+- Include real-world applications of the concept
+- Include common misconceptions to watch out for
+- Include 3 progressive follow-up questions`,
+
+    HR: `Generate HR round interview questions.
+For each problem:
+- Create questions about motivation, career goals, company fit, salary expectations, work style
+- Include guidance on what makes a strong authentic answer
+- Include tips for company-specific research
+- Include 3 follow-up questions that probe deeper`,
+
+    SQL: `Generate SQL interview problems.
+For each problem:
+- Create a realistic database scenario with table schemas
+- Include the exact table structure (column names, types, relationships)
+- Include sample data for clarity
+- Include the query requirement (what to return)
+- Include 3 progressive follow-up questions (basic → optimization → complex joins)`,
+  };
+
+  const difficultyInstruction =
+    data.difficulty === "auto"
+      ? `Analyze the team context below and choose appropriate difficulty levels.
+If the team is new or has low solve rates, lean toward EASY and MEDIUM.
+If the team is experienced, include more MEDIUM and HARD.
+Mix difficulties for variety.`
+      : `All problems should be ${data.difficulty} difficulty.`;
+
+  const system = `You are an expert interview preparation curriculum designer.
+Your job is to generate high-quality interview problems that progressively build skills.
+
+${categoryInstructions[data.category] || categoryInstructions.CODING}
+
+${difficultyInstruction}
+
+CRITICAL RULES:
+1. Every problem must be unique — do not repeat problems the team already has
+2. For CODING: always include a real, working URL to the problem on the source platform
+3. Problems should build on each other — if generating multiple, create a logical progression
+4. Include real-world context explaining where this pattern/concept appears in production
+5. Admin notes should include the expected approach, common mistakes, and key insight
+6. Tags should be specific and useful for filtering
+
+${data.teamContext ? `TEAM CONTEXT:\n${data.teamContext}` : ""}
+${data.existingProblems ? `PROBLEMS ALREADY IN THE TEAM (do not repeat):\n${data.existingProblems}` : ""}
+
+RESPOND WITH THIS EXACT JSON FORMAT:
+{
+  "problems": [
+    {
+      "title": "string — clear, concise problem title",
+      "description": "string — full problem description with examples and constraints",
+      "difficulty": "EASY" | "MEDIUM" | "HARD",
+      "category": "${data.category}",
+      "source": "LEETCODE" | "GFG" | "HACKERRANK" | "CODECHEF" | "INTERVIEWBIT" | "OTHER",
+      "sourceUrl": "string — exact URL to the problem (for CODING) or empty string",
+      "tags": ["string", "string", ...],
+      "companyTags": ["string", "string", ...],
+      "realWorldContext": "string — where this appears in real software/interviews",
+      "useCases": "string — 3-5 specific use cases, newline separated",
+      "adminNotes": "string — teaching notes: expected approach, edge cases, key insight, common mistakes",
+      "followUpQuestions": [
+        { "question": "string", "difficulty": "EASY", "hint": "string" },
+        { "question": "string", "difficulty": "MEDIUM", "hint": "string" },
+        { "question": "string", "difficulty": "HARD", "hint": "string" }
+      ]
+    }
+  ],
+  "reasoning": "string — brief explanation of why these problems were chosen and how they build on each other"
+}`;
+
+  const user = `Generate ${data.count} ${data.category.replace("_", " ").toLowerCase()} interview problem${data.count > 1 ? "s" : ""}.
+
+Category: ${data.category}
+Count: ${data.count}
+Difficulty: ${data.difficulty}
+${data.targetCompany ? `Target company style: ${data.targetCompany}` : ""}
+${data.focusAreas ? `Focus areas: ${data.focusAreas}` : ""}`;
+
+  return { system, user };
+}

@@ -490,3 +490,122 @@ export async function findSimilarProblems(req, res) {
     return error(res, "Failed to search similar problems.", 500);
   }
 }
+
+// ============================================================================
+// AI PROBLEM GENERATION (Batch — for Team Admin)
+// ============================================================================
+export async function generateProblemsAI(req, res) {
+  try {
+    if (!AI_ENABLED) {
+      return error(res, "AI features are not enabled.", 503);
+    }
+
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { category, count, difficulty, targetCompany, focusAreas } = req.body;
+
+    if (!category) {
+      return error(res, "Category is required.", 400);
+    }
+
+    const problemCount = Math.min(Math.max(parseInt(count) || 1, 1), 5);
+    const difficultyPref = difficulty || "auto";
+
+    // ── Gather team context for intelligent generation ──
+    let teamContext = "";
+    let existingProblems = "";
+
+    try {
+      // Get team's current problem titles to avoid duplicates
+      const existing = await prisma.problem.findMany({
+        where: { teamId, category, isPublished: true },
+        select: { title: true, difficulty: true },
+        take: 50,
+      });
+
+      if (existing.length > 0) {
+        existingProblems = existing
+          .map((p) => `- ${p.title} (${p.difficulty})`)
+          .join("\n");
+      }
+
+      // Get team performance data for difficulty calibration
+      if (difficultyPref === "auto") {
+        const [totalMembers, solutionStats] = await Promise.all([
+          prisma.user.count({ where: { currentTeamId: teamId } }),
+          prisma.$queryRaw`
+            SELECT
+              p.difficulty,
+              COUNT(DISTINCT s."userId")::int as solvers,
+              ROUND(AVG(s.confidence), 1)::float as avg_confidence
+            FROM solutions s
+            JOIN problems p ON s."problemId" = p.id
+            WHERE s."teamId" = ${teamId} AND p.category = ${category}::"ProblemCategory"
+            GROUP BY p.difficulty
+          `,
+        ]);
+
+        if (solutionStats.length > 0) {
+          teamContext = `Team size: ${totalMembers} members\n`;
+          teamContext += `Performance by difficulty in ${category}:\n`;
+          solutionStats.forEach((s) => {
+            teamContext += `  ${s.difficulty}: ${s.solvers} solvers, avg confidence ${s.avg_confidence}/5\n`;
+          });
+        } else {
+          teamContext = `Team size: ${totalMembers} members. No solutions in ${category} yet — this is a new category for them. Start with easier problems.`;
+        }
+      }
+    } catch (err) {
+      console.error("Team context gathering failed:", err.message);
+    }
+
+    // ── Generate problems via AI ─────────────────────────
+    const { problemGenerationPrompt } =
+      await import("../services/ai.prompts.js");
+    const { system, user } = problemGenerationPrompt({
+      category,
+      count: problemCount,
+      difficulty: difficultyPref,
+      targetCompany,
+      focusAreas,
+      teamContext,
+      existingProblems,
+    });
+
+    const { default: OpenAI } = await import("openai");
+    const openai = new OpenAI();
+
+    const response = await openai.chat.completions.create({
+      model: AI_MODEL_FAST,
+      temperature: 0.8,
+      response_format: { type: "json_object" },
+      max_tokens: 4000,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+
+    let result;
+    try {
+      result = JSON.parse(response.choices[0].message.content);
+    } catch {
+      return error(res, "Failed to parse AI response.", 500);
+    }
+
+    if (!result.problems || !Array.isArray(result.problems)) {
+      return error(res, "AI failed to generate problems.", 500);
+    }
+
+    return success(res, {
+      problems: result.problems,
+      reasoning: result.reasoning,
+      count: result.problems.length,
+      category,
+      difficulty: difficultyPref,
+    });
+  } catch (err) {
+    console.error("AI problem generation error:", err);
+    return error(res, "Failed to generate problems.", 500);
+  }
+}

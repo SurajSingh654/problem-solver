@@ -1,21 +1,37 @@
-import { Router } from 'express'
-import { authenticate } from '../middleware/auth.middleware.js'
-import { requireTeamContext, requireTeamAdmin } from '../middleware/team.middleware.js'
+import { Router } from "express";
+import { authenticate } from "../middleware/auth.middleware.js";
+import {
+  requireTeamContext,
+  requireTeamAdmin,
+} from "../middleware/team.middleware.js";
 import {
   reviewSolution,
   getHint,
   getWeeklyPlan,
   generateProblemContent,
   findSimilarProblems,
-} from '../controllers/ai.controller.js'
+  generateProblemsAI,
+} from "../controllers/ai.controller.js";
 
-const router = Router()
-router.use(authenticate)
+const router = Router();
 
-router.post('/review/:solutionId', requireTeamContext, reviewSolution)
-router.post('/hint/:problemId', requireTeamContext, getHint)
-router.get('/weekly-plan', requireTeamContext, getWeeklyPlan)
-router.post('/generate-content', requireTeamContext, requireTeamAdmin, generateProblemContent)
-router.post('/similar', requireTeamContext, findSimilarProblems)
+router.use(authenticate);
 
-export default router
+router.post("/review/:solutionId", requireTeamContext, reviewSolution);
+router.post("/hint/:problemId", requireTeamContext, getHint);
+router.get("/weekly-plan", requireTeamContext, getWeeklyPlan);
+router.post(
+  "/generate-content",
+  requireTeamContext,
+  requireTeamAdmin,
+  generateProblemContent,
+);
+router.post(
+  "/generate-problems",
+  requireTeamContext,
+  requireTeamAdmin,
+  generateProblemsAI,
+);
+router.post("/similar", requireTeamContext, findSimilarProblems);
+
+export default router;
