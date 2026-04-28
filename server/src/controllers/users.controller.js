@@ -7,15 +7,12 @@ import { success, error } from "../utils/response.js";
 // ── GET /api/users — list team members ─────────────────
 export async function getUsers(req, res) {
   try {
-    // Scope by team if available (regular users see team members)
-    // SUPER_ADMIN without team sees all users
     const where = {};
     const teamId = req.user.currentTeamId;
 
     if (teamId) {
       where.currentTeamId = teamId;
     } else if (req.user.globalRole !== "SUPER_ADMIN") {
-      // Regular user without team — return empty
       return success(res, { users: [], count: 0 });
     }
 
@@ -71,7 +68,6 @@ export async function getUsers(req, res) {
 }
 
 // ── GET /api/users/:id — get user profile ──────────────
-// ── GET /api/users/:id — get user profile ──────────────
 export async function getUserProfile(req, res) {
   try {
     const { id } = req.params;
@@ -109,38 +105,24 @@ export async function getUserProfile(req, res) {
       return error(res, "User not found.", 404);
     }
 
-    // Only show full profile if same team, SUPER_ADMIN, or self
     const isSameTeam =
       req.user.currentTeamId && user.currentTeamId === req.user.currentTeamId;
     const isSuperAdmin = req.user.globalRole === "SUPER_ADMIN";
     const isSelf = user.id === req.user.id;
 
     if (!isSameTeam && !isSuperAdmin && !isSelf) {
-      // Return limited profile for users outside team
       return success(res, {
-        user: {
-          id: user.id,
-          name: user.name,
-          avatarUrl: user.avatarUrl,
-        },
+        user: { id: user.id, name: user.name, avatarUrl: user.avatarUrl },
       });
     }
 
-    // Fetch recent solutions
-    // For SuperAdmin: show solutions from any team
-    // For same-team / self: scope to current team
-    let recentSolutions = [];
     const solutionWhere = { userId: id };
-
     if (!isSuperAdmin) {
-      // Regular user — scope to their team
       const teamId = req.user.currentTeamId;
-      if (teamId) {
-        solutionWhere.teamId = teamId;
-      }
+      if (teamId) solutionWhere.teamId = teamId;
     }
 
-    recentSolutions = await prisma.solution.findMany({
+    const recentSolutions = await prisma.solution.findMany({
       where: solutionWhere,
       select: {
         id: true,
@@ -184,7 +166,6 @@ export async function getUserProfile(req, res) {
 }
 
 // ── DELETE /api/users/:id — remove user (admin) ────────
-// ── DELETE /api/users/:id — remove user (admin) ────────
 export async function deleteUser(req, res) {
   try {
     const { id } = req.params;
@@ -208,12 +189,10 @@ export async function deleteUser(req, res) {
     if (!user) {
       return error(res, "User not found.", 404);
     }
-
     if (user.globalRole === "SUPER_ADMIN") {
       return error(res, "Cannot delete a super admin account.", 400);
     }
 
-    // If user is in a team (not personal space), check if they're the only admin
     if (user.currentTeamId && user.currentTeamId !== user.personalTeamId) {
       if (user.teamRole === "TEAM_ADMIN") {
         const otherAdmins = await prisma.user.count({
@@ -225,52 +204,46 @@ export async function deleteUser(req, res) {
         });
 
         if (otherAdmins === 0) {
-          // Try to promote the first available member
           const nextMember = await prisma.user.findFirst({
-            where: {
-              currentTeamId: user.currentTeamId,
-              id: { not: id },
-            },
+            where: { currentTeamId: user.currentTeamId, id: { not: id } },
             select: { id: true, name: true },
           });
 
           if (nextMember) {
-            await prisma.user.update({
-              where: { id: nextMember.id },
-              data: { teamRole: "TEAM_ADMIN" },
+            // Update both User.teamRole and TeamMembership.role
+            await prisma.$transaction(async (tx) => {
+              await tx.user.update({
+                where: { id: nextMember.id },
+                data: { teamRole: "TEAM_ADMIN" },
+              });
+              await tx.teamMembership.updateMany({
+                where: {
+                  userId: nextMember.id,
+                  teamId: user.currentTeamId,
+                  isActive: true,
+                },
+                data: { role: "TEAM_ADMIN" },
+              });
             });
           }
-          // If no members left, the team becomes empty (that's fine)
         }
       }
-
-      // Remove user from team before deleting
-      await prisma.user.update({
-        where: { id },
-        data: {
-          currentTeamId: user.personalTeamId || null,
-          teamRole: null,
-        },
-      });
     }
 
-    // Soft delete the user (Prisma middleware converts to update { deletedAt })
+    // TeamMembership records cascade-delete with User (onDelete: Cascade)
     await prisma.user.delete({ where: { id } });
 
-    // Also soft delete their personal space
     if (user.personalTeamId) {
       await prisma.team.delete({ where: { id: user.personalTeamId } });
     }
 
-    return success(res, {
-      message: `${user.name} has been deleted.`,
-      id,
-    });
+    return success(res, { message: `${user.name} has been deleted.`, id });
   } catch (err) {
     console.error("Delete user error:", err);
     return error(res, "Failed to delete user.", 500);
   }
 }
+
 // ── PATCH /api/users/:id/role — update team role ───────
 export async function updateUserRole(req, res) {
   try {
@@ -280,7 +253,6 @@ export async function updateUserRole(req, res) {
     if (!["TEAM_ADMIN", "MEMBER"].includes(role)) {
       return error(res, "Invalid role. Must be TEAM_ADMIN or MEMBER.", 400);
     }
-
     if (id === req.user.id) {
       return error(res, "You cannot change your own role.", 400);
     }
@@ -294,7 +266,6 @@ export async function updateUserRole(req, res) {
       return error(res, "User not found.", 404);
     }
 
-    // Verify user is in the same team (unless SUPER_ADMIN)
     if (
       req.user.globalRole !== "SUPER_ADMIN" &&
       user.currentTeamId !== req.user.currentTeamId
@@ -302,15 +273,22 @@ export async function updateUserRole(req, res) {
       return error(res, "User is not in your team.", 403);
     }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: { teamRole: role },
-      select: { id: true, name: true, teamRole: true },
+    // Update both User.teamRole (cache) and TeamMembership.role (authoritative)
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: { teamRole: role },
+      });
+
+      await tx.teamMembership.updateMany({
+        where: { userId: id, teamId: user.currentTeamId, isActive: true },
+        data: { role },
+      });
     });
 
     return success(res, {
-      message: `${updated.name} is now ${role === "TEAM_ADMIN" ? "a team admin" : "a member"}.`,
-      user: updated,
+      message: `${user.name} is now ${role === "TEAM_ADMIN" ? "a team admin" : "a member"}.`,
+      user: { id, name: user.name, teamRole: role },
     });
   } catch (err) {
     console.error("Update user role error:", err);

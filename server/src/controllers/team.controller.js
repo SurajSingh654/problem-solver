@@ -4,29 +4,33 @@
 //
 // DESIGN DECISIONS:
 //
-// 1. Team creation: Always starts in PENDING status. A join code is
+// 1. TeamMembership is the authoritative record of team access.
+//    User.teamRole is a denormalized cache for the current context only.
+//    Every operation that changes membership MUST update both.
+//
+// 2. Team creation: Always starts in PENDING status. A join code is
 //    NOT generated until the SUPER_ADMIN approves. This prevents
 //    users from sharing codes for unapproved teams.
 //
-// 2. Approval flow: SUPER_ADMIN calls POST /teams/:id/review with
+// 3. Approval flow: SUPER_ADMIN calls POST /teams/:id/review with
 //    { action: 'approve' } or { action: 'reject', rejectionReason }.
-//    On approval, a join code is generated and the creator is
-//    automatically switched to the new team.
+//    On approval, a join code is generated, a TeamMembership record
+//    is created for the creator, and they are switched to the team.
 //
-// 3. Join by code: Atomic operation — verifies code, checks capacity,
-//    updates user's currentTeamId and teamRole in one transaction.
-//    The user's previous team context is cleared.
+// 4. Join by code: Creates a TeamMembership record atomically with
+//    the user context switch. Returns buildUserResponse so the client
+//    immediately has updated memberships[].
 //
-// 4. Leave team: User can leave at any time. If they're the last
-//    TEAM_ADMIN, they must transfer ownership first. After leaving,
-//    they're switched to their personal space.
+// 5. Leave team: Deactivates TeamMembership (soft leave — history
+//    is preserved). Switches user to personal space.
 //
-// 5. Join code generation: Uses characters that avoid visual ambiguity
-//    (no I/O/0/1). 8 chars from a 32-char alphabet = 32^8 ≈ 1.1
-//    trillion possible codes. Collision probability is negligible.
+// 6. Role change: Updates BOTH User.teamRole (if currently in that
+//    team) AND TeamMembership.role (authoritative source).
+//
+// 7. Remove member: Deactivates TeamMembership, switches them to
+//    their personal space.
 //
 // ============================================================================
-
 import crypto from "crypto";
 import prisma from "../lib/prisma.js";
 import { generateToken } from "../lib/jwt.js";
@@ -54,37 +58,66 @@ async function uniqueJoinCode() {
   let code;
   let exists = true;
   let attempts = 0;
-
   while (exists && attempts < 10) {
     code = generateJoinCode();
     const found = await prisma.team.findUnique({ where: { joinCode: code } });
     exists = !!found;
     attempts++;
   }
-
   if (exists) {
     throw new Error("Failed to generate unique join code after 10 attempts.");
   }
-
   return code;
+}
+
+// ── Helper: build complete user response with memberships ─────
+// Reused from auth.controller pattern — keeps responses consistent.
+async function buildUserResponse(userId) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      avatarUrl: true,
+      globalRole: true,
+      currentTeamId: true,
+      teamRole: true,
+      personalTeamId: true,
+      onboardingComplete: true,
+      mustChangePassword: true,
+      isVerified: true,
+      currentTeam: {
+        select: { id: true, name: true, isPersonal: true, status: true },
+      },
+      personalTeam: {
+        select: { id: true, name: true },
+      },
+      memberships: {
+        where: { isActive: true },
+        select: {
+          role: true,
+          joinedAt: true,
+          team: {
+            select: { id: true, name: true, isPersonal: true, status: true },
+          },
+        },
+        orderBy: { joinedAt: "asc" },
+      },
+    },
+  });
 }
 
 // ============================================================================
 // CREATE TEAM
 // ============================================================================
-
 export async function createTeam(req, res) {
   try {
     const { name, description, maxMembers } = req.body;
     const userId = req.user.id;
 
-    // ── Check if user already has a pending team ───────
     const existingPending = await prisma.team.findFirst({
-      where: {
-        createdById: userId,
-        status: "PENDING",
-        isPersonal: false,
-      },
+      where: { createdById: userId, status: "PENDING", isPersonal: false },
       select: { id: true, name: true },
     });
 
@@ -96,7 +129,6 @@ export async function createTeam(req, res) {
       );
     }
 
-    // ── Create team in PENDING status ──────────────────
     const team = await prisma.team.create({
       data: {
         name,
@@ -116,14 +148,9 @@ export async function createTeam(req, res) {
       },
     });
 
-    // TODO: Notify SUPER_ADMIN about new pending team (email/push)
-
     return success(
       res,
-      {
-        message: `Team "${name}" created and is pending approval.`,
-        team,
-      },
+      { message: `Team "${name}" created and is pending approval.`, team },
       201,
     );
   } catch (err) {
@@ -135,7 +162,6 @@ export async function createTeam(req, res) {
 // ============================================================================
 // REVIEW TEAM (SUPER_ADMIN — approve/reject)
 // ============================================================================
-
 export async function reviewTeam(req, res) {
   try {
     const { teamId } = req.params;
@@ -155,7 +181,6 @@ export async function reviewTeam(req, res) {
     if (!team) {
       return error(res, "Team not found.", 404);
     }
-
     if (team.status !== "PENDING") {
       return error(res, `Team is already ${team.status.toLowerCase()}.`, 400);
     }
@@ -168,11 +193,7 @@ export async function reviewTeam(req, res) {
         // Activate team with join code
         const approved = await tx.team.update({
           where: { id: teamId },
-          data: {
-            status: "ACTIVE",
-            joinCode,
-            approvedAt: new Date(),
-          },
+          data: { status: "ACTIVE", joinCode, approvedAt: new Date() },
           select: {
             id: true,
             name: true,
@@ -185,16 +206,31 @@ export async function reviewTeam(req, res) {
         // Switch creator to this team
         await tx.user.update({
           where: { id: team.createdById },
-          data: {
-            currentTeamId: teamId,
-            teamRole: "TEAM_ADMIN",
+          data: { currentTeamId: teamId, teamRole: "TEAM_ADMIN" },
+        });
+
+        // Create TeamMembership for the creator
+        // upsert in case they somehow already have a record
+        await tx.teamMembership.upsert({
+          where: {
+            userId_teamId: { userId: team.createdById, teamId },
+          },
+          create: {
+            userId: team.createdById,
+            teamId,
+            role: "TEAM_ADMIN",
+            isActive: true,
+          },
+          update: {
+            role: "TEAM_ADMIN",
+            isActive: true,
+            leftAt: null,
           },
         });
 
         return approved;
       });
 
-      // Notify creator
       sendTeamApprovedEmail(
         team.createdBy.email,
         team.createdBy.name,
@@ -218,15 +254,9 @@ export async function reviewTeam(req, res) {
           status: "REJECTED",
           rejectionReason: rejectionReason || "No reason provided.",
         },
-        select: {
-          id: true,
-          name: true,
-          status: true,
-          rejectionReason: true,
-        },
+        select: { id: true, name: true, status: true, rejectionReason: true },
       });
 
-      // Notify creator
       sendTeamRejectedEmail(
         team.createdBy.email,
         team.createdBy.name,
@@ -252,7 +282,6 @@ export async function reviewTeam(req, res) {
 // ============================================================================
 // JOIN TEAM BY CODE
 // ============================================================================
-
 export async function joinTeam(req, res) {
   try {
     const { joinCode } = req.body;
@@ -273,54 +302,61 @@ export async function joinTeam(req, res) {
     if (!team) {
       return error(res, "Invalid join code.", 404);
     }
-
     if (team.isPersonal) {
       return error(res, "Cannot join a personal space.", 400);
     }
-
     if (team.status !== "ACTIVE") {
       return error(res, "This team is not accepting members.", 400);
     }
-
     if (team._count.currentMembers >= team.maxMembers) {
       return error(res, "This team is full.", 400);
     }
 
-    // ── Check if user is already in this team ──────────
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { currentTeamId: true },
+    // Check if user already has an active membership
+    const existingMembership = await prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId, teamId: team.id } },
+      select: { isActive: true, role: true },
     });
 
-    if (user?.currentTeamId === team.id) {
-      return error(res, "You are already in this team.", 400);
+    if (existingMembership?.isActive) {
+      return error(res, "You are already a member of this team.", 400);
     }
 
-    // ── Join: update user's team context ───────────────
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        currentTeamId: team.id,
-        teamRole: "MEMBER",
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        globalRole: true,
-        currentTeamId: true,
-        teamRole: true,
-        personalTeamId: true,
-        onboardingComplete: true,
-      },
+    await prisma.$transaction(async (tx) => {
+      // Update user context
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          currentTeamId: team.id,
+          teamRole: "MEMBER",
+        },
+      });
+
+      // Create or reactivate TeamMembership
+      await tx.teamMembership.upsert({
+        where: { userId_teamId: { userId, teamId: team.id } },
+        create: {
+          userId,
+          teamId: team.id,
+          role: "MEMBER",
+          isActive: true,
+        },
+        update: {
+          // Re-joining after leaving — restore as MEMBER, reset leftAt
+          role: "MEMBER",
+          isActive: true,
+          leftAt: null,
+        },
+      });
     });
 
-    const token = generateToken(updatedUser);
+    const fullUser = await buildUserResponse(userId);
+    const token = generateToken(fullUser);
 
     return success(res, {
       message: `Joined ${team.name}!`,
       token,
-      user: updatedUser,
+      user: fullUser,
       team: { id: team.id, name: team.name },
     });
   } catch (err) {
@@ -332,18 +368,16 @@ export async function joinTeam(req, res) {
 // ============================================================================
 // LEAVE TEAM
 // ============================================================================
-
 export async function leaveTeam(req, res) {
   try {
     const userId = req.user.id;
     const teamId = req.teamId;
 
-    // ── Can't leave personal space ─────────────────────
     if (req.isPersonalTeam) {
       return error(res, "Cannot leave your personal space.", 400);
     }
 
-    // ── Check if last TEAM_ADMIN ───────────────────────
+    // Check if last TEAM_ADMIN
     if (req.user.teamRole === "TEAM_ADMIN") {
       const otherAdmins = await prisma.user.count({
         where: {
@@ -354,12 +388,8 @@ export async function leaveTeam(req, res) {
       });
 
       if (otherAdmins === 0) {
-        // Check if there are other members who could be promoted
         const otherMembers = await prisma.user.count({
-          where: {
-            currentTeamId: teamId,
-            id: { not: userId },
-          },
+          where: { currentTeamId: teamId, id: { not: userId } },
         });
 
         if (otherMembers > 0) {
@@ -370,41 +400,38 @@ export async function leaveTeam(req, res) {
             "LAST_ADMIN",
           );
         }
-        // If no other members, allow leaving (team becomes empty)
       }
     }
 
-    // ── Get personal team to fall back to ──────────────
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { personalTeamId: true },
     });
 
-    // ── Leave: switch to personal space ────────────────
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        currentTeamId: user?.personalTeamId || null,
-        teamRole: user?.personalTeamId ? "TEAM_ADMIN" : null,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        globalRole: true,
-        currentTeamId: true,
-        teamRole: true,
-        personalTeamId: true,
-        onboardingComplete: true,
-      },
+    await prisma.$transaction(async (tx) => {
+      // Switch to personal space
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          currentTeamId: user?.personalTeamId || null,
+          teamRole: user?.personalTeamId ? "TEAM_ADMIN" : null,
+        },
+      });
+
+      // Deactivate TeamMembership (soft leave — history preserved)
+      await tx.teamMembership.updateMany({
+        where: { userId, teamId, isActive: true },
+        data: { isActive: false, leftAt: new Date() },
+      });
     });
 
-    const token = generateToken(updatedUser);
+    const fullUser = await buildUserResponse(userId);
+    const token = generateToken(fullUser);
 
     return success(res, {
       message: "You have left the team. Switched to individual mode.",
       token,
-      user: updatedUser,
+      user: fullUser,
     });
   } catch (err) {
     console.error("Leave team error:", err);
@@ -415,7 +442,6 @@ export async function leaveTeam(req, res) {
 // ============================================================================
 // INVITE MEMBERS (TEAM_ADMIN)
 // ============================================================================
-
 export async function inviteMembers(req, res) {
   try {
     const { emails } = req.body;
@@ -434,18 +460,24 @@ export async function inviteMembers(req, res) {
     const results = { sent: [], skipped: [] };
 
     for (const email of emails) {
-      // ── Check if already a member ────────────────────
+      // Check if already an active member
       const existingUser = await prisma.user.findUnique({
         where: { email },
         select: { id: true, currentTeamId: true },
       });
 
-      if (existingUser?.currentTeamId === teamId) {
-        results.skipped.push({ email, reason: "Already a team member." });
-        continue;
+      if (existingUser) {
+        const activeMembership = await prisma.teamMembership.findUnique({
+          where: { userId_teamId: { userId: existingUser.id, teamId } },
+          select: { isActive: true },
+        });
+        if (activeMembership?.isActive) {
+          results.skipped.push({ email, reason: "Already a team member." });
+          continue;
+        }
       }
 
-      // ── Check for existing pending invitation ────────
+      // Check for existing pending invitation
       const existingInvite = await prisma.teamInvitation.findFirst({
         where: {
           teamId,
@@ -460,7 +492,6 @@ export async function inviteMembers(req, res) {
         continue;
       }
 
-      // ── Create invitation ────────────────────────────
       const invitation = await prisma.teamInvitation.create({
         data: {
           teamId,
@@ -473,7 +504,6 @@ export async function inviteMembers(req, res) {
         },
       });
 
-      // ── Send email ───────────────────────────────────
       sendTeamInviteEmail(
         email,
         team.name,
@@ -499,7 +529,6 @@ export async function inviteMembers(req, res) {
 // ============================================================================
 // GET TEAM DETAILS
 // ============================================================================
-
 export async function getTeam(req, res) {
   try {
     const teamId = req.teamId;
@@ -520,11 +549,7 @@ export async function getTeam(req, res) {
         createdById: true,
         createdAt: true,
         _count: {
-          select: {
-            currentMembers: true,
-            problems: true,
-            solutions: true,
-          },
+          select: { currentMembers: true, problems: true, solutions: true },
         },
       },
     });
@@ -533,7 +558,6 @@ export async function getTeam(req, res) {
       return error(res, "Team not found.", 404);
     }
 
-    // ── Only show join code to TEAM_ADMIN ──────────────
     const isAdmin =
       req.user.globalRole === "SUPER_ADMIN" ||
       req.user.teamRole === "TEAM_ADMIN";
@@ -551,7 +575,6 @@ export async function getTeam(req, res) {
 // ============================================================================
 // LIST TEAM MEMBERS
 // ============================================================================
-
 export async function getTeamMembers(req, res) {
   try {
     const teamId = req.teamId;
@@ -569,10 +592,7 @@ export async function getTeamMembers(req, res) {
         activityStatus: true,
         createdAt: true,
       },
-      orderBy: [
-        { teamRole: "asc" }, // TEAM_ADMIN first
-        { lastActiveAt: "desc" },
-      ],
+      orderBy: [{ teamRole: "asc" }, { lastActiveAt: "desc" }],
     });
 
     return success(res, { members, count: members.length });
@@ -585,19 +605,16 @@ export async function getTeamMembers(req, res) {
 // ============================================================================
 // UPDATE MEMBER ROLE (TEAM_ADMIN)
 // ============================================================================
-
 export async function changeMemberRole(req, res) {
   try {
     const { memberId } = req.params;
     const { role } = req.body;
     const teamId = req.teamId;
 
-    // ── Can't change own role ──────────────────────────
     if (memberId === req.user.id) {
       return error(res, "You cannot change your own role.", 400);
     }
 
-    // ── Verify member is in this team ──────────────────
     const member = await prisma.user.findFirst({
       where: { id: memberId, currentTeamId: teamId },
       select: { id: true, name: true, teamRole: true },
@@ -607,15 +624,25 @@ export async function changeMemberRole(req, res) {
       return error(res, "Member not found in this team.", 404);
     }
 
-    const updated = await prisma.user.update({
-      where: { id: memberId },
-      data: { teamRole: role },
-      select: { id: true, name: true, teamRole: true },
+    // Update both User.teamRole (current context cache) AND
+    // TeamMembership.role (authoritative source)
+    await prisma.$transaction(async (tx) => {
+      // Update denormalized cache on User
+      await tx.user.update({
+        where: { id: memberId },
+        data: { teamRole: role },
+      });
+
+      // Update authoritative role in TeamMembership
+      await tx.teamMembership.updateMany({
+        where: { userId: memberId, teamId, isActive: true },
+        data: { role },
+      });
     });
 
     return success(res, {
-      message: `${updated.name} is now ${role === "TEAM_ADMIN" ? "a team admin" : "a member"}.`,
-      member: updated,
+      message: `${member.name} is now ${role === "TEAM_ADMIN" ? "a team admin" : "a member"}.`,
+      member: { id: member.id, name: member.name, teamRole: role },
     });
   } catch (err) {
     console.error("Change member role error:", err);
@@ -626,18 +653,15 @@ export async function changeMemberRole(req, res) {
 // ============================================================================
 // REMOVE MEMBER (TEAM_ADMIN)
 // ============================================================================
-
 export async function removeMember(req, res) {
   try {
     const { memberId } = req.params;
     const teamId = req.teamId;
 
-    // ── Can't remove yourself ──────────────────────────
     if (memberId === req.user.id) {
       return error(res, "Use the leave endpoint to leave the team.", 400);
     }
 
-    // ── Verify member is in this team ──────────────────
     const member = await prisma.user.findFirst({
       where: { id: memberId, currentTeamId: teamId },
       select: { id: true, name: true, personalTeamId: true },
@@ -647,13 +671,21 @@ export async function removeMember(req, res) {
       return error(res, "Member not found in this team.", 404);
     }
 
-    // ── Switch member to their personal space ──────────
-    await prisma.user.update({
-      where: { id: memberId },
-      data: {
-        currentTeamId: member.personalTeamId || null,
-        teamRole: member.personalTeamId ? "TEAM_ADMIN" : null,
-      },
+    await prisma.$transaction(async (tx) => {
+      // Switch member to their personal space
+      await tx.user.update({
+        where: { id: memberId },
+        data: {
+          currentTeamId: member.personalTeamId || null,
+          teamRole: member.personalTeamId ? "TEAM_ADMIN" : null,
+        },
+      });
+
+      // Deactivate TeamMembership (soft remove — history preserved)
+      await tx.teamMembership.updateMany({
+        where: { userId: memberId, teamId, isActive: true },
+        data: { isActive: false, leftAt: new Date() },
+      });
     });
 
     return success(res, {
@@ -668,11 +700,9 @@ export async function removeMember(req, res) {
 // ============================================================================
 // REGENERATE JOIN CODE (TEAM_ADMIN)
 // ============================================================================
-
 export async function regenerateJoinCode(req, res) {
   try {
     const teamId = req.teamId;
-
     const newCode = await uniqueJoinCode();
 
     const team = await prisma.team.update({
@@ -694,23 +724,17 @@ export async function regenerateJoinCode(req, res) {
 // ============================================================================
 // LIST PENDING TEAMS (SUPER_ADMIN)
 // ============================================================================
-
 export async function listPendingTeams(req, res) {
   try {
     const teams = await prisma.team.findMany({
-      where: {
-        status: "PENDING",
-        isPersonal: false,
-      },
+      where: { status: "PENDING", isPersonal: false },
       select: {
         id: true,
         name: true,
         description: true,
         maxMembers: true,
         createdAt: true,
-        createdBy: {
-          select: { id: true, name: true, email: true },
-        },
+        createdBy: { select: { id: true, name: true, email: true } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -725,11 +749,9 @@ export async function listPendingTeams(req, res) {
 // ============================================================================
 // LIST ALL TEAMS (SUPER_ADMIN)
 // ============================================================================
-
 export async function listAllTeams(req, res) {
   try {
     const { status, page = 1, limit = 20 } = req.query;
-
     const where = { isPersonal: false };
     if (status) where.status = status;
 
@@ -745,9 +767,7 @@ export async function listAllTeams(req, res) {
           maxMembers: true,
           createdAt: true,
           approvedAt: true,
-          createdBy: {
-            select: { id: true, name: true, email: true },
-          },
+          createdBy: { select: { id: true, name: true, email: true } },
           _count: {
             select: { currentMembers: true, problems: true, solutions: true },
           },
@@ -777,7 +797,6 @@ export async function listAllTeams(req, res) {
 // ============================================================================
 // UPDATE TEAM (TEAM_ADMIN)
 // ============================================================================
-
 export async function updateTeam(req, res) {
   try {
     const teamId = req.teamId;
@@ -797,10 +816,7 @@ export async function updateTeam(req, res) {
       },
     });
 
-    return success(res, {
-      message: "Team updated.",
-      team,
-    });
+    return success(res, { message: "Team updated.", team });
   } catch (err) {
     console.error("Update team error:", err);
     return error(res, "Failed to update team.", 500);
@@ -810,7 +826,6 @@ export async function updateTeam(req, res) {
 // ============================================================================
 // GET TEAM DETAILS WITH MEMBERS (SUPER_ADMIN — any team)
 // ============================================================================
-
 export async function getTeamDetails(req, res) {
   try {
     const { teamId } = req.params;
@@ -831,15 +846,9 @@ export async function getTeamDetails(req, res) {
         createdAt: true,
         approvedAt: true,
         rejectionReason: true,
-        createdBy: {
-          select: { id: true, name: true, email: true },
-        },
+        createdBy: { select: { id: true, name: true, email: true } },
         _count: {
-          select: {
-            currentMembers: true,
-            problems: true,
-            solutions: true,
-          },
+          select: { currentMembers: true, problems: true, solutions: true },
         },
       },
     });
@@ -848,7 +857,6 @@ export async function getTeamDetails(req, res) {
       return error(res, "Team not found.", 404);
     }
 
-    // Get team members
     const members = await prisma.user.findMany({
       where: { currentTeamId: teamId },
       select: {
@@ -861,9 +869,7 @@ export async function getTeamDetails(req, res) {
         lastActiveAt: true,
         activityStatus: true,
         createdAt: true,
-        _count: {
-          select: { solutions: true },
-        },
+        _count: { select: { solutions: true } },
       },
       orderBy: [{ teamRole: "asc" }, { lastActiveAt: "desc" }],
     });
@@ -885,11 +891,6 @@ export async function getTeamDetails(req, res) {
 // ============================================================================
 // DELETE TEAM (SUPER_ADMIN)
 // ============================================================================
-
-// ============================================================================
-// DELETE TEAM (SUPER_ADMIN)
-// ============================================================================
-
 export async function deleteTeam(req, res) {
   try {
     const { teamId } = req.params;
@@ -901,11 +902,7 @@ export async function deleteTeam(req, res) {
         name: true,
         isPersonal: true,
         _count: {
-          select: {
-            currentMembers: true,
-            problems: true,
-            solutions: true,
-          },
+          select: { currentMembers: true, problems: true, solutions: true },
         },
       },
     });
@@ -913,7 +910,6 @@ export async function deleteTeam(req, res) {
     if (!team) {
       return error(res, "Team not found.", 404);
     }
-
     if (team.isPersonal) {
       return error(
         res,
@@ -922,25 +918,27 @@ export async function deleteTeam(req, res) {
       );
     }
 
-    // Switch all team members to their personal spaces
     const members = await prisma.user.findMany({
       where: { currentTeamId: teamId },
-      select: { id: true, personalTeamId: true, teamRole: true },
+      select: { id: true, personalTeamId: true },
     });
 
-    for (const member of members) {
-      await prisma.user.update({
-        where: { id: member.id },
-        data: {
-          currentTeamId: member.personalTeamId || null,
-          teamRole: member.personalTeamId ? "TEAM_ADMIN" : null,
-        },
-      });
-    }
+    await prisma.$transaction(async (tx) => {
+      // Switch all members to their personal spaces
+      for (const member of members) {
+        await tx.user.update({
+          where: { id: member.id },
+          data: {
+            currentTeamId: member.personalTeamId || null,
+            teamRole: member.personalTeamId ? "TEAM_ADMIN" : null,
+          },
+        });
+      }
 
-    // Soft delete the team (Prisma middleware converts to update { deletedAt })
-    // Problems and solutions remain in DB but are orphaned (archived)
-    await prisma.team.delete({ where: { id: teamId } });
+      // TeamMembership records are cascade-deleted when team is deleted
+      // (TeamMembership has onDelete: Cascade on Team FK)
+      await tx.team.delete({ where: { id: teamId } });
+    });
 
     return success(res, {
       message: `Team "${team.name}" deleted. ${members.length} member(s) moved to individual mode. ${team._count.problems} problems and ${team._count.solutions} solutions archived.`,
