@@ -55,6 +55,26 @@ export default function AllTeamsPage() {
         }
     }
 
+    async function handleChangeRole(memberId, teamId, newRole) {
+        setActionLoading(memberId)
+        try {
+            await api.patch(`/users/${memberId}/role`, { role: newRole })
+            // Refresh the team detail to show updated role
+            if (teamDetail?.members) {
+                setTeamDetail(prev => ({
+                    ...prev,
+                    members: prev.members.map(m =>
+                        m.id === memberId ? { ...m, teamRole: newRole } : m
+                    )
+                }))
+            }
+        } catch (err) {
+            console.error('Role change error:', err)
+        } finally {
+            setActionLoading(null)
+        }
+    }
+
     async function handleApprove(teamId) {
         setActionLoading(teamId)
         try {
@@ -224,7 +244,7 @@ export default function AllTeamsPage() {
                                                                         className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
                                                                         <div className="flex items-center gap-3">
                                                                             <div className="w-7 h-7 rounded-full bg-brand-400/20 flex items-center
-                                                                                         justify-center text-xs font-bold text-brand-300">
+                         justify-center text-xs font-bold text-brand-300">
                                                                                 {m.name?.charAt(0).toUpperCase()}
                                                                             </div>
                                                                             <div>
@@ -244,6 +264,21 @@ export default function AllTeamsPage() {
                                                                             <span className="text-[10px] text-text-disabled">
                                                                                 {m.solutionCount || 0} solved
                                                                             </span>
+                                                                            <button
+                                                                                onClick={() => handleChangeRole(
+                                                                                    m.id,
+                                                                                    expandedTeam,
+                                                                                    m.teamRole === 'TEAM_ADMIN' ? 'MEMBER' : 'TEAM_ADMIN'
+                                                                                )}
+                                                                                disabled={actionLoading === m.id}
+                                                                                className="text-[10px] font-bold text-text-disabled
+                           hover:text-brand-300 transition-colors
+                           px-2 py-1 rounded-lg hover:bg-brand-400/10
+                           border border-transparent hover:border-brand-400/20"
+                                                                            >
+                                                                                {actionLoading === m.id ? '...' :
+                                                                                    m.teamRole === 'TEAM_ADMIN' ? 'Demote' : 'Promote'}
+                                                                            </button>
                                                                         </div>
                                                                     </div>
                                                                 ))}
