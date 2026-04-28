@@ -492,7 +492,20 @@ export async function findSimilarProblems(req, res) {
 }
 
 // ============================================================================
-// AI PROBLEM GENERATION (Batch — for Team Admin)
+// AI PROBLEM GENERATION (Multi-Stage Pipeline — for Team Admin)
+// ============================================================================
+//
+// ARCHITECTURE:
+// Stage 1 — Intelligence: Gather team performance data from DB
+// Stage 2 — Selection: AI decides WHAT problems to generate (fast, cheap)
+// Stage 3 — Content: Generate rich content per problem IN PARALLEL
+//
+// Benefits over single-call approach:
+// - Never hits token limits (each call is focused)
+// - Better quality (each prompt has one job)
+// - Faster (parallel content generation)
+// - More resilient (partial failures return partial results)
+//
 // ============================================================================
 export async function generateProblemsAI(req, res) {
   try {
@@ -511,98 +524,306 @@ export async function generateProblemsAI(req, res) {
     const problemCount = Math.min(Math.max(parseInt(count) || 1, 1), 5);
     const difficultyPref = difficulty || "auto";
 
-    // ── Gather team context for intelligent generation ──
+    // ── STAGE 1: Intelligence Gathering ────────────────
+    // Understand the team deeply before generating anything.
+    // All DB queries run in parallel for speed.
     let teamContext = "";
     let existingProblems = "";
+    let difficultyInstruction = "";
 
     try {
-      // Get team's current problem titles to avoid duplicates
-      const existing = await prisma.problem.findMany({
-        where: { teamId, category, isPublished: true },
-        select: { title: true, difficulty: true },
-        take: 50,
-      });
+      const [existing, totalMembers, solutionStats, patternGaps] =
+        await Promise.all([
+          // What problems already exist (avoid duplicates)
+          prisma.problem.findMany({
+            where: { teamId, category, isPublished: true },
+            select: { title: true, difficulty: true },
+            take: 50,
+          }),
+          // Team size
+          prisma.user.count({ where: { currentTeamId: teamId } }),
+          // Performance by difficulty in this category
+          prisma.$queryRaw`
+            SELECT
+              p.difficulty,
+              COUNT(DISTINCT s."userId")::int as solvers,
+              ROUND(AVG(s.confidence), 1)::float as avg_confidence,
+              COUNT(s.id)::int as total_solutions
+            FROM solutions s
+            JOIN problems p ON s."problemId" = p.id
+            WHERE s."teamId" = ${teamId}
+              AND p.category = ${category}::"ProblemCategory"
+            GROUP BY p.difficulty
+          `,
+          // What patterns/topics have been practiced vs missing
+          prisma.solution.findMany({
+            where: { teamId, userId },
+            select: { pattern: true, confidence: true },
+            orderBy: { createdAt: "desc" },
+            take: 30,
+          }),
+        ]);
 
+      // Build existing problems list
       if (existing.length > 0) {
         existingProblems = existing
           .map((p) => `- ${p.title} (${p.difficulty})`)
           .join("\n");
       }
 
-      // Get team performance data for difficulty calibration
-      if (difficultyPref === "auto") {
-        const [totalMembers, solutionStats] = await Promise.all([
-          prisma.user.count({ where: { currentTeamId: teamId } }),
-          prisma.$queryRaw`
-            SELECT
-              p.difficulty,
-              COUNT(DISTINCT s."userId")::int as solvers,
-              ROUND(AVG(s.confidence), 1)::float as avg_confidence
-            FROM solutions s
-            JOIN problems p ON s."problemId" = p.id
-            WHERE s."teamId" = ${teamId} AND p.category = ${category}::"ProblemCategory"
-            GROUP BY p.difficulty
-          `,
-        ]);
+      // Build rich team context
+      if (solutionStats.length > 0) {
+        teamContext = `Team size: ${totalMembers} members\n`;
+        teamContext += `Experience in ${category}:\n`;
+        solutionStats.forEach((s) => {
+          const confidence =
+            s.avg_confidence >= 4
+              ? "Strong"
+              : s.avg_confidence >= 3
+                ? "Developing"
+                : "Struggling";
+          teamContext += `  ${s.difficulty}: ${s.solvers} members have solved, avg confidence ${s.avg_confidence}/5 (${confidence})\n`;
+        });
 
-        if (solutionStats.length > 0) {
-          teamContext = `Team size: ${totalMembers} members\n`;
-          teamContext += `Performance by difficulty in ${category}:\n`;
-          solutionStats.forEach((s) => {
-            teamContext += `  ${s.difficulty}: ${s.solvers} solvers, avg confidence ${s.avg_confidence}/5\n`;
-          });
-        } else {
-          teamContext = `Team size: ${totalMembers} members. No solutions in ${category} yet — this is a new category for them. Start with easier problems.`;
+        // Identify patterns they've practiced
+        const practicedPatterns = [
+          ...new Set(patternGaps.filter((s) => s.pattern).map((s) => s.pattern)),
+        ];
+        if (practicedPatterns.length > 0) {
+          teamContext += `Patterns already practiced: ${practicedPatterns.join(", ")}\n`;
         }
+
+        // Identify weak areas (low confidence solutions)
+        const weakSolutions = patternGaps.filter((s) => s.confidence <= 2);
+        if (weakSolutions.length > 0) {
+          const weakPatterns = [
+            ...new Set(
+              weakSolutions.filter((s) => s.pattern).map((s) => s.pattern),
+            ),
+          ];
+          if (weakPatterns.length > 0) {
+            teamContext += `Weak areas needing reinforcement: ${weakPatterns.join(", ")}\n`;
+          }
+        }
+      } else {
+        teamContext = `Team size: ${totalMembers} members. Fresh start in ${category} — no solutions submitted yet. Begin with accessible fundamentals.`;
+      }
+
+      // Build difficulty instruction
+      if (difficultyPref === "auto") {
+        // Determine best difficulty based on team performance
+        const hasEasy = solutionStats.find((s) => s.difficulty === "EASY");
+        const hasMedium = solutionStats.find((s) => s.difficulty === "MEDIUM");
+
+        if (!hasEasy || hasEasy.avg_confidence < 3) {
+          difficultyInstruction = `Team needs foundational work. Generate ${Math.ceil(problemCount * 0.6)} EASY and ${Math.floor(problemCount * 0.4)} MEDIUM problems.`;
+        } else if (!hasMedium || hasMedium.avg_confidence < 3) {
+          difficultyInstruction = `Team has basic skills. Generate ${Math.ceil(problemCount * 0.3)} EASY, ${Math.ceil(problemCount * 0.5)} MEDIUM, and ${Math.floor(problemCount * 0.2)} HARD problems.`;
+        } else {
+          difficultyInstruction = `Team is progressing well. Generate ${Math.ceil(problemCount * 0.2)} EASY, ${Math.ceil(problemCount * 0.4)} MEDIUM, and ${Math.floor(problemCount * 0.4)} HARD problems.`;
+        }
+      } else if (difficultyPref.startsWith("custom:")) {
+        const parts = difficultyPref.replace("custom:", "").split(",");
+        const easy = parseInt(parts[0]) || 0;
+        const medium = parseInt(parts[1]) || 0;
+        const hard = parseInt(parts[2]) || 0;
+        difficultyInstruction = `Generate exactly: ${easy} EASY, ${medium} MEDIUM, ${hard} HARD problems.`;
+      } else {
+        difficultyInstruction = `All ${problemCount} problems should be ${difficultyPref} difficulty.`;
       }
     } catch (err) {
-      console.error("Team context gathering failed:", err.message);
+      console.error("Stage 1 intelligence gathering failed:", err.message);
+      teamContext = "Context unavailable — generate balanced problems.";
+      difficultyInstruction =
+        difficultyPref === "auto"
+          ? "Mix of EASY, MEDIUM, and HARD."
+          : `${difficultyPref} difficulty.`;
     }
-
-    // ── Generate problems via AI ─────────────────────────
-    const { problemGenerationPrompt } =
-      await import("../services/ai.prompts.js");
-    const { system, user } = problemGenerationPrompt({
-      category,
-      count: problemCount,
-      difficulty: difficultyPref,
-      targetCompany,
-      focusAreas,
-      teamContext,
-      existingProblems,
-    });
 
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.8,
-      response_format: { type: "json_object" },
-      max_tokens: 4000,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+    // ── STAGE 2: Problem Selection ──────────────────────
+    // Fast AI call to decide WHAT to generate.
+    // Small output = cheap + fast + reliable.
+    const { problemSelectionPrompt, problemContentGenerationPrompt } =
+      await import("../services/ai.prompts.js");
+
+    const selectionPromptData = {
+      category,
+      count: problemCount,
+      difficulty: difficultyPref,
+      difficultyInstruction,
+      teamContext,
+      existingProblems,
+      targetCompany,
+      focusAreas,
+    };
+
+    const { system: selSystem, user: selUser } =
+      problemSelectionPrompt(selectionPromptData);
+
+    let selections = [];
+    let learningPath = "";
+
+    try {
+      const selectionResponse = await openai.chat.completions.create({
+        model: AI_MODEL_FAST,
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        max_tokens: 1200, // Small — just titles + platforms + URLs
+        messages: [
+          { role: "system", content: selSystem },
+          { role: "user", content: selUser },
+        ],
+      });
+
+      const selectionResult = JSON.parse(
+        selectionResponse.choices[0].message.content,
+      );
+      selections = selectionResult.selections || [];
+      learningPath = selectionResult.learningPath || "";
+    } catch (err) {
+      console.error("Stage 2 selection failed:", err.message);
+      // Fall back to legacy single-call approach
+      const { problemGenerationPrompt } = await import(
+        "../services/ai.prompts.js"
+      );
+      const { system, user } = problemGenerationPrompt({
+        category,
+        count: problemCount,
+        difficulty: difficultyPref,
+        targetCompany,
+        focusAreas,
+        teamContext,
+        existingProblems,
+      });
+
+      const maxTokens = Math.min(problemCount * 1800, 8000);
+      const fallbackResponse = await openai.chat.completions.create({
+        model: AI_MODEL_FAST,
+        temperature: 0.8,
+        response_format: { type: "json_object" },
+        max_tokens: maxTokens,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      });
+
+      const fallbackResult = JSON.parse(
+        fallbackResponse.choices[0].message.content,
+      );
+
+      if (!fallbackResult.problems?.length) {
+        return error(res, "AI failed to generate problems.", 500);
+      }
+
+      return success(res, {
+        problems: fallbackResult.problems,
+        reasoning: fallbackResult.reasoning,
+        count: fallbackResult.problems.length,
+        category,
+        difficulty: difficultyPref,
+        pipeline: "legacy",
+      });
+    }
+
+    if (selections.length === 0) {
+      return error(res, "AI failed to select problems.", 500);
+    }
+
+    // ── STAGE 3: Content Generation (PARALLEL) ──────────
+    // Generate rich educational content for each problem simultaneously.
+    // Each call is focused on ONE problem — no token competition.
+    // If a call fails, that problem is skipped (partial success is better than total failure).
+    const contentPromises = selections.map(async (selection) => {
+      try {
+        const { system: contentSystem, user: contentUser } =
+          problemContentGenerationPrompt({
+            title: selection.title,
+            category,
+            difficulty: selection.difficulty,
+            platform: selection.platform,
+            url: selection.url,
+            pattern: selection.pattern,
+            targetCompany,
+          });
+
+        const contentResponse = await openai.chat.completions.create({
+          model: AI_MODEL_FAST,
+          temperature: 0.75,
+          response_format: { type: "json_object" },
+          max_tokens: 2000, // Rich content for ONE problem
+          messages: [
+            { role: "system", content: contentSystem },
+            { role: "user", content: contentUser },
+          ],
+        });
+
+        const content = JSON.parse(contentResponse.choices[0].message.content);
+
+        // Merge selection metadata with generated content
+        return {
+          title: selection.title,
+          difficulty: selection.difficulty,
+          category,
+          source: selection.platform,
+          sourceUrl: selection.url,
+          description: content.description || "",
+          realWorldContext: content.realWorldContext || "",
+          useCases: content.useCases || "",
+          adminNotes: content.adminNotes || "",
+          tags: content.tags || [],
+          companyTags: content.companyTags || [],
+          followUpQuestions: content.followUpQuestions || [],
+          whySelected: selection.whySelected,
+        };
+      } catch (err) {
+        console.error(
+          `Stage 3 content generation failed for "${selection.title}":`,
+          err.message,
+        );
+        // Return partial problem with basic info — better than nothing
+        return {
+          title: selection.title,
+          difficulty: selection.difficulty,
+          category,
+          source: selection.platform,
+          sourceUrl: selection.url,
+          description: `Problem: ${selection.title}\nSee ${selection.url} for full description.`,
+          realWorldContext: "",
+          useCases: "",
+          adminNotes: `Pattern: ${selection.pattern}. ${selection.whySelected}`,
+          tags: [selection.pattern],
+          companyTags: [],
+          followUpQuestions: [],
+          whySelected: selection.whySelected,
+          contentGenerationFailed: true,
+        };
+      }
     });
 
-    let result;
-    try {
-      result = JSON.parse(response.choices[0].message.content);
-    } catch {
-      return error(res, "Failed to parse AI response.", 500);
-    }
+    // Wait for all parallel content generations
+    const problems = await Promise.all(contentPromises);
 
-    if (!result.problems || !Array.isArray(result.problems)) {
-      return error(res, "AI failed to generate problems.", 500);
-    }
+    const successCount = problems.filter((p) => !p.contentGenerationFailed).length;
+    const reasoning = learningPath
+      ? `${learningPath} (${successCount}/${problems.length} problems fully generated)`
+      : `Generated ${successCount}/${problems.length} problems for ${category}`;
 
     return success(res, {
-      problems: result.problems,
-      reasoning: result.reasoning,
-      count: result.problems.length,
+      problems,
+      reasoning,
+      count: problems.length,
       category,
       difficulty: difficultyPref,
+      pipeline: "multi-stage",
+      stages: {
+        intelligenceGathered: !!teamContext,
+        problemsSelected: selections.length,
+        contentGenerated: successCount,
+      },
     });
   } catch (err) {
     console.error("AI problem generation error:", err);

@@ -303,112 +303,236 @@ Identify patterns in what they got wrong and give specific study advice.`;
   return { system, user };
 }
 
-// ── AI Problem Generation (Batch) ─────────────────────
-export function problemGenerationPrompt(data) {
-  const categoryInstructions = {
-    CODING: `Generate coding/algorithm interview problems.
-For each problem:
-- Find a REAL problem from popular platforms (LeetCode, GeeksForGeeks, HackerRank, CodeChef, InterviewBit)
-- Include the EXACT URL to the problem on that platform
-- Include the full problem description, constraints, and examples
-- Include company tags (which companies ask this problem)
-- Include relevant algorithm/data structure tags
-- The problem should be solvable in 20-45 minutes
-- Include 3 progressive follow-up questions (Easy → Medium → Hard)`,
+// ── AI Problem Generation — Stage 1: Problem Selection ─────────
+// Fast call to decide WHAT problems to generate before generating content.
+export function problemSelectionPrompt(data) {
+  const platformGuide = {
+    CODING: `
+Available platforms with their strengths:
+- LEETCODE: Best for DSA, has company tags, most popular. URL format: https://leetcode.com/problems/[slug]/
+- GFG: Great for Indian tech companies (Flipkart, Paytm, Zomato), theory + coding. URL format: https://www.geeksforgeeks.org/problems/[slug]/
+- HACKERRANK: Good for data structures, string manipulation. URL format: https://www.hackerrank.com/challenges/[slug]/problem
+- INTERVIEWBIT: Great for product companies, structured paths. URL format: https://www.interviewbit.com/problems/[slug]/
+- CODECHEF: Competitive programming, advanced algorithms. URL format: https://www.codechef.com/problems/[slug]
 
-    SYSTEM_DESIGN: `Generate system design interview problems.
-For each problem:
-- Create a realistic system to design (e.g., "Design WhatsApp", "Design URL Shortener")
-- Include scale requirements (users, QPS, storage)
-- Include specific features to cover
-- Include constraints and non-functional requirements
-- Include 3 progressive follow-up questions about scaling, trade-offs, and edge cases`,
-
-    BEHAVIORAL: `Generate behavioral interview questions.
-For each problem:
-- Create a question that tests specific leadership/teamwork competencies
-- Include context about what the interviewer is really assessing
-- Include guidance on STAR format for answering
-- Include 3 follow-up probing questions an interviewer might ask
-- Cover different competencies: leadership, conflict resolution, failure handling, teamwork, initiative`,
-
-    CS_FUNDAMENTALS: `Generate CS fundamentals interview questions.
-For each problem:
-- Cover core CS topics: Operating Systems, Computer Networks, DBMS, OOP
-- Include conceptual questions that test deep understanding, not just memorization
-- Include real-world applications of the concept
-- Include common misconceptions to watch out for
-- Include 3 progressive follow-up questions`,
-
-    HR: `Generate HR round interview questions.
-For each problem:
-- Create questions about motivation, career goals, company fit, salary expectations, work style
-- Include guidance on what makes a strong authentic answer
-- Include tips for company-specific research
-- Include 3 follow-up questions that probe deeper`,
-
-    SQL: `Generate SQL interview problems.
-For each problem:
-- Create a realistic database scenario with table schemas
-- Include the exact table structure (column names, types, relationships)
-- Include sample data for clarity
-- Include the query requirement (what to return)
-- Include 3 progressive follow-up questions (basic → optimization → complex joins)`,
-  };
-
-  let difficultyInstruction;
-  if (data.difficulty === "auto") {
-    difficultyInstruction = `Analyze the team context below and choose appropriate difficulty levels.
-If the team is new or has low solve rates, lean toward EASY and MEDIUM.
-If the team is experienced, include more MEDIUM and HARD.
-Mix difficulties for variety.`;
-  } else if (data.difficulty.startsWith("custom:")) {
-    const parts = data.difficulty.replace("custom:", "").split(",");
-    const easy = parseInt(parts[0]) || 0;
-    const medium = parseInt(parts[1]) || 0;
-    const hard = parseInt(parts[2]) || 0;
-    difficultyInstruction = `Generate exactly this difficulty mix:
-- ${easy} EASY problem${easy !== 1 ? "s" : ""}
-- ${medium} MEDIUM problem${medium !== 1 ? "s" : ""}
-- ${hard} HARD problem${hard !== 1 ? "s" : ""}
-Total: ${easy + medium + hard} problems. Follow this distribution exactly.`;
-  } else {
-    difficultyInstruction = `All problems should be ${data.difficulty} difficulty.`;
+PLATFORM ROTATION RULE: Spread problems across different platforms. Do not use the same platform twice in a row.`,
+    SQL: `
+Available platforms:
+- LEETCODE: Best SQL problems with real scenarios
+- HACKERRANK: Good SQL practice
+- GFG: Good for SQL theory + practice`,
   }
 
-  const system = `You are an expert interview preparation curriculum designer.
-Your job is to generate high-quality interview problems that progressively build skills.
+  const categoryDepth = {
+    CODING: `Focus on algorithm patterns: Array, Hashing, Two Pointers, Sliding Window, Binary Search, Linked List, Trees, Graphs, Dynamic Programming, Greedy, Backtracking, Heap, Tries`,
+    SYSTEM_DESIGN: `Focus on real systems: URL Shortener, Chat App, Feed System, Search Engine, Ride Sharing, Video Streaming, Payment System, Notification Service, Rate Limiter, Distributed Cache`,
+    BEHAVIORAL: `Cover competencies: Leadership, Conflict Resolution, Failure & Learning, Initiative, Teamwork, Ambiguity, Customer Focus, Time Management, Cross-team Collaboration, Technical Disagreement`,
+    CS_FUNDAMENTALS: `Cover topics: Operating Systems (Process Management, Memory, Concurrency), Networking (TCP/IP, HTTP, DNS, Load Balancing), DBMS (Indexing, Transactions, Normalization), OOP (SOLID, Design Patterns)`,
+    HR: `Cover scenarios: Why this company, Career goals, Strengths/Weaknesses, Salary expectations, Work style, Culture fit, 5-year plan, Remote work, Conflict with manager`,
+    SQL: `Cover patterns: JOINs, Subqueries, Window Functions (ROW_NUMBER, RANK, LAG, LEAD), CTEs, Aggregations, HAVING, EXISTS, Recursive queries, Query optimization`,
+  }
+
+  const system = `You are a curriculum designer for an interview preparation platform.
+Your job is to SELECT which problems to generate — not write the content yet.
+
+${platformGuide[data.category] || ''}
+
+TEAM INTELLIGENCE:
+${data.teamContext || 'New team — no data yet. Start with fundamentals.'}
+
+AVOID THESE (already in the team):
+${data.existingProblems || 'None yet — this is a fresh start.'}
+
+DIFFICULTY REQUIREMENT:
+${data.difficultyInstruction}
+
+CATEGORY FOCUS (${data.category}):
+${categoryDepth[data.category] || ''}
+
+${data.targetCompany ? `TARGET COMPANY STYLE: ${data.targetCompany} — select problems that this company is known for asking.` : ''}
+${data.focusAreas ? `ADMIN FOCUS REQUEST: ${data.focusAreas} — prioritize problems in these areas.` : ''}
+
+Return ONLY a JSON list of problem selections — no content yet:
+{
+  "selections": [
+    {
+      "title": "exact problem title as it appears on the platform",
+      "difficulty": "EASY" | "MEDIUM" | "HARD",
+      "platform": "LEETCODE" | "GFG" | "HACKERRANK" | "INTERVIEWBIT" | "CODECHEF" | "OTHER",
+      "url": "exact working URL to this problem",
+      "pattern": "primary algorithm pattern or topic area",
+      "whySelected": "one sentence: why this problem for this team right now"
+    }
+  ],
+  "learningPath": "one sentence describing how these problems build on each other"
+}`
+
+  const user = `Select ${data.count} ${data.category.replace('_', ' ').toLowerCase()} problem${data.count > 1 ? 's' : ''} for this team.
+Count: ${data.count}
+Category: ${data.category}
+Difficulty requirement: ${data.difficulty}`
+
+  return { system, user }
+}
+
+// ── AI Problem Generation — Stage 2: Rich Content ──────────────
+// One focused call per problem. Gets full, high-quality content.
+export function problemContentGenerationPrompt(data) {
+  const categoryInstructions = {
+    CODING: `This is a coding/algorithm problem.
+Generate content that teaches the PATTERN, not just the solution.
+Admin notes must include:
+  1. Brute force approach with complexity
+  2. Optimal approach with complexity and WHY it's better
+  3. The key insight that unlocks the solution
+  4. 3 most common mistakes candidates make
+  5. How to explain complexity in an interview`,
+
+    SYSTEM_DESIGN: `This is a system design problem.
+Generate content that teaches distributed systems thinking.
+Admin notes must include:
+  1. Functional requirements to clarify
+  2. Non-functional requirements (scale, latency, availability)
+  3. High-level architecture with key components
+  4. The most important trade-offs to discuss
+  5. What makes a Strong vs Weak answer`,
+
+    BEHAVIORAL: `This is a behavioral question.
+Generate content that teaches STAR storytelling.
+Admin notes must include:
+  1. The core competency being tested
+  2. What a Strong/Weak answer looks like
+  3. Red flags interviewers watch for
+  4. How to quantify impact
+  5. Common mistakes candidates make`,
+
+    CS_FUNDAMENTALS: `This is a CS fundamentals question.
+Generate content that builds deep conceptual understanding.
+Admin notes must include:
+  1. The core concept explained simply
+  2. Where this concept appears in real systems
+  3. Common misconceptions to address
+  4. How deep to go in an interview
+  5. The "gotcha" follow-up most interviewers ask`,
+
+    HR: `This is an HR/behavioral question.
+Generate content that teaches authentic, specific answering.
+Admin notes must include:
+  1. What the interviewer is really assessing
+  2. The ideal answer structure
+  3. How to make the answer company-specific
+  4. What generic answers to avoid
+  5. How to recover if nervous`,
+
+    SQL: `This is a SQL problem.
+Generate content that teaches query thinking and optimization.
+Admin notes must include:
+  1. Schema analysis approach
+  2. Step-by-step query building
+  3. Alternative approaches (subquery vs JOIN vs CTE)
+  4. Indexing strategy that would help
+  5. Edge cases (NULLs, duplicates, empty tables)`,
+  }
+
+  const system = `You are a senior engineering interview coach creating educational content for a specific problem.
+Your goal: a candidate who reads this content should deeply understand the problem, the approach, and how to explain it in an interview.
+
+PROBLEM TO GENERATE CONTENT FOR:
+Title: ${data.title}
+Category: ${data.category}
+Difficulty: ${data.difficulty}
+Platform: ${data.platform}
+URL: ${data.url}
+Pattern/Topic: ${data.pattern}
 
 ${categoryInstructions[data.category] || categoryInstructions.CODING}
 
+${data.targetCompany ? `COMPANY CONTEXT: This problem is often asked at ${data.targetCompany}. Tailor the teaching notes to that company's interview style.` : ''}
+
+Return rich educational content as JSON:
+{
+  "description": "Complete problem description — include the problem statement, input/output format, constraints, and 2 worked examples. For non-coding: include the interview question and what context/scenario to use.",
+  "realWorldContext": "2-3 sentences: where does this exact pattern/concept appear in production systems? Be specific — name real companies or systems (e.g., 'Google uses this in their search index', 'Redis uses this for LRU cache eviction').",
+  "useCases": "5 specific real-world use cases, each on a new line. Format: 'Company/System — what they use this for'",
+  "adminNotes": "Comprehensive teaching guide following the category-specific structure above. Use numbered lists and be specific. This is what the admin sees to coach team members.",
+  "tags": ["tag1", "tag2", "tag3"],
+  "companyTags": ["company1", "company2"],
+  "followUpQuestions": [
+    {
+      "question": "An EASY follow-up that tests basic understanding",
+      "difficulty": "EASY",
+      "hint": "A subtle nudge toward the answer without giving it away"
+    },
+    {
+      "question": "A MEDIUM follow-up that requires applying the concept in a new context",
+      "difficulty": "MEDIUM",
+      "hint": "A hint that points toward the key insight"
+    },
+    {
+      "question": "A HARD follow-up that tests mastery and edge case thinking",
+      "difficulty": "HARD",
+      "hint": "A hint that opens the right mental model"
+    }
+  ]
+}`
+
+  const user = `Generate comprehensive educational content for: "${data.title}" (${data.difficulty} ${data.category})`
+
+  return { system, user }
+}
+
+// ── AI Problem Generation (Batch) — Legacy wrapper ─────────────
+// Kept for backward compatibility. New code uses the two-stage approach.
+export function problemGenerationPrompt(data) {
+  const platforms = ['LEETCODE', 'GFG', 'HACKERRANK', 'INTERVIEWBIT', 'CODECHEF']
+
+  let difficultyInstruction
+  if (data.difficulty === 'auto') {
+    difficultyInstruction = `Analyze the team context below and choose appropriate difficulty levels.
+If the team is new or has low solve rates, lean toward EASY and MEDIUM.
+If the team is experienced, include more MEDIUM and HARD.`
+  } else if (data.difficulty.startsWith('custom:')) {
+    const parts = data.difficulty.replace('custom:', '').split(',')
+    const easy = parseInt(parts[0]) || 0
+    const medium = parseInt(parts[1]) || 0
+    const hard = parseInt(parts[2]) || 0
+    difficultyInstruction = `Generate exactly: ${easy} EASY, ${medium} MEDIUM, ${hard} HARD problems.`
+  } else {
+    difficultyInstruction = `All problems should be ${data.difficulty} difficulty.`
+  }
+
+  const suggestedPlatforms = data.count > 1
+    ? `Distribute across these platforms in order: ${platforms.slice(0, data.count).join(' → ')}`
+    : 'Use any platform — prefer variety.'
+
+  const system = `You are an expert interview preparation curriculum designer.
+Generate high-quality ${data.category} interview problems.
+
+${data.category === 'CODING' || data.category === 'SQL' ? `PLATFORM DIVERSITY: ${suggestedPlatforms}
+Always include exact working URLs. Never use the same platform twice.` : ''}
+
 ${difficultyInstruction}
 
-CRITICAL RULES:
-1. Every problem must be unique — do not repeat problems the team already has
-2. For CODING: always include a real, working URL to the problem on the source platform
-3. Problems should build on each other — if generating multiple, create a logical progression
-4. Include real-world context explaining where this pattern/concept appears in production
-5. Admin notes should include the expected approach, common mistakes, and key insight
-6. Tags should be specific and useful for filtering
+TEAM CONTEXT: ${data.teamContext || 'New team'}
+AVOID DUPLICATES: ${data.existingProblems || 'None'}
+${data.targetCompany ? `TARGET: ${data.targetCompany} interview style` : ''}
+${data.focusAreas ? `FOCUS: ${data.focusAreas}` : ''}
 
-${data.teamContext ? `TEAM CONTEXT:\n${data.teamContext}` : ""}
-${data.existingProblems ? `PROBLEMS ALREADY IN THE TEAM (do not repeat):\n${data.existingProblems}` : ""}
-
-RESPOND WITH THIS EXACT JSON FORMAT:
+RESPOND WITH EXACT JSON:
 {
   "problems": [
     {
-      "title": "string — clear, concise problem title",
-      "description": "string — full problem description with examples and constraints",
+      "title": "string",
+      "description": "string — full problem with examples and constraints",
       "difficulty": "EASY" | "MEDIUM" | "HARD",
       "category": "${data.category}",
       "source": "LEETCODE" | "GFG" | "HACKERRANK" | "CODECHEF" | "INTERVIEWBIT" | "OTHER",
-      "sourceUrl": "string — exact URL to the problem (for CODING) or empty string",
-      "tags": ["string", "string", ...],
-      "companyTags": ["string", "string", ...],
-      "realWorldContext": "string — where this appears in real software/interviews",
-      "useCases": "string — 3-5 specific use cases, newline separated",
-      "adminNotes": "string — teaching notes: expected approach, edge cases, key insight, common mistakes",
+      "sourceUrl": "string — exact URL or empty",
+      "tags": ["string"],
+      "companyTags": ["string"],
+      "realWorldContext": "string",
+      "useCases": "string — newline separated",
+      "adminNotes": "string — teaching notes with approaches, edge cases, key insight",
       "followUpQuestions": [
         { "question": "string", "difficulty": "EASY", "hint": "string" },
         { "question": "string", "difficulty": "MEDIUM", "hint": "string" },
@@ -416,16 +540,11 @@ RESPOND WITH THIS EXACT JSON FORMAT:
       ]
     }
   ],
-  "reasoning": "string — brief explanation of why these problems were chosen and how they build on each other"
-}`;
+  "reasoning": "string"
+}`
 
-  const user = `Generate ${data.count} ${data.category.replace("_", " ").toLowerCase()} interview problem${data.count > 1 ? "s" : ""}.
+  const user = `Generate ${data.count} ${data.category.replace('_', ' ').toLowerCase()} interview problem${data.count > 1 ? 's' : ''}.
+Count: ${data.count} | Difficulty: ${data.difficulty}`
 
-Category: ${data.category}
-Count: ${data.count}
-Difficulty: ${data.difficulty}
-${data.targetCompany ? `Target company style: ${data.targetCompany}` : ""}
-${data.focusAreas ? `Focus areas: ${data.focusAreas}` : ""}`;
-
-  return { system, user };
+  return { system, user }
 }
