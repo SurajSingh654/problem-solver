@@ -140,39 +140,44 @@ export default function Sidebar() {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -4 }}
                                 className="mt-2 bg-surface-0 border border-border-default rounded-xl
-                             shadow-lg overflow-hidden"
+             shadow-lg overflow-hidden"
                             >
-                                {/* Personal space option */}
-                                {user.personalTeamId && user.currentTeamId !== user.personalTeamId && (
-                                    <button
-                                        onClick={() => handleSwitch(user.personalTeamId)}
-                                        disabled={switching}
-                                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left
-                                 hover:bg-surface-2 transition-colors"
-                                    >
-                                        <span className="text-sm">🧠</span>
-                                        <span className="text-xs text-text-secondary">My Practice</span>
-                                    </button>
-                                )}
+                                {/* All memberships — personal + teams */}
+                                {(user.memberships || []).map(({ team, role }) => {
+                                    const isCurrent = user.currentTeamId === team.id
+                                    if (isCurrent) return null // Don't show what you're already in
 
-                                {/* Current team (if in personal mode and has a team) */}
-                                {isPersonal && user.currentTeamId !== user.personalTeamId && (
-                                    <button
-                                        onClick={() => handleSwitch(user.currentTeamId)}
-                                        disabled={switching}
-                                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left
-                                 hover:bg-surface-2 transition-colors"
-                                    >
-                                        <span className="text-sm">👥</span>
-                                        <span className="text-xs text-text-secondary">{user.currentTeam?.name}</span>
-                                    </button>
-                                )}
+                                    return (
+                                        <button
+                                            key={team.id}
+                                            onClick={() => handleSwitch(team.id)}
+                                            disabled={switching}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-left
+                         hover:bg-surface-2 transition-colors"
+                                        >
+                                            <span className="text-sm">
+                                                {team.isPersonal ? '🧠' : '👥'}
+                                            </span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-semibold text-text-secondary truncate">
+                                                    {team.isPersonal ? 'My Practice' : team.name}
+                                                </p>
+                                                <p className="text-[10px] text-text-disabled">
+                                                    {team.isPersonal
+                                                        ? 'Individual mode'
+                                                        : role === 'TEAM_ADMIN' ? 'Admin' : 'Member'
+                                                    }
+                                                </p>
+                                            </div>
+                                        </button>
+                                    )
+                                })}
 
                                 {/* Team management link */}
                                 <button
                                     onClick={() => { setShowSwitcher(false); navigate('/team') }}
                                     className="w-full flex items-center gap-3 px-3 py-2.5 text-left
-                               hover:bg-surface-2 transition-colors border-t border-border-subtle"
+                   hover:bg-surface-2 transition-colors border-t border-border-subtle"
                                 >
                                     <span className="text-sm">⚙️</span>
                                     <span className="text-xs text-text-tertiary">Manage Teams</span>

@@ -18,16 +18,18 @@
 //    - { mode: 'team', teamName: 'My Team' } → creates new team (PENDING)
 //
 // 4. Personal team creation: Uses a transaction to atomically create
-//    the team and update the user. The team is marked isPersonal=true
-//    and status=ACTIVE (no approval needed for personal spaces).
+//    the team, update the user, AND create a TeamMembership record.
+//    The team is marked isPersonal=true and status=ACTIVE.
 //
-// 5. Verification codes: 6-digit numeric, 15-minute expiry.
-//    Stored hashed? No — they're short-lived and brute-force
-//    protected by rate limiting (the 6-digit space = 1M possibilities,
-//    15 min expiry makes brute force impractical).
+// 5. TeamMembership is the authoritative source for team access.
+//    User.teamRole is a denormalized cache for the current team only.
+//    switchTeam reads role from TeamMembership, not from User.
+//
+// 6. buildUserResponse: Every auth response includes memberships[]
+//    so the client always has the complete picture of all teams
+//    the user belongs to, regardless of current context.
 //
 // ============================================================================
-
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import prisma from "../lib/prisma.js";
@@ -44,6 +46,60 @@ import {
 } from "../config/env.js";
 import { success, error } from "../utils/response.js";
 
+// ── Helper: build complete user response with memberships ─────
+// Called by login, getMe, verifyEmail, switchTeam, completeOnboarding.
+// Always returns user with memberships[] for the sidebar switcher.
+async function buildUserResponse(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      avatarUrl: true,
+      globalRole: true,
+      currentTeamId: true,
+      teamRole: true,
+      personalTeamId: true,
+      onboardingComplete: true,
+      mustChangePassword: true,
+      isVerified: true,
+      targetCompany: true,
+      interviewDate: true,
+      preferredLanguage: true,
+      streak: true,
+      lastSolvedAt: true,
+      activityStatus: true,
+      aiProblemConfig: true,
+      createdAt: true,
+      currentTeam: {
+        select: { id: true, name: true, isPersonal: true, status: true },
+      },
+      personalTeam: {
+        select: { id: true, name: true },
+      },
+      // All active team memberships for the sidebar switcher
+      memberships: {
+        where: { isActive: true },
+        select: {
+          role: true,
+          joinedAt: true,
+          team: {
+            select: {
+              id: true,
+              name: true,
+              isPersonal: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: { joinedAt: "asc" },
+      },
+    },
+  });
+  return user;
+}
+
 // ── Helper: generate 6-digit code ────────────────────────────
 function generateCode() {
   return crypto.randomInt(100000, 999999).toString();
@@ -51,7 +107,7 @@ function generateCode() {
 
 // ── Helper: generate join code ───────────────────────────────
 function generateJoinCode(length = 8) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No I/O/0/1 to avoid confusion
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
   const bytes = crypto.randomBytes(length);
   for (let i = 0; i < length; i++) {
@@ -68,29 +124,22 @@ function codeExpiry() {
 // ============================================================================
 // REGISTER
 // ============================================================================
-
 export async function register(req, res) {
   try {
     const { email, password, name } = req.body;
 
-    // ── Check existing user ────────────────────────────
     const existing = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
-
     if (existing) {
       return error(res, "An account with this email already exists.", 409);
     }
 
-    // ── Hash password ──────────────────────────────────
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
-
-    // ── Generate verification code ─────────────────────
     const code = generateCode();
     console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
 
-    // ── Create user ────────────────────────────────────
     const user = await prisma.user.create({
       data: {
         email,
@@ -111,7 +160,6 @@ export async function register(req, res) {
       },
     });
 
-    // ── Send verification email (non-blocking) ─────────
     sendVerificationEmail(user.email, user.name, code).catch((err) => {
       console.error("Failed to send verification email:", err.message);
     });
@@ -134,7 +182,6 @@ export async function register(req, res) {
 // ============================================================================
 // VERIFY EMAIL
 // ============================================================================
-
 export async function verifyEmail(req, res) {
   try {
     const { email, code } = req.body;
@@ -152,15 +199,12 @@ export async function verifyEmail(req, res) {
     if (!user) {
       return error(res, "No account found with this email.", 404);
     }
-
     if (user.isVerified) {
       return error(res, "Email is already verified.", 400);
     }
-
     if (!user.verificationCode || user.verificationCode !== code) {
       return error(res, "Invalid verification code.", 400);
     }
-
     if (!user.verificationExpiry || new Date() > user.verificationExpiry) {
       return error(
         res,
@@ -169,8 +213,8 @@ export async function verifyEmail(req, res) {
       );
     }
 
-    // ── Mark verified + auto-login ─────────────────────
-    const verifiedUser = await prisma.user.update({
+    // Mark verified
+    await prisma.user.update({
       where: { id: user.id },
       data: {
         isVerified: true,
@@ -179,40 +223,16 @@ export async function verifyEmail(req, res) {
         lastActiveAt: new Date(),
         activityStatus: "ACTIVE",
       },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        globalRole: true,
-        currentTeamId: true,
-        teamRole: true,
-        personalTeamId: true,
-        isVerified: true,
-        onboardingComplete: true,
-        mustChangePassword: true,
-        avatarUrl: true,
-      },
     });
 
-    // Generate token so user is immediately authenticated
-    const token = generateToken(verifiedUser);
+    // Build complete user with memberships (token uses fullUser)
+    const fullUser = await buildUserResponse(user.id);
+    const token = generateToken(fullUser);
 
     return success(res, {
       message: "Email verified successfully.",
       token,
-      user: {
-        id: verifiedUser.id,
-        email: verifiedUser.email,
-        name: verifiedUser.name,
-        globalRole: verifiedUser.globalRole,
-        currentTeamId: verifiedUser.currentTeamId,
-        teamRole: verifiedUser.teamRole,
-        personalTeamId: verifiedUser.personalTeamId,
-        isVerified: verifiedUser.isVerified,
-        onboardingComplete: verifiedUser.onboardingComplete,
-        mustChangePassword: verifiedUser.mustChangePassword,
-        avatarUrl: verifiedUser.avatarUrl,
-      },
+      user: fullUser,
     });
   } catch (err) {
     console.error("Email verification error:", err);
@@ -223,7 +243,6 @@ export async function verifyEmail(req, res) {
 // ============================================================================
 // RESEND VERIFICATION
 // ============================================================================
-
 export async function resendVerification(req, res) {
   try {
     const { email } = req.body;
@@ -234,12 +253,10 @@ export async function resendVerification(req, res) {
     });
 
     if (!user) {
-      // Don't reveal if email exists
       return success(res, {
         message: "If an account exists, a verification code has been sent.",
       });
     }
-
     if (user.isVerified) {
       return error(res, "Email is already verified.", 400);
     }
@@ -271,45 +288,26 @@ export async function resendVerification(req, res) {
 // ============================================================================
 // LOGIN
 // ============================================================================
-
 export async function login(req, res) {
   try {
     const { email, password } = req.body;
 
-    // ── Find user (include team context for JWT) ───────
-    const user = await prisma.user.findUnique({
+    // Fetch credentials only — avoid loading full user before auth check
+    const credentials = await prisma.user.findUnique({
       where: { email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        password: true,
-        globalRole: true,
-        currentTeamId: true,
-        teamRole: true,
-        currentTeam: {
-          select: { id: true, name: true, isPersonal: true },
-        },
-        personalTeamId: true,
-        isVerified: true,
-        onboardingComplete: true,
-        mustChangePassword: true,
-        avatarUrl: true,
-      },
+      select: { id: true, password: true, isVerified: true },
     });
 
-    if (!user) {
+    if (!credentials) {
       return error(res, "Invalid email or password.", 401);
     }
 
-    // ── Verify password ────────────────────────────────
-    const valid = await bcrypt.compare(password, user.password);
+    const valid = await bcrypt.compare(password, credentials.password);
     if (!valid) {
       return error(res, "Invalid email or password.", 401);
     }
 
-    // ── Check verification ─────────────────────────────
-    if (!user.isVerified) {
+    if (!credentials.isVerified) {
       return error(
         res,
         "Please verify your email before logging in.",
@@ -318,34 +316,23 @@ export async function login(req, res) {
       );
     }
 
-    // ── Generate token ─────────────────────────────────
+    // Build complete user response with memberships
+    const user = await buildUserResponse(credentials.id);
+    if (!user) {
+      return error(res, "User not found.", 404);
+    }
+
     const token = generateToken(user);
 
-    // ── Update last active ─────────────────────────────
+    // Fire-and-forget activity update
     prisma.user
       .update({
-        where: { id: user.id },
+        where: { id: credentials.id },
         data: { lastActiveAt: new Date(), activityStatus: "ACTIVE" },
       })
       .catch(() => {});
 
-    return success(res, {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-        globalRole: user.globalRole,
-        currentTeamId: user.currentTeamId,
-        teamRole: user.teamRole,
-        currentTeam: user.currentTeam || null,
-        personalTeamId: user.personalTeamId,
-        isVerified: user.isVerified,
-        onboardingComplete: user.onboardingComplete,
-        mustChangePassword: user.mustChangePassword,
-      },
-    });
+    return success(res, { token, user });
   } catch (err) {
     console.error("Login error:", err);
     return error(res, "Login failed. Please try again.", 500);
@@ -355,13 +342,11 @@ export async function login(req, res) {
 // ============================================================================
 // ONBOARDING — Choose team or individual mode
 // ============================================================================
-
 export async function completeOnboarding(req, res) {
   try {
     const { mode, joinCode, teamName, teamDescription } = req.body;
     const userId = req.user.id;
 
-    // ── Verify user exists and hasn't onboarded ────────
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, onboardingComplete: true },
@@ -370,14 +355,13 @@ export async function completeOnboarding(req, res) {
     if (!user) {
       return error(res, "User not found.", 404);
     }
-
     if (user.onboardingComplete) {
       return error(res, "Onboarding already completed.", 400);
     }
 
     // ── INDIVIDUAL MODE ────────────────────────────────
     if (mode === "individual") {
-      const result = await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx) => {
         // Create personal team
         const personalTeam = await tx.team.create({
           data: {
@@ -391,41 +375,39 @@ export async function completeOnboarding(req, res) {
           },
         });
 
-        // Update user with personal team + mark onboarded
-        const updatedUser = await tx.user.update({
+        // Update user
+        await tx.user.update({
           where: { id: userId },
           data: {
             personalTeamId: personalTeam.id,
             currentTeamId: personalTeam.id,
-            teamRole: "TEAM_ADMIN", // Admin of own personal space
-            onboardingComplete: true,
-          },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            globalRole: true,
-            currentTeamId: true,
-            teamRole: true,
-            personalTeamId: true,
+            teamRole: "TEAM_ADMIN",
             onboardingComplete: true,
           },
         });
 
-        return updatedUser;
+        // Create TeamMembership record for personal space
+        await tx.teamMembership.create({
+          data: {
+            userId,
+            teamId: personalTeam.id,
+            role: "TEAM_ADMIN",
+            isActive: true,
+          },
+        });
       });
 
-      // Issue new token with team context
-      const token = generateToken(result);
+      const fullUser = await buildUserResponse(userId);
+      const token = generateToken(fullUser);
 
       return success(res, {
         message: "Welcome! Your personal practice space is ready.",
         token,
-        user: result,
+        user: fullUser,
       });
     }
 
-    // ── TEAM MODE: Join existing team ──────────────────
+    // ── TEAM MODE: Join existing team via join code ────
     if (mode === "team" && joinCode) {
       const team = await prisma.team.findUnique({
         where: { joinCode },
@@ -434,6 +416,7 @@ export async function completeOnboarding(req, res) {
           name: true,
           status: true,
           maxMembers: true,
+          createdById: true,
           _count: { select: { currentMembers: true } },
         },
       });
@@ -445,11 +428,9 @@ export async function completeOnboarding(req, res) {
           404,
         );
       }
-
       if (team.status !== "ACTIVE") {
         return error(res, "This team is not currently accepting members.", 400);
       }
-
       if (team._count.currentMembers >= team.maxMembers) {
         return error(
           res,
@@ -458,9 +439,11 @@ export async function completeOnboarding(req, res) {
         );
       }
 
-      // Join the team
-      const result = await prisma.$transaction(async (tx) => {
-        // Also create personal space for future use
+      // Determine correct role — preserve TEAM_ADMIN if user created this team
+      const teamRole = team.createdById === userId ? "TEAM_ADMIN" : "MEMBER";
+
+      await prisma.$transaction(async (tx) => {
+        // Create personal space
         const personalTeam = await tx.team.create({
           data: {
             name: `${user.name}'s Space`,
@@ -473,42 +456,53 @@ export async function completeOnboarding(req, res) {
           },
         });
 
-        const updatedUser = await tx.user.update({
+        // Update user — start in the real team context
+        await tx.user.update({
           where: { id: userId },
           data: {
             personalTeamId: personalTeam.id,
             currentTeamId: team.id,
-            teamRole: "MEMBER",
-            onboardingComplete: true,
-          },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            globalRole: true,
-            currentTeamId: true,
-            teamRole: true,
-            personalTeamId: true,
+            teamRole,
             onboardingComplete: true,
           },
         });
 
-        return updatedUser;
+        // Create TeamMembership records for both personal space and real team
+        await tx.teamMembership.createMany({
+          data: [
+            {
+              userId,
+              teamId: personalTeam.id,
+              role: "TEAM_ADMIN",
+              isActive: true,
+            },
+            {
+              userId,
+              teamId: team.id,
+              role: teamRole,
+              isActive: true,
+            },
+          ],
+          skipDuplicates: true,
+        });
       });
 
-      const token = generateToken(result);
+      const fullUser = await buildUserResponse(userId);
+      const token = generateToken(fullUser);
 
       return success(res, {
         message: `Welcome to ${team.name}!`,
         token,
-        user: result,
+        user: fullUser,
         team: { id: team.id, name: team.name },
       });
     }
 
     // ── TEAM MODE: Create new team ─────────────────────
     if (mode === "team" && teamName) {
-      const result = await prisma.$transaction(async (tx) => {
+      let pendingTeamData;
+
+      await prisma.$transaction(async (tx) => {
         // Create personal space
         const personalTeam = await tx.team.create({
           data: {
@@ -534,10 +528,8 @@ export async function completeOnboarding(req, res) {
           },
         });
 
-        // Set user's personal space but DON'T set currentTeamId
-        // to the new team yet — it's PENDING approval.
-        // User starts in personal space until team is approved.
-        const updatedUser = await tx.user.update({
+        // User starts in personal space while team is pending approval
+        await tx.user.update({
           where: { id: userId },
           data: {
             personalTeamId: personalTeam.id,
@@ -545,32 +537,35 @@ export async function completeOnboarding(req, res) {
             teamRole: "TEAM_ADMIN",
             onboardingComplete: true,
           },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            globalRole: true,
-            currentTeamId: true,
-            teamRole: true,
-            personalTeamId: true,
-            onboardingComplete: true,
+        });
+
+        // Create TeamMembership for personal space now.
+        // TeamMembership for the new team will be created when
+        // SuperAdmin approves it and the user switches to it.
+        await tx.teamMembership.create({
+          data: {
+            userId,
+            teamId: personalTeam.id,
+            role: "TEAM_ADMIN",
+            isActive: true,
           },
         });
 
-        return { updatedUser, newTeam };
+        pendingTeamData = {
+          id: newTeam.id,
+          name: newTeam.name,
+          status: newTeam.status,
+        };
       });
 
-      const token = generateToken(result.updatedUser);
+      const fullUser = await buildUserResponse(userId);
+      const token = generateToken(fullUser);
 
       return success(res, {
         message: `Team "${teamName}" created and is pending approval. You can practice individually while waiting.`,
         token,
-        user: result.updatedUser,
-        pendingTeam: {
-          id: result.newTeam.id,
-          name: result.newTeam.name,
-          status: result.newTeam.status,
-        },
+        user: fullUser,
+        pendingTeam: pendingTeamData,
       });
     }
 
@@ -584,7 +579,6 @@ export async function completeOnboarding(req, res) {
 // ============================================================================
 // FORGOT PASSWORD
 // ============================================================================
-
 export async function forgotPassword(req, res) {
   try {
     const { email } = req.body;
@@ -594,7 +588,6 @@ export async function forgotPassword(req, res) {
       select: { id: true, name: true },
     });
 
-    // Always return success (don't reveal email existence)
     if (!user) {
       return success(res, {
         message: "If an account exists, a reset code has been sent.",
@@ -628,7 +621,6 @@ export async function forgotPassword(req, res) {
 // ============================================================================
 // RESET PASSWORD
 // ============================================================================
-
 export async function resetPassword(req, res) {
   try {
     const { email, code, newPassword } = req.body;
@@ -641,11 +633,9 @@ export async function resetPassword(req, res) {
     if (!user) {
       return error(res, "Invalid email or reset code.", 400);
     }
-
     if (!user.resetCode || user.resetCode !== code) {
       return error(res, "Invalid reset code.", 400);
     }
-
     if (!user.resetExpiry || new Date() > user.resetExpiry) {
       return error(
         res,
@@ -678,7 +668,6 @@ export async function resetPassword(req, res) {
 // ============================================================================
 // CHANGE PASSWORD (logged in)
 // ============================================================================
-
 export async function changePassword(req, res) {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -717,46 +706,9 @@ export async function changePassword(req, res) {
 // ============================================================================
 // GET CURRENT USER (profile)
 // ============================================================================
-
 export async function getMe(req, res) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatarUrl: true,
-        globalRole: true,
-        currentTeamId: true,
-        teamRole: true,
-        personalTeamId: true,
-        onboardingComplete: true,
-        mustChangePassword: true,
-        targetCompany: true,
-        interviewDate: true,
-        preferredLanguage: true,
-        streak: true,
-        lastSolvedAt: true,
-        activityStatus: true,
-        aiProblemConfig: true,
-        createdAt: true,
-        currentTeam: {
-          select: {
-            id: true,
-            name: true,
-            isPersonal: true,
-            status: true,
-          },
-        },
-        personalTeam: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
+    const user = await buildUserResponse(req.user.id);
 
     if (!user) {
       return error(res, "User not found.", 404);
@@ -772,7 +724,6 @@ export async function getMe(req, res) {
 // ============================================================================
 // SWITCH TEAM CONTEXT
 // ============================================================================
-
 export async function switchTeam(req, res) {
   try {
     const { teamId } = req.body;
@@ -782,81 +733,40 @@ export async function switchTeam(req, res) {
       return error(res, "Team ID is required.", 400);
     }
 
-    // ── Verify the team exists and user is a member ────
-    // Special case: personal team (user's own)
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { personalTeamId: true },
-    });
-
-    if (!user) {
-      return error(res, "User not found.", 404);
-    }
-
+    // Verify team exists and is active
     const team = await prisma.team.findUnique({
       where: { id: teamId },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        isPersonal: true,
-        createdById: true,
-      },
+      select: { id: true, name: true, status: true, isPersonal: true },
     });
 
     if (!team) {
       return error(res, "Team not found.", 404);
     }
-
     if (team.status !== "ACTIVE") {
       return error(res, "This team is not active.", 400);
     }
 
-    // Determine the role in the target team
-    let newTeamRole = "MEMBER";
+    // Verify user has an active membership in this team
+    // TeamMembership is the authoritative access check
+    const membership = await prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+      select: { role: true, isActive: true },
+    });
 
-    // Personal team — user is always TEAM_ADMIN
-    if (team.isPersonal && user.personalTeamId === teamId) {
-      newTeamRole = "TEAM_ADMIN";
-    }
-    // Created the team — they're TEAM_ADMIN
-    else if (team.createdById === userId) {
-      newTeamRole = "TEAM_ADMIN";
-    }
-    // Switching to a regular team — verify membership
-    // In v3.0 (single team), switching means the user's
-    // currentTeamId must already be this team, OR it's their personal team
-    else if (user.personalTeamId !== teamId) {
-      // Check if the user is actually a member
-      // (their currentTeamId should already be this team if they're a member)
-      // For now, we allow switching to personal team always
-      // and to any team they were previously in
-      // TODO: In multi-team future, check TeamMembership table
+    if (!membership || !membership.isActive) {
+      return error(res, "You are not a member of this team.", 403);
     }
 
-    // ── Update context ─────────────────────────────────
-    const updatedUser = await prisma.user.update({
+    // Update current context — role comes from membership record
+    await prisma.user.update({
       where: { id: userId },
       data: {
         currentTeamId: teamId,
-        teamRole: newTeamRole,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        globalRole: true,
-        currentTeamId: true,
-        teamRole: true,
-        currentTeam: {
-          select: { id: true, name: true, isPersonal: true },
-        },
-        personalTeamId: true,
-        onboardingComplete: true,
+        teamRole: membership.role,
       },
     });
 
-    // ── Issue new token with updated context ────────────
+    const updatedUser = await buildUserResponse(userId);
     const token = generateToken(updatedUser);
 
     return success(res, {
@@ -875,7 +785,6 @@ export async function switchTeam(req, res) {
 // ============================================================================
 // UPDATE EMAIL (pre-verification only)
 // ============================================================================
-
 export async function updateUnverifiedEmail(req, res) {
   try {
     const { currentEmail, newEmail } = req.body;
@@ -884,7 +793,6 @@ export async function updateUnverifiedEmail(req, res) {
       return error(res, "Both current and new email are required.", 400);
     }
 
-    // Find the unverified user
     const user = await prisma.user.findUnique({
       where: { email: currentEmail },
       select: { id: true, isVerified: true, name: true },
@@ -893,7 +801,6 @@ export async function updateUnverifiedEmail(req, res) {
     if (!user) {
       return error(res, "No account found with this email.", 404);
     }
-
     if (user.isVerified) {
       return error(
         res,
@@ -902,7 +809,6 @@ export async function updateUnverifiedEmail(req, res) {
       );
     }
 
-    // Check if new email is already taken
     const existingNew = await prisma.user.findUnique({
       where: { email: newEmail },
       select: { id: true },
@@ -912,7 +818,6 @@ export async function updateUnverifiedEmail(req, res) {
       return error(res, "An account with this email already exists.", 409);
     }
 
-    // Update email and send new verification code
     const code = generateCode();
     console.log(
       `[DEV] Verification code: ${code} for ${newEmail || currentEmail || "unknown"}`,

@@ -219,6 +219,7 @@ model User {
   simSessions        SimSession[]
   quizAttempts       QuizAttempt[]
   interviewSessions  InterviewSession[]
+  memberships        TeamMembership[]
 
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
@@ -296,6 +297,7 @@ model Team {
   simSessions       SimSession[]
   quizAttempts      QuizAttempt[]
   interviewSessions InterviewSession[]
+  memberships        TeamMembership[]
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -347,6 +349,70 @@ model TeamInvitation {
 
   @@map("team_invitations")
 }
+
+
+
+// ============================================================================
+// TEAM MEMBERSHIP
+// ============================================================================
+/// Explicit record of every user-team relationship.
+///
+/// DESIGN DECISIONS:
+///
+/// 1. Separates membership (permanent) from context (temporary).
+///    User.currentTeamId = "what I am looking at right now."
+///    TeamMembership = "what teams I belong to and with what role."
+///
+/// 2. User.teamRole is a denormalized cache of the role in the
+///    current team for fast JWT embedding and query filtering.
+///    TeamMembership.role is the authoritative source of truth.
+///    They must be kept in sync whenever currentTeamId changes.
+///
+/// 3. isActive flag allows soft-leaving a team without losing history.
+///    A user can be re-added to a team they previously left without
+///    losing their solutions, quiz history, or interview sessions.
+///
+/// 4. Personal teams ARE included here (isPersonal = true on Team).
+///    This gives a uniform "all my teams" query without special-casing
+///    the personal space.
+model TeamMembership {
+  id String @id @default(cuid())
+
+  // ── User ───────────────────────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Team ───────────────────────────────────────────
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // ── Role in this specific team ─────────────────────
+  // This is the authoritative role. User.teamRole is a
+  // denormalized cache that must match this when the user
+  // is currently viewing this team.
+  role TeamRole @default(MEMBER)
+
+  // ── Membership status ──────────────────────────────
+  // false = user has left the team (soft leave)
+  // Content created while active is preserved.
+  isActive Boolean @default(true)
+
+  // ── Timestamps ─────────────────────────────────────
+  joinedAt DateTime @default(now())
+  leftAt   DateTime?
+
+  // ── Constraints ────────────────────────────────────
+  @@unique([userId, teamId])
+
+  // ── Indexes ────────────────────────────────────────
+  // "All active teams this user belongs to" — for sidebar switcher
+  @@index([userId, isActive])
+  // "All active members of this team" — for team management
+  @@index([teamId, isActive])
+
+  @@map("team_memberships")
+}
+
 
 // ============================================================================
 // PROBLEM
