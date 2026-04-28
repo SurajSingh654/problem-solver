@@ -29,6 +29,21 @@ function InfoChip({ label, value, color }) {
     )
 }
 
+
+// ── Helper: fallback search URL if direct link is broken ──────
+function getPlatformSearchUrl(source, title) {
+    if (!title) return null
+    const encoded = encodeURIComponent(title)
+    const searchUrls = {
+        LEETCODE: `https://leetcode.com/problemset/?search=${encoded}`,
+        GFG: `https://www.geeksforgeeks.org/explore?searchQuery=${encoded}`,
+        HACKERRANK: `https://www.hackerrank.com/domains/algorithms?filters%5Bsubdomains%5D%5B%5D=arrays&searchQuery=${encoded}`,
+        INTERVIEWBIT: `https://www.interviewbit.com/search/?query=${encoded}`,
+        CODECHEF: `https://www.codechef.com/problems/school?search=${encoded}`,
+    }
+    return searchUrls[source] || null
+}
+
 export default function ProblemDetailPage() {
     // v3.0 FIX: Route param is `problemId` not `id`
     const { problemId } = useParams()
@@ -163,26 +178,50 @@ export default function ProblemDetailPage() {
                 </h1>
                 {/* External link — for problems from LeetCode, GFG, etc. */}
                 {problem.categoryData?.sourceUrl && (
-                    <a
-                        href={problem.categoryData.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
-           bg-brand-400/10 border border-brand-400/25
-           text-sm font-semibold text-brand-300 hover:text-brand-200
-           hover:bg-brand-400/15 transition-all mb-4"
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                            <polyline points="15 3 21 3 21 9" />
-                            <line x1="10" y1="14" x2="21" y2="3" />
-                        </svg>
-                        Solve on {problem.source !== 'MANUAL' && problem.source !== 'AI_GENERATED'
-                            ? problem.source.replace('_', ' ')
-                            : 'External Site'}
-                    </a>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                        <a
+                            href={problem.categoryData.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
+               bg-brand-400/10 border border-brand-400/25
+               text-sm font-semibold text-brand-300 hover:text-brand-200
+               hover:bg-brand-400/15 transition-all"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                            Solve on {problem.source !== 'MANUAL' && problem.source !== 'AI_GENERATED'
+                                ? problem.source.replace('_', ' ')
+                                : 'External Site'}
+                        </a>
+
+                        {/* Fallback search — if the direct link is broken */}
+                        {getPlatformSearchUrl(problem.source, problem.title) && (
+                            <a
+                                href={getPlatformSearchUrl(problem.source, problem.title)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
+                   bg-surface-2 border border-border-default
+                   text-xs font-medium text-text-tertiary hover:text-text-primary
+                   hover:border-border-strong transition-all"
+                                title="If the direct link doesn't work, search here"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2"
+                                    strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="11" cy="11" r="8" />
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                </svg>
+                                Search if link broken
+                            </a>
+                        )}
+                    </div>
                 )}
 
                 {/* Company tags */}

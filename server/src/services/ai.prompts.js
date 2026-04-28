@@ -308,20 +308,72 @@ Identify patterns in what they got wrong and give specific study advice.`;
 export function problemSelectionPrompt(data) {
   const platformGuide = {
     CODING: `
-Available platforms with their strengths:
-- LEETCODE: Best for DSA, has company tags, most popular. URL format: https://leetcode.com/problems/[slug]/
-- GFG: Great for Indian tech companies (Flipkart, Paytm, Zomato), theory + coding. URL format: https://www.geeksforgeeks.org/problems/[slug]/
-- HACKERRANK: Good for data structures, string manipulation. URL format: https://www.hackerrank.com/challenges/[slug]/problem
-- INTERVIEWBIT: Great for product companies, structured paths. URL format: https://www.interviewbit.com/problems/[slug]/
-- CODECHEF: Competitive programming, advanced algorithms. URL format: https://www.codechef.com/problems/[slug]
+Available platforms with their exact URL formats and verified working examples:
 
-PLATFORM ROTATION RULE: Spread problems across different platforms. Do not use the same platform twice in a row.`,
+- LEETCODE (source: "LEETCODE")
+  URL format: https://leetcode.com/problems/[slug]/
+  Examples that WORK:
+    https://leetcode.com/problems/two-sum/
+    https://leetcode.com/problems/longest-substring-without-repeating-characters/
+    https://leetcode.com/problems/merge-intervals/
+  RULE: Slug is lowercase with hyphens. Very reliable — use this format exactly.
+
+- GFG (source: "GFG")
+  URL format: https://www.geeksforgeeks.org/problems/[slug]/1
+  Examples that WORK:
+    https://www.geeksforgeeks.org/problems/two-sum--170645/1
+    https://www.geeksforgeeks.org/problems/peak-element/1
+    https://www.geeksforgeeks.org/problems/missing-number-in-array1416/1
+    https://www.geeksforgeeks.org/problems/longest-common-substring1452/1
+  RULE: Always use /problems/[slug]/1 format. Never use the article URL format (/find-a-peak-in-an-array/).
+  If unsure of exact slug, prefer GFG search: https://www.geeksforgeeks.org/problems/[best-guess-slug]/1
+
+- HACKERRANK (source: "HACKERRANK")
+  URL format: https://www.hackerrank.com/challenges/[slug]/problem
+  Examples that WORK:
+    https://www.hackerrank.com/challenges/arrays-ds/problem
+    https://www.hackerrank.com/challenges/ctci-array-left-rotation/problem
+    https://www.hackerrank.com/challenges/diagonal-difference/problem
+    https://www.hackerrank.com/challenges/linkedin-practice-insert-a-node-at-specific-position-in-a-linked-list/problem
+  RULE: Must end in /problem. Only use well-known HackerRank problems you are certain exist.
+
+- INTERVIEWBIT (source: "INTERVIEWBIT")
+  URL format: https://www.interviewbit.com/problems/[slug]/
+  Examples that WORK:
+    https://www.interviewbit.com/problems/2-sum/
+    https://www.interviewbit.com/problems/best-time-to-buy-and-sell-stocks-i/
+    https://www.interviewbit.com/problems/merge-intervals/
+    https://www.interviewbit.com/problems/min-stack/
+  RULE: Numbers are written as words or with hyphens (stocks-i not stock). 
+  Only use problems you are highly confident about. If uncertain, use LEETCODE instead.
+
+- CODECHEF (source: "CODECHEF")
+  URL format: https://www.codechef.com/problems/[SLUG]
+  Examples that WORK:
+    https://www.codechef.com/problems/INTEST
+    https://www.codechef.com/problems/FLOW001
+  RULE: CodeChef slugs are typically uppercase. Only use for competitive programming problems.
+  For standard DSA interview problems, prefer LEETCODE or GFG.
+
+CRITICAL URL RULES:
+1. Only generate a URL you are HIGHLY CONFIDENT is correct
+2. If you are not 100% sure of the exact slug, use LEETCODE — it is the most reliable
+3. NEVER use article-style GFG URLs like /find-a-peak-in-an-array/ — always use /problems/[slug]/1
+4. Test your URL mentally: does it follow the exact format shown in the working examples?
+5. When in doubt, choose LEETCODE over other platforms
+
+PLATFORM ROTATION: Spread across platforms but RELIABILITY > DIVERSITY.
+If you cannot generate a reliable URL for a non-Leetcode platform, use LEETCODE instead.`,
     SQL: `
-Available platforms:
-- LEETCODE: Best SQL problems with real scenarios
-- HACKERRANK: Good SQL practice
-- GFG: Good for SQL theory + practice`,
-  }
+Available platforms for SQL:
+- LEETCODE (source: "LEETCODE"): URL format: https://leetcode.com/problems/[slug]/
+  Most reliable. Examples: https://leetcode.com/problems/combine-two-tables/
+- HACKERRANK (source: "HACKERRANK"): URL format: https://www.hackerrank.com/challenges/[slug]/problem
+  Examples: https://www.hackerrank.com/challenges/revising-the-select-query/problem
+- GFG (source: "GFG"): URL format: https://www.geeksforgeeks.org/problems/[slug]/1
+
+RULE: Prefer LEETCODE for SQL problems — most consistent URL format.`,
+  };
 
   const categoryDepth = {
     CODING: `Focus on algorithm patterns: Array, Hashing, Two Pointers, Sliding Window, Binary Search, Linked List, Trees, Graphs, Dynamic Programming, Greedy, Backtracking, Heap, Tries`,
@@ -330,27 +382,27 @@ Available platforms:
     CS_FUNDAMENTALS: `Cover topics: Operating Systems (Process Management, Memory, Concurrency), Networking (TCP/IP, HTTP, DNS, Load Balancing), DBMS (Indexing, Transactions, Normalization), OOP (SOLID, Design Patterns)`,
     HR: `Cover scenarios: Why this company, Career goals, Strengths/Weaknesses, Salary expectations, Work style, Culture fit, 5-year plan, Remote work, Conflict with manager`,
     SQL: `Cover patterns: JOINs, Subqueries, Window Functions (ROW_NUMBER, RANK, LAG, LEAD), CTEs, Aggregations, HAVING, EXISTS, Recursive queries, Query optimization`,
-  }
+  };
 
   const system = `You are a curriculum designer for an interview preparation platform.
 Your job is to SELECT which problems to generate — not write the content yet.
 
-${platformGuide[data.category] || ''}
+${platformGuide[data.category] || ""}
 
 TEAM INTELLIGENCE:
-${data.teamContext || 'New team — no data yet. Start with fundamentals.'}
+${data.teamContext || "New team — no data yet. Start with fundamentals."}
 
 AVOID THESE (already in the team):
-${data.existingProblems || 'None yet — this is a fresh start.'}
+${data.existingProblems || "None yet — this is a fresh start."}
 
 DIFFICULTY REQUIREMENT:
 ${data.difficultyInstruction}
 
 CATEGORY FOCUS (${data.category}):
-${categoryDepth[data.category] || ''}
+${categoryDepth[data.category] || ""}
 
-${data.targetCompany ? `TARGET COMPANY STYLE: ${data.targetCompany} — select problems that this company is known for asking.` : ''}
-${data.focusAreas ? `ADMIN FOCUS REQUEST: ${data.focusAreas} — prioritize problems in these areas.` : ''}
+${data.targetCompany ? `TARGET COMPANY STYLE: ${data.targetCompany} — select problems that this company is known for asking.` : ""}
+${data.focusAreas ? `ADMIN FOCUS REQUEST: ${data.focusAreas} — prioritize problems in these areas.` : ""}
 
 Return ONLY a JSON list of problem selections — no content yet:
 {
@@ -365,14 +417,14 @@ Return ONLY a JSON list of problem selections — no content yet:
     }
   ],
   "learningPath": "one sentence describing how these problems build on each other"
-}`
+}`;
 
-  const user = `Select ${data.count} ${data.category.replace('_', ' ').toLowerCase()} problem${data.count > 1 ? 's' : ''} for this team.
+  const user = `Select ${data.count} ${data.category.replace("_", " ").toLowerCase()} problem${data.count > 1 ? "s" : ""} for this team.
 Count: ${data.count}
 Category: ${data.category}
-Difficulty requirement: ${data.difficulty}`
+Difficulty requirement: ${data.difficulty}`;
 
-  return { system, user }
+  return { system, user };
 }
 
 // ── AI Problem Generation — Stage 2: Rich Content ──────────────
@@ -432,7 +484,7 @@ Admin notes must include:
   3. Alternative approaches (subquery vs JOIN vs CTE)
   4. Indexing strategy that would help
   5. Edge cases (NULLs, duplicates, empty tables)`,
-  }
+  };
 
   const system = `You are a senior engineering interview coach creating educational content for a specific problem.
 Your goal: a candidate who reads this content should deeply understand the problem, the approach, and how to explain it in an interview.
@@ -447,7 +499,7 @@ Pattern/Topic: ${data.pattern}
 
 ${categoryInstructions[data.category] || categoryInstructions.CODING}
 
-${data.targetCompany ? `COMPANY CONTEXT: This problem is often asked at ${data.targetCompany}. Tailor the teaching notes to that company's interview style.` : ''}
+${data.targetCompany ? `COMPANY CONTEXT: This problem is often asked at ${data.targetCompany}. Tailor the teaching notes to that company's interview style.` : ""}
 
 Return rich educational content as JSON:
 {
@@ -474,49 +526,60 @@ Return rich educational content as JSON:
       "hint": "A hint that opens the right mental model"
     }
   ]
-}`
+}`;
 
-  const user = `Generate comprehensive educational content for: "${data.title}" (${data.difficulty} ${data.category})`
+  const user = `Generate comprehensive educational content for: "${data.title}" (${data.difficulty} ${data.category})`;
 
-  return { system, user }
+  return { system, user };
 }
 
 // ── AI Problem Generation (Batch) — Legacy wrapper ─────────────
 // Kept for backward compatibility. New code uses the two-stage approach.
 export function problemGenerationPrompt(data) {
-  const platforms = ['LEETCODE', 'GFG', 'HACKERRANK', 'INTERVIEWBIT', 'CODECHEF']
+  const platforms = [
+    "LEETCODE",
+    "GFG",
+    "HACKERRANK",
+    "INTERVIEWBIT",
+    "CODECHEF",
+  ];
 
-  let difficultyInstruction
-  if (data.difficulty === 'auto') {
+  let difficultyInstruction;
+  if (data.difficulty === "auto") {
     difficultyInstruction = `Analyze the team context below and choose appropriate difficulty levels.
 If the team is new or has low solve rates, lean toward EASY and MEDIUM.
-If the team is experienced, include more MEDIUM and HARD.`
-  } else if (data.difficulty.startsWith('custom:')) {
-    const parts = data.difficulty.replace('custom:', '').split(',')
-    const easy = parseInt(parts[0]) || 0
-    const medium = parseInt(parts[1]) || 0
-    const hard = parseInt(parts[2]) || 0
-    difficultyInstruction = `Generate exactly: ${easy} EASY, ${medium} MEDIUM, ${hard} HARD problems.`
+If the team is experienced, include more MEDIUM and HARD.`;
+  } else if (data.difficulty.startsWith("custom:")) {
+    const parts = data.difficulty.replace("custom:", "").split(",");
+    const easy = parseInt(parts[0]) || 0;
+    const medium = parseInt(parts[1]) || 0;
+    const hard = parseInt(parts[2]) || 0;
+    difficultyInstruction = `Generate exactly: ${easy} EASY, ${medium} MEDIUM, ${hard} HARD problems.`;
   } else {
-    difficultyInstruction = `All problems should be ${data.difficulty} difficulty.`
+    difficultyInstruction = `All problems should be ${data.difficulty} difficulty.`;
   }
 
-  const suggestedPlatforms = data.count > 1
-    ? `Distribute across these platforms in order: ${platforms.slice(0, data.count).join(' → ')}`
-    : 'Use any platform — prefer variety.'
+  const suggestedPlatforms =
+    data.count > 1
+      ? `Distribute across these platforms in order: ${platforms.slice(0, data.count).join(" → ")}`
+      : "Use any platform — prefer variety.";
 
   const system = `You are an expert interview preparation curriculum designer.
 Generate high-quality ${data.category} interview problems.
 
-${data.category === 'CODING' || data.category === 'SQL' ? `PLATFORM DIVERSITY: ${suggestedPlatforms}
-Always include exact working URLs. Never use the same platform twice.` : ''}
+${
+  data.category === "CODING" || data.category === "SQL"
+    ? `PLATFORM DIVERSITY: ${suggestedPlatforms}
+Always include exact working URLs. Never use the same platform twice.`
+    : ""
+}
 
 ${difficultyInstruction}
 
-TEAM CONTEXT: ${data.teamContext || 'New team'}
-AVOID DUPLICATES: ${data.existingProblems || 'None'}
-${data.targetCompany ? `TARGET: ${data.targetCompany} interview style` : ''}
-${data.focusAreas ? `FOCUS: ${data.focusAreas}` : ''}
+TEAM CONTEXT: ${data.teamContext || "New team"}
+AVOID DUPLICATES: ${data.existingProblems || "None"}
+${data.targetCompany ? `TARGET: ${data.targetCompany} interview style` : ""}
+${data.focusAreas ? `FOCUS: ${data.focusAreas}` : ""}
 
 RESPOND WITH EXACT JSON:
 {
@@ -541,10 +604,10 @@ RESPOND WITH EXACT JSON:
     }
   ],
   "reasoning": "string"
-}`
+}`;
 
-  const user = `Generate ${data.count} ${data.category.replace('_', ' ').toLowerCase()} interview problem${data.count > 1 ? 's' : ''}.
-Count: ${data.count} | Difficulty: ${data.difficulty}`
+  const user = `Generate ${data.count} ${data.category.replace("_", " ").toLowerCase()} interview problem${data.count > 1 ? "s" : ""}.
+Count: ${data.count} | Difficulty: ${data.difficulty}`;
 
-  return { system, user }
+  return { system, user };
 }
