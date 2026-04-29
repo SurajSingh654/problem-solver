@@ -1,3 +1,6 @@
+// ============================================================================
+// ProbSolver v3.0 — Problem Form (Add + Edit)
+// ============================================================================
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -26,7 +29,6 @@ const schema = z.object({
     adminNotes: z.string().optional().default(''),
 })
 
-// Fields to show/hide as per category
 const CATEGORY_FIELD_CONFIG = {
     CODING: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Algorithm Tags', tagPlaceholder: 'Type a pattern or pick from suggestions…' },
     SYSTEM_DESIGN: { showUrl: false, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Design Concepts', tagPlaceholder: 'e.g. Microservices, CQRS, Event Sourcing…' },
@@ -37,64 +39,26 @@ const CATEGORY_FIELD_CONFIG = {
 }
 
 const CATEGORY_DESCRIPTION_CONFIG = {
-    CODING: {
-        label: 'Problem Description',
-        placeholder: 'Optional — the external link is the primary resource for coding problems.',
-        hint: 'Add extra context if the external problem statement needs clarification.',
-        required: false,
-        rows: 3,
-    },
-    SYSTEM_DESIGN: {
-        label: 'Problem Statement',
-        placeholder: 'Describe what to design:\n• What the system does\n• Expected scale (users, QPS, storage)\n• Core features vs nice-to-have\n• Specific constraints',
-        hint: 'This IS the problem — members will read this and design the system.',
-        required: true,
-        rows: 8,
-    },
-    BEHAVIORAL: {
-        label: 'Question & Context',
-        placeholder: 'Write the behavioral question and add context:\n• What is the interviewer really assessing?\n• What makes a strong answer?\n• Example scenarios to consider',
-        hint: 'Help members understand what a great answer looks like.',
-        required: true,
-        rows: 6,
-    },
-    CS_FUNDAMENTALS: {
-        label: 'Topic Description',
-        placeholder: 'Describe the topic and expected depth:\n• Core concept to explain\n• Sub-topics to cover\n• Common misconceptions to address',
-        hint: 'Guide members on how deep they should go.',
-        required: true,
-        rows: 6,
-    },
-    HR: {
-        label: 'Question & Guidance',
-        placeholder: 'Write the HR question and add guidance:\n• What is the interviewer really asking?\n• Tips for an authentic answer\n• What to research about the company',
-        hint: 'Help members prepare thoughtful, specific responses.',
-        required: true,
-        rows: 6,
-    },
-    SQL: {
-        label: 'Problem Statement & Schema',
-        placeholder: 'Describe the SQL problem:\n• Table schemas (column names, types)\n• What the query should return\n• Sample data if helpful\n• Any constraints',
-        hint: 'Describe the schema and requirements. External link is optional.',
-        required: false,
-        rows: 8,
-    },
+    CODING: { label: 'Problem Description', placeholder: 'Optional — the external link is the primary resource for coding problems.', hint: 'Add extra context if the external problem statement needs clarification.', required: false, rows: 3 },
+    SYSTEM_DESIGN: { label: 'Problem Statement', placeholder: 'Describe what to design:\n• What the system does\n• Expected scale\n• Core features vs nice-to-have\n• Specific constraints', hint: 'This IS the problem — members will read this and design the system.', required: true, rows: 8 },
+    BEHAVIORAL: { label: 'Question & Context', placeholder: 'Write the behavioral question and add context:\n• What is the interviewer really assessing?\n• What makes a strong answer?', hint: 'Help members understand what a great answer looks like.', required: true, rows: 6 },
+    CS_FUNDAMENTALS: { label: 'Topic Description', placeholder: 'Describe the topic and expected depth:\n• Core concept to explain\n• Sub-topics to cover\n• Common misconceptions to address', hint: 'Guide members on how deep they should go.', required: true, rows: 6 },
+    HR: { label: 'Question & Guidance', placeholder: 'Write the HR question and add guidance:\n• What is the interviewer really asking?\n• Tips for an authentic answer', hint: 'Help members prepare thoughtful, specific responses.', required: true, rows: 6 },
+    SQL: { label: 'Problem Statement & Schema', placeholder: 'Describe the SQL problem:\n• Table schemas\n• What the query should return\n• Sample data if helpful', hint: 'Describe the schema and requirements. External link is optional.', required: false, rows: 8 },
 }
 
 const DIFF_COLORS = {
-    EASY: 'bg-success/12  border-success/30  text-success',
-    MEDIUM: 'bg-warning/12  border-warning/30  text-warning',
-    HARD: 'bg-danger/12   border-danger/30   text-danger',
+    EASY: 'bg-success/12 border-success/30 text-success',
+    MEDIUM: 'bg-warning/12 border-warning/30 text-warning',
+    HARD: 'bg-danger/12  border-danger/30  text-danger',
 }
 
-const SOURCES = ['LEETCODE', 'GFG', 'CODECHEF', 'INTERVIEWBIT',
-    'HACKERRANK', 'CODEFORCES', 'OTHER']
+const SOURCES = ['LEETCODE', 'GFG', 'CODECHEF', 'INTERVIEWBIT', 'HACKERRANK', 'CODEFORCES', 'OTHER']
 
-// ── Toggle switch ──────────────────────────────────────
 function Toggle({ label, desc, value, onChange }) {
     return (
         <div className="flex items-center justify-between py-3
-                    border-b border-border-subtle last:border-0">
+                        border-b border-border-subtle last:border-0">
             <div>
                 <p className="text-sm font-semibold text-text-primary">{label}</p>
                 {desc && <p className="text-xs text-text-tertiary mt-0.5">{desc}</p>}
@@ -104,9 +68,7 @@ function Toggle({ label, desc, value, onChange }) {
                 onClick={() => onChange(!value)}
                 className={cn(
                     'relative w-11 h-6 rounded-full border transition-all duration-300',
-                    value
-                        ? 'bg-brand-400 border-brand-400'
-                        : 'bg-surface-4 border-border-strong'
+                    value ? 'bg-brand-400 border-brand-400' : 'bg-surface-4 border-border-strong'
                 )}
             >
                 <motion.div
@@ -119,7 +81,6 @@ function Toggle({ label, desc, value, onChange }) {
     )
 }
 
-// ── Section wrapper ────────────────────────────────────
 function FormSection({ title, icon, children }) {
     return (
         <div className="bg-surface-1 border border-border-default rounded-2xl p-5 space-y-4">
@@ -131,7 +92,6 @@ function FormSection({ title, icon, children }) {
     )
 }
 
-// ── Textarea ───────────────────────────────────────────
 function Textarea({ label, optional, hint, rows = 3, ...props }) {
     return (
         <div>
@@ -139,9 +99,7 @@ function Textarea({ label, optional, hint, rows = 3, ...props }) {
                 <label className="block text-sm font-semibold text-text-primary mb-1.5">
                     {label}
                     {optional && (
-                        <span className="ml-1.5 text-xs font-normal text-text-disabled">
-                            optional
-                        </span>
+                        <span className="ml-1.5 text-xs font-normal text-text-disabled">optional</span>
                     )}
                 </label>
             )}
@@ -149,17 +107,16 @@ function Textarea({ label, optional, hint, rows = 3, ...props }) {
             <textarea
                 rows={rows}
                 className="w-full bg-surface-3 border border-border-strong rounded-xl
-                   text-sm text-text-primary placeholder:text-text-tertiary
-                   px-3.5 py-2.5 outline-none resize-none
-                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                   transition-all duration-150"
+                           text-sm text-text-primary placeholder:text-text-tertiary
+                           px-3.5 py-2.5 outline-none resize-none
+                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                           transition-all duration-150"
                 {...props}
             />
         </div>
     )
 }
 
-// ── Main form ──────────────────────────────────────────
 export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }) {
     const {
         register, handleSubmit, formState: { errors }, setValue, watch,
@@ -167,10 +124,16 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
         resolver: zodResolver(schema),
         defaultValues: {
             title: initialData?.title || '',
-            source: initialData?.source === 'MANUAL' || initialData?.source === 'AI_GENERATED'
-                ? 'OTHER'
-                : (initialData?.source || 'OTHER'),
-            sourceUrl: initialData?.sourceUrl || '',
+            // FIX 1: MANUAL and AI_GENERATED are internal source types, not
+            // platform sources. Map them to OTHER for the UI selector.
+            // Preserve real platform sources (LEETCODE, GFG, etc.) as-is.
+            source: (
+                !initialData?.source ||
+                initialData.source === 'MANUAL' ||
+                initialData.source === 'AI_GENERATED'
+            ) ? 'OTHER' : initialData.source,
+            // FIX 2: sourceUrl lives inside categoryData, not top-level
+            sourceUrl: initialData?.categoryData?.sourceUrl || '',
             difficulty: initialData?.difficulty || 'MEDIUM',
             category: initialData?.category || 'CODING',
             description: initialData?.description || '',
@@ -181,7 +144,12 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
 
     // Uncontrolled state
     const [tags, setTags] = useState(initialData?.tags || [])
-    const [companyTags, setCompanyTags] = useState(initialData?.companyTags || [])
+    // FIX 3: companyTags lives inside categoryData, not top-level
+    const [companyTags, setCompanyTags] = useState(
+        initialData?.categoryData?.companyTags ||
+        initialData?.companyTags ||
+        []
+    )
     const [useCases, setUseCases] = useState(() => {
         const raw = initialData?.useCases
         if (!raw) return []
@@ -198,21 +166,30 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
 
-    // THESE MUST COME FIRST — watch values
     const selectedSource = watch('source')
     const selectedDifficulty = watch('difficulty')
     const selectedCategory = watch('category')
 
-    // THEN use selectedCategory
     const fieldConfig = CATEGORY_FIELD_CONFIG[selectedCategory] || CATEGORY_FIELD_CONFIG.CODING
     const descConfig = CATEGORY_DESCRIPTION_CONFIG[selectedCategory] || CATEGORY_DESCRIPTION_CONFIG.CODING
     const patternSuggestions = PATTERNS.map(p => p.label)
 
     function onFormSubmit(data) {
+        const { sourceUrl, ...rest } = data
         onSubmit({
-            ...data,
-            sourceUrl: data.sourceUrl || `https://probsolver.app/${(data.category || 'coding').toLowerCase()}`,
+            ...rest,
+            // FIX 4: Build categoryData correctly so sourceUrl and companyTags
+            // are saved in the right place and survive round-trips through the DB.
+            // Spread existing categoryData first so we don't lose other fields
+            // (e.g. companyTags already saved there from a previous edit).
+            categoryData: {
+                ...(initialData?.categoryData || {}),
+                sourceUrl: sourceUrl || '',
+                companyTags: fieldConfig.showCompanyTags ? companyTags : [],
+            },
             tags,
+            // Keep top-level companyTags for backward compat with createProblem
+            // controller's normalizedTags merge logic
             companyTags: fieldConfig.showCompanyTags ? companyTags : [],
             useCases: fieldConfig.showUseCases ? useCases : [],
             followUps: followUps.map((fq, i) => ({ ...fq, order: i })),
@@ -225,8 +202,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
         <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-5">
             {/* ── Core info ─────────────────────────────── */}
             <FormSection title="Problem Info" icon="📋">
-
-                {/* Category selector — ADD THIS */}
+                {/* Category */}
                 <div>
                     <label className="block text-sm font-semibold text-text-primary mb-2">
                         Category
@@ -241,7 +217,6 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                 type="button"
                                 onClick={() => {
                                     setValue('category', cat.id)
-                                    // Auto-set source to OTHER for non-coding categories
                                     if (!cat.sources.includes(selectedSource)) {
                                         setValue('source', 'OTHER')
                                     }
@@ -266,8 +241,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     </div>
                 </div>
 
-                {/* Title  */}
-
+                {/* Title */}
                 <Input
                     label="Title"
                     placeholder="e.g. Two Sum"
@@ -275,13 +249,17 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     {...register('title')}
                 />
 
-                {/* Problem Description — category-aware */}
+                {/* Description — category-aware */}
                 <div>
                     <label className="block text-sm font-semibold text-text-primary mb-1.5">
                         {descConfig.label}
-                        {descConfig.required && <span className="ml-1 text-danger text-xs">*</span>}
+                        {descConfig.required && (
+                            <span className="ml-1 text-danger text-xs">*</span>
+                        )}
                         {!descConfig.required && (
-                            <span className="ml-1.5 text-xs font-normal text-text-disabled">optional</span>
+                            <span className="ml-1.5 text-xs font-normal text-text-disabled">
+                                optional
+                            </span>
                         )}
                     </label>
                     <p className="text-xs text-text-tertiary mb-2">{descConfig.hint}</p>
@@ -289,22 +267,21 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         rows={descConfig.rows}
                         placeholder={descConfig.placeholder}
                         className="w-full bg-surface-3 border border-border-strong rounded-xl
-                   text-sm text-text-primary placeholder:text-text-tertiary
-                   px-3.5 py-2.5 outline-none resize-y
-                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                   transition-all duration-150"
+                                   text-sm text-text-primary placeholder:text-text-tertiary
+                                   px-3.5 py-2.5 outline-none resize-y
+                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                                   transition-all duration-150"
                         {...register('description')}
                     />
                 </div>
 
-                {/* Source */}
+                {/* Source Platform */}
                 <div>
                     <label className="block text-sm font-semibold text-text-primary mb-2">
                         Source Platform
                     </label>
                     <div className="flex flex-wrap gap-2">
                         {SOURCES.filter(s => {
-                            // Show only sources valid for the selected category
                             const cat = PROBLEM_CATEGORIES.find(c => c.id === selectedCategory)
                             return cat ? cat.sources.includes(s) : true
                         }).map(s => (
@@ -324,7 +301,8 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         ))}
                     </div>
                 </div>
-                {/* Problem URL — only for categories with external links */}
+
+                {/* Problem URL */}
                 {fieldConfig.showUrl && (
                     <Input
                         label="Problem URL"
@@ -341,6 +319,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         {...register('sourceUrl')}
                     />
                 )}
+
                 {/* Difficulty */}
                 {fieldConfig.showDifficulty && (
                     <div>
@@ -374,12 +353,15 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
             {/* ── Tags ──────────────────────────────────── */}
             <FormSection title="Tags & Companies" icon="🏷️">
                 {fieldConfig.showAlgoTags && (
-                    <ChipInput label={fieldConfig.tagLabel} hint="Select from suggestions or type custom"
-                        value={tags} onChange={setTags} suggestions={patternSuggestions}
-                        placeholder={fieldConfig.tagPlaceholder} />
+                    <ChipInput
+                        label={fieldConfig.tagLabel}
+                        hint="Select from suggestions or type custom"
+                        value={tags}
+                        onChange={setTags}
+                        suggestions={patternSuggestions}
+                        placeholder={fieldConfig.tagPlaceholder}
+                    />
                 )}
-
-                {/* Company Tags — conditional */}
                 {fieldConfig.showCompanyTags && (
                     <ChipInput
                         label="Company Tags"
@@ -392,7 +374,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                 )}
             </FormSection>
 
-            {/* ── Learning content ───────────────────────── */}
+            {/* ── Learning Content ───────────────────────── */}
             <FormSection title="Learning Content" icon="🌍">
                 {/* AI Generate button */}
                 {aiEnabled && (
@@ -419,71 +401,49 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                     const source = watch('source')
                                     const sourceUrl = watch('sourceUrl')
                                     const difficulty = watch('difficulty')
-
                                     if (!title) {
                                         toast.warning('Enter a problem title first')
                                         return
                                     }
-
                                     const hasExisting =
                                         watch('realWorldContext') ||
                                         watch('adminNotes') ||
                                         useCases.length > 0 ||
                                         followUps.length > 0
-
                                     if (hasExisting) {
                                         const confirmed = window.confirm(
                                             'AI-generated content will replace your current entries for:\n\n' +
-                                            '• Description\n' +
-                                            '• Real World Context\n' +
-                                            '• Use Cases\n' +
-                                            '• Admin Notes\n' +
-                                            '• Follow-up Questions\n' +
-                                            '• Tags\n\n' +
-                                            'Continue?'
+                                            '• Description\n• Real World Context\n• Use Cases\n' +
+                                            '• Admin Notes\n• Follow-up Questions\n• Tags\n\nContinue?'
                                         )
                                         if (!confirmed) return
                                     }
-
                                     try {
                                         const res = await aiGenerate.mutateAsync({
                                             title, source, sourceUrl, difficulty, tags,
                                             category: watch('category'),
                                         })
-
-                                        // v3.0 FIX: response is { data: { success, content: {...} } }
                                         const content = res.data.data.content
-
-                                        if (content.description) {
-                                            setValue('description', content.description)
-                                        }
-                                        if (content.realWorldContext) {
-                                            setValue('realWorldContext', content.realWorldContext)
-                                        }
-                                        if (content.adminNotes) {
-                                            setValue('adminNotes', content.adminNotes)
-                                        }
-                                        // v3.0 FIX: useCases comes as string, split into array
+                                        if (content.description) setValue('description', content.description)
+                                        if (content.realWorldContext) setValue('realWorldContext', content.realWorldContext)
+                                        if (content.adminNotes) setValue('adminNotes', content.adminNotes)
                                         if (content.useCases) {
                                             const cases = typeof content.useCases === 'string'
                                                 ? content.useCases.split('\n').filter(Boolean).map(s => s.replace(/^\d+\.\s*/, '').trim())
                                                 : content.useCases
                                             setUseCases(cases)
                                         }
-                                        // v3.0 FIX: AI returns followUpQuestions not followUps
                                         const fqs = content.followUpQuestions || content.followUps || []
                                         if (fqs.length > 0) {
-                                            setFollowUps(fqs.map((fq) => ({
+                                            setFollowUps(fqs.map(fq => ({
                                                 question: fq.question,
                                                 difficulty: fq.difficulty || 'MEDIUM',
                                                 hint: fq.hint || '',
                                             })))
                                         }
-                                        // v3.0 FIX: Also set tags from AI response
                                         if (content.tags?.length > 0) {
                                             setTags(prev => [...new Set([...prev, ...content.tags])])
                                         }
-
                                         toast.success('AI generated content! Review and edit as needed.')
                                     } catch {
                                         // error handled by hook
@@ -502,6 +462,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         </div>
                     </div>
                 )}
+
                 {fieldConfig.showRealWorld && (
                     <Textarea
                         label="Real World Context"
@@ -509,11 +470,10 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         hint="Where does this problem pattern appear in real software?"
                         placeholder="e.g. Hash maps are used in database indexing to achieve O(1) lookups…"
                         rows={3}
-                        {...register('realWorldContext')}   // ← add this
+                        {...register('realWorldContext')}
                     />
                 )}
 
-                {/* Use Cases — conditional */}
                 {fieldConfig.showUseCases && (
                     <ChipInput
                         label="Use Cases"
@@ -531,7 +491,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     hint="Internal notes visible only to admins"
                     placeholder="Teaching notes, common mistakes, hints for review…"
                     rows={2}
-                    {...register('adminNotes')}   // ← add this
+                    {...register('adminNotes')}
                 />
             </FormSection>
 
