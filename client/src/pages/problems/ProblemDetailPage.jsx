@@ -500,6 +500,7 @@ export default function ProblemDetailPage() {
                                         <AIReviewCard
                                             solutionId={mySolution.id}
                                             existingReview={mySolution.aiFeedback}
+                                            problemFollowUps={followUpQuestions}
                                         />
                                     </div>
                                 )}
