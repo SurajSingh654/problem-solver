@@ -1,15 +1,6 @@
 // ============================================================================
 // ProbSolver v3.0 — Submit Solution Page (Redesigned)
 // ============================================================================
-//
-// Single-page form that adapts to:
-// 1. External-link problems (coding) — "solve there, reflect here"
-// 2. On-platform problems (all other categories) — full response here
-//
-// AI handles complexity analysis. No manual time/space input.
-// Category-specific field labels come from categoryForms.js config.
-//
-// ============================================================================
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -28,7 +19,7 @@ import { getCategoryForm } from '@utils/categoryForms'
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
 // ── Section wrapper ────────────────────────────────────
-function FormSection({ icon, title, hint, children, className }) {
+function FormSection({ icon, title, hint, badge, children, className }) {
     return (
         <div className={cn(
             'bg-surface-1 border border-border-default rounded-2xl p-5',
@@ -39,8 +30,16 @@ function FormSection({ icon, title, hint, children, className }) {
                         justify-center text-base flex-shrink-0 mt-0.5">
                     {icon}
                 </div>
-                <div>
-                    <h3 className="text-sm font-bold text-text-primary">{title}</h3>
+                <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-text-primary">{title}</h3>
+                        {badge && (
+                            <span className="text-[9px] font-bold px-1.5 py-px rounded-full
+                                   bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                                {badge}
+                            </span>
+                        )}
+                    </div>
                     {hint && <p className="text-xs text-text-tertiary mt-0.5">{hint}</p>}
                 </div>
             </div>
@@ -119,6 +118,95 @@ function ConfidencePicker({ value, onChange }) {
     )
 }
 
+// ── Follow-up question with answer field ───────────────
+function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
+    const [showHint, setShowHint] = useState(false)
+    const hasAnswer = !!(answer?.trim())
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className={cn(
+                'rounded-xl border p-4 transition-colors',
+                hasAnswer
+                    ? 'bg-success/3 border-success/20'
+                    : 'bg-surface-2 border-border-default'
+            )}
+        >
+            {/* Question */}
+            <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-start gap-2.5 flex-1">
+                    <span className={cn(
+                        'flex-shrink-0 w-5 h-5 rounded-full flex items-center',
+                        'justify-center text-[10px] font-bold mt-0.5',
+                        hasAnswer
+                            ? 'bg-success/15 text-success'
+                            : 'bg-surface-3 border border-border-default text-text-disabled'
+                    )}>
+                        {hasAnswer ? '✓' : index + 1}
+                    </span>
+                    <p className="text-xs font-semibold text-text-primary leading-relaxed">
+                        {followUp.question}
+                    </p>
+                </div>
+                <Badge variant={DIFF_VARIANT[followUp.difficulty] || 'brand'}
+                    size="xs" className="flex-shrink-0">
+                    {followUp.difficulty}
+                </Badge>
+            </div>
+
+            {/* Hint */}
+            {followUp.hint && (
+                <div className="mb-3 ml-7">
+                    <button
+                        type="button"
+                        onClick={() => setShowHint(!showHint)}
+                        className="text-[10px] text-brand-300 hover:text-brand-200
+                               transition-colors flex items-center gap-1"
+                    >
+                        💡 {showHint ? 'Hide hint' : 'Show hint'}
+                    </button>
+                    {showHint && (
+                        <p className="text-[11px] text-text-tertiary mt-1.5
+                               bg-surface-3 border border-border-subtle
+                               rounded-lg p-2.5 leading-relaxed">
+                            {followUp.hint}
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* Answer field */}
+            <div className="ml-7">
+                <textarea
+                    rows={3}
+                    value={answer || ''}
+                    onChange={e => onAnswerChange(followUp.id, e.target.value)}
+                    placeholder={
+                        followUp.difficulty === 'EASY'
+                            ? 'Answer this follow-up to earn bonus points...'
+                            : followUp.difficulty === 'MEDIUM'
+                                ? 'Challenge yourself — answer this for extra AI feedback...'
+                                : 'Hard bonus question — attempt it to demonstrate mastery...'
+                    }
+                    className="w-full bg-surface-3 border border-border-strong rounded-xl
+                           text-xs text-text-primary placeholder:text-text-disabled
+                           px-3 py-2.5 outline-none resize-none
+                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                           transition-all"
+                />
+                {!hasAnswer && (
+                    <p className="text-[10px] text-text-disabled mt-1">
+                        Optional — AI will note this was skipped
+                    </p>
+                )}
+            </div>
+        </motion.div>
+    )
+}
+
 // ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
@@ -144,6 +232,15 @@ export default function SubmitSolutionPage() {
     const [feynmanExplanation, setFeynmanExplanation] = useState('')
     const [realWorldConnection, setRealWorldConnection] = useState('')
     const [confidence, setConfidence] = useState(0)
+    // followUpAnswers: { [followUpQuestionId]: answerText }
+    const [followUpAnswers, setFollowUpAnswers] = useState({})
+
+    function handleFollowUpAnswer(questionId, text) {
+        setFollowUpAnswers(prev => ({ ...prev, [questionId]: text }))
+    }
+
+    const followUpCount = problem?.followUpQuestions?.length || 0
+    const answeredCount = Object.values(followUpAnswers).filter(v => v?.trim()).length
 
     // ── Submit ─────────────────────────────────────────
     async function onSubmit() {
@@ -154,6 +251,14 @@ export default function SubmitSolutionPage() {
 
         localStorage.setItem('ps_last_language', language)
 
+        // Build follow-up answers array (only answered ones)
+        const followUpAnswersArray = Object.entries(followUpAnswers)
+            .filter(([, text]) => text?.trim())
+            .map(([questionId, text]) => ({
+                followUpQuestionId: questionId,
+                answerText: text.trim(),
+            }))
+
         const data = {
             approach: approach || null,
             code: code || null,
@@ -163,11 +268,11 @@ export default function SubmitSolutionPage() {
             feynmanExplanation: feynmanExplanation || null,
             realWorldConnection: realWorldConnection || null,
             confidence,
-            // AI will analyze these from the code
             timeComplexity: null,
             spaceComplexity: null,
             bruteForce: null,
             optimizedApproach: approach || null,
+            followUpAnswers: followUpAnswersArray,
         }
 
         try {
@@ -234,8 +339,6 @@ export default function SubmitSolutionPage() {
                 <h2 className="text-base font-bold text-text-primary mb-2">
                     {problem.title}
                 </h2>
-
-                {/* External link — prominent for coding problems */}
                 {hasExternalLink && (
                     <a
                         href={problem.categoryData.sourceUrl}
@@ -272,9 +375,8 @@ export default function SubmitSolutionPage() {
                             Solve first, then reflect here
                         </p>
                         <p className="text-xs text-text-tertiary leading-relaxed">
-                            Click the link above to solve the problem on {problem.source || 'the external site'}.
-                            Once done, come back and paste your code below. AI will analyze your solution's
-                            complexity, quality, and suggest optimizations.
+                            Solve on {problem.source || 'the external site'}, then paste your code below.
+                            AI will analyze complexity, correctness, and give specific feedback.
                         </p>
                     </div>
                 </motion.div>
@@ -283,19 +385,15 @@ export default function SubmitSolutionPage() {
             {/* Form sections */}
             <div className="space-y-5">
 
-                {/* Section 1: Code (for coding/SQL categories or any external link) */}
+                {/* Code section */}
                 {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
                     <FormSection
                         icon="💻"
                         title={hasExternalLink ? "Paste Your Solution Code" : (formConfig.solutionTabConfig?.codeLabel || "Your Code")}
-                        hint={hasExternalLink
-                            ? "Paste the code you submitted. AI will analyze complexity and suggest optimizations."
-                            : "Write or paste your solution code."
-                        }
+                        hint="AI will analyze correctness, complexity, and detect any issues"
                     >
-                        {/* Language selector */}
                         <div className="flex flex-wrap gap-1.5 mb-3">
-                            {['PYTHON', 'JAVASCRIPT', 'JAVA', 'CPP', 'TYPESCRIPT', 'GO', 'SQL'].map(lang => (
+                            {['PYTHON', 'JAVASCRIPT', 'JAVA', 'CPP', 'TYPESCRIPT', 'GO', 'RUST', 'SQL'].map(lang => (
                                 <button
                                     key={lang}
                                     type="button"
@@ -319,12 +417,12 @@ export default function SubmitSolutionPage() {
                             minHeight="200px"
                         />
                         <p className="text-[10px] text-text-disabled mt-2">
-                            🤖 AI will automatically analyze time/space complexity and suggest optimizations
+                            🤖 AI will check correctness, detect edge cases, analyze complexity, and flag any issues
                         </p>
                     </FormSection>
                 )}
 
-                {/* Section 2: Approach / Response */}
+                {/* Approach / Response */}
                 <FormSection
                     icon={category === 'BEHAVIORAL' ? '🎯' : category === 'HR' ? '💬' : '📝'}
                     title={
@@ -336,14 +434,10 @@ export default function SubmitSolutionPage() {
                     }
                     hint={
                         hasExternalLink
-                            ? 'Explain your thought process. How did you arrive at your solution? What alternatives did you consider?'
+                            ? 'Explain your thought process. What pattern did you use and why? What alternatives did you consider?'
                             : category === 'BEHAVIORAL'
                                 ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.')
-                                : category === 'SYSTEM_DESIGN'
-                                    ? 'Describe your architecture — components, data flow, APIs, trade-offs.'
-                                    : category === 'CS_FUNDAMENTALS'
-                                        ? 'Explain the concept clearly. Start with "what", then "why", then "how".'
-                                        : 'Describe your approach step by step.'
+                                : 'Describe your approach step by step.'
                     }
                 >
                     <RichTextEditor
@@ -351,19 +445,19 @@ export default function SubmitSolutionPage() {
                         onChange={setApproach}
                         placeholder={
                             hasExternalLink
-                                ? 'Explain your approach: what pattern did you use, why, what alternatives you considered...'
+                                ? 'Walk through your approach: pattern identification, why this approach, alternatives considered...'
                                 : fields.patternReasoning?.placeholder || 'Write your approach here...'
                         }
                         minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'}
                     />
                 </FormSection>
 
-                {/* Section 3: Pattern / Topic identification */}
+                {/* Pattern identification */}
                 {fields.patternIdentified?.show && (
                     <FormSection
                         icon="🧩"
                         title={fields.patternIdentified.label || 'Pattern Identified'}
-                        hint={fields.patternIdentified.placeholder}
+                        hint="AI will verify if your identified pattern matches your solution"
                     >
                         <PatternSelector
                             config={fields.patternIdentified}
@@ -373,7 +467,7 @@ export default function SubmitSolutionPage() {
                     </FormSection>
                 )}
 
-                {/* Section 4: Key Insight */}
+                {/* Key Insight */}
                 {fields.keyInsight?.show && (
                     <FormSection
                         icon="💡"
@@ -394,12 +488,12 @@ export default function SubmitSolutionPage() {
                     </FormSection>
                 )}
 
-                {/* Section 5: Feynman Explanation */}
+                {/* Feynman Explanation */}
                 {fields.simpleExplanation?.show && (
                     <FormSection
                         icon="🗣"
                         title={fields.simpleExplanation.label || 'Explain It Simply'}
-                        hint="Can you explain this to someone who doesn't know the topic?"
+                        hint="Explain to someone who doesn't know the topic"
                     >
                         <RichTextEditor
                             content={feynmanExplanation}
@@ -410,7 +504,7 @@ export default function SubmitSolutionPage() {
                     </FormSection>
                 )}
 
-                {/* Section 6: Challenges / Real-world connection */}
+                {/* Challenges / Real-world */}
                 {fields.challenges?.show && (
                     <FormSection
                         icon="🌍"
@@ -425,58 +519,61 @@ export default function SubmitSolutionPage() {
                     </FormSection>
                 )}
 
-                {/* Section 7: Confidence */}
+                {/* Confidence */}
                 <FormSection
                     icon="📊"
                     title="Confidence Level"
-                    hint="Be honest — this drives your spaced repetition schedule"
+                    hint="Be honest — AI will flag if your confidence doesn't match your solution quality"
                 >
                     <ConfidencePicker value={confidence} onChange={setConfidence} />
                 </FormSection>
 
-                {/* Follow-up questions (read-only reference) */}
+                {/* Follow-up questions — INTERACTIVE */}
                 {problem.followUpQuestions?.length > 0 && (
                     <FormSection
                         icon="🧠"
                         title="Follow-up Questions"
-                        hint="Think about these as you solve — they deepen your understanding"
+                        badge={answeredCount > 0 ? `${answeredCount}/${followUpCount} answered` : 'Optional — earn bonus points'}
+                        hint="Each answer you provide earns bonus points in your AI review. Skipped questions are noted."
                     >
-                        <div className="space-y-2.5">
+                        <div className="space-y-3">
                             {problem.followUpQuestions.map((fq, i) => (
-                                <div key={fq.id || i}
-                                    className="flex items-start gap-3 bg-surface-2 border border-border-subtle
-                                  rounded-xl p-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-3
-                                     border border-border-default flex items-center
-                                     justify-center text-xs font-bold text-text-tertiary">
-                                        {i + 1}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <p className="text-xs font-medium text-text-primary leading-relaxed">
-                                                {fq.question}
-                                            </p>
-                                            <Badge variant={DIFF_VARIANT[fq.difficulty] || 'brand'}
-                                                size="xs" className="flex-shrink-0">
-                                                {fq.difficulty}
-                                            </Badge>
-                                        </div>
-                                        {fq.hint && (
-                                            <details className="mt-1.5">
-                                                <summary className="text-[10px] text-brand-300 cursor-pointer
-                                              hover:text-brand-200 transition-colors w-fit">
-                                                    💡 Show hint
-                                                </summary>
-                                                <p className="text-[10px] text-text-tertiary mt-1 bg-surface-3
-                                          border border-border-subtle rounded-lg p-2">
-                                                    {fq.hint}
-                                                </p>
-                                            </details>
-                                        )}
-                                    </div>
-                                </div>
+                                <FollowUpWithAnswer
+                                    key={fq.id}
+                                    followUp={fq}
+                                    index={i}
+                                    answer={followUpAnswers[fq.id] || ''}
+                                    onAnswerChange={handleFollowUpAnswer}
+                                />
                             ))}
                         </div>
+
+                        {/* Progress indicator */}
+                        {followUpCount > 0 && (
+                            <div className="mt-4 pt-4 border-t border-border-subtle">
+                                <div className="flex items-center justify-between text-xs mb-1.5">
+                                    <span className="text-text-disabled">Follow-up progress</span>
+                                    <span className={cn(
+                                        'font-semibold',
+                                        answeredCount === followUpCount ? 'text-success' :
+                                            answeredCount > 0 ? 'text-brand-300' : 'text-text-disabled'
+                                    )}>
+                                        {answeredCount}/{followUpCount} answered
+                                        {answeredCount > 0 && ` (+${Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus)`}
+                                    </span>
+                                </div>
+                                <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                                    <motion.div
+                                        animate={{ width: `${followUpCount > 0 ? (answeredCount / followUpCount) * 100 : 0}%` }}
+                                        transition={{ duration: 0.4 }}
+                                        className={cn(
+                                            'h-full rounded-full',
+                                            answeredCount === followUpCount ? 'bg-success' : 'bg-brand-400'
+                                        )}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </FormSection>
                 )}
             </div>
