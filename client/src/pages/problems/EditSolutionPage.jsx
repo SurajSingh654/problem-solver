@@ -3,6 +3,7 @@
 // ============================================================================
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
 import { useProblemSolutions, useUpdateSolution } from '@hooks/useSolutions'
 import { SolutionTabs } from '@components/features/solutions/SolutionTabs'
@@ -16,8 +17,105 @@ import useAuthStore from '@store/useAuthStore'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
+// ── Follow-up question with answer field ───────────────
+// Identical contract to SubmitSolutionPage's FollowUpWithAnswer.
+// Kept local to this file — no shared component needed yet.
+function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
+    const [showHint, setShowHint] = useState(false)
+    const hasAnswer = !!(answer?.trim())
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className={cn(
+                'rounded-xl border p-4 transition-colors',
+                hasAnswer
+                    ? 'bg-success/3 border-success/20'
+                    : 'bg-surface-2 border-border-default'
+            )}
+        >
+            {/* Question header */}
+            <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-start gap-2.5 flex-1">
+                    <span className={cn(
+                        'flex-shrink-0 w-5 h-5 rounded-full flex items-center',
+                        'justify-center text-[10px] font-bold mt-0.5',
+                        hasAnswer
+                            ? 'bg-success/15 text-success'
+                            : 'bg-surface-3 border border-border-default text-text-disabled'
+                    )}>
+                        {hasAnswer ? '✓' : index + 1}
+                    </span>
+                    <p className="text-xs font-semibold text-text-primary leading-relaxed">
+                        {followUp.question}
+                    </p>
+                </div>
+                <Badge
+                    variant={DIFF_VARIANT[followUp.difficulty] || 'brand'}
+                    size="xs"
+                    className="flex-shrink-0"
+                >
+                    {followUp.difficulty}
+                </Badge>
+            </div>
+
+            {/* Hint */}
+            {followUp.hint && (
+                <div className="mb-3 ml-7">
+                    <button
+                        type="button"
+                        onClick={() => setShowHint(!showHint)}
+                        className="text-[10px] text-brand-300 hover:text-brand-200
+                                   transition-colors flex items-center gap-1"
+                    >
+                        💡 {showHint ? 'Hide hint' : 'Show hint'}
+                    </button>
+                    {showHint && (
+                        <p className="text-[11px] text-text-tertiary mt-1.5
+                                       bg-surface-3 border border-border-subtle
+                                       rounded-lg p-2.5 leading-relaxed">
+                            {followUp.hint}
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* Answer textarea */}
+            <div className="ml-7">
+                <textarea
+                    rows={3}
+                    value={answer || ''}
+                    onChange={e => onAnswerChange(followUp.id, e.target.value)}
+                    placeholder={
+                        followUp.difficulty === 'EASY'
+                            ? 'Update your answer to this follow-up...'
+                            : followUp.difficulty === 'MEDIUM'
+                                ? 'Refine your answer for extra AI feedback...'
+                                : 'Hard bonus question — demonstrate mastery...'
+                    }
+                    className="w-full bg-surface-3 border border-border-strong rounded-xl
+                               text-xs text-text-primary placeholder:text-text-disabled
+                               px-3 py-2.5 outline-none resize-none
+                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                               transition-all"
+                />
+                {!hasAnswer && (
+                    <p className="text-[10px] text-text-disabled mt-1">
+                        Optional — AI will note this was skipped
+                    </p>
+                )}
+            </div>
+        </motion.div>
+    )
+}
+
+// ============================================================================
+// MAIN PAGE
+// ============================================================================
 export default function EditSolutionPage() {
-    const { problemId } = useParams()
+    const { problemId, solutionId } = useParams()
     const navigate = useNavigate()
     const { user } = useAuthStore()
 
@@ -25,14 +123,15 @@ export default function EditSolutionPage() {
     const { data: solutionsData, isLoading: solutionsLoading } = useProblemSolutions(problemId)
     const updateSolution = useUpdateSolution()
 
-    // Find current user's solution from the team solutions
+    // Find current user's solution
     const solutions = solutionsData?.solutions || []
-    const mySolution = solutions.find(s => s.userId === user?.id || s.isOwn)
+    const mySolution = solutions.find(s => s.id === solutionId) ||
+        solutions.find(s => s.userId === user?.id || s.isOwn)
 
     const category = problem?.category || 'CODING'
     const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
 
-    // ── Form state (v3 field names) ────────────────────
+    // ── Form state ─────────────────────────────────────
     const [formData, setFormData] = useState({
         pattern: '',
         approach: '',
@@ -41,17 +140,17 @@ export default function EditSolutionPage() {
         realWorldConnection: '',
         confidence: 3,
     })
-
     const [solutionTabs, setSolutionTabs] = useState([])
     const [commonNotes, setCommonNotes] = useState('')
+    // followUpAnswers: { [followUpQuestionId]: answerText }
+    const [followUpAnswers, setFollowUpAnswers] = useState({})
     const [loaded, setLoaded] = useState(false)
 
     // ── Pre-fill form when solution loads ──────────────
     useEffect(() => {
         if (mySolution && !loaded) {
+            // ── Solution tabs ──────────────────────────
             const existingTabs = []
-
-            // Add brute force tab if exists
             if (mySolution.bruteForce) {
                 existingTabs.push({
                     type: 'BRUTE_FORCE',
@@ -62,8 +161,6 @@ export default function EditSolutionPage() {
                     language: mySolution.language || 'PYTHON',
                 })
             }
-
-            // Add optimized / main solution tab
             existingTabs.push({
                 type: mySolution.bruteForce ? 'OPTIMIZED' : 'BRUTE_FORCE',
                 approach: mySolution.optimizedApproach || mySolution.approach || '',
@@ -72,8 +169,6 @@ export default function EditSolutionPage() {
                 code: mySolution.code || '',
                 language: mySolution.language || 'PYTHON',
             })
-
-            // Fallback: ensure at least one tab
             if (existingTabs.length === 0) {
                 existingTabs.push({
                     type: 'BRUTE_FORCE',
@@ -84,10 +179,10 @@ export default function EditSolutionPage() {
                     language: mySolution.language || 'PYTHON',
                 })
             }
-
             setSolutionTabs(existingTabs)
             setCommonNotes(mySolution.realWorldConnection || '')
 
+            // ── Core fields ────────────────────────────
             setFormData({
                 pattern: mySolution.pattern || '',
                 approach: mySolution.approach || '',
@@ -97,6 +192,17 @@ export default function EditSolutionPage() {
                 confidence: mySolution.confidence || 3,
             })
 
+            // ── Pre-fill follow-up answers from existing DB records ──
+            // mySolution.followUpAnswers comes from getProblemSolutions
+            // which already includes followUpAnswers in its query
+            if (mySolution.followUpAnswers?.length > 0) {
+                const prefilled = {}
+                mySolution.followUpAnswers.forEach(a => {
+                    prefilled[a.followUpQuestionId] = a.answerText
+                })
+                setFollowUpAnswers(prefilled)
+            }
+
             setLoaded(true)
         }
     }, [mySolution, loaded])
@@ -105,6 +211,14 @@ export default function EditSolutionPage() {
         setFormData(prev => ({ ...prev, ...updates }))
     }
 
+    function handleFollowUpAnswer(questionId, text) {
+        setFollowUpAnswers(prev => ({ ...prev, [questionId]: text }))
+    }
+
+    // Derived counts for the progress indicator
+    const followUpCount = problem?.followUpQuestions?.length || 0
+    const answeredCount = Object.values(followUpAnswers).filter(v => v?.trim()).length
+
     async function onSubmit() {
         if (!mySolution) return
 
@@ -112,9 +226,17 @@ export default function EditSolutionPage() {
         const brute = solutionTabs.find(s => s.type === 'BRUTE_FORCE')
         const bestSol = optimized || solutionTabs[0]
         const language = bestSol?.language || 'PYTHON'
+
         localStorage.setItem('ps_last_language', language)
 
-        // v3.0: Map to v3 solution schema
+        // Build follow-up answers array — only answered ones
+        const followUpAnswersArray = Object.entries(followUpAnswers)
+            .filter(([, text]) => text?.trim())
+            .map(([questionId, text]) => ({
+                followUpQuestionId: questionId,
+                answerText: text.trim(),
+            }))
+
         const data = {
             approach: formData.approach || optimized?.approach || bestSol?.approach || null,
             code: bestSol?.code || null,
@@ -128,6 +250,7 @@ export default function EditSolutionPage() {
             realWorldConnection: formData.realWorldConnection || commonNotes || null,
             confidence: formData.confidence || 3,
             pattern: formData.pattern || null,
+            followUpAnswers: followUpAnswersArray,
         }
 
         try {
@@ -150,7 +273,10 @@ export default function EditSolutionPage() {
                 <p className="text-text-secondary text-sm">
                     You haven't submitted a solution for this problem yet.
                 </p>
-                <Button variant="primary" onClick={() => navigate(`/problems/${problemId}/submit`)}>
+                <Button
+                    variant="primary"
+                    onClick={() => navigate(`/problems/${problemId}/submit`)}
+                >
                     Submit Solution
                 </Button>
             </div>
@@ -166,7 +292,7 @@ export default function EditSolutionPage() {
                 type="button"
                 onClick={() => navigate(`/problems/${problemId}`)}
                 className="flex items-center gap-1.5 text-sm text-text-tertiary
-                   hover:text-text-primary transition-colors mb-6"
+                           hover:text-text-primary transition-colors mb-6"
             >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" strokeWidth="2"
@@ -183,7 +309,10 @@ export default function EditSolutionPage() {
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <div className="flex items-center gap-2 mb-1">
-                                <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
+                                <Badge
+                                    variant={DIFF_VARIANT[problem.difficulty] || 'brand'}
+                                    size="xs"
+                                >
                                     {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
                                 </Badge>
                                 {catInfo && (
@@ -195,7 +324,9 @@ export default function EditSolutionPage() {
                                     </span>
                                 )}
                             </div>
-                            <h2 className="text-base font-bold text-text-primary">{problem.title}</h2>
+                            <h2 className="text-base font-bold text-text-primary">
+                                {problem.title}
+                            </h2>
                         </div>
                     </div>
                 </div>
@@ -209,7 +340,7 @@ export default function EditSolutionPage() {
                     <h2 className="text-lg font-bold text-text-primary">Edit Solution</h2>
                 </div>
 
-                {/* ── Pattern section ───────────────────────── */}
+                {/* ── Pattern ───────────────────────────────── */}
                 <div className="space-y-5">
                     <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
                         <span>🧩</span> Pattern
@@ -239,13 +370,13 @@ export default function EditSolutionPage() {
                         value={!PATTERNS.some(p => p.label === selectedPattern) ? selectedPattern : ''}
                         onChange={e => updateFormData({ pattern: e.target.value })}
                         className="w-full bg-surface-3 border border-border-strong rounded-xl
-                         text-sm text-text-primary placeholder:text-text-tertiary
-                         px-3.5 py-2.5 outline-none
-                         focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                   text-sm text-text-primary placeholder:text-text-tertiary
+                                   px-3.5 py-2.5 outline-none
+                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                     />
                 </div>
 
-                {/* ── Solutions section ──────────────────────── */}
+                {/* ── Solutions ─────────────────────────────── */}
                 <div className="space-y-4">
                     <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
                         <span>💻</span> Solutions
@@ -258,7 +389,7 @@ export default function EditSolutionPage() {
                     />
                 </div>
 
-                {/* ── Reflection section ─────────────────────── */}
+                {/* ── Reflection ────────────────────────────── */}
                 <div className="space-y-5">
                     <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
                         <span>🔬</span> Reflection
@@ -268,11 +399,13 @@ export default function EditSolutionPage() {
                     <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
                         <div className="flex items-start gap-3 mb-3">
                             <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
-                              justify-center text-base flex-shrink-0 mt-0.5">
+                                            justify-center text-base flex-shrink-0 mt-0.5">
                                 💡
                             </div>
                             <div>
-                                <h4 className="text-sm font-bold text-text-primary mb-0.5">Key Insight</h4>
+                                <h4 className="text-sm font-bold text-text-primary mb-0.5">
+                                    Key Insight
+                                </h4>
                                 <p className="text-xs text-text-tertiary">
                                     In one sentence — what makes this problem click?
                                 </p>
@@ -284,9 +417,9 @@ export default function EditSolutionPage() {
                             onChange={e => updateFormData({ keyInsight: e.target.value })}
                             placeholder="e.g. The trick is realizing you only need to track the running max..."
                             className="w-full bg-surface-3 border border-border-strong rounded-xl
-                         text-sm text-text-primary placeholder:text-text-tertiary
-                         px-3.5 py-2.5 outline-none resize-none
-                         focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                       text-sm text-text-primary placeholder:text-text-tertiary
+                                       px-3.5 py-2.5 outline-none resize-none
+                                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                         />
                     </div>
 
@@ -294,7 +427,7 @@ export default function EditSolutionPage() {
                     <div className="bg-surface-2 border border-border-default rounded-2xl p-5">
                         <div className="flex items-start gap-3 mb-3">
                             <div className="w-8 h-8 rounded-lg bg-info/15 flex items-center
-                              justify-center text-base flex-shrink-0 mt-0.5">
+                                            justify-center text-base flex-shrink-0 mt-0.5">
                                 🗣
                             </div>
                             <div>
@@ -318,7 +451,7 @@ export default function EditSolutionPage() {
                     <div className="bg-surface-2 border border-border-default rounded-2xl p-5">
                         <div className="flex items-start gap-3 mb-3">
                             <div className="w-8 h-8 rounded-lg bg-warning/15 flex items-center
-                              justify-center text-base flex-shrink-0 mt-0.5">
+                                            justify-center text-base flex-shrink-0 mt-0.5">
                                 🌍
                             </div>
                             <div>
@@ -372,50 +505,74 @@ export default function EditSolutionPage() {
                         </div>
                     </div>
 
-                    {/* Follow-up questions (read-only display) */}
+                    {/* ── Follow-up Questions — INTERACTIVE ─── */}
                     {problem?.followUpQuestions?.length > 0 && (
-                        <div className="space-y-4">
-                            <label className="block text-sm font-semibold text-text-primary">
-                                Follow-up Questions
-                            </label>
-                            {problem.followUpQuestions.map((fq, i) => (
-                                <div key={fq.id || i}
-                                    className="bg-surface-2 border border-border-default rounded-xl p-4">
-                                    <div className="flex items-start gap-3">
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-3
-                                     border border-border-default flex items-center
-                                     justify-center text-xs font-bold text-text-tertiary mt-0.5">
-                                            {i + 1}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                                    <span>🧠</span> Follow-up Questions
+                                </h3>
+                                <span className={cn(
+                                    'text-[9px] font-bold px-1.5 py-px rounded-full border',
+                                    answeredCount > 0
+                                        ? 'bg-success/10 text-success border-success/25'
+                                        : 'bg-brand-400/10 text-brand-300 border-brand-400/25'
+                                )}>
+                                    {answeredCount > 0
+                                        ? `${answeredCount}/${followUpCount} answered`
+                                        : 'Optional — earn bonus points'}
+                                </span>
+                            </div>
+                            <p className="text-xs text-text-tertiary">
+                                Your previous answers are pre-filled. Update or add answers
+                                to improve your AI review score.
+                            </p>
+                            <div className="space-y-3">
+                                {problem.followUpQuestions.map((fq, i) => (
+                                    <FollowUpWithAnswer
+                                        key={fq.id}
+                                        followUp={fq}
+                                        index={i}
+                                        answer={followUpAnswers[fq.id] || ''}
+                                        onAnswerChange={handleFollowUpAnswer}
+                                    />
+                                ))}
+                            </div>
+                            {/* Progress bar */}
+                            {followUpCount > 0 && (
+                                <div className="pt-3 border-t border-border-subtle">
+                                    <div className="flex items-center justify-between text-xs mb-1.5">
+                                        <span className="text-text-disabled">Follow-up progress</span>
+                                        <span className={cn(
+                                            'font-semibold',
+                                            answeredCount === followUpCount
+                                                ? 'text-success'
+                                                : answeredCount > 0
+                                                    ? 'text-brand-300'
+                                                    : 'text-text-disabled'
+                                        )}>
+                                            {answeredCount}/{followUpCount} answered
+                                            {answeredCount > 0 && ` (+${Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus)`}
                                         </span>
-                                        <div className="flex-1">
-                                            <div className="flex items-start justify-between gap-2">
-                                                <p className="text-sm font-medium text-text-primary">
-                                                    {fq.question}
-                                                </p>
-                                                <Badge
-                                                    variant={DIFF_VARIANT[fq.difficulty] || 'brand'}
-                                                    size="xs"
-                                                    className="flex-shrink-0"
-                                                >
-                                                    {fq.difficulty?.charAt(0) + fq.difficulty?.slice(1).toLowerCase()}
-                                                </Badge>
-                                            </div>
-                                            {fq.hint && (
-                                                <details className="mt-2">
-                                                    <summary className="text-xs text-brand-300 cursor-pointer
-                                                      hover:text-brand-200 transition-colors w-fit">
-                                                        💡 Show hint
-                                                    </summary>
-                                                    <p className="text-xs text-text-secondary mt-1.5 bg-surface-3
-                                                        border border-border-subtle rounded-lg p-2.5">
-                                                        {fq.hint}
-                                                    </p>
-                                                </details>
+                                    </div>
+                                    <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                                        <motion.div
+                                            animate={{
+                                                width: `${followUpCount > 0
+                                                    ? (answeredCount / followUpCount) * 100
+                                                    : 0}%`
+                                            }}
+                                            transition={{ duration: 0.4 }}
+                                            className={cn(
+                                                'h-full rounded-full',
+                                                answeredCount === followUpCount
+                                                    ? 'bg-success'
+                                                    : 'bg-brand-400'
                                             )}
-                                        </div>
+                                        />
                                     </div>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
                 </div>

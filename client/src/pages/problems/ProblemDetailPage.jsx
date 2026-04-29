@@ -305,7 +305,7 @@ export default function ProblemDetailPage() {
                         <Button
                             variant="secondary"
                             size="md"
-                            onClick={() => navigate(`/problems/${problemId}/submit`)}
+                            onClick={() => navigate(`/problems/${problemId}/edit-solution/${problem.userSolutionId}`)}
                         >
                             Edit My Solution
                         </Button>
