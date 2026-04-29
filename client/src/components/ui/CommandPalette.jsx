@@ -55,6 +55,7 @@ function useSuperAdminCommands(navigate, close) {
         { label: 'All Teams', shortcut: 'G T', icon: '🏢', action: () => { navigate('/super-admin/teams'); close() } },
         { label: 'All Users', shortcut: 'G U', icon: '👥', action: () => { navigate('/super-admin/users'); close() } },
         { label: 'Platform Analytics', shortcut: 'G A', icon: '📊', action: () => { navigate('/super-admin/analytics'); close() } },
+        { label: 'Product Roadmap', icon: '🗺️', action: () => { navigate('/super-admin/roadmap'); close() } },
         { label: 'Settings', shortcut: 'G S', icon: '⚙️', action: () => { navigate('/super-admin/settings'); close() } },
         { label: 'My Profile', icon: '👤', action: () => { navigate('/super-admin/profile'); close() } },
       ],

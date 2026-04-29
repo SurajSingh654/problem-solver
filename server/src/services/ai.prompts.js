@@ -306,123 +306,89 @@ Identify patterns in what they got wrong and give specific study advice.`;
 // ── AI Problem Generation — Stage 1: Problem Selection ─────────
 // Fast call to decide WHAT problems to generate before generating content.
 export function problemSelectionPrompt(data) {
-  const platformGuide = {
-    CODING: `
-Available platforms with their exact URL formats and verified working examples:
+  const leetcodeGuidance = `
+PLATFORM: LeetCode only for now.
+URL format: https://leetcode.com/problems/[slug]/
+Verified examples:
+  https://leetcode.com/problems/two-sum/
+  https://leetcode.com/problems/longest-substring-without-repeating-characters/
+  https://leetcode.com/problems/merge-intervals/
+  https://leetcode.com/problems/number-of-islands/
+  https://leetcode.com/problems/coin-change/
+  https://leetcode.com/problems/binary-tree-level-order-traversal/
+  https://leetcode.com/problems/course-schedule/
+  https://leetcode.com/problems/word-break/
+  https://leetcode.com/problems/meeting-rooms-ii/
+  https://leetcode.com/problems/find-median-from-data-stream/
 
-- LEETCODE (source: "LEETCODE")
-  URL format: https://leetcode.com/problems/[slug]/
-  Examples that WORK:
-    https://leetcode.com/problems/two-sum/
-    https://leetcode.com/problems/longest-substring-without-repeating-characters/
-    https://leetcode.com/problems/merge-intervals/
-  RULE: Slug is lowercase with hyphens. Very reliable — use this format exactly.
+SLUG RULES:
+- Always lowercase with hyphens
+- No special characters
+- Common patterns: "two-sum", "longest-[adjective]-[noun]", "number-of-[noun]"
+- Roman numerals for parts: "best-time-to-buy-and-sell-stock-ii"
+- Numbers spelled: "4sum" not "four-sum" — verify before using
+`;
 
-- GFG (source: "GFG")
-  URL format: https://www.geeksforgeeks.org/problems/[slug]/1
-  Examples that WORK:
-    https://www.geeksforgeeks.org/problems/two-sum--170645/1
-    https://www.geeksforgeeks.org/problems/peak-element/1
-    https://www.geeksforgeeks.org/problems/missing-number-in-array1416/1
-    https://www.geeksforgeeks.org/problems/longest-common-substring1452/1
-  RULE: Always use /problems/[slug]/1 format. Never use the article URL format (/find-a-peak-in-an-array/).
-  If unsure of exact slug, prefer GFG search: https://www.geeksforgeeks.org/problems/[best-guess-slug]/1
-
-- HACKERRANK (source: "HACKERRANK")
-  URL format: https://www.hackerrank.com/challenges/[slug]/problem
-  Examples that WORK:
-    https://www.hackerrank.com/challenges/arrays-ds/problem
-    https://www.hackerrank.com/challenges/ctci-array-left-rotation/problem
-    https://www.hackerrank.com/challenges/diagonal-difference/problem
-    https://www.hackerrank.com/challenges/linkedin-practice-insert-a-node-at-specific-position-in-a-linked-list/problem
-  RULE: Must end in /problem. Only use well-known HackerRank problems you are certain exist.
-
-- INTERVIEWBIT (source: "INTERVIEWBIT")
-  URL format: https://www.interviewbit.com/problems/[slug]/
-  Examples that WORK:
-    https://www.interviewbit.com/problems/2-sum/
-    https://www.interviewbit.com/problems/best-time-to-buy-and-sell-stocks-i/
-    https://www.interviewbit.com/problems/merge-intervals/
-    https://www.interviewbit.com/problems/min-stack/
-  RULE: Numbers are written as words or with hyphens (stocks-i not stock). 
-  Only use problems you are highly confident about. If uncertain, use LEETCODE instead.
-
-- CODECHEF (source: "CODECHEF")
-  URL format: https://www.codechef.com/problems/[SLUG]
-  Examples that WORK:
-    https://www.codechef.com/problems/INTEST
-    https://www.codechef.com/problems/FLOW001
-  RULE: CodeChef slugs are typically uppercase. Only use for competitive programming problems.
-  For standard DSA interview problems, prefer LEETCODE or GFG.
-
-CRITICAL URL RULES:
-1. Only generate a URL you are HIGHLY CONFIDENT is correct
-2. If you are not 100% sure of the exact slug, use LEETCODE — it is the most reliable
-3. NEVER use article-style GFG URLs like /find-a-peak-in-an-array/ — always use /problems/[slug]/1
-4. Test your URL mentally: does it follow the exact format shown in the working examples?
-5. When in doubt, choose LEETCODE over other platforms
-
-PLATFORM ROTATION: Spread across platforms but RELIABILITY > DIVERSITY.
-If you cannot generate a reliable URL for a non-Leetcode platform, use LEETCODE instead.`,
-    SQL: `
-Available platforms for SQL:
-- LEETCODE (source: "LEETCODE"): URL format: https://leetcode.com/problems/[slug]/
-  Most reliable. Examples: https://leetcode.com/problems/combine-two-tables/
-- HACKERRANK (source: "HACKERRANK"): URL format: https://www.hackerrank.com/challenges/[slug]/problem
-  Examples: https://www.hackerrank.com/challenges/revising-the-select-query/problem
-- GFG (source: "GFG"): URL format: https://www.geeksforgeeks.org/problems/[slug]/1
-
-RULE: Prefer LEETCODE for SQL problems — most consistent URL format.`,
-  };
+  const slotInstructions = data.platformAssignments
+    ? data.platformAssignments
+        .map(
+          (slot) =>
+            `Slot ${slot.slot}: ${slot.difficulty === "auto" ? "Appropriate" : slot.difficulty} difficulty problem`,
+        )
+        .join("\n")
+    : "";
 
   const categoryDepth = {
-    CODING: `Focus on algorithm patterns: Array, Hashing, Two Pointers, Sliding Window, Binary Search, Linked List, Trees, Graphs, Dynamic Programming, Greedy, Backtracking, Heap, Tries`,
-    SYSTEM_DESIGN: `Focus on real systems: URL Shortener, Chat App, Feed System, Search Engine, Ride Sharing, Video Streaming, Payment System, Notification Service, Rate Limiter, Distributed Cache`,
-    BEHAVIORAL: `Cover competencies: Leadership, Conflict Resolution, Failure & Learning, Initiative, Teamwork, Ambiguity, Customer Focus, Time Management, Cross-team Collaboration, Technical Disagreement`,
-    CS_FUNDAMENTALS: `Cover topics: Operating Systems (Process Management, Memory, Concurrency), Networking (TCP/IP, HTTP, DNS, Load Balancing), DBMS (Indexing, Transactions, Normalization), OOP (SOLID, Design Patterns)`,
-    HR: `Cover scenarios: Why this company, Career goals, Strengths/Weaknesses, Salary expectations, Work style, Culture fit, 5-year plan, Remote work, Conflict with manager`,
-    SQL: `Cover patterns: JOINs, Subqueries, Window Functions (ROW_NUMBER, RANK, LAG, LEAD), CTEs, Aggregations, HAVING, EXISTS, Recursive queries, Query optimization`,
+    CODING: `Algorithm patterns: Two Pointers, Sliding Window, Binary Search, Hashing, Sorting, Stack, Queue, Linked List, Trees (DFS/BFS), Graphs, Dynamic Programming, Greedy, Backtracking, Heap, Trie, Bit Manipulation`,
+    SYSTEM_DESIGN: `Systems: URL Shortener, Chat App, News Feed, Search Engine, Ride Sharing, Video Streaming, Payment System, Notification Service, Rate Limiter, Distributed Cache`,
+    BEHAVIORAL: `Competencies: Leadership, Conflict Resolution, Failure & Learning, Initiative, Teamwork, Ambiguity, Customer Focus, Technical Disagreement`,
+    CS_FUNDAMENTALS: `Topics: OS (Processes, Memory, Concurrency), Networking (TCP/IP, HTTP, DNS), DBMS (Indexing, Transactions, ACID), OOP (SOLID, Design Patterns)`,
+    HR: `Scenarios: Motivation, Career Goals, Strengths/Weaknesses, Culture Fit, Work Style, Salary, Why this company`,
+    SQL: `Patterns: JOINs, Subqueries, Window Functions, CTEs, Aggregations, HAVING, EXISTS, Query optimization`,
   };
 
-  const system = `You are a curriculum designer for an interview preparation platform.
-Your job is to SELECT which problems to generate — not write the content yet.
+  const system = `You are a curriculum designer selecting interview problems for a preparation platform.
 
-${platformGuide[data.category] || ""}
+${data.category === "CODING" || data.category === "SQL" ? leetcodeGuidance : ""}
+
+SLOTS TO FILL:
+${slotInstructions}
 
 TEAM INTELLIGENCE:
-${data.teamContext || "New team — no data yet. Start with fundamentals."}
+${data.teamContext || "New team — start with fundamentals."}
 
-AVOID THESE (already in the team):
-${data.existingProblems || "None yet — this is a fresh start."}
+AVOID (already in team):
+${data.existingProblems || "None — fresh start."}
 
-DIFFICULTY REQUIREMENT:
-${data.difficultyInstruction}
+CATEGORY: ${data.category}
+TOPIC AREAS: ${categoryDepth[data.category] || ""}
+${data.targetCompany ? `TARGET COMPANY STYLE: ${data.targetCompany}` : ""}
+${data.focusAreas ? `ADMIN FOCUS: ${data.focusAreas}` : ""}
 
-CATEGORY FOCUS (${data.category}):
-${categoryDepth[data.category] || ""}
+RULES:
+1. Only generate URLs you are HIGHLY CONFIDENT exist on LeetCode
+2. Problems should build on each other — create a learning progression
+3. Match the difficulty for each slot exactly
+4. No duplicate titles with existing team problems
 
-${data.targetCompany ? `TARGET COMPANY STYLE: ${data.targetCompany} — select problems that this company is known for asking.` : ""}
-${data.focusAreas ? `ADMIN FOCUS REQUEST: ${data.focusAreas} — prioritize problems in these areas.` : ""}
-
-Return ONLY a JSON list of problem selections — no content yet:
+Return JSON:
 {
   "selections": [
     {
-      "title": "exact problem title as it appears on the platform",
+      "title": "exact LeetCode problem title",
       "difficulty": "EASY" | "MEDIUM" | "HARD",
-      "platform": "LEETCODE" | "GFG" | "HACKERRANK" | "INTERVIEWBIT" | "CODECHEF" | "OTHER",
-      "url": "exact working URL to this problem",
-      "pattern": "primary algorithm pattern or topic area",
-      "whySelected": "one sentence: why this problem for this team right now"
+      "platform": "LEETCODE",
+      "url": "https://leetcode.com/problems/[exact-slug]/",
+      "urlConfidence": "high" | "medium" | "low",
+      "pattern": "primary algorithm pattern",
+      "whySelected": "one sentence: why this problem for this team"
     }
   ],
-  "learningPath": "one sentence describing how these problems build on each other"
+  "learningPath": "one sentence: how these problems build on each other"
 }`;
 
-  const user = `Select ${data.count} ${data.category.replace("_", " ").toLowerCase()} problem${data.count > 1 ? "s" : ""} for this team.
-Count: ${data.count}
-Category: ${data.category}
-Difficulty requirement: ${data.difficulty}`;
+  const user = `Select ${data.count} ${data.category.replace("_", " ").toLowerCase()} problem${data.count > 1 ? "s" : ""} from LeetCode.
+Build a logical learning progression.`;
 
   return { system, user };
 }

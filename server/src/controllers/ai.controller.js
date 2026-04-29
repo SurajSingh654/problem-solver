@@ -9,7 +9,6 @@
 // This is "pool-based multi-tenant RAG" — same table, filtered queries.
 //
 // ============================================================================
-
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
@@ -17,7 +16,6 @@ import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
 // ============================================================================
 // AI SOLUTION REVIEW (RAG-Enhanced, Team-Scoped)
 // ============================================================================
-
 export async function reviewSolution(req, res) {
   try {
     if (!AI_ENABLED) {
@@ -30,7 +28,7 @@ export async function reviewSolution(req, res) {
 
     // ── Fetch solution with problem context ────────────
     const solution = await prisma.solution.findFirst({
-      where: { id: solutionId, userId, teamId }, // SCOPING
+      where: { id: solutionId, userId, teamId },
       include: {
         problem: {
           select: {
@@ -65,8 +63,6 @@ export async function reviewSolution(req, res) {
 
       if (queryEmbedding) {
         const vectorStr = `[${queryEmbedding.join(",")}]`;
-
-        // TEAM-SCOPED VECTOR SEARCH — the critical multi-tenant RAG query
         teammateSolutions = await prisma.$queryRawUnsafe(
           `
   SELECT
@@ -98,7 +94,7 @@ export async function reviewSolution(req, res) {
       console.error("RAG search failed (continuing without):", err.message);
     }
 
-    // ── Build prompt with RAG context ──────────────────
+    // ── Build RAG context string ───────────────────────
     let ragContext = "";
     if (teammateSolutions.length > 0) {
       ragContext = "\n\n--- TEAMMATE SOLUTIONS (for comparison) ---\n";
@@ -128,10 +124,17 @@ export async function reviewSolution(req, res) {
       messages: [
         {
           role: "system",
+          // NOTE: User no longer fills time/space complexity manually.
+          // AI must derive complexity analysis from the submitted code.
           content: `You are a senior engineering interview coach reviewing a candidate's solution.
 Category: ${solution.problem.category}. Difficulty: ${solution.problem.difficulty}.
 
-If teammate solutions are provided, compare the candidate's approach and offer specific comparative feedback — reference teammates by name.
+IMPORTANT: The candidate did not manually provide time/space complexity.
+You must derive it by analyzing their submitted code. If no code provided,
+infer complexity from their approach description.
+
+If teammate solutions are provided, compare the candidate's approach and
+offer specific comparative feedback — reference teammates by name.
 If admin teaching notes are provided, check if the candidate's approach aligns.
 
 Return JSON:
@@ -141,23 +144,29 @@ Return JSON:
   "gaps": ["specific gap 1", ...],
   "improvement": "One specific, actionable improvement suggestion",
   "interviewTip": "One specific tip for explaining this in an interview",
-  "complexityCheck": { "timeCorrect": bool, "spaceCorrect": bool, "suggestion": "..." }
+  "complexityCheck": {
+    "timeComplexity": "O(...) — derived from code analysis",
+    "spaceComplexity": "O(...) — derived from code analysis",
+    "timeCorrect": true,
+    "spaceCorrect": true,
+    "suggestion": "Any optimization opportunity or null"
+  }
 }`,
         },
         {
           role: "user",
           content: `Problem: ${solution.problem.title}
 Description: ${solution.problem.description || "N/A"}
-
 --- CANDIDATE'S SOLUTION ---
 Approach: ${solution.approach || "Not provided"}
-Code: ${solution.code ? solution.code.substring(0, 1000) : "Not provided"}
-Time Complexity: ${solution.timeComplexity || "Not provided"}
-Space Complexity: ${solution.spaceComplexity || "Not provided"}
+Code:
+\`\`\`
+${solution.code ? solution.code.substring(0, 1500) : "No code provided"}
+\`\`\`
 Key Insight: ${solution.keyInsight || "Not provided"}
 Feynman Explanation: ${solution.feynmanExplanation || "Not provided"}
-Pattern: ${solution.pattern || "Not identified"}
-Confidence: ${solution.confidence}/5
+Pattern Identified: ${solution.pattern || "Not identified"}
+Self-Confidence: ${solution.confidence}/5
 ${ragContext}${adminContext}`,
         },
       ],
@@ -173,7 +182,18 @@ ${ragContext}${adminContext}`,
     // ── Store feedback on solution ─────────────────────
     await prisma.solution.update({
       where: { id: solutionId },
-      data: { aiFeedback: feedback },
+      data: {
+        aiFeedback: feedback,
+        // Auto-populate complexity fields from AI analysis if not set
+        timeComplexity:
+          solution.timeComplexity ||
+          feedback.complexityCheck?.timeComplexity ||
+          null,
+        spaceComplexity:
+          solution.spaceComplexity ||
+          feedback.complexityCheck?.spaceComplexity ||
+          null,
+      },
     });
 
     return success(res, {
@@ -192,7 +212,6 @@ ${ragContext}${adminContext}`,
 // ============================================================================
 // AI PROGRESSIVE HINTS (Team-Scoped)
 // ============================================================================
-
 export async function getHint(req, res) {
   try {
     if (!AI_ENABLED) {
@@ -200,11 +219,11 @@ export async function getHint(req, res) {
     }
 
     const { problemId } = req.params;
-    const { level } = req.body; // 1, 2, or 3
+    const { level } = req.body;
     const teamId = req.teamId;
 
     const problem = await prisma.problem.findFirst({
-      where: { id: problemId, teamId }, // SCOPING
+      where: { id: problemId, teamId },
       select: {
         title: true,
         description: true,
@@ -219,7 +238,6 @@ export async function getHint(req, res) {
     }
 
     const hintLevel = Math.min(Math.max(parseInt(level) || 1, 1), 3);
-
     const levelInstructions = {
       1: "Give a vague directional nudge. Do NOT name the pattern or approach. Just point them in the right direction.",
       2: 'Name the general approach category (e.g., "Consider a sliding window approach") but do NOT give specific implementation details.',
@@ -262,7 +280,6 @@ Keep it to 1-2 sentences maximum.`,
 // ============================================================================
 // AI WEEKLY COACHING PLAN (Team-Context-Aware)
 // ============================================================================
-
 export async function getWeeklyPlan(req, res) {
   try {
     if (!AI_ENABLED) {
@@ -273,6 +290,10 @@ export async function getWeeklyPlan(req, res) {
     const teamId = req.teamId;
 
     // ── Gather user data scoped to team ────────────────
+    // SCOPING NOTE: quizzes are intentionally NOT scoped to teamId here.
+    // Quizzes are personal knowledge checks that apply regardless of
+    // which team the user is in. Scoping them would exclude quizzes
+    // taken in personal mode from the coaching plan — wrong behavior.
     const [
       user,
       solutionCount,
@@ -283,7 +304,11 @@ export async function getWeeklyPlan(req, res) {
     ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
-        select: { targetCompany: true, interviewDate: true, streak: true },
+        select: {
+          targetCompany: true,
+          interviewDate: true,
+          streak: true,
+        },
       }),
       prisma.solution.count({ where: { userId, teamId } }),
       prisma.solution.findMany({
@@ -296,8 +321,9 @@ export async function getWeeklyPlan(req, res) {
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
+      // Intentionally NOT scoped to teamId — personal knowledge
       prisma.quizAttempt.findMany({
-        where: { userId, teamId, completedAt: { not: null } },
+        where: { userId, completedAt: { not: null } },
         select: { subject: true, score: true },
         orderBy: { createdAt: "desc" },
         take: 10,
@@ -314,6 +340,7 @@ export async function getWeeklyPlan(req, res) {
     const categories = {};
     const patterns = new Set();
     let totalConf = 0;
+
     recentSolutions.forEach((s) => {
       const cat = s.problem?.category || "CODING";
       categories[cat] = (categories[cat] || 0) + 1;
@@ -348,13 +375,17 @@ export async function getWeeklyPlan(req, res) {
           content: `You are a personal interview coach creating a specific 7-day study plan.
 Based on the candidate's data, create daily tasks that address their weak areas.
 Be SPECIFIC — name exact problem types, categories, and actions.
-
 Return JSON:
 {
   "weeklyGoal": "One sentence goal for the week",
   "days": [
     { "day": "Monday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
-    ...
+    { "day": "Tuesday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
+    { "day": "Wednesday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
+    { "day": "Thursday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
+    { "day": "Friday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
+    { "day": "Saturday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "45 min" },
+    { "day": "Sunday", "focus": "review", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" }
   ],
   "keyInsight": "One insight about their preparation gaps"
 }`,
@@ -363,20 +394,19 @@ Return JSON:
           role: "user",
           content: `Stats:
 - Solutions: ${solutionCount}, Avg confidence: ${recentSolutions.length > 0 ? (totalConf / recentSolutions.length).toFixed(1) : "N/A"}
-- Categories: ${JSON.stringify(categories)}
+- Categories practiced: ${JSON.stringify(categories)}
 - Patterns practiced: ${[...patterns].join(", ") || "none"}
-- Quizzes: ${quizzes.length}, Avg score: ${avgQuizScore ?? "N/A"}%
-- Mock interviews: ${interviews}
-- Reviews due: ${reviewsDue}
-- Target: ${user?.targetCompany || "Not set"}
+- Quizzes taken: ${quizzes.length}, Avg score: ${avgQuizScore ?? "N/A"}%
+- Mock interviews completed: ${interviews}
+- Reviews overdue: ${reviewsDue}
+- Target company: ${user?.targetCompany || "Not set"}
 - Days until interview: ${daysUntilInterview ?? "Not set"}
-- Streak: ${user?.streak || 0} days`,
+- Current streak: ${user?.streak || 0} days`,
         },
       ],
     });
 
     const plan = JSON.parse(response.choices[0].message.content);
-
     return success(res, { plan });
   } catch (err) {
     console.error("Weekly plan error:", err);
@@ -387,7 +417,6 @@ Return JSON:
 // ============================================================================
 // AI PROBLEM CONTENT GENERATOR (TEAM_ADMIN tool)
 // ============================================================================
-
 export async function generateProblemContent(req, res) {
   try {
     if (!AI_ENABLED) {
@@ -408,7 +437,6 @@ export async function generateProblemContent(req, res) {
         {
           role: "system",
           content: `You are an expert interview problem designer. Generate complete problem content.
-
 Return JSON:
 {
   "description": "Full problem description with examples",
@@ -431,7 +459,6 @@ Return JSON:
     });
 
     const content = JSON.parse(response.choices[0].message.content);
-
     return success(res, { content });
   } catch (err) {
     console.error("Generate content error:", err);
@@ -442,7 +469,6 @@ Return JSON:
 // ============================================================================
 // SIMILAR PROBLEMS SEARCH (Team-Scoped Vector Search)
 // ============================================================================
-
 export async function findSimilarProblems(req, res) {
   try {
     if (!AI_ENABLED) {
@@ -462,7 +488,6 @@ export async function findSimilarProblems(req, res) {
 
     const vectorStr = `[${embedding.join(",")}]`;
 
-    // TEAM-SCOPED vector similarity search
     const similar = await prisma.$queryRawUnsafe(
       `
   SELECT
@@ -496,15 +521,14 @@ export async function findSimilarProblems(req, res) {
 // ============================================================================
 //
 // ARCHITECTURE:
-// Stage 1 — Intelligence: Gather team performance data from DB
-// Stage 2 — Selection: AI decides WHAT problems to generate (fast, cheap)
+// Stage 1 — Intelligence: Gather team performance data from DB (parallel queries)
+// Stage 2 — Selection: AI decides WHAT problems to generate (fast, cheap call)
 // Stage 3 — Content: Generate rich content per problem IN PARALLEL
 //
-// Benefits over single-call approach:
-// - Never hits token limits (each call is focused)
-// - Better quality (each prompt has one job)
-// - Faster (parallel content generation)
-// - More resilient (partial failures return partial results)
+// Platform assignment: done in CODE before Stage 2, not left to AI.
+// Currently LeetCode-only for reliable URLs.
+// TODO: Replace with Search API for multi-platform support.
+// See Super Admin → Product Roadmap for details.
 //
 // ============================================================================
 export async function generateProblemsAI(req, res) {
@@ -525,7 +549,6 @@ export async function generateProblemsAI(req, res) {
     const difficultyPref = difficulty || "auto";
 
     // ── STAGE 1: Intelligence Gathering ────────────────
-    // Understand the team deeply before generating anything.
     // All DB queries run in parallel for speed.
     let teamContext = "";
     let existingProblems = "";
@@ -534,13 +557,13 @@ export async function generateProblemsAI(req, res) {
     try {
       const [existing, totalMembers, solutionStats, patternGaps] =
         await Promise.all([
-          // What problems already exist (avoid duplicates)
+          // Existing problems to avoid duplicates
           prisma.problem.findMany({
             where: { teamId, category, isPublished: true },
             select: { title: true, difficulty: true },
             take: 50,
           }),
-          // Team size
+          // Team size for context
           prisma.user.count({ where: { currentTeamId: teamId } }),
           // Performance by difficulty in this category
           prisma.$queryRaw`
@@ -555,7 +578,8 @@ export async function generateProblemsAI(req, res) {
               AND p.category = ${category}::"ProblemCategory"
             GROUP BY p.difficulty
           `,
-          // What patterns/topics have been practiced vs missing
+          // This user's patterns to find gaps (intentionally userId-scoped,
+          // not team-scoped — we want to know what THIS user has practiced)
           prisma.solution.findMany({
             where: { teamId, userId },
             select: { pattern: true, confidence: true },
@@ -564,54 +588,52 @@ export async function generateProblemsAI(req, res) {
           }),
         ]);
 
-      // Build existing problems list
+      // Build existing problems list for deduplication
       if (existing.length > 0) {
         existingProblems = existing
           .map((p) => `- ${p.title} (${p.difficulty})`)
           .join("\n");
       }
 
-      // Build rich team context
+      // Build rich team context string
       if (solutionStats.length > 0) {
         teamContext = `Team size: ${totalMembers} members\n`;
         teamContext += `Experience in ${category}:\n`;
         solutionStats.forEach((s) => {
-          const confidence =
+          const level =
             s.avg_confidence >= 4
               ? "Strong"
               : s.avg_confidence >= 3
                 ? "Developing"
                 : "Struggling";
-          teamContext += `  ${s.difficulty}: ${s.solvers} members have solved, avg confidence ${s.avg_confidence}/5 (${confidence})\n`;
+          teamContext += `  ${s.difficulty}: ${s.solvers}/${totalMembers} members solved, avg confidence ${s.avg_confidence}/5 (${level})\n`;
         });
 
-        // Identify patterns they've practiced
         const practicedPatterns = [
-          ...new Set(patternGaps.filter((s) => s.pattern).map((s) => s.pattern)),
+          ...new Set(
+            patternGaps.filter((s) => s.pattern).map((s) => s.pattern),
+          ),
         ];
         if (practicedPatterns.length > 0) {
           teamContext += `Patterns already practiced: ${practicedPatterns.join(", ")}\n`;
         }
 
-        // Identify weak areas (low confidence solutions)
-        const weakSolutions = patternGaps.filter((s) => s.confidence <= 2);
-        if (weakSolutions.length > 0) {
-          const weakPatterns = [
-            ...new Set(
-              weakSolutions.filter((s) => s.pattern).map((s) => s.pattern),
-            ),
-          ];
-          if (weakPatterns.length > 0) {
-            teamContext += `Weak areas needing reinforcement: ${weakPatterns.join(", ")}\n`;
-          }
+        const weakPatterns = [
+          ...new Set(
+            patternGaps
+              .filter((s) => s.confidence <= 2 && s.pattern)
+              .map((s) => s.pattern),
+          ),
+        ];
+        if (weakPatterns.length > 0) {
+          teamContext += `Weak areas needing reinforcement: ${weakPatterns.join(", ")}\n`;
         }
       } else {
-        teamContext = `Team size: ${totalMembers} members. Fresh start in ${category} — no solutions submitted yet. Begin with accessible fundamentals.`;
+        teamContext = `Team size: ${totalMembers} members. Fresh start in ${category} — no solutions yet. Begin with fundamentals.`;
       }
 
-      // Build difficulty instruction
+      // Compute difficulty instruction from actual team performance
       if (difficultyPref === "auto") {
-        // Determine best difficulty based on team performance
         const hasEasy = solutionStats.find((s) => s.difficulty === "EASY");
         const hasMedium = solutionStats.find((s) => s.difficulty === "MEDIUM");
 
@@ -633,21 +655,46 @@ export async function generateProblemsAI(req, res) {
       }
     } catch (err) {
       console.error("Stage 1 intelligence gathering failed:", err.message);
+      // Non-fatal — continue with defaults
       teamContext = "Context unavailable — generate balanced problems.";
       difficultyInstruction =
         difficultyPref === "auto"
           ? "Mix of EASY, MEDIUM, and HARD."
-          : `${difficultyPref} difficulty.`;
+          : difficultyPref.startsWith("custom:")
+            ? difficultyInstruction || "Mix of difficulties."
+            : `${difficultyPref} difficulty.`;
     }
 
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
     // ── STAGE 2: Problem Selection ──────────────────────
-    // Fast AI call to decide WHAT to generate.
-    // Small output = cheap + fast + reliable.
+    // Platform assignments computed HERE in code — not left to AI.
+    // This guarantees reliable URLs (LeetCode-only for now).
+    // TODO: Replace with Search API for multi-platform support.
+    // See Super Admin → Product Roadmap for details.
     const { problemSelectionPrompt, problemContentGenerationPrompt } =
       await import("../services/ai.prompts.js");
+
+    const platformAssignments = Array.from(
+      { length: problemCount },
+      (_, i) => ({
+        platform:
+          category === "CODING" || category === "SQL" ? "LEETCODE" : "OTHER",
+        slot: i + 1,
+        difficulty: (() => {
+          if (!difficultyPref.startsWith("custom:")) {
+            return difficultyPref === "auto" ? "auto" : difficultyPref;
+          }
+          const parts = difficultyPref.replace("custom:", "").split(",");
+          const easy = parseInt(parts[0]) || 0;
+          const medium = parseInt(parts[1]) || 0;
+          if (i < easy) return "EASY";
+          if (i < easy + medium) return "MEDIUM";
+          return "HARD";
+        })(),
+      }),
+    );
 
     const selectionPromptData = {
       category,
@@ -658,6 +705,7 @@ export async function generateProblemsAI(req, res) {
       existingProblems,
       targetCompany,
       focusAreas,
+      platformAssignments,
     };
 
     const { system: selSystem, user: selUser } =
@@ -671,7 +719,7 @@ export async function generateProblemsAI(req, res) {
         model: AI_MODEL_FAST,
         temperature: 0.7,
         response_format: { type: "json_object" },
-        max_tokens: 1200, // Small — just titles + platforms + URLs
+        max_tokens: 1200,
         messages: [
           { role: "system", content: selSystem },
           { role: "user", content: selUser },
@@ -683,12 +731,18 @@ export async function generateProblemsAI(req, res) {
       );
       selections = selectionResult.selections || [];
       learningPath = selectionResult.learningPath || "";
+
+      // Enforce platform assignments — AI sometimes substitutes platforms
+      selections = selections.map((sel, i) => ({
+        ...sel,
+        platform: platformAssignments[i]?.platform || sel.platform,
+      }));
     } catch (err) {
       console.error("Stage 2 selection failed:", err.message);
-      // Fall back to legacy single-call approach
-      const { problemGenerationPrompt } = await import(
-        "../services/ai.prompts.js"
-      );
+
+      // Fallback to legacy single-call approach
+      const { problemGenerationPrompt } =
+        await import("../services/ai.prompts.js");
       const { system, user } = problemGenerationPrompt({
         category,
         count: problemCount,
@@ -700,6 +754,7 @@ export async function generateProblemsAI(req, res) {
       });
 
       const maxTokens = Math.min(problemCount * 1800, 8000);
+
       const fallbackResponse = await openai.chat.completions.create({
         model: AI_MODEL_FAST,
         temperature: 0.8,
@@ -734,9 +789,8 @@ export async function generateProblemsAI(req, res) {
     }
 
     // ── STAGE 3: Content Generation (PARALLEL) ──────────
-    // Generate rich educational content for each problem simultaneously.
-    // Each call is focused on ONE problem — no token competition.
-    // If a call fails, that problem is skipped (partial success is better than total failure).
+    // One focused call per problem, all running simultaneously.
+    // If one fails, that problem returns partial data — others succeed.
     const contentPromises = selections.map(async (selection) => {
       try {
         const { system: contentSystem, user: contentUser } =
@@ -754,7 +808,7 @@ export async function generateProblemsAI(req, res) {
           model: AI_MODEL_FAST,
           temperature: 0.75,
           response_format: { type: "json_object" },
-          max_tokens: 2000, // Rich content for ONE problem
+          max_tokens: 2000,
           messages: [
             { role: "system", content: contentSystem },
             { role: "user", content: contentUser },
@@ -763,53 +817,61 @@ export async function generateProblemsAI(req, res) {
 
         const content = JSON.parse(contentResponse.choices[0].message.content);
 
-        // Merge selection metadata with generated content
         return {
           title: selection.title,
           difficulty: selection.difficulty,
           category,
           source: selection.platform,
-          sourceUrl: selection.url,
+          // Clear low-confidence URLs — better no link than a broken one
+          sourceUrl:
+            selection.urlConfidence === "low" ? "" : selection.url || "",
           description: content.description || "",
           realWorldContext: content.realWorldContext || "",
           useCases: content.useCases || "",
           adminNotes: content.adminNotes || "",
-          tags: content.tags || [],
-          companyTags: content.companyTags || [],
+          tags: (content.tags || []).filter(Boolean),
+          companyTags: (content.companyTags || []).filter(Boolean),
           followUpQuestions: content.followUpQuestions || [],
-          whySelected: selection.whySelected,
+          whySelected: selection.whySelected || "",
+          urlConfidence: selection.urlConfidence || "high",
         };
       } catch (err) {
         console.error(
           `Stage 3 content generation failed for "${selection.title}":`,
           err.message,
         );
-        // Return partial problem with basic info — better than nothing
+
+        // Return partial problem — better than nothing
         return {
           title: selection.title,
           difficulty: selection.difficulty,
           category,
           source: selection.platform,
-          sourceUrl: selection.url,
-          description: `Problem: ${selection.title}\nSee ${selection.url} for full description.`,
+          // Clear URL on failure — content generation failure means
+          // we couldn't verify the URL either
+          sourceUrl: "",
+          description: `Problem: ${selection.title}\nPlease look up this problem on LeetCode for the full description.`,
           realWorldContext: "",
           useCases: "",
-          adminNotes: `Pattern: ${selection.pattern}. ${selection.whySelected}`,
-          tags: [selection.pattern],
+          adminNotes:
+            `Pattern: ${selection.pattern || ""}. ${selection.whySelected || ""}`.trim(),
+          tags: [selection.pattern].filter(Boolean),
           companyTags: [],
           followUpQuestions: [],
-          whySelected: selection.whySelected,
+          whySelected: selection.whySelected || "",
           contentGenerationFailed: true,
         };
       }
     });
 
-    // Wait for all parallel content generations
     const problems = await Promise.all(contentPromises);
 
-    const successCount = problems.filter((p) => !p.contentGenerationFailed).length;
+    const successCount = problems.filter(
+      (p) => !p.contentGenerationFailed,
+    ).length;
+
     const reasoning = learningPath
-      ? `${learningPath} (${successCount}/${problems.length} problems fully generated)`
+      ? `${learningPath} (${successCount}/${problems.length} fully generated)`
       : `Generated ${successCount}/${problems.length} problems for ${category}`;
 
     return success(res, {

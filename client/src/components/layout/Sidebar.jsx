@@ -44,6 +44,7 @@ export default function Sidebar() {
             { to: '/super-admin/users', icon: '👥', label: 'All Users' },
             { to: '/super-admin/analytics', icon: '📊', label: 'Platform Analytics' },
             { to: '/super-admin/showcase', icon: '🎪', label: 'Showcase' },
+            { to: '/super-admin/roadmap', icon: '🗺️', label: 'Product Roadmap' },
             { to: '/super-admin/settings', icon: '⚙️', label: 'Settings' },
             { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]
