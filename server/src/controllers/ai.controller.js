@@ -16,6 +16,16 @@ import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
 // ============================================================================
 // AI SOLUTION REVIEW (RAG-Enhanced, Team-Scoped)
 // ============================================================================
+// ============================================================================
+// AI SOLUTION REVIEW (RAG-Enhanced, Rubric-Based, Team-Scoped)
+// ============================================================================
+//
+// SCORING MODEL:
+// AI scores each dimension independently (1-10).
+// Controller computes weighted final score from dimension scores.
+// Hard caps applied in code — not in prompt (more reliable).
+// aiFeedback stored as array of reviews for improvement tracking.
+//
 export async function reviewSolution(req, res) {
   try {
     if (!AI_ENABLED) {
@@ -26,7 +36,7 @@ export async function reviewSolution(req, res) {
     const teamId = req.teamId;
     const userId = req.user.id;
 
-    // ── Fetch solution with problem context ────────────
+    // ── Fetch solution with problem + follow-up context ──
     const solution = await prisma.solution.findFirst({
       where: { id: solutionId, userId, teamId },
       include: {
@@ -39,6 +49,26 @@ export async function reviewSolution(req, res) {
             difficulty: true,
             adminNotes: true,
             tags: true,
+            followUpQuestions: {
+              orderBy: { order: "asc" },
+              select: {
+                id: true,
+                question: true,
+                difficulty: true,
+                order: true,
+              },
+            },
+          },
+        },
+        followUpAnswers: {
+          include: {
+            followUpQuestion: {
+              select: {
+                id: true,
+                question: true,
+                difficulty: true,
+              },
+            },
           },
         },
       },
@@ -48,7 +78,7 @@ export async function reviewSolution(req, res) {
       return error(res, "Solution not found.", 404);
     }
 
-    // ── RAG: Find similar teammate solutions (TEAM-SCOPED) ─
+    // ── RAG: Find similar teammate solutions ────────────
     let teammateSolutions = [];
     try {
       const solutionText = [
@@ -94,114 +124,220 @@ export async function reviewSolution(req, res) {
       console.error("RAG search failed (continuing without):", err.message);
     }
 
-    // ── Build RAG context string ───────────────────────
+    // ── Build RAG context ──────────────────────────────
     let ragContext = "";
     if (teammateSolutions.length > 0) {
-      ragContext = "\n\n--- TEAMMATE SOLUTIONS (for comparison) ---\n";
-      teammateSolutions.forEach((ts, i) => {
-        ragContext += `\nTeammate ${i + 1} (${ts.author_name}):\n`;
-        ragContext += `  Approach: ${ts.approach || "Not provided"}\n`;
-        ragContext += `  Key Insight: ${ts.key_insight || "Not provided"}\n`;
-        ragContext += `  Complexity: ${ts.time_complexity || "?"} time, ${ts.space_complexity || "?"} space\n`;
-        ragContext += `  Pattern: ${ts.pattern || "Not identified"}\n`;
-        ragContext += `  Confidence: ${ts.confidence}/5\n`;
-      });
+      ragContext = teammateSolutions
+        .map(
+          (ts, i) =>
+            `Teammate ${i + 1} (${ts.author_name}):
+  Approach: ${ts.approach || "Not provided"}
+  Key Insight: ${ts.key_insight || "Not provided"}
+  Complexity: ${ts.time_complexity || "?"} time, ${ts.space_complexity || "?"} space
+  Pattern: ${ts.pattern || "Not identified"}
+  Confidence: ${ts.confidence}/5`,
+        )
+        .join("\n\n");
     }
 
-    let adminContext = "";
-    if (solution.problem.adminNotes) {
-      adminContext = `\n\n--- ADMIN TEACHING NOTES ---\n${solution.problem.adminNotes}`;
-    }
+    // ── Build follow-up context WITH real IDs ──────────
+    // Map: followUpQuestion.id → answerText (or null if skipped)
+    const answeredMap = new Map(
+      solution.followUpAnswers.map((a) => [a.followUpQuestionId, a.answerText]),
+    );
+
+    // Include ALL follow-up questions (answered + skipped)
+    // Pass real IDs so AI can reference them correctly
+    const followUpAnswersForPrompt = solution.problem.followUpQuestions.map(
+      (fq) => ({
+        id: fq.id,
+        question: fq.question,
+        difficulty: fq.difficulty,
+        answerText: answeredMap.get(fq.id) || null,
+      }),
+    );
+
+    // ── Call AI ────────────────────────────────────────
+    const { solutionReviewPrompt } = await import("../services/ai.prompts.js");
+    const { system, user } = solutionReviewPrompt({
+      problem: solution.problem,
+      category: solution.problem.category,
+      difficulty: solution.problem.difficulty,
+      language: solution.language,
+      code: solution.code,
+      approach: solution.approach,
+      pattern: solution.pattern,
+      keyInsight: solution.keyInsight,
+      feynmanExplanation: solution.feynmanExplanation,
+      realWorldConnection: solution.realWorldConnection,
+      confidence: solution.confidence,
+      adminNotes: solution.problem.adminNotes,
+      ragContext,
+      followUpAnswers: followUpAnswersForPrompt,
+    });
 
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
     const response = await openai.chat.completions.create({
       model: AI_MODEL_FAST,
-      temperature: 0.7,
+      temperature: 0.6,
       response_format: { type: "json_object" },
-      max_tokens: 1500,
+      max_tokens: 2000,
       messages: [
-        {
-          role: "system",
-          // NOTE: User no longer fills time/space complexity manually.
-          // AI must derive complexity analysis from the submitted code.
-          content: `You are a senior engineering interview coach reviewing a candidate's solution.
-Category: ${solution.problem.category}. Difficulty: ${solution.problem.difficulty}.
-
-IMPORTANT: The candidate did not manually provide time/space complexity.
-You must derive it by analyzing their submitted code. If no code provided,
-infer complexity from their approach description.
-
-If teammate solutions are provided, compare the candidate's approach and
-offer specific comparative feedback — reference teammates by name.
-If admin teaching notes are provided, check if the candidate's approach aligns.
-
-Return JSON:
-{
-  "overallScore": 1-10,
-  "strengths": ["specific strength 1", ...],
-  "gaps": ["specific gap 1", ...],
-  "improvement": "One specific, actionable improvement suggestion",
-  "interviewTip": "One specific tip for explaining this in an interview",
-  "complexityCheck": {
-    "timeComplexity": "O(...) — derived from code analysis",
-    "spaceComplexity": "O(...) — derived from code analysis",
-    "timeCorrect": true,
-    "spaceCorrect": true,
-    "suggestion": "Any optimization opportunity or null"
-  }
-}`,
-        },
-        {
-          role: "user",
-          content: `Problem: ${solution.problem.title}
-Description: ${solution.problem.description || "N/A"}
---- CANDIDATE'S SOLUTION ---
-Approach: ${solution.approach || "Not provided"}
-Code:
-\`\`\`
-${solution.code ? solution.code.substring(0, 1500) : "No code provided"}
-\`\`\`
-Key Insight: ${solution.keyInsight || "Not provided"}
-Feynman Explanation: ${solution.feynmanExplanation || "Not provided"}
-Pattern Identified: ${solution.pattern || "Not identified"}
-Self-Confidence: ${solution.confidence}/5
-${ragContext}${adminContext}`,
-        },
+        { role: "system", content: system },
+        { role: "user", content: user },
       ],
     });
 
-    let feedback;
+    let aiResponse;
     try {
-      feedback = JSON.parse(response.choices[0].message.content);
+      aiResponse = JSON.parse(response.choices[0].message.content);
     } catch {
       return error(res, "Failed to parse AI feedback.", 500);
     }
 
-    // ── Store feedback on solution ─────────────────────
+    // ── Compute weighted score in code ─────────────────
+    const dimScores = aiResponse.scores || {};
+    const aiFlags = aiResponse.flags || {};
+
+    let computedScore =
+      (dimScores.codeCorrectness || 5) * 0.35 +
+      (dimScores.patternAccuracy || 5) * 0.2 +
+      (dimScores.understandingDepth || 5) * 0.2 +
+      (dimScores.explanationQuality || 5) * 0.15 +
+      (dimScores.confidenceCalibration || 5) * 0.1;
+
+    // Hard cap: code clearly wrong or incomplete → max 5
+    if (
+      (dimScores.codeCorrectness || 10) <= 3 ||
+      aiFlags.incompleteSubmission
+    ) {
+      computedScore = Math.min(computedScore, 5.0);
+    }
+
+    // Follow-up bonus: +0.5 per answered question, max +2
+    const answeredCount = solution.followUpAnswers.length;
+    const followUpBonus = Math.min(answeredCount * 0.5, 2.0);
+
+    // Final score
+    const overallScore = Math.min(
+      Math.round(computedScore + followUpBonus),
+      10,
+    );
+
+    // ── Compute overconfidence flag IN CODE (not by AI) ─
+    // This is deterministic: confidence 4-5 but code score 1-3
+    // Solution.confidence is 1-5 scale
+    const overconfidenceDetected =
+      solution.confidence >= 4 && (dimScores.codeCorrectness || 10) <= 3;
+
+    // ── Merge flags: AI flags + computed flags ──────────
+    const flags = {
+      languageMismatch: aiFlags.languageMismatch || false,
+      detectedLanguage: aiFlags.detectedLanguage || null,
+      selectedLanguage: solution.language || null,
+      incompleteSubmission: aiFlags.incompleteSubmission || false,
+      wrongPattern: aiFlags.wrongPattern || false,
+      identifiedPattern: solution.pattern || aiFlags.identifiedPattern || null,
+      correctPattern: aiFlags.correctPattern || null,
+      // Computed deterministically — never trust AI for this
+      overconfidenceDetected,
+      candidateConfidence: solution.confidence,
+      codeCorrectnessScore: dimScores.codeCorrectness || null,
+    };
+
+    // ── Build follow-up evaluations with verified IDs ───
+    // AI returns evaluations ordered by the questions we sent
+    // Map them back to real IDs by index position
+    const followUpEvaluations = followUpAnswersForPrompt.map((fq, i) => {
+      const aiEval = aiResponse.followUpEvaluations?.[i];
+      return {
+        questionId: fq.id, // Use our real ID, not AI's potentially wrong ID
+        question: fq.question,
+        difficulty: fq.difficulty,
+        wasAnswered: !!fq.answerText,
+        score: fq.answerText ? aiEval?.score || null : null,
+        feedback: fq.answerText
+          ? aiEval?.feedback || null
+          : "Skipped — no answer provided",
+      };
+    });
+
+    // ── Update follow-up answer AI scores ───────────────
+    await Promise.all(
+      followUpEvaluations
+        .filter((e) => e.wasAnswered && e.score != null)
+        .map((e) =>
+          prisma.solutionFollowUpAnswer
+            .updateMany({
+              where: {
+                solutionId,
+                followUpQuestionId: e.questionId,
+              },
+              data: {
+                aiScore: e.score,
+                aiFeedback: e.feedback,
+              },
+            })
+            .catch(() => {}),
+        ),
+    );
+
+    // ── Build review record ────────────────────────────
+    const reviewRecord = {
+      reviewedAt: new Date().toISOString(),
+      reviewNumber: (solution.reviewCount || 0) + 1,
+      overallScore,
+      dimensionScores: dimScores,
+      flags,
+      strengths: aiResponse.strengths || [],
+      gaps: aiResponse.gaps || [],
+      improvement: aiResponse.improvement || null,
+      interviewTip: aiResponse.interviewTip || null,
+      complexityCheck: aiResponse.complexityCheck || null,
+      followUpEvaluations,
+      followUpBonus,
+      ragContext: {
+        teammateCount: teammateSolutions.length,
+        hasAdminNotes: !!solution.problem.adminNotes,
+      },
+    };
+
+    // ── Store as array — preserves review history ───────
+    const existingFeedback = Array.isArray(solution.aiFeedback)
+      ? solution.aiFeedback
+      : solution.aiFeedback
+        ? [solution.aiFeedback] // migrate old single-object format
+        : [];
+
+    const updatedFeedback = [...existingFeedback, reviewRecord];
+
     await prisma.solution.update({
       where: { id: solutionId },
       data: {
-        aiFeedback: feedback,
-        // Auto-populate complexity fields from AI analysis if not set
+        aiFeedback: updatedFeedback,
+        reviewCount: { increment: 1 },
+        lastReviewedAt: new Date(),
         timeComplexity:
           solution.timeComplexity ||
-          feedback.complexityCheck?.timeComplexity ||
+          aiResponse.complexityCheck?.timeComplexity ||
           null,
         spaceComplexity:
           solution.spaceComplexity ||
-          feedback.complexityCheck?.spaceComplexity ||
+          aiResponse.complexityCheck?.spaceComplexity ||
           null,
       },
     });
 
     return success(res, {
-      feedback,
-      ragContext: {
-        teammateCount: teammateSolutions.length,
-        hasAdminNotes: !!solution.problem.adminNotes,
-      },
+      feedback: reviewRecord,
+      isFirstReview: existingFeedback.length === 0,
+      previousScore:
+        existingFeedback.length > 0
+          ? existingFeedback[existingFeedback.length - 1].overallScore
+          : null,
+      totalReviews: updatedFeedback.length,
     });
   } catch (err) {
     console.error("AI review error:", err);

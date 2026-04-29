@@ -4,66 +4,217 @@
  */
 
 // ── Solution Review ────────────────────────────────────
+// ── Solution Review — Rubric-Based Multi-Dimensional Scoring ───
+//
+// SCORING MODEL:
+// Each dimension is scored independently by AI (1-10).
+// Final score is computed by weighted formula in the controller.
+// This is more consistent and explainable than a holistic impression.
+//
+// Dimension weights:
+//   Code Correctness    35%  — logical correctness, edge cases, completeness
+//   Pattern Accuracy    20%  — does identified pattern match the code?
+//   Understanding Depth 20%  — key insight + Feynman explanation quality
+//   Explanation Quality 15%  — approach explanation clarity
+//   Confidence Calib.   10%  — is self-confidence realistic vs actual quality?
+//
+// HARD CAPS enforced in controller (not prompt — more reliable):
+//   - Code clearly wrong/incomplete → cap at 5/10
+//   - Wrong pattern identified → -3 from patternAccuracy score
+//
+// Follow-up answers are scored separately (bonus, not in main formula).
 export function solutionReviewPrompt(data) {
   const categoryContext = {
-    CODING:
-      "This is a coding/algorithm problem. Review approach, complexity, and code quality.",
-    SYSTEM_DESIGN:
-      "This is a system design problem. Review requirements coverage, component design, scalability, and trade-offs.",
-    BEHAVIORAL:
-      "This is a behavioral question. Review STAR structure, specificity, and impact.",
-    CS_FUNDAMENTALS:
-      "This is a CS fundamentals question. Review conceptual accuracy and explanation depth.",
-    HR: "This is an HR question. Review authenticity, specificity, and company research.",
-    SQL: "This is a SQL problem. Review query correctness, optimization, and edge cases.",
+    CODING: {
+      focus:
+        "algorithm correctness, time/space complexity, edge cases, code quality",
+      codeCorrectnessGuide: `
+CODING correctness analysis:
+- Does the algorithm solve ALL cases including edge cases?
+- Would it pass with: empty input, single element, duplicates, negative numbers, large inputs?
+- Is the logic correct or are there off-by-one errors, infinite loops, wrong conditions?
+- Is the code complete (has a return statement, all branches handled)?
+- Detect language mismatch: if selected language is X but code is clearly language Y, flag it
+- Detect incomplete solutions: pseudocode, TODO comments, missing critical sections`,
+    },
+    SYSTEM_DESIGN: {
+      focus: "requirements coverage, component design, scalability, trade-offs",
+      codeCorrectnessGuide: `
+SYSTEM DESIGN correctness analysis:
+- Does the design address the core functional requirements?
+- Are the scale requirements considered?
+- Are key components present and correctly connected?
+- Are the most critical trade-offs identified and explained?`,
+    },
+    BEHAVIORAL: {
+      focus: "STAR structure, specificity, impact quantification, authenticity",
+      codeCorrectnessGuide: `
+BEHAVIORAL correctness analysis:
+- Does the response follow STAR format?
+- Is the answer specific (names real project, team size, timeframe)?
+- Does it quantify impact where possible?
+- Does it answer what was actually asked?`,
+    },
+    CS_FUNDAMENTALS: {
+      focus:
+        "conceptual accuracy, depth of explanation, real-world connections",
+      codeCorrectnessGuide: `
+CS FUNDAMENTALS correctness analysis:
+- Is the core concept explained accurately with no factual errors?
+- Does it cover the key sub-concepts at appropriate depth?
+- Are common misconceptions avoided?`,
+    },
+    HR: {
+      focus: "authenticity, specificity, company alignment, structure",
+      codeCorrectnessGuide: `
+HR correctness analysis:
+- Is the answer authentic and specific?
+- Does it address what the question is actually asking?
+- Is it appropriate length?`,
+    },
+    SQL: {
+      focus:
+        "query correctness, optimization, edge cases, schema understanding",
+      codeCorrectnessGuide: `
+SQL correctness analysis:
+- Is the query syntactically valid?
+- Does it return the correct result?
+- Does it handle NULLs, duplicates, and edge cases?
+- Detect language mismatch: SQL selected but Python/Java code pasted`,
+    },
   };
 
-  const system = `You are an expert interview coach reviewing solutions from engineers preparing for top tech interviews.
-${categoryContext[data.category] || categoryContext.CODING}
-The candidate's level is: ${data.userLevel || "BEGINNER"}. Adjust your feedback depth accordingly.
-IMPORTANT: You have access to teammate solutions and admin teaching notes for this problem. Use them to give SPECIFIC, COMPARATIVE feedback — not generic advice.
-When teammate solutions are provided:
-- Compare the candidate's approach with teammates' approaches
-- Point out if teammates found a better optimization
-- Highlight if the candidate found something teammates missed
-- Reference specific teammates by name when making comparisons
-When admin notes are provided:
-- Check if the candidate covered the key teaching points
-- Verify their complexity analysis against the admin's expected answer
-- Note if they missed important edge cases mentioned in the notes
-ALWAYS respond in this exact JSON format:
+  const ctx = categoryContext[data.category] || categoryContext.CODING;
+
+  // Build follow-up context WITH real IDs so AI can reference them
+  let followUpContext = "";
+  if (data.followUpAnswers?.length > 0) {
+    followUpContext = "\n\n--- FOLLOW-UP QUESTIONS ---\n";
+    followUpContext +=
+      "Evaluate each answer. Use the exact questionId provided.\n\n";
+    data.followUpAnswers.forEach((item, i) => {
+      followUpContext += `Question ${i + 1}:\n`;
+      followUpContext += `  questionId: "${item.id}"\n`;
+      followUpContext += `  difficulty: ${item.difficulty}\n`;
+      followUpContext += `  question: ${item.question}\n`;
+      followUpContext += `  candidateAnswer: ${item.answerText || "SKIPPED — candidate did not answer"}\n\n`;
+    });
+  } else {
+    followUpContext =
+      "\n\n--- FOLLOW-UP QUESTIONS: All skipped (no answers provided) ---\n";
+  }
+
+  const system = `You are a senior engineering interview coach doing a comprehensive solution review.
+Evaluate this ${data.category} submission across 5 dimensions with independent, honest scores.
+
+PROBLEM: ${data.problem?.title || "Unknown"}
+DIFFICULTY: ${data.difficulty}
+CATEGORY: ${data.category}
+FOCUS: ${ctx.focus}
+
+${ctx.codeCorrectnessGuide}
+
+SCORING DIMENSIONS — score each 1-10 INDEPENDENTLY:
+
+1. CODE CORRECTNESS (35% weight)
+   10 = Completely correct, handles all edge cases, optimal
+   7-9 = Correct for main cases, minor edge case issues
+   4-6 = Partially correct, has significant logic errors
+   1-3 = Fundamentally wrong, does not solve the problem
+
+2. PATTERN ACCURACY (20% weight)
+   10 = Correct pattern AND can explain why
+   7-9 = Correct pattern family, slightly imprecise
+   4-6 = Wrong pattern but code accidentally partially works
+   1-3 = Completely wrong pattern
+
+3. UNDERSTANDING DEPTH (20% weight)
+   10 = Exceptional key insight, brilliant explanation
+   7-9 = Good insight, clear explanation
+   4-6 = Surface-level, lacks conceptual depth
+   1-3 = Cannot explain their own solution
+
+4. EXPLANATION QUALITY (15% weight)
+   10 = Crystal clear, anyone could implement from description
+   7-9 = Clear with minor gaps
+   4-6 = Vague or incomplete
+   1-3 = No explanation or completely unclear
+
+5. CONFIDENCE CALIBRATION (10% weight)
+   NOTE: The candidate self-rated confidence as ${data.confidence}/5.
+   Compare this to actual solution quality.
+   10 = Self-confidence perfectly matches actual quality
+   7-9 = Slightly over/under confident
+   4-6 = Noticeably miscalibrated
+   1-3 = Severely miscalibrated (5/5 confidence but code is fundamentally wrong)
+
+CROSS-VALIDATION RULES:
+- If code is in a different language than selected: set languageMismatch=true, set detectedLanguage
+- If code is incomplete/pseudocode: set incompleteSubmission=true
+- If pattern is wrong: set wrongPattern=true, set correctPattern to the right one,
+  set identifiedPattern to what they said
+${data.adminNotes ? `\nADMIN TEACHING NOTES:\n${data.adminNotes}` : ""}
+${data.ragContext ? `\nTEAMMATE SOLUTIONS FOR COMPARISON:\n${data.ragContext}` : ""}
+
+RESPOND WITH EXACT JSON — no extra fields, no missing fields:
 {
-  "overallScore": <number 1-10>,
-  "strengths": [<string>, <string>, ...],
-  "gaps": [<string>, <string>, ...],
-  "improvement": <string — one specific actionable improvement>,
-  "interviewTip": <string — one tip for presenting this in a real interview>,
+  "scores": {
+    "codeCorrectness": <1-10>,
+    "patternAccuracy": <1-10>,
+    "understandingDepth": <1-10>,
+    "explanationQuality": <1-10>,
+    "confidenceCalibration": <1-10>
+  },
+  "flags": {
+    "languageMismatch": <boolean>,
+    "detectedLanguage": <string or null>,
+    "incompleteSubmission": <boolean>,
+    "wrongPattern": <boolean>,
+    "identifiedPattern": <string or null>,
+    "correctPattern": <string or null>
+  },
+  "strengths": [<string>, ...],
+  "gaps": [<string>, ...],
+  "improvement": <string>,
+  "interviewTip": <string>,
   "complexityCheck": {
+    "timeComplexity": <string — e.g. "O(n)">,
+    "spaceComplexity": <string — e.g. "O(1)">,
     "timeCorrect": <boolean>,
     "spaceCorrect": <boolean>,
-    "timeNote": <string or null>,
-    "spaceNote": <string or null>
-  }
+    "optimizationNote": <string or null>
+  },
+  "followUpEvaluations": [
+    {
+      "questionId": <string — use EXACT questionId from the follow-up questions above>,
+      "score": <1-10 or null if skipped>,
+      "feedback": <string — one sentence, or "Skipped" if not answered>
+    }
+  ]
 }`;
 
-  const user = `Review this solution:
-**Problem:** ${data.problemTitle}
-**Difficulty:** ${data.difficulty}
-**Category:** ${data.category || "CODING"}
-**Pattern/Topic:** ${data.pattern || "Not identified"}
-**Approach:**
+  const user = `Review this ${data.category} solution:
+
+PROBLEM: ${data.problem?.title || "Unknown"}
+DESCRIPTION: ${data.problem?.description ? data.problem.description.substring(0, 400) : "Not available"}
+
+--- CANDIDATE SUBMISSION ---
+Language Selected: ${data.language || "Not specified"}
+Pattern Identified: ${data.pattern || "None"}
+Self-Confidence: ${data.confidence}/5 (where 1=forgot it, 5=crystal clear)
+
+Approach:
 ${data.approach || "Not provided"}
-**Time Complexity:** ${data.timeComplexity || "Not stated"}
-**Space Complexity:** ${data.spaceComplexity || "Not stated"}
-**Code:**
-\`\`\`${data.language || "python"}
-${data.code || "No code provided"}
+
+Code:
+\`\`\`${(data.language || "plaintext").toLowerCase()}
+${data.code ? data.code.substring(0, 2000) : "No code provided"}
 \`\`\`
-**Key Insight:** ${data.keyInsight || "Not provided"}
-**Explanation:** ${data.explanation || "Not provided"}
-${data.ragContext || ""}
-${data.adminContext || ""}
-Give specific, comparative feedback. If teammate solutions are provided, reference them directly in your review. If admin notes are provided, check the candidate's work against the expected approach.`;
+
+Key Insight: ${data.keyInsight || "Not provided"}
+Feynman Explanation: ${data.feynmanExplanation || "Not provided"}
+Real-World Connection: ${data.realWorldConnection || "Not provided"}
+${followUpContext}`;
 
   return { system, user };
 }

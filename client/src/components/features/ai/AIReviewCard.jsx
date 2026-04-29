@@ -1,21 +1,6 @@
 // ============================================================================
 // ProbSolver v3.0 — AI Review Card (Production Grade)
 // ============================================================================
-//
-// Shows rubric-based multi-dimensional feedback designed to help
-// candidates crack real interviews. Surfaces what matters most:
-//
-// 1. Critical flags first (interview killers shown prominently)
-// 2. Score with improvement trend
-// 3. 5 dimension breakdown with bars + per-dimension feedback
-// 4. Code analysis (complexity, correctness, optimization)
-// 5. Strengths vs gaps with interview context
-// 6. Follow-up question performance
-// 7. One concrete next action
-//
-// Supports aiFeedback as array (review history) for improvement tracking.
-//
-// ============================================================================
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAIReview } from '@hooks/useAI'
@@ -40,10 +25,8 @@ function ScoreRing({ score, size = 72 }) {
         <div className="flex flex-col items-center gap-1 flex-shrink-0">
             <div className="relative" style={{ width: size, height: size }}>
                 <svg width={size} height={size} className="-rotate-90">
-                    <circle
-                        cx={size / 2} cy={size / 2} r={r}
-                        fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5"
-                    />
+                    <circle cx={size / 2} cy={size / 2} r={r}
+                        fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
                     <motion.circle
                         cx={size / 2} cy={size / 2} r={r}
                         fill="none" stroke={color} strokeWidth="5"
@@ -67,7 +50,7 @@ function ScoreRing({ score, size = 72 }) {
 }
 
 // ── Dimension bar ──────────────────────────────────────
-function DimensionBar({ label, score, weight, feedback, color, delay = 0 }) {
+function DimensionBar({ label, score, weight, feedback, delay = 0 }) {
     const [showFeedback, setShowFeedback] = useState(false)
     const barColor =
         score >= 8 ? 'bg-success' :
@@ -78,10 +61,12 @@ function DimensionBar({ label, score, weight, feedback, color, delay = 0 }) {
         <div className="space-y-1">
             <button
                 type="button"
-                onClick={() => setShowFeedback(v => !v)}
-                className="w-full flex items-center gap-3 group"
+                onClick={() => feedback && setShowFeedback(v => !v)}
+                className={cn('w-full flex items-center gap-3 group',
+                    feedback && 'cursor-pointer')}
             >
-                <span className="text-[10px] text-text-tertiary w-32 text-left flex-shrink-0 group-hover:text-text-secondary transition-colors">
+                <span className="text-[10px] text-text-tertiary w-32 text-left
+                       flex-shrink-0 group-hover:text-text-secondary transition-colors">
                     {label}
                 </span>
                 <div className="flex-1 h-2 bg-surface-3 rounded-full overflow-hidden">
@@ -138,31 +123,33 @@ function DimensionBar({ label, score, weight, feedback, color, delay = 0 }) {
 
 // ── Critical flag banner ───────────────────────────────
 function FlagBanner({ flags }) {
-    if (!flags) return null
+    // Null-safe — flags may not exist on old review records
+    if (!flags || typeof flags !== 'object') return null
 
     const activeFlags = [
-        flags.incompleteSubmission && {
+        flags.incompleteSubmission === true && {
             icon: '🚨',
             label: 'Incomplete Submission',
-            desc: 'Your code is missing critical sections. Interviewers will fail you before you can explain your approach.',
+            desc: 'Your code is missing critical sections or is pseudocode. In a real interview, this would end your evaluation immediately.',
             severity: 'critical',
         },
-        flags.languageMismatch && {
+        flags.overconfidenceDetected === true && {
+            icon: '⚡',
+            label: 'Confidence Mismatch Detected',
+            desc: `You rated your confidence ${flags.candidateConfidence}/5 (${flags.candidateConfidence >= 4 ? 'Pretty Solid or Crystal Clear' : 'high'
+                }) but your code correctness score is ${flags.codeCorrectnessScore}/10. Overconfidence in interviews signals poor self-awareness — interviewers specifically watch for this.`,
+            severity: 'critical',
+        },
+        flags.languageMismatch === true && {
             icon: '⚠️',
-            label: `Language Mismatch Detected`,
-            desc: `You selected ${flags.selectedLanguage || 'one language'} but your code appears to be ${flags.detectedLanguage || 'a different language'}. Verify this is intentional.`,
+            label: 'Language Mismatch Detected',
+            desc: `You selected ${flags.selectedLanguage || 'one language'} but your code appears to be ${flags.detectedLanguage || 'a different language'}. Verify your language selection is correct.`,
             severity: 'warning',
         },
-        flags.wrongPattern && {
+        flags.wrongPattern === true && {
             icon: '🎯',
             label: 'Wrong Pattern Identified',
-            desc: `You identified "${flags.identifiedPattern || 'the wrong pattern'}" but this problem uses ${flags.correctPattern || 'a different pattern'}. Pattern recognition is tested directly in interviews.`,
-            severity: 'warning',
-        },
-        flags.overconfidenceDetected && {
-            icon: '⚡',
-            label: 'Confidence Mismatch',
-            desc: 'Your self-confidence is significantly higher than your solution quality. Overconfidence in interviews signals poor self-awareness to interviewers.',
+            desc: `You identified "${flags.identifiedPattern || 'a pattern'}" but this problem uses ${flags.correctPattern || 'a different pattern'}. Pattern recognition is directly tested in technical interviews.`,
             severity: 'warning',
         },
     ].filter(Boolean)
@@ -184,7 +171,7 @@ function FlagBanner({ flags }) {
                             : 'bg-warning/8 border-warning/25'
                     )}
                 >
-                    <span className="text-base flex-shrink-0">{flag.icon}</span>
+                    <span className="text-base flex-shrink-0 mt-0.5">{flag.icon}</span>
                     <div>
                         <p className={cn(
                             'text-xs font-bold mb-0.5',
@@ -202,135 +189,135 @@ function FlagBanner({ flags }) {
     )
 }
 
-// ── Score improvement indicator ────────────────────────
+// ── Score trend ────────────────────────────────────────
 function ScoreTrend({ current, previous }) {
-    if (!previous || previous === current) return null
+    if (previous == null || previous === current) return null
     const improved = current > previous
     const diff = Math.abs(current - previous)
-
     return (
-        <div className={cn(
-            'flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full',
-            improved
-                ? 'text-success bg-success/12'
-                : 'text-danger bg-danger/12'
+        <span className={cn(
+            'text-[10px] font-bold px-2 py-0.5 rounded-full',
+            improved ? 'text-success bg-success/12' : 'text-danger bg-danger/12'
         )}>
-            <span>{improved ? '↑' : '↓'}</span>
-            <span>{diff} from last review</span>
-        </div>
+            {improved ? '↑' : '↓'}{diff} from last
+        </span>
     )
 }
 
-// ── Follow-up performance ──────────────────────────────
+// ── Follow-up section ──────────────────────────────────
 function FollowUpSection({ followUpEvaluations, problemFollowUps }) {
-    if (!problemFollowUps?.length) return null
+    if (!problemFollowUps?.length) {
+        return (
+            <p className="text-xs text-text-disabled text-center py-4">
+                No follow-up questions for this problem.
+            </p>
+        )
+    }
 
     return (
-        <div>
-            <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-3">
-                Follow-up Questions
-            </p>
-            <div className="space-y-2">
-                {problemFollowUps.map((fq, i) => {
-                    const evaluation = followUpEvaluations?.find(
-                        e => e.questionId === fq.id
-                    )
-                    const wasAnswered = evaluation && evaluation.score != null
-                    const wasSkipped = !wasAnswered
+        <div className="space-y-2">
+            {problemFollowUps.map((fq, i) => {
+                const evaluation = followUpEvaluations?.find(e => e.questionId === fq.id)
+                const wasAnswered = evaluation?.wasAnswered ?? false
+                const score = evaluation?.score ?? null
 
-                    return (
-                        <motion.div
-                            key={fq.id}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.04 }}
-                            className={cn(
-                                'rounded-xl border p-3',
-                                wasSkipped
-                                    ? 'bg-surface-2 border-border-subtle'
-                                    : evaluation.score >= 7
-                                        ? 'bg-success/5 border-success/20'
-                                        : evaluation.score >= 5
-                                            ? 'bg-warning/5 border-warning/20'
-                                            : 'bg-danger/5 border-danger/20'
-                            )}
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-start gap-2 flex-1">
-                                    <span className={cn(
-                                        'text-[9px] font-bold px-1.5 py-px rounded-full border flex-shrink-0 mt-0.5',
-                                        fq.difficulty === 'EASY'
-                                            ? 'bg-success/10 text-success border-success/20'
-                                            : fq.difficulty === 'MEDIUM'
-                                                ? 'bg-warning/10 text-warning border-warning/20'
-                                                : 'bg-danger/10 text-danger border-danger/20'
-                                    )}>
-                                        {fq.difficulty}
-                                    </span>
-                                    <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        {fq.question}
-                                    </p>
-                                </div>
-                                {wasSkipped ? (
+                return (
+                    <motion.div
+                        key={fq.id}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className={cn(
+                            'rounded-xl border p-3.5',
+                            !wasAnswered
+                                ? 'bg-surface-2 border-border-subtle'
+                                : score != null && score >= 7
+                                    ? 'bg-success/5 border-success/20'
+                                    : score != null && score >= 5
+                                        ? 'bg-warning/5 border-warning/20'
+                                        : 'bg-danger/5 border-danger/20'
+                        )}
+                    >
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2 flex-1 min-w-0">
+                                <span className={cn(
+                                    'text-[9px] font-bold px-1.5 py-px rounded-full border flex-shrink-0 mt-0.5',
+                                    fq.difficulty === 'EASY'
+                                        ? 'bg-success/10 text-success border-success/20'
+                                        : fq.difficulty === 'MEDIUM'
+                                            ? 'bg-warning/10 text-warning border-warning/20'
+                                            : 'bg-danger/10 text-danger border-danger/20'
+                                )}>
+                                    {fq.difficulty}
+                                </span>
+                                <p className="text-[11px] text-text-secondary leading-relaxed">
+                                    {fq.question}
+                                </p>
+                            </div>
+                            <div className="flex-shrink-0">
+                                {!wasAnswered ? (
                                     <span className="text-[9px] font-bold text-text-disabled
                                            bg-surface-3 border border-border-subtle
-                                           px-1.5 py-px rounded-full flex-shrink-0">
+                                           px-1.5 py-px rounded-full">
                                         Skipped
                                     </span>
-                                ) : (
+                                ) : score != null ? (
                                     <span className={cn(
-                                        'text-[10px] font-extrabold font-mono flex-shrink-0',
-                                        evaluation.score >= 7 ? 'text-success' :
-                                            evaluation.score >= 5 ? 'text-warning' : 'text-danger'
+                                        'text-[11px] font-extrabold font-mono',
+                                        score >= 7 ? 'text-success' :
+                                            score >= 5 ? 'text-warning' : 'text-danger'
                                     )}>
-                                        {evaluation.score}/10
+                                        {score}/10
                                     </span>
+                                ) : (
+                                    <span className="text-[9px] text-text-disabled">Answered</span>
                                 )}
                             </div>
-                            {!wasSkipped && evaluation.feedback && (
-                                <p className="text-[10px] text-text-tertiary mt-1.5 ml-7 leading-relaxed">
-                                    {evaluation.feedback}
-                                </p>
-                            )}
-                            {wasSkipped && (
-                                <p className="text-[10px] text-text-disabled mt-1.5 ml-7 italic">
-                                    Answering this would show depth of understanding beyond the base solution.
-                                </p>
-                            )}
-                        </motion.div>
-                    )
-                })}
-            </div>
+                        </div>
+                        {evaluation?.feedback && evaluation.feedback !== 'Skipped' && (
+                            <p className="text-[10px] text-text-tertiary mt-1.5 ml-7 leading-relaxed">
+                                {evaluation.feedback}
+                            </p>
+                        )}
+                        {!wasAnswered && (
+                            <p className="text-[10px] text-text-disabled mt-1.5 ml-7 italic">
+                                Answering follow-ups earns bonus points and demonstrates
+                                mastery beyond the base solution.
+                            </p>
+                        )}
+                    </motion.div>
+                )
+            })}
         </div>
     )
 }
 
-// ── Main component ─────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════
 export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
-    const [expanded, setExpanded] = useState(false)
-    const [activeTab, setActiveTab] = useState('overview')
     const aiReview = useAIReview()
+    const [activeTab, setActiveTab] = useState('overview')
+    const [expanded, setExpanded] = useState(false)
 
-    // Handle aiFeedback as array (new) or single object (legacy)
-    const reviewHistory = useMemo(() => {
+    // Normalize existingReview to array and manage history locally
+    // so card updates correctly after re-review without page refresh
+    const [localHistory, setLocalHistory] = useState(() => {
         if (!existingReview) return []
         if (Array.isArray(existingReview)) return existingReview
-        // Legacy: single object — wrap in array
         return [existingReview]
-    }, [existingReview])
+    })
 
-    const latestReview = reviewHistory[reviewHistory.length - 1] || null
-    const previousReview = reviewHistory.length > 1
-        ? reviewHistory[reviewHistory.length - 2]
+    const latestReview = localHistory[localHistory.length - 1] || null
+    const previousReview = localHistory.length > 1
+        ? localHistory[localHistory.length - 2]
         : null
-
-    const [currentReview, setCurrentReview] = useState(latestReview)
 
     async function handleReview() {
         try {
             const res = await aiReview.mutateAsync(solutionId)
             const newReview = res.data.data.feedback
-            setCurrentReview(newReview)
+            setLocalHistory(prev => [...prev, newReview])
             setExpanded(true)
             setActiveTab('overview')
         } catch {
@@ -338,47 +325,49 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
         }
     }
 
-    // Build dimension config from scores
-    const dimensions = currentReview?.dimensionScores ? [
+    const dimensions = latestReview?.dimensionScores ? [
         {
-            label: 'Code Correctness',
-            key: 'codeCorrectness',
-            weight: 35,
-            score: currentReview.dimensionScores.codeCorrectness,
-            feedback: 'Whether your solution correctly handles all cases, edge cases, and would pass test cases.',
+            label: 'Code Correctness', key: 'codeCorrectness', weight: 35,
+            score: latestReview.dimensionScores.codeCorrectness,
+            feedback: 'Whether your solution is logically correct and handles edge cases.'
         },
         {
-            label: 'Pattern Accuracy',
-            key: 'patternAccuracy',
-            weight: 20,
-            score: currentReview.dimensionScores.patternAccuracy,
-            feedback: 'Whether you identified and applied the right algorithm pattern for this problem.',
+            label: 'Pattern Accuracy', key: 'patternAccuracy', weight: 20,
+            score: latestReview.dimensionScores.patternAccuracy,
+            feedback: 'Whether you identified and applied the right algorithm pattern.'
         },
         {
-            label: 'Understanding Depth',
-            key: 'understandingDepth',
-            weight: 20,
-            score: currentReview.dimensionScores.understandingDepth,
-            feedback: 'Quality of your key insight, Feynman explanation, and demonstrated conceptual understanding.',
+            label: 'Understanding', key: 'understandingDepth', weight: 20,
+            score: latestReview.dimensionScores.understandingDepth,
+            feedback: 'Quality of your key insight and Feynman explanation.'
         },
         {
-            label: 'Explanation Quality',
-            key: 'explanationQuality',
-            weight: 15,
-            score: currentReview.dimensionScores.explanationQuality,
-            feedback: 'How clearly you explained your approach. Critical in interviews — thinking aloud is evaluated.',
+            label: 'Explanation', key: 'explanationQuality', weight: 15,
+            score: latestReview.dimensionScores.explanationQuality,
+            feedback: 'How clearly you described your approach. Thinking aloud is evaluated in real interviews.'
         },
         {
-            label: 'Confidence Calibration',
-            key: 'confidenceCalibration',
-            weight: 10,
-            score: currentReview.dimensionScores.confidenceCalibration,
-            feedback: 'Whether your self-assessed confidence matches the actual quality of your solution.',
+            label: 'Confidence Cal.', key: 'confidenceCalibration', weight: 10,
+            score: latestReview.dimensionScores.confidenceCalibration,
+            feedback: 'Whether your self-assessment matches actual solution quality.'
         },
     ] : []
 
-    // No review yet
-    if (!currentReview) {
+    // Count active flags for header badge
+    const flagCount = latestReview?.flags
+        ? [
+            latestReview.flags.incompleteSubmission,
+            latestReview.flags.overconfidenceDetected,
+            latestReview.flags.languageMismatch,
+            latestReview.flags.wrongPattern,
+        ].filter(Boolean).length
+        : 0
+
+    const followUpBonus = latestReview?.followUpBonus || 0
+    const ragContext = latestReview?.ragContext
+
+    // ── No review yet ──────────────────────────────────
+    if (!latestReview) {
         return (
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
@@ -387,14 +376,14 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
             >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-brand-400/15 border border-brand-400/20
-                                flex items-center justify-center text-xl flex-shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-brand-400/15 border
+                                border-brand-400/20 flex items-center justify-center text-xl">
                             🤖
                         </div>
                         <div>
                             <h3 className="text-sm font-bold text-text-primary">AI Review</h3>
                             <p className="text-xs text-text-tertiary">
-                                Multi-dimensional analysis to help you crack interviews
+                                5-dimension analysis · Flags interview killers · Tracks improvement
                             </p>
                         </div>
                     </div>
@@ -404,9 +393,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                         loading={aiReview.isPending}
                         onClick={handleReview}
                     >
-                        {aiReview.isPending ? (
-                            'Analyzing...'
-                        ) : (
+                        {aiReview.isPending ? 'Analyzing...' : (
                             <>
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" strokeWidth="2"
@@ -420,15 +407,14 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                         )}
                     </Button>
                 </div>
-
-                {/* What the review checks */}
-                <div className="mt-4 pt-4 border-t border-border-subtle grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="mt-4 pt-4 border-t border-border-subtle
+                       grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {[
                         { icon: '🔍', label: 'Code Analysis' },
                         { icon: '🧩', label: 'Pattern Check' },
-                        { icon: '🧠', label: 'Understanding' },
+                        { icon: '⚡', label: 'Flags Killers' },
                         { icon: '💬', label: 'Explanation' },
-                        { icon: '⚡', label: 'Flags & Alerts' },
+                        { icon: '📈', label: 'Track Progress' },
                     ].map(item => (
                         <div key={item.label}
                             className="flex items-center gap-1.5 text-[10px] text-text-disabled">
@@ -441,14 +427,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
         )
     }
 
-    const overallScore = currentReview.overallScore
-    const flags = currentReview.flags
-    const hasFlags = flags && Object.values(flags).some(v =>
-        v === true || (typeof v === 'string' && v)
-    )
-    const ragContext = currentReview.ragContext
-    const followUpBonus = currentReview.followUpBonus || 0
-    const isFirstReview = reviewHistory.length <= 1
+    const overallScore = latestReview.overallScore
 
     return (
         <motion.div
@@ -456,7 +435,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
             animate={{ opacity: 1, y: 0 }}
             className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
         >
-            {/* Header — always visible, clickable to expand */}
+            {/* Header */}
             <button
                 type="button"
                 onClick={() => setExpanded(v => !v)}
@@ -468,32 +447,31 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                         <h3 className="text-sm font-bold text-text-primary">AI Review</h3>
-                        {hasFlags && (
+                        {flagCount > 0 && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                   bg-warning/15 text-warning border border-warning/25">
-                                {Object.values(flags).filter(v => v === true || (typeof v === 'string' && v)).length} flag{Object.values(flags).filter(v => v === true || (typeof v === 'string' && v)).length !== 1 ? 's' : ''}
+                                   bg-danger/15 text-danger border border-danger/25">
+                                {flagCount} issue{flagCount !== 1 ? 's' : ''}
                             </span>
                         )}
-                        {!isFirstReview && (
-                            <ScoreTrend
-                                current={overallScore}
-                                previous={previousReview?.overallScore}
-                            />
-                        )}
+                        <ScoreTrend
+                            current={overallScore}
+                            previous={previousReview?.overallScore}
+                        />
                         {followUpBonus > 0 && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
                                    bg-success/12 text-success border border-success/20">
-                                +{followUpBonus} follow-up bonus
+                                +{followUpBonus} bonus
                             </span>
                         )}
                     </div>
                     <p className="text-xs text-text-tertiary">
                         {ragContext?.teammateCount > 0
-                            ? `Compared with ${ragContext.teammateCount} teammate solution${ragContext.teammateCount !== 1 ? 's' : ''}`
+                            ? `Compared with ${ragContext.teammateCount} teammate${ragContext.teammateCount !== 1 ? 's' : ''}`
                             : 'Individual analysis'
                         }
                         {ragContext?.hasAdminNotes && ' · Admin notes applied'}
-                        {currentReview.reviewNumber > 1 && ` · Review #${currentReview.reviewNumber}`}
+                        {latestReview.reviewNumber > 1
+                            && ` · Review #${latestReview.reviewNumber}`}
                     </p>
                 </div>
 
@@ -521,20 +499,23 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                         className="overflow-hidden"
                     >
                         <div className="border-t border-border-default">
-                            {/* Tab navigation */}
-                            <div className="flex gap-1 px-5 pt-4 pb-0">
+                            {/* Tabs */}
+                            <div className="flex gap-1 px-5 pt-3">
                                 {[
                                     { id: 'overview', label: '📊 Overview' },
                                     { id: 'dimensions', label: '📐 Dimensions' },
                                     { id: 'code', label: '💻 Code' },
-                                    ...(problemFollowUps?.length > 0 ? [{ id: 'followups', label: '🧠 Follow-ups' }] : []),
+                                    ...(problemFollowUps?.length > 0
+                                        ? [{ id: 'followups', label: '🧠 Follow-ups' }]
+                                        : []),
                                 ].map(tab => (
                                     <button
                                         key={tab.id}
                                         type="button"
                                         onClick={() => setActiveTab(tab.id)}
                                         className={cn(
-                                            'px-3 py-2 rounded-t-lg text-xs font-semibold transition-all border-b-2',
+                                            'px-3 py-2 rounded-t-lg text-xs font-semibold',
+                                            'transition-all border-b-2',
                                             activeTab === tab.id
                                                 ? 'text-brand-300 border-brand-400 bg-brand-400/5'
                                                 : 'text-text-tertiary border-transparent hover:text-text-secondary'
@@ -547,70 +528,60 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
 
                             <div className="px-5 pb-5 pt-4 space-y-4">
 
-                                {/* OVERVIEW TAB */}
+                                {/* OVERVIEW */}
                                 {activeTab === 'overview' && (
                                     <motion.div
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         className="space-y-4"
                                     >
-                                        {/* Critical flags — shown first */}
-                                        <FlagBanner flags={flags} />
+                                        {/* Flags first — interview killers */}
+                                        <FlagBanner flags={latestReview.flags} />
 
                                         {/* Strengths */}
-                                        {currentReview.strengths?.length > 0 && (
+                                        {latestReview.strengths?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] font-bold text-success
                                                        uppercase tracking-widest mb-2.5">
                                                     ✅ Strengths
                                                 </p>
                                                 <div className="space-y-2">
-                                                    {currentReview.strengths.map((s, i) => (
-                                                        <motion.div
-                                                            key={i}
-                                                            initial={{ opacity: 0, x: -8 }}
-                                                            animate={{ opacity: 1, x: 0 }}
-                                                            transition={{ delay: i * 0.05 }}
-                                                            className="flex items-start gap-2.5
-                                                                   text-xs text-text-secondary leading-relaxed"
-                                                        >
+                                                    {latestReview.strengths.map((s, i) => (
+                                                        <div key={i}
+                                                            className="flex items-start gap-2.5 text-xs
+                                                               text-text-secondary leading-relaxed">
                                                             <span className="w-1.5 h-1.5 rounded-full
                                                                    bg-success flex-shrink-0 mt-1.5" />
                                                             {s}
-                                                        </motion.div>
+                                                        </div>
                                                     ))}
                                                 </div>
                                             </div>
                                         )}
 
                                         {/* Gaps */}
-                                        {currentReview.gaps?.length > 0 && (
+                                        {latestReview.gaps?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] font-bold text-warning
                                                        uppercase tracking-widest mb-2.5">
                                                     ⚠️ Gaps
                                                 </p>
                                                 <div className="space-y-2">
-                                                    {currentReview.gaps.map((g, i) => (
-                                                        <motion.div
-                                                            key={i}
-                                                            initial={{ opacity: 0, x: -8 }}
-                                                            animate={{ opacity: 1, x: 0 }}
-                                                            transition={{ delay: i * 0.05 }}
-                                                            className="flex items-start gap-2.5
-                                                                   text-xs text-text-secondary leading-relaxed"
-                                                        >
+                                                    {latestReview.gaps.map((g, i) => (
+                                                        <div key={i}
+                                                            className="flex items-start gap-2.5 text-xs
+                                                               text-text-secondary leading-relaxed">
                                                             <span className="w-1.5 h-1.5 rounded-full
                                                                    bg-warning flex-shrink-0 mt-1.5" />
                                                             {g}
-                                                        </motion.div>
+                                                        </div>
                                                     ))}
                                                 </div>
                                             </div>
                                         )}
 
                                         {/* Key improvement */}
-                                        {currentReview.improvement && (
+                                        {latestReview.improvement && (
                                             <div className="bg-brand-400/5 border border-brand-400/20
                                                    rounded-xl p-4">
                                                 <p className="text-[10px] font-bold text-brand-300
@@ -618,13 +589,13 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                     💡 Key Improvement
                                                 </p>
                                                 <p className="text-sm text-text-secondary leading-relaxed">
-                                                    {currentReview.improvement}
+                                                    {latestReview.improvement}
                                                 </p>
                                             </div>
                                         )}
 
                                         {/* Interview tip */}
-                                        {currentReview.interviewTip && (
+                                        {latestReview.interviewTip && (
                                             <div className="bg-info/5 border border-info/20
                                                    rounded-xl p-4">
                                                 <p className="text-[10px] font-bold text-info
@@ -632,25 +603,23 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                     🎯 Interview Tip
                                                 </p>
                                                 <p className="text-sm text-text-secondary leading-relaxed">
-                                                    {currentReview.interviewTip}
+                                                    {latestReview.interviewTip}
                                                 </p>
                                             </div>
                                         )}
                                     </motion.div>
                                 )}
 
-                                {/* DIMENSIONS TAB */}
+                                {/* DIMENSIONS */}
                                 {activeTab === 'dimensions' && (
                                     <motion.div
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         className="space-y-3"
                                     >
-                                        <p className="text-[10px] text-text-disabled leading-relaxed">
-                                            Click any dimension to see specific feedback.
-                                            Weighted score: 35% Code · 20% Pattern · 20% Understanding · 15% Explanation · 10% Confidence
+                                        <p className="text-[10px] text-text-disabled">
+                                            Click any row to see specific feedback.
                                         </p>
-
                                         {dimensions.map((dim, i) => (
                                             <DimensionBar
                                                 key={dim.key}
@@ -661,35 +630,28 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                 delay={i * 0.08}
                                             />
                                         ))}
-
-                                        {/* Score breakdown */}
-                                        <div className="pt-3 border-t border-border-subtle">
-                                            <div className="flex items-center justify-between text-[10px]">
-                                                <span className="text-text-disabled">
-                                                    Weighted score
-                                                </span>
-                                                <span className="font-bold text-text-secondary">
+                                        <div className="pt-3 border-t border-border-subtle space-y-1.5">
+                                            <div className="flex justify-between text-[10px]">
+                                                <span className="text-text-disabled">Weighted score</span>
+                                                <span className="font-bold text-text-secondary font-mono">
                                                     {dimensions.reduce((sum, d) =>
                                                         sum + (d.score * d.weight / 10), 0
                                                     ).toFixed(1)}
                                                 </span>
                                             </div>
                                             {followUpBonus > 0 && (
-                                                <div className="flex items-center justify-between text-[10px] mt-1">
-                                                    <span className="text-text-disabled">
-                                                        Follow-up bonus
-                                                    </span>
-                                                    <span className="font-bold text-success">
+                                                <div className="flex justify-between text-[10px]">
+                                                    <span className="text-text-disabled">Follow-up bonus</span>
+                                                    <span className="font-bold text-success font-mono">
                                                         +{followUpBonus}
                                                     </span>
                                                 </div>
                                             )}
-                                            <div className="flex items-center justify-between text-[11px] mt-2 pt-2
+                                            <div className="flex justify-between text-[11px] pt-1.5
                                                    border-t border-border-subtle font-bold">
-                                                <span className="text-text-secondary">
-                                                    Final score
-                                                </span>
+                                                <span className="text-text-secondary">Final score</span>
                                                 <span className={cn(
+                                                    'font-mono',
                                                     overallScore >= 8 ? 'text-success' :
                                                         overallScore >= 6 ? 'text-brand-300' :
                                                             overallScore >= 4 ? 'text-warning' : 'text-danger'
@@ -701,37 +663,35 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                     </motion.div>
                                 )}
 
-                                {/* CODE TAB */}
+                                {/* CODE */}
                                 {activeTab === 'code' && (
                                     <motion.div
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         className="space-y-4"
                                     >
-                                        {/* Complexity analysis */}
-                                        {currentReview.complexityCheck && (
-                                            <div>
+                                        {latestReview.complexityCheck ? (
+                                            <>
                                                 <p className="text-[10px] font-bold text-text-disabled
-                                                       uppercase tracking-widest mb-3">
-                                                    Complexity Analysis
+                                                       uppercase tracking-widest">
+                                                    Complexity Analysis (AI-derived from code)
                                                 </p>
-                                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <div className="grid grid-cols-2 gap-3">
                                                     {[
                                                         {
                                                             label: 'Time Complexity',
-                                                            value: currentReview.complexityCheck.timeComplexity,
-                                                            optimal: currentReview.complexityCheck.timeCorrect,
+                                                            value: latestReview.complexityCheck.timeComplexity,
+                                                            correct: latestReview.complexityCheck.timeCorrect,
                                                         },
                                                         {
                                                             label: 'Space Complexity',
-                                                            value: currentReview.complexityCheck.spaceComplexity,
-                                                            optimal: currentReview.complexityCheck.spaceCorrect,
+                                                            value: latestReview.complexityCheck.spaceComplexity,
+                                                            correct: latestReview.complexityCheck.spaceCorrect,
                                                         },
                                                     ].map(c => (
                                                         <div key={c.label}
-                                                            className={cn(
-                                                                'rounded-xl p-3.5 border',
-                                                                c.optimal
+                                                            className={cn('rounded-xl p-3.5 border',
+                                                                c.correct
                                                                     ? 'bg-success/5 border-success/20'
                                                                     : 'bg-warning/5 border-warning/20'
                                                             )}>
@@ -739,19 +699,19 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                                 {c.label}
                                                             </p>
                                                             <p className={cn(
-                                                                'text-base font-extrabold font-mono',
-                                                                c.optimal ? 'text-success' : 'text-warning'
+                                                                'text-lg font-extrabold font-mono',
+                                                                c.correct ? 'text-success' : 'text-warning'
                                                             )}>
-                                                                {c.value || 'N/A'}
+                                                                {c.value || '?'}
                                                             </p>
                                                             <p className="text-[9px] mt-0.5"
-                                                                style={{ color: c.optimal ? '#22c55e' : '#eab308' }}>
-                                                                {c.optimal ? 'Optimal' : 'Can be improved'}
+                                                                style={{ color: c.correct ? '#22c55e' : '#eab308' }}>
+                                                                {c.correct ? 'Optimal' : 'Can be improved'}
                                                             </p>
                                                         </div>
                                                     ))}
                                                 </div>
-                                                {currentReview.complexityCheck.optimizationNote && (
+                                                {latestReview.complexityCheck.optimizationNote && (
                                                     <div className="bg-surface-2 border border-border-subtle
                                                            rounded-xl p-3">
                                                         <p className="text-[10px] font-bold text-text-disabled
@@ -759,46 +719,52 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                             Optimization Opportunity
                                                         </p>
                                                         <p className="text-xs text-text-secondary leading-relaxed">
-                                                            {currentReview.complexityCheck.optimizationNote}
+                                                            {latestReview.complexityCheck.optimizationNote}
                                                         </p>
                                                     </div>
                                                 )}
-                                            </div>
+                                            </>
+                                        ) : (
+                                            <p className="text-xs text-text-disabled text-center py-4">
+                                                No code was submitted for analysis.
+                                            </p>
                                         )}
 
-                                        {/* Code correctness score in context */}
-                                        {currentReview.dimensionScores && (
+                                        {/* Code correctness context */}
+                                        {latestReview.dimensionScores?.codeCorrectness != null && (
                                             <div className={cn(
                                                 'rounded-xl p-4 border',
-                                                currentReview.dimensionScores.codeCorrectness >= 7
+                                                latestReview.dimensionScores.codeCorrectness >= 7
                                                     ? 'bg-success/5 border-success/20'
-                                                    : currentReview.dimensionScores.codeCorrectness >= 5
+                                                    : latestReview.dimensionScores.codeCorrectness >= 5
                                                         ? 'bg-warning/5 border-warning/20'
                                                         : 'bg-danger/5 border-danger/20'
                                             )}>
                                                 <div className="flex items-center justify-between mb-2">
                                                     <p className="text-xs font-bold text-text-primary">
-                                                        Code Correctness
+                                                        Code Correctness Score
                                                     </p>
                                                     <span className={cn(
-                                                        'text-lg font-extrabold font-mono',
-                                                        currentReview.dimensionScores.codeCorrectness >= 7 ? 'text-success' :
-                                                            currentReview.dimensionScores.codeCorrectness >= 5 ? 'text-warning' : 'text-danger'
+                                                        'text-xl font-extrabold font-mono',
+                                                        latestReview.dimensionScores.codeCorrectness >= 7
+                                                            ? 'text-success'
+                                                            : latestReview.dimensionScores.codeCorrectness >= 5
+                                                                ? 'text-warning' : 'text-danger'
                                                     )}>
-                                                        {currentReview.dimensionScores.codeCorrectness}/10
+                                                        {latestReview.dimensionScores.codeCorrectness}/10
                                                     </span>
                                                 </div>
                                                 <p className="text-[11px] text-text-tertiary leading-relaxed">
-                                                    {currentReview.dimensionScores.codeCorrectness >= 8
+                                                    {latestReview.dimensionScores.codeCorrectness >= 8
                                                         ? 'Your code appears correct and handles edge cases well.'
-                                                        : currentReview.dimensionScores.codeCorrectness >= 6
-                                                            ? 'Your code handles the main cases but may miss some edge cases.'
-                                                            : currentReview.dimensionScores.codeCorrectness >= 4
+                                                        : latestReview.dimensionScores.codeCorrectness >= 6
+                                                            ? 'Your code handles main cases but may miss some edge cases.'
+                                                            : latestReview.dimensionScores.codeCorrectness >= 4
                                                                 ? 'Your code has significant issues that would fail test cases.'
-                                                                : 'Your code has fundamental correctness problems. Focus on fixing this before anything else.'
+                                                                : 'Fundamental correctness problems. Fix this before anything else.'
                                                     }
                                                 </p>
-                                                {currentReview.dimensionScores.codeCorrectness <= 5 && (
+                                                {latestReview.dimensionScores.codeCorrectness <= 4 && (
                                                     <p className="text-[10px] text-danger mt-2 font-semibold">
                                                         ⚠️ Interviewers will not proceed past this in a real interview.
                                                     </p>
@@ -808,34 +774,31 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                     </motion.div>
                                 )}
 
-                                {/* FOLLOW-UPS TAB */}
+                                {/* FOLLOW-UPS */}
                                 {activeTab === 'followups' && (
                                     <motion.div
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                     >
                                         <FollowUpSection
-                                            followUpEvaluations={currentReview.followUpEvaluations}
+                                            followUpEvaluations={latestReview.followUpEvaluations}
                                             problemFollowUps={problemFollowUps}
                                         />
                                     </motion.div>
                                 )}
-
                             </div>
 
-                            {/* Footer — re-analyze + review history indicator */}
+                            {/* Footer */}
                             <div className="px-5 pb-4 flex items-center justify-between
                                    border-t border-border-subtle pt-3">
-                                <div className="flex items-center gap-2">
-                                    {reviewHistory.length > 1 && (
-                                        <span className="text-[10px] text-text-disabled">
-                                            Review {currentReview.reviewNumber || reviewHistory.length} of {reviewHistory.length}
+                                <div className="text-[10px] text-text-disabled">
+                                    {latestReview.reviewedAt && (
+                                        <span>
+                                            {new Date(latestReview.reviewedAt).toLocaleDateString()}
                                         </span>
                                     )}
-                                    {currentReview.reviewedAt && (
-                                        <span className="text-[10px] text-text-disabled">
-                                            · {new Date(currentReview.reviewedAt).toLocaleDateString()}
-                                        </span>
+                                    {localHistory.length > 1 && (
+                                        <span> · Review #{latestReview.reviewNumber || localHistory.length} of {localHistory.length}</span>
                                     )}
                                 </div>
                                 <Button
