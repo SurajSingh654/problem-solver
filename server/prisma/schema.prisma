@@ -512,10 +512,67 @@ model FollowUpQuestion {
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
 
+  // ── Relations ──────────────────────────────────────
+  answers SolutionFollowUpAnswer[]
+
   // ── Indexes ────────────────────────────────────────
   @@index([problemId, order])
-
   @@map("follow_up_questions")
+}
+
+
+
+// ============================================================================
+// SOLUTION FOLLOW-UP ANSWER
+// ============================================================================
+/// A member's answer to a follow-up question as part of their solution.
+///
+/// DESIGN DECISIONS:
+///
+/// 1. Separate model (not JSON in Solution) — enables per-answer AI scoring,
+///    team analytics on which follow-ups are hardest, and future features
+///    like "show me teammates' answers to follow-up 2."
+///
+/// 2. aiScore is nullable — set after AI review, not at submission time.
+///    This allows submission without waiting for AI analysis.
+///
+/// 3. No teamId — follows Solution's team scope through the FK chain:
+///    SolutionFollowUpAnswer → Solution → teamId
+///    This avoids denormalization while keeping queries simple.
+model SolutionFollowUpAnswer {
+  id String @id @default(cuid())
+
+  // ── Solution reference ─────────────────────────────
+  solutionId String
+  solution   Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+
+  // ── Question reference ─────────────────────────────
+  followUpQuestionId String
+  followUpQuestion   FollowUpQuestion @relation(fields: [followUpQuestionId], references: [id], onDelete: Cascade)
+
+  // ── Answer content ─────────────────────────────────
+  answerText String
+
+  // ── AI evaluation ──────────────────────────────────
+  // Set after reviewSolution is called — null until then
+  aiScore    Int?     // 1-10
+  aiFeedback String?  // One sentence feedback on this specific answer
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Constraints ────────────────────────────────────
+  // One answer per follow-up per solution
+  @@unique([solutionId, followUpQuestionId])
+
+  // ── Indexes ────────────────────────────────────────
+  // "All answers for this solution"
+  @@index([solutionId])
+  // "All answers to this follow-up question" — for team analytics
+  @@index([followUpQuestionId])
+
+  @@map("solution_follow_up_answers")
 }
 
 // ============================================================================
@@ -582,7 +639,8 @@ model Solution {
   updatedAt DateTime @updatedAt
 
   // ── Relations ──────────────────────────────────────
-  clarityRatings ClarityRating[]
+  clarityRatings   ClarityRating[]
+  followUpAnswers  SolutionFollowUpAnswer[]
 
   // ── Indexes ────────────────────────────────────────
   // THE critical query: "all solutions for this problem in this team"

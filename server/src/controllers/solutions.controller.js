@@ -1,23 +1,12 @@
 // ============================================================================
 // ProbSolver v3.0 — Solutions Controller (Team-Scoped)
 // ============================================================================
-//
-// SCOPING: Every solution belongs to a team. When a team member
-// submits a solution, it's tagged with req.teamId. When listing
-// solutions (for a problem or for a user), we always filter by team.
-//
-// RAG CONTEXT: The AI review fetches similar solutions from the SAME
-// team only — this is the multi-tenant RAG isolation.
-//
-// ============================================================================
-
 import prisma from '../lib/prisma.js'
 import { success, error } from '../utils/response.js'
 
 // ============================================================================
 // SUBMIT SOLUTION
 // ============================================================================
-
 export async function submitSolution(req, res) {
   try {
     const teamId = req.teamId
@@ -29,19 +18,15 @@ export async function submitSolution(req, res) {
       where: { id: problemId, teamId },
       select: { id: true, title: true },
     })
-
     if (!problem) {
       return error(res, 'Problem not found in your team.', 404)
     }
 
     // ── Check for existing solution ────────────────────
     const existing = await prisma.solution.findUnique({
-      where: {
-        userId_problemId_teamId: { userId, problemId, teamId },
-      },
+      where: { userId_problemId_teamId: { userId, problemId, teamId } },
       select: { id: true },
     })
-
     if (existing) {
       return error(res, 'You have already submitted a solution. Use the update endpoint.', 409)
     }
@@ -60,6 +45,7 @@ export async function submitSolution(req, res) {
       confidence,
       pattern,
       patternIdentificationTime,
+      followUpAnswers, // Array of { followUpQuestionId, answerText }
     } = req.body
 
     // ── Calculate spaced repetition dates ──────────────
@@ -71,37 +57,70 @@ export async function submitSolution(req, res) {
       return date.toISOString()
     })
 
-    const solution = await prisma.solution.create({
-      data: {
-        problemId,
-        userId,
-        teamId, // SCOPING: always from middleware
-        approach,
-        code,
-        language,
-        bruteForce,
-        optimizedApproach,
-        timeComplexity,
-        spaceComplexity,
-        keyInsight,
-        feynmanExplanation,
-        realWorldConnection,
-        confidence: confidence || 3,
-        pattern,
-        patternIdentificationTime,
-        reviewDates: reviewDates,
-        nextReviewDate: new Date(now.getTime() + 24 * 60 * 60 * 1000), // +1 day
-      },
-      include: {
-        problem: { select: { id: true, title: true, category: true } },
-        user: { select: { id: true, name: true } },
-      },
+    // ── Create solution + follow-up answers atomically ─
+    const solution = await prisma.$transaction(async (tx) => {
+      const created = await tx.solution.create({
+        data: {
+          problemId,
+          userId,
+          teamId,
+          approach,
+          code,
+          language,
+          bruteForce,
+          optimizedApproach,
+          timeComplexity,
+          spaceComplexity,
+          keyInsight,
+          feynmanExplanation,
+          realWorldConnection,
+          confidence: confidence || 3,
+          pattern,
+          patternIdentificationTime,
+          reviewDates,
+          nextReviewDate: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        },
+        include: {
+          problem: { select: { id: true, title: true, category: true } },
+          user: { select: { id: true, name: true } },
+        },
+      })
+
+      // Save follow-up answers if provided
+      if (followUpAnswers?.length > 0) {
+        // Verify all referenced follow-up questions belong to this problem
+        const validQuestionIds = await tx.followUpQuestion.findMany({
+          where: {
+            id: { in: followUpAnswers.map(a => a.followUpQuestionId) },
+            problemId,
+          },
+          select: { id: true },
+        })
+        const validIds = new Set(validQuestionIds.map(q => q.id))
+
+        const answersToCreate = followUpAnswers
+          .filter(a => a.answerText?.trim() && validIds.has(a.followUpQuestionId))
+          .map(a => ({
+            solutionId: created.id,
+            followUpQuestionId: a.followUpQuestionId,
+            answerText: a.answerText.trim(),
+          }))
+
+        if (answersToCreate.length > 0) {
+          await tx.solutionFollowUpAnswer.createMany({
+            data: answersToCreate,
+            skipDuplicates: true,
+          })
+        }
+      }
+
+      return created
     })
 
-    // ── Update user streak ─────────────────────────────
+    // ── Update user streak (fire-and-forget) ──────────
     updateStreak(userId).catch(() => {})
 
-    // ── Generate embedding in background ───────────────
+    // ── Generate embedding in background ──────────────
     generateSolutionEmbedding(solution.id).catch(() => {})
 
     return success(res, { message: 'Solution submitted.', solution }, 201)
@@ -114,46 +133,44 @@ export async function submitSolution(req, res) {
 // ============================================================================
 // GET SOLUTIONS FOR A PROBLEM (team-scoped)
 // ============================================================================
-
 export async function getProblemSolutions(req, res) {
   try {
     const { problemId } = req.params
     const teamId = req.teamId
     const userId = req.user.id
 
-    // ── Verify problem belongs to team ─────────────────
     const problem = await prisma.problem.findFirst({
       where: { id: problemId, teamId },
       select: { id: true, title: true },
     })
-
     if (!problem) {
       return error(res, 'Problem not found.', 404)
     }
 
-    // ── Fetch all team solutions for this problem ──────
     const solutions = await prisma.solution.findMany({
-      where: {
-        problemId,
-        teamId, // SCOPING: only this team's solutions
-      },
+      where: { problemId, teamId },
       include: {
         user: { select: { id: true, name: true, avatarUrl: true } },
-        clarityRatings: {
-          select: { rating: true, raterId: true },
+        clarityRatings: { select: { rating: true, raterId: true } },
+        followUpAnswers: {
+          select: {
+            id: true,
+            followUpQuestionId: true,
+            answerText: true,
+            aiScore: true,
+            aiFeedback: true,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    // ── Enrich with clarity rating info ────────────────
     const enriched = solutions.map((s) => {
       const ratings = s.clarityRatings || []
       const avgClarity = ratings.length > 0
         ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
         : null
       const userRating = ratings.find((r) => r.raterId === userId)
-
       return {
         ...s,
         clarityRatings: undefined,
@@ -178,22 +195,17 @@ export async function getProblemSolutions(req, res) {
 // ============================================================================
 // GET USER'S SOLUTIONS (within team)
 // ============================================================================
-
 export async function getUserSolutions(req, res) {
   try {
     const teamId = req.teamId
     const targetUserId = req.params.userId || req.user.id
     const { page = 1, limit = 20 } = req.query
-
     const skip = (parseInt(page) - 1) * parseInt(limit)
     const take = parseInt(limit)
 
     const [solutions, total] = await Promise.all([
       prisma.solution.findMany({
-        where: {
-          userId: targetUserId,
-          teamId, // SCOPING
-        },
+        where: { userId: targetUserId, teamId },
         include: {
           problem: {
             select: { id: true, title: true, difficulty: true, category: true },
@@ -203,9 +215,7 @@ export async function getUserSolutions(req, res) {
         skip,
         take,
       }),
-      prisma.solution.count({
-        where: { userId: targetUserId, teamId },
-      }),
+      prisma.solution.count({ where: { userId: targetUserId, teamId } }),
     ])
 
     return success(res, {
@@ -226,22 +236,24 @@ export async function getUserSolutions(req, res) {
 // ============================================================================
 // UPDATE SOLUTION
 // ============================================================================
-
 export async function updateSolution(req, res) {
   try {
     const { solutionId } = req.params
     const teamId = req.teamId
     const userId = req.user.id
 
-    // ── Verify ownership AND team scope ────────────────
     const existing = await prisma.solution.findFirst({
       where: { id: solutionId, userId, teamId },
-      select: { id: true },
+      select: { id: true, problemId: true },
     })
-
     if (!existing) {
       return error(res, 'Solution not found.', 404)
     }
+
+    const {
+      followUpAnswers, // Optional: update follow-up answers too
+      ...restBody
+    } = req.body
 
     const data = {}
     const fields = [
@@ -249,22 +261,63 @@ export async function updateSolution(req, res) {
       'timeComplexity', 'spaceComplexity', 'keyInsight', 'feynmanExplanation',
       'realWorldConnection', 'confidence', 'pattern', 'patternIdentificationTime',
     ]
-
     fields.forEach((field) => {
-      if (req.body[field] !== undefined) data[field] = req.body[field]
+      if (restBody[field] !== undefined) data[field] = restBody[field]
     })
 
-    const solution = await prisma.solution.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.solution.update({
+        where: { id: solutionId },
+        data,
+      })
+
+      // Update follow-up answers if provided
+      if (followUpAnswers?.length > 0) {
+        const validQuestionIds = await tx.followUpQuestion.findMany({
+          where: {
+            id: { in: followUpAnswers.map(a => a.followUpQuestionId) },
+            problemId: existing.problemId,
+          },
+          select: { id: true },
+        })
+        const validIds = new Set(validQuestionIds.map(q => q.id))
+
+        for (const answer of followUpAnswers) {
+          if (!answer.answerText?.trim() || !validIds.has(answer.followUpQuestionId)) continue
+          await tx.solutionFollowUpAnswer.upsert({
+            where: {
+              solutionId_followUpQuestionId: {
+                solutionId,
+                followUpQuestionId: answer.followUpQuestionId,
+              },
+            },
+            create: {
+              solutionId,
+              followUpQuestionId: answer.followUpQuestionId,
+              answerText: answer.answerText.trim(),
+            },
+            update: {
+              answerText: answer.answerText.trim(),
+              // Reset AI scores when answer is updated — needs re-review
+              aiScore: null,
+              aiFeedback: null,
+            },
+          })
+        }
+      }
+    })
+
+    const solution = await prisma.solution.findUnique({
       where: { id: solutionId },
-      data,
       include: {
         problem: { select: { id: true, title: true } },
+        followUpAnswers: true,
       },
     })
 
     // Re-generate embedding if content changed
     if (data.approach || data.code || data.keyInsight) {
-      generateSolutionEmbedding(solution.id).catch(() => {})
+      generateSolutionEmbedding(solutionId).catch(() => {})
     }
 
     return success(res, { message: 'Solution updated.', solution })
@@ -277,7 +330,6 @@ export async function updateSolution(req, res) {
 // ============================================================================
 // RATE SOLUTION CLARITY (team members rate each other)
 // ============================================================================
-
 export async function rateSolutionClarity(req, res) {
   try {
     const { solutionId } = req.params
@@ -285,35 +337,21 @@ export async function rateSolutionClarity(req, res) {
     const teamId = req.teamId
     const raterId = req.user.id
 
-    // ── Verify solution is in this team ────────────────
     const solution = await prisma.solution.findFirst({
       where: { id: solutionId, teamId },
       select: { id: true, userId: true },
     })
-
     if (!solution) {
       return error(res, 'Solution not found.', 404)
     }
-
-    // Can't rate own solution
     if (solution.userId === raterId) {
       return error(res, 'You cannot rate your own solution.', 400)
     }
 
-    // Upsert rating
     const clarityRating = await prisma.clarityRating.upsert({
-      where: {
-        raterId_solutionId: { raterId, solutionId },
-      },
-      create: {
-        solutionId,
-        raterId,
-        teamId,
-        rating,
-      },
-      update: {
-        rating,
-      },
+      where: { raterId_solutionId: { raterId, solutionId } },
+      create: { solutionId, raterId, teamId, rating },
+      update: { rating },
     })
 
     return success(res, { message: 'Rating saved.', rating: clarityRating })
@@ -326,20 +364,14 @@ export async function rateSolutionClarity(req, res) {
 // ============================================================================
 // REVIEW QUEUE (spaced repetition — team-scoped)
 // ============================================================================
-
 export async function getReviewQueue(req, res) {
   try {
     const teamId = req.teamId
     const userId = req.user.id
-
     const now = new Date()
 
     const dueReviews = await prisma.solution.findMany({
-      where: {
-        userId,
-        teamId, // SCOPING
-        nextReviewDate: { lte: now },
-      },
+      where: { userId, teamId, nextReviewDate: { lte: now } },
       include: {
         problem: {
           select: { id: true, title: true, difficulty: true, category: true },
@@ -349,27 +381,17 @@ export async function getReviewQueue(req, res) {
     })
 
     const upcoming = await prisma.solution.findMany({
-      where: {
-        userId,
-        teamId,
-        nextReviewDate: { gt: now },
-      },
+      where: { userId, teamId, nextReviewDate: { gt: now } },
       select: {
         id: true,
         nextReviewDate: true,
-        problem: {
-          select: { id: true, title: true, difficulty: true },
-        },
+        problem: { select: { id: true, title: true, difficulty: true } },
       },
       orderBy: { nextReviewDate: 'asc' },
       take: 10,
     })
 
-    return success(res, {
-      due: dueReviews,
-      dueCount: dueReviews.length,
-      upcoming,
-    })
+    return success(res, { due: dueReviews, dueCount: dueReviews.length, upcoming })
   } catch (err) {
     console.error('Review queue error:', err)
     return error(res, 'Failed to fetch review queue.', 500)
@@ -379,13 +401,11 @@ export async function getReviewQueue(req, res) {
 // ============================================================================
 // HELPERS
 // ============================================================================
-
 async function updateStreak(userId) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { lastSolvedAt: true, streak: true },
   })
-
   if (!user) return
 
   const now = new Date()
@@ -396,11 +416,7 @@ async function updateStreak(userId) {
     newStreak = 1
   } else {
     const diffHours = (now - lastSolved) / (1000 * 60 * 60)
-    if (diffHours < 48) {
-      newStreak = user.streak + 1
-    } else {
-      newStreak = 1 // Streak broken
-    }
+    newStreak = diffHours < 48 ? user.streak + 1 : 1
   }
 
   await prisma.user.update({
@@ -424,7 +440,6 @@ async function generateSolutionEmbedding(solutionId) {
         problem: { select: { title: true } },
       },
     })
-
     if (!solution) return
 
     const text = [
