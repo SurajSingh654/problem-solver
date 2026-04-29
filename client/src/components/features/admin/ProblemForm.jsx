@@ -124,14 +124,8 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
         resolver: zodResolver(schema),
         defaultValues: {
             title: initialData?.title || '',
-            // FIX 1: MANUAL and AI_GENERATED are internal source types, not
-            // platform sources. Map them to OTHER for the UI selector.
-            // Preserve real platform sources (LEETCODE, GFG, etc.) as-is.
-            source: (
-                !initialData?.source ||
-                initialData.source === 'MANUAL' ||
-                initialData.source === 'AI_GENERATED'
-            ) ? 'OTHER' : initialData.source,
+            // AFTER — platform is now in categoryData.platform
+            source: initialData?.categoryData?.platform || 'OTHER',
             // FIX 2: sourceUrl lives inside categoryData, not top-level
             sourceUrl: initialData?.categoryData?.sourceUrl || '',
             difficulty: initialData?.difficulty || 'MEDIUM',
@@ -174,22 +168,19 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const descConfig = CATEGORY_DESCRIPTION_CONFIG[selectedCategory] || CATEGORY_DESCRIPTION_CONFIG.CODING
     const patternSuggestions = PATTERNS.map(p => p.label)
 
+    // AFTER — source from form goes to categoryData.platform, not DB source column
     function onFormSubmit(data) {
-        const { sourceUrl, ...rest } = data
+        const { sourceUrl, source, ...rest } = data
         onSubmit({
             ...rest,
-            // FIX 4: Build categoryData correctly so sourceUrl and companyTags
-            // are saved in the right place and survive round-trips through the DB.
-            // Spread existing categoryData first so we don't lose other fields
-            // (e.g. companyTags already saved there from a previous edit).
+            source: 'MANUAL',
             categoryData: {
                 ...(initialData?.categoryData || {}),
                 sourceUrl: sourceUrl || '',
                 companyTags: fieldConfig.showCompanyTags ? companyTags : [],
+                platform: source || 'OTHER',
             },
             tags,
-            // Keep top-level companyTags for backward compat with createProblem
-            // controller's normalizedTags merge logic
             companyTags: fieldConfig.showCompanyTags ? companyTags : [],
             useCases: fieldConfig.showUseCases ? useCases : [],
             followUps: followUps.map((fq, i) => ({ ...fq, order: i })),

@@ -216,20 +216,9 @@ export async function createProblem(req, res) {
     // v3.0 FIX: v2 sends followUps, v3 expects followUpQuestions
     const normalizedFollowUps = followUpQuestions || followUps || [];
 
-    const VALID_PROBLEM_SOURCES = [
-      "MANUAL",
-      "AI_GENERATED",
-      "LEETCODE",
-      "GFG",
-      "CODECHEF",
-      "INTERVIEWBIT",
-      "HACKERRANK",
-      "CODEFORCES",
-      "OTHER",
-    ];
-    const normalizedSource = VALID_PROBLEM_SOURCES.includes(source)
-      ? source
-      : "MANUAL";
+    // AFTER (correct — only MANUAL and AI_GENERATED are valid ProblemSource enum values)
+    const normalizedSource =
+      source === "AI_GENERATED" ? "AI_GENERATED" : "MANUAL";
 
     // v3.0 FIX: v2 sends useCases as array, v3 expects string
     const normalizedUseCases = Array.isArray(useCases)

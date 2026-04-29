@@ -16,10 +16,11 @@ import { PROBLEM_CATEGORIES } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
+const PLATFORM_SOURCES = ['LEETCODE', 'GFG', 'HACKERRANK', 'CODECHEF', 'INTERVIEWBIT', 'CODEFORCES']
+
 // ── AI Generated Problem Preview Card ──────────────────
 function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving }) {
     const [expanded, setExpanded] = useState(false)
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -79,7 +80,6 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                             ))}
                         </div>
                     </div>
-
                     {/* Actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                         <button
@@ -108,7 +108,6 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                     </div>
                 </div>
             </div>
-
             {/* Expanded preview */}
             <AnimatePresence>
                 {expanded && (
@@ -119,7 +118,6 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                         className="overflow-hidden"
                     >
                         <div className="px-5 pb-5 space-y-4 border-t border-border-default pt-4">
-                            {/* Description */}
                             {problem.description && (
                                 <div>
                                     <p className="text-[10px] font-bold text-text-disabled uppercase
@@ -128,8 +126,6 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                                    whitespace-pre-wrap">{problem.description}</p>
                                 </div>
                             )}
-
-                            {/* Real world context */}
                             {problem.realWorldContext && (
                                 <div>
                                     <p className="text-[10px] font-bold text-text-disabled uppercase
@@ -139,8 +135,6 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                                     </p>
                                 </div>
                             )}
-
-                            {/* Admin notes */}
                             {problem.adminNotes && (
                                 <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
                                     <p className="text-[10px] font-bold text-warning uppercase
@@ -149,8 +143,6 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                                    whitespace-pre-wrap">{problem.adminNotes}</p>
                                 </div>
                             )}
-
-                            {/* Follow-ups */}
                             {problem.followUpQuestions?.length > 0 && (
                                 <div>
                                     <p className="text-[10px] font-bold text-text-disabled uppercase
@@ -201,10 +193,42 @@ function AIGenerateScreen({ onBack }) {
 
     const totalCustom = (customMix.easy || 0) + (customMix.medium || 0) + (customMix.hard || 0)
 
+    // ── Single source of truth for problem data shape ──
+    // Both handleApprove and handleApproveAll use this.
+    // If the shape ever changes, fix it here only.
+    function buildProblemData(problem) {
+        return {
+            title: problem.title,
+            description: problem.description || '',
+            difficulty: problem.difficulty || 'MEDIUM',
+            category: problem.category || category,
+            // source DB column only accepts MANUAL | AI_GENERATED
+            // Platform identity (LEETCODE, GFG etc.) goes into categoryData.platform
+            source: 'AI_GENERATED',
+            categoryData: {
+                sourceUrl: problem.sourceUrl || '',
+                companyTags: problem.companyTags || [],
+                platform: PLATFORM_SOURCES.includes(problem.source)
+                    ? problem.source
+                    : 'OTHER',
+            },
+            tags: problem.tags || [],
+            realWorldContext: problem.realWorldContext || '',
+            useCases: problem.useCases || '',
+            adminNotes: problem.adminNotes || '',
+            followUps: (problem.followUpQuestions || []).map((fq, i) => ({
+                question: fq.question,
+                difficulty: fq.difficulty || 'MEDIUM',
+                hint: fq.hint || '',
+                order: i,
+            })),
+            isPinned: false,
+        }
+    }
+
     async function handleGenerate() {
         let finalCount = count
         let finalDifficulty = difficulty
-
         if (difficulty === 'custom') {
             finalCount = totalCustom
             if (finalCount === 0) {
@@ -213,7 +237,6 @@ function AIGenerateScreen({ onBack }) {
             }
             finalDifficulty = `custom:${customMix.easy || 0}E,${customMix.medium || 0}M,${customMix.hard || 0}H`
         }
-
         try {
             const res = await generateAI.mutateAsync({
                 category,
@@ -232,31 +255,7 @@ function AIGenerateScreen({ onBack }) {
     async function handleApprove(problem, index) {
         setApprovingIdx(index)
         try {
-            const data = {
-                title: problem.title,
-                description: problem.description || '',
-                difficulty: problem.difficulty || 'MEDIUM',
-                category: problem.category || category,
-                source: ['LEETCODE', 'GFG', 'HACKERRANK', 'CODECHEF', 'INTERVIEWBIT'].includes(problem.source)
-                    ? problem.source : 'OTHER',
-                categoryData: {
-                    sourceUrl: problem.sourceUrl || '',
-                    companyTags: problem.companyTags || [],
-                },
-                tags: problem.tags || [],
-                realWorldContext: problem.realWorldContext || '',
-                useCases: problem.useCases || '',
-                adminNotes: problem.adminNotes || '',
-                followUps: (problem.followUpQuestions || []).map((fq, i) => ({
-                    question: fq.question,
-                    difficulty: fq.difficulty || 'MEDIUM',
-                    hint: fq.hint || '',
-                    order: i,
-                })),
-                isPinned: false,
-            }
-
-            await createProblem.mutateAsync(data)
+            await createProblem.mutateAsync(buildProblemData(problem))
             toast.success(`"${problem.title}" added to team`)
             setGenerated(prev => prev.filter((_, i) => i !== index))
         } catch {
@@ -272,9 +271,19 @@ function AIGenerateScreen({ onBack }) {
 
     async function handleApproveAll() {
         if (!generated?.length) return
-        for (let i = 0; i < generated.length; i++) {
-            await handleApprove(generated[i], 0)
+        // Snapshot the array before iterating — do not mutate mid-loop
+        const problems = [...generated]
+        for (let i = 0; i < problems.length; i++) {
+            setApprovingIdx(i)
+            try {
+                await createProblem.mutateAsync(buildProblemData(problems[i]))
+                toast.success(`"${problems[i].title}" added to team`)
+            } catch {
+                toast.error(`Failed to add "${problems[i].title}"`)
+            }
         }
+        setApprovingIdx(null)
+        setGenerated([])  // clear all at the end, not mid-loop
     }
 
     const displayCount = difficulty === 'custom' ? totalCustom : count
@@ -546,7 +555,6 @@ function AIGenerateScreen({ onBack }) {
                             )}
                         </div>
                     </div>
-
                     {generated.length === 0 ? (
                         <div className="bg-surface-1 border border-success/25 rounded-2xl p-10 text-center">
                             <div className="text-4xl mb-3">✅</div>
@@ -609,7 +617,6 @@ export default function AddProblemPage() {
                 </svg>
                 Back to Admin
             </button>
-
             <div className="mb-6">
                 <h1 className="text-2xl font-extrabold text-text-primary mb-1">
                     Add Problems
@@ -618,7 +625,6 @@ export default function AddProblemPage() {
                     Let AI generate problems for your team, or add them manually
                 </p>
             </div>
-
             {/* Mode toggle */}
             <div className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1 mb-6 w-fit">
                 <button
@@ -644,7 +650,6 @@ export default function AddProblemPage() {
                     <span>✏️</span> Manual Add
                 </button>
             </div>
-
             {/* Content */}
             {mode === 'ai' ? (
                 <AIGenerateScreen onBack={() => setMode('manual')} />

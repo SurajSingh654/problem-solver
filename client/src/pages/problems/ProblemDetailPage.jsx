@@ -145,11 +145,14 @@ export default function ProblemDetailPage() {
                         ) : null
                     })()}
 
-                    {problem.source && problem.source !== 'MANUAL' && (
-                        <span className="text-sm font-semibold text-text-tertiary">
-                            {problem.source}
-                        </span>
-                    )}
+                    {/* Show platform from categoryData (LEETCODE, GFG, etc.) */}
+                    {problem.categoryData?.platform &&
+                        problem.categoryData.platform !== 'OTHER' && (
+                            <span className="text-[10px] font-bold text-text-disabled bg-surface-3
+         border border-border-subtle rounded-full px-2 py-px">
+                                {problem.categoryData.platform}
+                            </span>
+                        )}
 
                     {isPinned && (
                         <span className="text-xs font-bold text-warning bg-warning/10
@@ -176,7 +179,6 @@ export default function ProblemDetailPage() {
                 <h1 className="text-2xl font-extrabold text-text-primary mb-4 leading-tight">
                     {title}
                 </h1>
-                {/* External link — for problems from LeetCode, GFG, etc. */}
                 {problem.categoryData?.sourceUrl && (
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
                         <a
@@ -184,9 +186,9 @@ export default function ProblemDetailPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
-               bg-brand-400/10 border border-brand-400/25
-               text-sm font-semibold text-brand-300 hover:text-brand-200
-               hover:bg-brand-400/15 transition-all"
+                       bg-brand-400/10 border border-brand-400/25
+                       text-sm font-semibold text-brand-300 hover:text-brand-200
+                       hover:bg-brand-400/15 transition-all"
                         >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" strokeWidth="2"
@@ -195,21 +197,19 @@ export default function ProblemDetailPage() {
                                 <polyline points="15 3 21 3 21 9" />
                                 <line x1="10" y1="14" x2="21" y2="3" />
                             </svg>
-                            Solve on {problem.source !== 'MANUAL' && problem.source !== 'AI_GENERATED'
-                                ? problem.source.replace('_', ' ')
+                            Solve on {problem.categoryData?.platform && problem.categoryData.platform !== 'OTHER'
+                                ? problem.categoryData.platform.replace('_', ' ')
                                 : 'External Site'}
                         </a>
-
-                        {/* Fallback search — if the direct link is broken */}
-                        {getPlatformSearchUrl(problem.source, problem.title) && (
+                        {getPlatformSearchUrl(problem.categoryData?.platform, problem.title) && (
                             <a
-                                href={getPlatformSearchUrl(problem.source, problem.title)}
+                                href={getPlatformSearchUrl(problem.categoryData?.platform, problem.title)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
-                   bg-surface-2 border border-border-default
-                   text-xs font-medium text-text-tertiary hover:text-text-primary
-                   hover:border-border-strong transition-all"
+                           bg-surface-2 border border-border-default
+                           text-xs font-medium text-text-tertiary hover:text-text-primary
+                           hover:border-border-strong transition-all"
                                 title="If the direct link doesn't work, search here"
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
