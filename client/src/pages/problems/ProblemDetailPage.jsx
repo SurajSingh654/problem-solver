@@ -9,6 +9,7 @@ import { Button } from '@components/ui/Button'
 import { PageSpinner } from '@components/ui/Spinner'
 import { EmptyState } from '@components/ui/EmptyState'
 import { AIReviewCard } from '@components/features/ai/AIReviewCard'
+import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { useAIStatus } from '@hooks/useAI'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
@@ -29,8 +30,6 @@ function InfoChip({ label, value, color }) {
     )
 }
 
-
-// ── Helper: fallback search URL if direct link is broken ──────
 function getPlatformSearchUrl(source, title) {
     if (!title) return null
     const encoded = encodeURIComponent(title)
@@ -45,25 +44,16 @@ function getPlatformSearchUrl(source, title) {
 }
 
 export default function ProblemDetailPage() {
-    // v3.0 FIX: Route param is `problemId` not `id`
     const { problemId } = useParams()
     const navigate = useNavigate()
     const { user } = useAuthStore()
-
-    // v3.0 FIX: Check role using v3 fields
     const isAdmin = user?.globalRole === 'SUPER_ADMIN' || user?.teamRole === 'TEAM_ADMIN'
-
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
-
-    // v3.0: useProblem returns the problem object directly
     const { data: problem, isLoading, isError } = useProblem(problemId)
-
-    // v3.0 FIX: Solutions are fetched separately
     const { data: solutionsData } = useProblemSolutions(problemId)
 
     if (isLoading) return <PageSpinner />
-
     if (isError || !problem) {
         return (
             <EmptyState
@@ -76,30 +66,16 @@ export default function ProblemDetailPage() {
         )
     }
 
-    // v3.0 FIX: Map v3 field names
     const {
-        title,
-        difficulty,
-        category,
-        description,
-        tags,
-        isPinned,
-        realWorldContext,
-        useCases,
-        adminNotes,
-        followUpQuestions,
-        isSolved,
-        teamSolutionCount,
-        createdBy,
-        createdAt,
+        title, difficulty, category, description, tags, isPinned,
+        realWorldContext, useCases, adminNotes, followUpQuestions,
+        isSolved, teamSolutionCount, createdBy, createdAt,
     } = problem
 
-    // v3.0 FIX: Solutions come from separate hook
     const solutions = solutionsData?.solutions || []
     const mySolution = solutions.find(s => s.userId === user?.id || s.isOwn)
     const otherSolutions = solutions.filter(s => s.userId !== user?.id && !s.isOwn)
 
-    // v3.0 FIX: Parse useCases — could be string or null
     const useCasesList = useCases
         ? (typeof useCases === 'string' ? useCases.split('\n').filter(Boolean) : useCases)
         : []
@@ -132,35 +108,26 @@ export default function ProblemDetailPage() {
                     <Badge variant={DIFF_VARIANT[difficulty] || 'brand'} size="sm">
                         {difficulty?.charAt(0) + difficulty?.slice(1).toLowerCase()}
                     </Badge>
-
                     {category && (() => {
                         const cat = PROBLEM_CATEGORIES.find(c => c.id === category)
                         return cat ? (
-                            <span className={cn(
-                                'text-xs font-bold px-2.5 py-0.5 rounded-full border',
-                                cat.bg
-                            )}>
+                            <span className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full border', cat.bg)}>
                                 {cat.icon} {cat.label}
                             </span>
                         ) : null
                     })()}
-
-                    {/* Show platform from categoryData (LEETCODE, GFG, etc.) */}
-                    {problem.categoryData?.platform &&
-                        problem.categoryData.platform !== 'OTHER' && (
-                            <span className="text-[10px] font-bold text-text-disabled bg-surface-3
-         border border-border-subtle rounded-full px-2 py-px">
-                                {problem.categoryData.platform}
-                            </span>
-                        )}
-
+                    {problem.categoryData?.platform && problem.categoryData.platform !== 'OTHER' && (
+                        <span className="text-[10px] font-bold text-text-disabled bg-surface-3
+                             border border-border-subtle rounded-full px-2 py-px">
+                            {problem.categoryData.platform}
+                        </span>
+                    )}
                     {isPinned && (
                         <span className="text-xs font-bold text-warning bg-warning/10
                              border border-warning/25 rounded-full px-2 py-0.5">
                             📌 Pinned
                         </span>
                     )}
-
                     {isSolved && (
                         <span className="text-xs font-bold text-success bg-success/10
                              border border-success/25 rounded-full px-2 py-0.5
@@ -179,6 +146,8 @@ export default function ProblemDetailPage() {
                 <h1 className="text-2xl font-extrabold text-text-primary mb-4 leading-tight">
                     {title}
                 </h1>
+
+                {/* External link */}
                 {problem.categoryData?.sourceUrl && (
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
                         <a
@@ -207,9 +176,9 @@ export default function ProblemDetailPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
-                           bg-surface-2 border border-border-default
-                           text-xs font-medium text-text-tertiary hover:text-text-primary
-                           hover:border-border-strong transition-all"
+                   bg-surface-2 border border-border-default
+                   text-xs font-medium text-text-tertiary hover:text-text-primary
+                   hover:border-border-strong transition-all"
                                 title="If the direct link doesn't work, search here"
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
@@ -230,36 +199,24 @@ export default function ProblemDetailPage() {
                         {problem.categoryData.companyTags.map(c => (
                             <span key={c}
                                 className="text-[10px] font-semibold text-warning
-               bg-warning/10 border border-warning/20
-               rounded-full px-2.5 py-0.5">
+               bg-warning/10 border border-warning/20 rounded-full px-2.5 py-0.5">
                                 🏢 {c}
                             </span>
                         ))}
                     </div>
                 )}
 
-
                 {/* Quick stats */}
                 <div className="flex items-center gap-3 flex-wrap mb-5">
-                    <InfoChip
-                        label="Solutions"
-                        value={teamSolutionCount || 0}
-                        color="text-brand-300"
-                    />
-                    <InfoChip
-                        label="Follow-ups"
-                        value={followUpQuestions?.length || 0}
-                        color="text-info"
-                    />
+                    <InfoChip label="Solutions" value={teamSolutionCount || 0} color="text-brand-300" />
+                    <InfoChip label="Follow-ups" value={followUpQuestions?.length || 0} color="text-info" />
                     {createdBy && (
                         <div className="flex flex-col justify-center bg-surface-2
                             border border-border-default rounded-xl px-4 py-3">
                             <span className="text-[10px] text-text-disabled uppercase tracking-wider mb-0.5">
                                 Added by
                             </span>
-                            <span className="text-sm font-bold text-text-primary">
-                                {createdBy.name}
-                            </span>
+                            <span className="text-sm font-bold text-text-primary">{createdBy.name}</span>
                         </div>
                     )}
                     <div className="flex flex-col justify-center bg-surface-2
@@ -310,7 +267,6 @@ export default function ProblemDetailPage() {
                             Edit My Solution
                         </Button>
                     )}
-
                     {isAdmin && (
                         <Button
                             variant="ghost"
@@ -323,7 +279,7 @@ export default function ProblemDetailPage() {
                 </div>
             </motion.div>
 
-            {/* Problem Description */}
+            {/* Problem Description — FIX: MarkdownRenderer instead of raw text */}
             {description && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -346,13 +302,12 @@ export default function ProblemDetailPage() {
                         </span>
                         Description
                     </h2>
-                    <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
-                        {description}
-                    </div>
+                    {/* FIX 1: Render Markdown instead of raw string */}
+                    <MarkdownRenderer content={description} />
                 </motion.div>
             )}
 
-            {/* Real world context */}
+            {/* Real World Context — FIX: MarkdownRenderer for realWorldContext */}
             {(realWorldContext || useCasesList.length > 0) && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -364,9 +319,8 @@ export default function ProblemDetailPage() {
                         <span>🌍</span> Real World Context
                     </h2>
                     {realWorldContext && (
-                        <p className="text-sm text-text-secondary leading-relaxed mb-3">
-                            {realWorldContext}
-                        </p>
+                        // FIX 2: Render Markdown instead of raw string
+                        <MarkdownRenderer content={realWorldContext} className="mb-3" />
                     )}
                     {useCasesList.length > 0 && (
                         <div className="flex flex-wrap gap-2">
@@ -390,10 +344,27 @@ export default function ProblemDetailPage() {
                     transition={{ delay: 0.08 }}
                     className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6"
                 >
-                    <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-4">
-                        <span>🧠</span> Follow-up Questions
-                        <Badge variant="brand" size="xs">{followUpQuestions.length}</Badge>
-                    </h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                            <span>🧠</span> Follow-up Questions
+                            <Badge variant="brand" size="xs">{followUpQuestions.length}</Badge>
+                        </h2>
+                        {/* Direct link to answer follow-ups — reduces friction */}
+                        {isSolved && problem.userSolutionId && (
+                            <button
+                                onClick={() => navigate(`/problems/${problemId}/edit-solution/${problem.userSolutionId}`)}
+                                className="text-xs font-semibold text-brand-300 hover:text-brand-200
+                                           transition-colors flex items-center gap-1"
+                            >
+                                Answer these
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2.5"
+                                    strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
                     <div className="space-y-3">
                         {followUpQuestions.map((fq, i) => (
                             <div key={fq.id || i}
@@ -433,6 +404,12 @@ export default function ProblemDetailPage() {
                             </div>
                         ))}
                     </div>
+                    {/* Nudge for unsolved — no link shown until they've submitted */}
+                    {!isSolved && (
+                        <p className="text-[11px] text-text-disabled mt-4 pt-3 border-t border-border-subtle">
+                            Submit your solution first — you can answer these follow-ups to earn bonus points on your AI review.
+                        </p>
+                    )}
                 </motion.div>
             )}
 
@@ -444,10 +421,11 @@ export default function ProblemDetailPage() {
                     transition={{ delay: 0.1 }}
                     className="bg-warning/5 border border-warning/20 rounded-2xl p-5 mb-6"
                 >
-                    <h2 className="text-sm font-bold text-warning flex items-center gap-2 mb-2">
+                    <h2 className="text-sm font-bold text-warning flex items-center gap-2 mb-3">
                         <span>⚡</span> Admin Notes
                     </h2>
-                    <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">{adminNotes}</p>
+                    {/* FIX 3: Render Markdown instead of raw string */}
+                    <MarkdownRenderer content={adminNotes} size="sm" />
                 </motion.div>
             )}
 
@@ -463,7 +441,6 @@ export default function ProblemDetailPage() {
                         <Badge variant="brand" size="xs">{teamSolutionCount || 0}</Badge>
                     </h2>
                 </div>
-
                 {solutions.length === 0 ? (
                     <div className="bg-surface-1 border border-border-default
                           rounded-2xl p-10 text-center">
@@ -506,7 +483,6 @@ export default function ProblemDetailPage() {
                                 )}
                             </div>
                         )}
-
                         {otherSolutions.length > 0 && (
                             <div>
                                 {mySolution && (
