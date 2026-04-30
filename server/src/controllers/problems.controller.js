@@ -4,6 +4,20 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 
+// ── Shared normalizer for adminNotes ───────────────────────
+// AI sometimes returns adminNotes as a JSON object {"1": "...", "2": "..."}
+// instead of a string. Prisma expects String or Null.
+// Normalize defensively here so the Prisma call never receives an object.
+function normalizeAdminNotes(adminNotes) {
+  if (!adminNotes) return null;
+  if (typeof adminNotes === "string") return adminNotes;
+  if (typeof adminNotes === "object") {
+    // Convert {"1": "...", "2": "..."} → "...\n\n..."
+    return Object.values(adminNotes).join("\n\n");
+  }
+  return null;
+}
+
 // ============================================================================
 // LIST PROBLEMS
 // ============================================================================
@@ -28,9 +42,7 @@ export async function listProblems(req, res) {
       sortOrder = "desc",
     } = req.query;
 
-    // ── Build WHERE clause ─────────────────────────────
     const where = { teamId };
-
     if (!isAdmin) {
       where.isPublished = true;
       where.isHidden = false;
@@ -39,13 +51,10 @@ export async function listProblems(req, res) {
         where.isPublished = isPublished === "true";
       }
     }
-
     if (category) where.category = category;
     if (difficulty) where.difficulty = difficulty;
     if (source) where.source = source;
     if (isPinned === "true") where.isPinned = true;
-
-    // v3.0 FIX: Guard against empty search string
     if (search && search.trim()) {
       where.OR = [
         { title: { contains: search.trim(), mode: "insensitive" } },
@@ -53,7 +62,6 @@ export async function listProblems(req, res) {
       ];
     }
 
-    // ── Build ORDER BY ─────────────────────────────────
     const orderBy = [];
     orderBy.push({ isPinned: "desc" });
     const validSortFields = ["createdAt", "title", "difficulty", "category"];
@@ -82,14 +90,9 @@ export async function listProblems(req, res) {
           isHidden: true,
           createdById: true,
           createdAt: true,
-          createdBy: {
-            select: { id: true, name: true },
-          },
+          createdBy: { select: { id: true, name: true } },
           _count: {
-            select: {
-              solutions: true,
-              followUpQuestions: true,
-            },
+            select: { solutions: true, followUpQuestions: true },
           },
           solutions: {
             where: { userId },
@@ -141,35 +144,23 @@ export async function getProblem(req, res) {
     const userId = req.user.id;
 
     const problem = await prisma.problem.findFirst({
-      where: {
-        id: problemId,
-        teamId,
-      },
+      where: { id: problemId, teamId },
       include: {
-        followUpQuestions: {
-          orderBy: { order: "asc" },
-        },
-        createdBy: {
-          select: { id: true, name: true },
-        },
-        _count: {
-          select: { solutions: true },
-        },
+        followUpQuestions: { orderBy: { order: "asc" } },
+        createdBy: { select: { id: true, name: true } },
+        _count: { select: { solutions: true } },
       },
     });
 
-    if (!problem) {
-      return error(res, "Problem not found.", 404);
-    }
+    if (!problem) return error(res, "Problem not found.", 404);
 
-    const userSolution = await prisma.solution.findFirst({
-      where: { problemId, userId, teamId },
-      select: { id: true, confidence: true, createdAt: true },
-    });
-
-    const teamSolutions = await prisma.solution.count({
-      where: { problemId, teamId },
-    });
+    const [userSolution, teamSolutions] = await Promise.all([
+      prisma.solution.findFirst({
+        where: { problemId, userId, teamId },
+        select: { id: true, confidence: true, createdAt: true },
+      }),
+      prisma.solution.count({ where: { problemId, teamId } }),
+    ]);
 
     return success(res, {
       problem: {
@@ -187,7 +178,6 @@ export async function getProblem(req, res) {
 
 // ============================================================================
 // CREATE PROBLEM (TEAM_ADMIN)
-// v3.0 FIX: Normalize v2 fields sent by ProblemForm.jsx
 // ============================================================================
 export async function createProblem(req, res) {
   try {
@@ -206,26 +196,18 @@ export async function createProblem(req, res) {
       adminNotes,
       source,
       followUpQuestions,
-      // v2 fields that ProblemForm.jsx may send — accept but normalize
       followUps,
       companyTags,
       sourceUrl,
       isBlindChallenge,
     } = req.body;
 
-    // v3.0 FIX: v2 sends followUps, v3 expects followUpQuestions
     const normalizedFollowUps = followUpQuestions || followUps || [];
-
-    // AFTER (correct — only MANUAL and AI_GENERATED are valid ProblemSource enum values)
     const normalizedSource =
       source === "AI_GENERATED" ? "AI_GENERATED" : "MANUAL";
-
-    // v3.0 FIX: v2 sends useCases as array, v3 expects string
     const normalizedUseCases = Array.isArray(useCases)
       ? useCases.join("\n")
       : useCases || null;
-
-    // v3.0 FIX: merge companyTags into tags if present
     const normalizedTags = [
       ...(Array.isArray(tags) ? tags : []),
       ...(Array.isArray(companyTags) ? companyTags : []),
@@ -241,7 +223,7 @@ export async function createProblem(req, res) {
         tags: normalizedTags,
         realWorldContext: realWorldContext || null,
         useCases: normalizedUseCases,
-        adminNotes: adminNotes || null,
+        adminNotes: normalizeAdminNotes(adminNotes),
         source: normalizedSource,
         isPublished: true,
         teamId,
@@ -268,17 +250,113 @@ export async function createProblem(req, res) {
       console.error("Background embedding failed:", err.message);
     });
 
+    return success(res, { message: "Problem created.", problem }, 201);
+  } catch (err) {
+    console.error("Create problem error:", err);
+    return error(res, "Failed to create problem.", 500);
+  }
+}
+
+// ============================================================================
+// BATCH CREATE PROBLEMS (TEAM_ADMIN)
+// ============================================================================
+// Creates up to 5 problems in a single DB transaction.
+// One round trip, one connection checkout, atomic — all succeed or all fail.
+// Embeddings generated in parallel after transaction commits.
+// Hard cap of 5 enforced here — same cap enforced on client.
+// ============================================================================
+export async function batchCreateProblems(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+
+    const { problems } = req.body;
+
+    if (!Array.isArray(problems) || problems.length === 0) {
+      return error(res, "problems array is required.", 400);
+    }
+
+    if (problems.length > 5) {
+      return error(res, "Maximum 5 problems per batch.", 400);
+    }
+
+    // Normalize each problem the same way createProblem does
+    const normalized = problems.map((p) => {
+      const normalizedFollowUps = p.followUpQuestions || p.followUps || [];
+      const normalizedUseCases = Array.isArray(p.useCases)
+        ? p.useCases.join("\n")
+        : p.useCases || null;
+      const normalizedTags = [
+        ...(Array.isArray(p.tags) ? p.tags : []),
+        ...(Array.isArray(p.companyTags) ? p.companyTags : []),
+      ];
+
+      return {
+        title: p.title,
+        description: p.description || null,
+        difficulty: p.difficulty || "MEDIUM",
+        category: p.category || "CODING",
+        categoryData: p.categoryData || null,
+        tags: normalizedTags,
+        realWorldContext: p.realWorldContext || null,
+        useCases: normalizedUseCases,
+        adminNotes: normalizeAdminNotes(p.adminNotes),
+        source: p.source === "AI_GENERATED" ? "AI_GENERATED" : "MANUAL",
+        isPublished: true,
+        teamId,
+        createdById: userId,
+        followUps: normalizedFollowUps,
+      };
+    });
+
+    // Single transaction — all or nothing
+    const created = await prisma.$transaction(
+      normalized.map(({ followUps, ...data }) =>
+        prisma.problem.create({
+          data: {
+            ...data,
+            followUpQuestions:
+              followUps.length > 0
+                ? {
+                    create: followUps.map((fq, index) => ({
+                      question: fq.question,
+                      difficulty: fq.difficulty || "MEDIUM",
+                      hint: fq.hint || null,
+                      order: fq.order ?? index,
+                    })),
+                  }
+                : undefined,
+          },
+          include: {
+            followUpQuestions: { orderBy: { order: "asc" } },
+            createdBy: { select: { id: true, name: true } },
+          },
+        }),
+      ),
+    );
+
+    // Fire embeddings in parallel after transaction — fire and forget
+    created.forEach((problem) => {
+      generateProblemEmbedding(problem.id).catch((err) => {
+        console.error(
+          `Background embedding failed for ${problem.id}:`,
+          err.message,
+        );
+      });
+    });
+
     return success(
       res,
       {
-        message: "Problem created.",
-        problem,
+        message: `${created.length} problem${created.length !== 1 ? "s" : ""} created.`,
+        problems: created,
+        count: created.length,
       },
       201,
     );
   } catch (err) {
-    console.error("Create problem error:", err);
-    return error(res, "Failed to create problem.", 500);
+    console.error("Batch create problems error:", err);
+    return error(res, "Failed to create problems.", 500);
   }
 }
 
@@ -295,9 +373,7 @@ export async function updateProblem(req, res) {
       select: { id: true },
     });
 
-    if (!existing) {
-      return error(res, "Problem not found.", 404);
-    }
+    if (!existing) return error(res, "Problem not found.", 404);
 
     const {
       title,
@@ -325,7 +401,8 @@ export async function updateProblem(req, res) {
       data.realWorldContext = realWorldContext;
     if (useCases !== undefined)
       data.useCases = Array.isArray(useCases) ? useCases.join("\n") : useCases;
-    if (adminNotes !== undefined) data.adminNotes = adminNotes;
+    if (adminNotes !== undefined)
+      data.adminNotes = normalizeAdminNotes(adminNotes);
     if (isPublished !== undefined) data.isPublished = isPublished;
     if (isPinned !== undefined) data.isPinned = isPinned;
     if (isHidden !== undefined) data.isHidden = isHidden;
@@ -363,12 +440,9 @@ export async function deleteProblem(req, res) {
       select: { id: true, title: true },
     });
 
-    if (!existing) {
-      return error(res, "Problem not found.", 404);
-    }
+    if (!existing) return error(res, "Problem not found.", 404);
 
     await prisma.problem.delete({ where: { id: problemId } });
-
     return success(res, { message: `"${existing.title}" deleted.` });
   } catch (err) {
     console.error("Delete problem error:", err);
@@ -390,9 +464,7 @@ export async function toggleProblemFlag(req, res) {
       select: { id: true, isPinned: true, isHidden: true },
     });
 
-    if (!existing) {
-      return error(res, "Problem not found.", 404);
-    }
+    if (!existing) return error(res, "Problem not found.", 404);
 
     const data = {};
     if (flag === "pin") data.isPinned = !existing.isPinned;
@@ -423,7 +495,6 @@ async function generateProblemEmbedding(problemId) {
       where: { id: problemId },
       select: { title: true, description: true, tags: true, category: true },
     });
-
     if (!problem) return;
 
     const text = [

@@ -13,13 +13,26 @@ import { Spinner } from '@components/ui/Spinner'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import { PROBLEM_CATEGORIES } from '@utils/constants'
+import api from '@services/api'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const PLATFORM_SOURCES = ['LEETCODE', 'GFG', 'HACKERRANK', 'CODECHEF', 'INTERVIEWBIT', 'CODEFORCES']
 
+// Hard cap enforced on both client and server
+// Prevents Railway 30s timeout from parallel GPT calls
+const MAX_PROBLEMS_PER_BATCH = 5
+
 // ── AI Generated Problem Preview Card ──────────────────
 function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving, disabled }) {
     const [expanded, setExpanded] = useState(false)
+
+    // Normalize adminNotes for display — AI sometimes returns an object
+    const adminNotesDisplay = problem.adminNotes
+        ? typeof problem.adminNotes === 'object'
+            ? Object.values(problem.adminNotes).join('\n\n')
+            : problem.adminNotes
+        : null
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -88,7 +101,6 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                         >
                             {expanded ? 'Collapse' : 'Preview'}
                         </button>
-                        {/* Bug 5 fix: disabled during handleApproveAll to prevent race condition */}
                         <Button
                             variant="ghost"
                             size="sm"
@@ -110,6 +122,7 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                     </div>
                 </div>
             </div>
+
             {/* Expanded preview */}
             <AnimatePresence>
                 {expanded && (
@@ -137,12 +150,12 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                                     </p>
                                 </div>
                             )}
-                            {problem.adminNotes && (
+                            {adminNotesDisplay && (
                                 <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
                                     <p className="text-[10px] font-bold text-warning uppercase
                                    tracking-widest mb-1">Teaching Notes</p>
                                     <p className="text-xs text-text-tertiary leading-relaxed
-                                   whitespace-pre-wrap">{problem.adminNotes}</p>
+                                   whitespace-pre-wrap">{adminNotesDisplay}</p>
                                 </div>
                             )}
                             {problem.followUpQuestions?.length > 0 && (
@@ -189,25 +202,27 @@ function AIGenerateScreen({ onBack }) {
     const [generated, setGenerated] = useState(null)
     const [reasoning, setReasoning] = useState('')
     const [approvingIdx, setApprovingIdx] = useState(null)
-    // Bug 5 fix: track whether bulk approve is running to disable individual buttons
     const [isApprovingAll, setIsApprovingAll] = useState(false)
+    // Dedicated flag — only true after an actual failed save attempt
+    // Prevents retry banner from showing on fresh generation results
+    const [hasRetryState, setHasRetryState] = useState(false)
 
     const generateAI = useGenerateProblemsAI()
     const createProblem = useCreateProblem()
 
     const totalCustom = (customMix.easy || 0) + (customMix.medium || 0) + (customMix.hard || 0)
 
+    // Cap at MAX_PROBLEMS_PER_BATCH — prevents Railway timeout
+    const effectiveCount = Math.min(count, MAX_PROBLEMS_PER_BATCH)
+    const effectiveTotalCustom = Math.min(totalCustom, MAX_PROBLEMS_PER_BATCH)
+
     // ── Single source of truth for problem data shape ──────
-    // Both handleApprove and handleApproveAll use this.
-    // If the shape ever changes, fix it here only.
     function buildProblemData(problem) {
         return {
             title: problem.title,
             description: problem.description || '',
             difficulty: problem.difficulty || 'MEDIUM',
             category: problem.category || category,
-            // source DB column only accepts MANUAL | AI_GENERATED
-            // Platform identity (LEETCODE, GFG etc.) goes into categoryData.platform
             source: 'AI_GENERATED',
             categoryData: {
                 sourceUrl: problem.sourceUrl || '',
@@ -219,7 +234,13 @@ function AIGenerateScreen({ onBack }) {
             tags: problem.tags || [],
             realWorldContext: problem.realWorldContext || '',
             useCases: problem.useCases || '',
-            adminNotes: problem.adminNotes || '',
+            // Normalize adminNotes client-side too — server also normalizes,
+            // but this ensures the payload is always a string
+            adminNotes: problem.adminNotes
+                ? typeof problem.adminNotes === 'object'
+                    ? Object.values(problem.adminNotes).join('\n\n')
+                    : problem.adminNotes
+                : '',
             followUps: (problem.followUpQuestions || []).map((fq, i) => ({
                 question: fq.question,
                 difficulty: fq.difficulty || 'MEDIUM',
@@ -231,16 +252,18 @@ function AIGenerateScreen({ onBack }) {
     }
 
     async function handleGenerate() {
-        let finalCount = count
+        let finalCount = effectiveCount
         let finalDifficulty = difficulty
+
         if (difficulty === 'custom') {
-            finalCount = totalCustom
+            finalCount = effectiveTotalCustom
             if (finalCount === 0) {
                 toast.error('Select at least 1 problem')
                 return
             }
-            finalDifficulty = `custom:${customMix.easy || 0}E,${customMix.medium || 0}M,${customMix.hard || 0}H`
+            finalDifficulty = `custom:${customMix.easy || 0},${customMix.medium || 0},${customMix.hard || 0}`
         }
+
         try {
             const res = await generateAI.mutateAsync({
                 category,
@@ -251,17 +274,25 @@ function AIGenerateScreen({ onBack }) {
             })
             setGenerated(res.data.data.problems || [])
             setReasoning(res.data.data.reasoning || '')
-        } catch {
-            toast.error('Failed to generate problems')
+            setHasRetryState(false)
+        } catch (err) {
+            // Distinguish timeout from other errors for clear user messaging
+            if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+                toast.error('Generation timed out. Try fewer problems or try again.')
+            } else {
+                toast.error('Failed to generate problems')
+            }
         }
     }
 
+    // Individual approve — single problem via existing POST /problems endpoint
     async function handleApprove(problem, index) {
         setApprovingIdx(index)
         try {
             await createProblem.mutateAsync(buildProblemData(problem))
             toast.success(`"${problem.title}" added to team`)
             setGenerated(prev => prev.filter((_, i) => i !== index))
+            setHasRetryState(false)
         } catch {
             toast.error('Failed to add problem')
         } finally {
@@ -271,34 +302,55 @@ function AIGenerateScreen({ onBack }) {
 
     function handleReject(index) {
         setGenerated(prev => prev.filter((_, i) => i !== index))
+        setHasRetryState(false)
     }
 
+    // Batch approve — single round trip via POST /problems/batch
+    // Falls back to sequential if batch endpoint fails
     async function handleApproveAll() {
         if (!generated?.length) return
-        // Bug 5 fix: lock individual buttons during bulk approve
         setIsApprovingAll(true)
-        // Bug 1 fix: snapshot array before iterating — do not mutate mid-loop.
-        // Track failures so we can leave them in the list for retry instead
-        // of clearing everything unconditionally at the end.
-        const problems = [...generated]
-        const failed = []
-        for (let i = 0; i < problems.length; i++) {
-            setApprovingIdx(i)
-            try {
-                await createProblem.mutateAsync(buildProblemData(problems[i]))
-                toast.success(`"${problems[i].title}" added to team`)
-            } catch {
-                toast.error(`Failed to add "${problems[i].title}"`)
-                failed.push(problems[i])
+        setHasRetryState(false)
+
+        try {
+            // Single batch call — one round trip, one DB transaction
+            const res = await api.post('/problems/batch', {
+                problems: generated.map(buildProblemData),
+            })
+            const created = res.data.data.problems || []
+            toast.success(
+                `${created.length} problem${created.length !== 1 ? 's' : ''} added to team`
+            )
+            setGenerated([])
+        } catch (batchErr) {
+            // Batch failed — fall back to sequential so partial success is possible
+            console.error('Batch create failed, falling back to sequential:', batchErr.message)
+            toast.warning('Trying one at a time...')
+
+            const snapshot = [...generated]
+            const failed = []
+
+            for (let i = 0; i < snapshot.length; i++) {
+                setApprovingIdx(i)
+                try {
+                    await createProblem.mutateAsync(buildProblemData(snapshot[i]))
+                    toast.success(`"${snapshot[i].title}" added`)
+                } catch {
+                    toast.error(`Failed: "${snapshot[i].title}"`)
+                    failed.push(snapshot[i])
+                }
             }
+
+            setApprovingIdx(null)
+            setGenerated(failed.length > 0 ? failed : [])
+            if (failed.length > 0) setHasRetryState(true)
+        } finally {
+            setIsApprovingAll(false)
+            setApprovingIdx(null)
         }
-        setApprovingIdx(null)
-        setIsApprovingAll(false)
-        // Only keep failed problems in the list — successfully added ones are gone
-        setGenerated(failed.length > 0 ? failed : [])
     }
 
-    const displayCount = difficulty === 'custom' ? totalCustom : count
+    const displayCount = difficulty === 'custom' ? effectiveTotalCustom : effectiveCount
 
     return (
         <div className="space-y-6">
@@ -385,6 +437,9 @@ function AIGenerateScreen({ onBack }) {
                             <div className="bg-surface-2 border border-border-default rounded-xl p-4">
                                 <p className="text-xs text-text-tertiary mb-3">
                                     Specify how many of each difficulty
+                                    <span className="ml-1 text-text-disabled">
+                                        (max {MAX_PROBLEMS_PER_BATCH} total)
+                                    </span>
                                 </p>
                                 <div className="grid grid-cols-3 gap-4">
                                     {[
@@ -416,7 +471,10 @@ function AIGenerateScreen({ onBack }) {
                                                     type="button"
                                                     onClick={() => setCustomMix(prev => ({
                                                         ...prev,
-                                                        [d.key]: Math.min(5, (prev[d.key] || 0) + 1)
+                                                        [d.key]: Math.min(
+                                                            MAX_PROBLEMS_PER_BATCH,
+                                                            (prev[d.key] || 0) + 1
+                                                        )
                                                     }))}
                                                     className="w-8 h-8 rounded-lg bg-surface-3 border border-border-default
                                                        text-text-secondary hover:border-border-strong transition-all
@@ -430,22 +488,30 @@ function AIGenerateScreen({ onBack }) {
                                 </div>
                                 <p className={cn(
                                     'text-xs font-bold text-center mt-3 pt-3 border-t border-border-subtle',
-                                    totalCustom > 0 ? 'text-brand-300' : 'text-text-disabled'
+                                    effectiveTotalCustom > 0 ? 'text-brand-300' : 'text-text-disabled'
                                 )}>
-                                    Total: {totalCustom} problem{totalCustom !== 1 ? 's' : ''}
+                                    Total: {effectiveTotalCustom} problem{effectiveTotalCustom !== 1 ? 's' : ''}
+                                    {totalCustom > MAX_PROBLEMS_PER_BATCH && (
+                                        <span className="text-warning ml-1">
+                                            (capped at {MAX_PROBLEMS_PER_BATCH})
+                                        </span>
+                                    )}
                                 </p>
                             </div>
                         )}
                     </div>
 
-                    {/* Count — only when NOT custom mix */}
+                    {/* Count — max 5 */}
                     {difficulty !== 'custom' && (
                         <div>
                             <label className="block text-sm font-semibold text-text-primary mb-2">
                                 Number of Problems
+                                <span className="ml-1.5 text-xs font-normal text-text-disabled">
+                                    max {MAX_PROBLEMS_PER_BATCH}
+                                </span>
                             </label>
                             <div className="flex gap-2">
-                                {[1, 2, 3, 5].map(n => (
+                                {[1, 2, 3, 4, 5].map(n => (
                                     <button
                                         key={n}
                                         onClick={() => setCount(n)}
@@ -517,7 +583,7 @@ function AIGenerateScreen({ onBack }) {
                         size="lg"
                         fullWidth
                         loading={generateAI.isPending}
-                        disabled={difficulty === 'custom' && totalCustom === 0}
+                        disabled={difficulty === 'custom' && effectiveTotalCustom === 0}
                         onClick={handleGenerate}
                     >
                         {generateAI.isPending ? (
@@ -561,7 +627,10 @@ function AIGenerateScreen({ onBack }) {
                                 variant="ghost"
                                 size="sm"
                                 disabled={isApprovingAll}
-                                onClick={() => setGenerated(null)}
+                                onClick={() => {
+                                    setGenerated(null)
+                                    setHasRetryState(false)
+                                }}
                             >
                                 ← Generate More
                             </Button>
@@ -573,20 +642,24 @@ function AIGenerateScreen({ onBack }) {
                                     onClick={handleApproveAll}
                                 >
                                     {isApprovingAll
-                                        ? `Adding ${approvingIdx + 1}/${generated.length}...`
+                                        ? `Adding ${generated.length}...`
                                         : `Add All (${generated.length})`
                                     }
                                 </Button>
                             )}
                         </div>
                     </div>
+
                     {generated.length === 0 ? (
                         <div className="bg-surface-1 border border-success/25 rounded-2xl p-10 text-center">
                             <div className="text-4xl mb-3">✅</div>
                             <h3 className="text-base font-bold text-text-primary mb-2">All problems added!</h3>
                             <p className="text-sm text-text-tertiary mb-5">Your team can now start practicing.</p>
                             <div className="flex gap-3 justify-center">
-                                <Button variant="primary" size="md" onClick={() => setGenerated(null)}>
+                                <Button variant="primary" size="md" onClick={() => {
+                                    setGenerated(null)
+                                    setHasRetryState(false)
+                                }}>
                                     Generate More
                                 </Button>
                                 <Button variant="secondary" size="md" onClick={() => navigate('/admin')}>
@@ -596,16 +669,20 @@ function AIGenerateScreen({ onBack }) {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {/* Bug 5 fix: show retry banner when some problems failed */}
-                            {!isApprovingAll && generated.length > 0 && generated.length < 5 && (
-                                <div className="bg-warning/5 border border-warning/20 rounded-xl p-3
-                                               flex items-center gap-3">
+                            {/* Retry banner — only shown after a real failed save attempt */}
+                            {hasRetryState && !isApprovingAll && generated.length > 0 && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -4 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="bg-warning/5 border border-warning/20 rounded-xl p-3
+                                               flex items-center gap-3"
+                                >
                                     <span className="text-base flex-shrink-0">⚠️</span>
                                     <p className="text-xs text-text-secondary">
                                         {generated.length} problem{generated.length !== 1 ? 's' : ''} failed
                                         to add. Review and retry below.
                                     </p>
-                                </div>
+                                </motion.div>
                             )}
                             {generated.map((problem, i) => (
                                 <GeneratedProblemCard

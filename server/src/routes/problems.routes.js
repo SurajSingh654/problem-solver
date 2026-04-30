@@ -5,6 +5,7 @@ import {
   listProblems,
   getProblem,
   createProblem,
+  batchCreateProblems,
   updateProblem,
   deleteProblem,
   toggleProblemFlag,
@@ -19,6 +20,11 @@ router.get('/:problemId', requireTeamContext, getProblem)
 
 // ── Admin operations ─────────────────────────────────────────
 router.post('/', requireTeamContext, requireTeamAdmin, createProblem)
+
+// Batch create — registered BEFORE /:problemId to prevent Express
+// from matching the literal string "batch" as a problemId param
+router.post('/batch', requireTeamContext, requireTeamAdmin, batchCreateProblems)
+
 router.put('/:problemId', requireTeamContext, requireTeamAdmin, updateProblem)
 router.delete('/:problemId', requireTeamContext, requireTeamAdmin, deleteProblem)
 router.patch('/:problemId/flag', requireTeamContext, requireTeamAdmin, toggleProblemFlag)
