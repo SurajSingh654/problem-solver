@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAIReview } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
+import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 
 // ── Score ring ─────────────────────────────────────────
 function ScoreRing({ score, size = 72 }) {
@@ -542,17 +543,17 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                         {latestReview.strengths?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] font-bold text-success
-                                                       uppercase tracking-widest mb-2.5">
+                       uppercase tracking-widest mb-2.5">
                                                     ✅ Strengths
                                                 </p>
                                                 <div className="space-y-2">
                                                     {latestReview.strengths.map((s, i) => (
                                                         <div key={i}
-                                                            className="flex items-start gap-2.5 text-xs
-                                                               text-text-secondary leading-relaxed">
+                                                            className="flex items-start gap-2.5">
                                                             <span className="w-1.5 h-1.5 rounded-full
-                                                                   bg-success flex-shrink-0 mt-1.5" />
-                                                            {s}
+                                   bg-success flex-shrink-0 mt-1.5" />
+                                                            {/* AI may use backticks or bold in strength strings */}
+                                                            <MarkdownRenderer content={s} size="sm" className="flex-1" />
                                                         </div>
                                                     ))}
                                                 </div>
@@ -563,17 +564,17 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                         {latestReview.gaps?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] font-bold text-warning
-                                                       uppercase tracking-widest mb-2.5">
+                       uppercase tracking-widest mb-2.5">
                                                     ⚠️ Gaps
                                                 </p>
                                                 <div className="space-y-2">
                                                     {latestReview.gaps.map((g, i) => (
                                                         <div key={i}
-                                                            className="flex items-start gap-2.5 text-xs
-                                                               text-text-secondary leading-relaxed">
+                                                            className="flex items-start gap-2.5">
                                                             <span className="w-1.5 h-1.5 rounded-full
-                                                                   bg-warning flex-shrink-0 mt-1.5" />
-                                                            {g}
+                                   bg-warning flex-shrink-0 mt-1.5" />
+                                                            {/* AI may use backticks or bold in gap strings */}
+                                                            <MarkdownRenderer content={g} size="sm" className="flex-1" />
                                                         </div>
                                                     ))}
                                                 </div>
@@ -583,28 +584,36 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                         {/* Key improvement */}
                                         {latestReview.improvement && (
                                             <div className="bg-brand-400/5 border border-brand-400/20
-                                                   rounded-xl p-4">
+                   rounded-xl p-4">
                                                 <p className="text-[10px] font-bold text-brand-300
-                                                       uppercase tracking-widest mb-2">
+                       uppercase tracking-widest mb-2">
                                                     💡 Key Improvement
                                                 </p>
-                                                <p className="text-sm text-text-secondary leading-relaxed">
-                                                    {latestReview.improvement}
-                                                </p>
+                                                <MarkdownRenderer content={latestReview.improvement} size="sm" />
                                             </div>
                                         )}
 
                                         {/* Interview tip */}
                                         {latestReview.interviewTip && (
                                             <div className="bg-info/5 border border-info/20
-                                                   rounded-xl p-4">
+                   rounded-xl p-4">
                                                 <p className="text-[10px] font-bold text-info
-                                                       uppercase tracking-widest mb-2">
+                       uppercase tracking-widest mb-2">
                                                     🎯 Interview Tip
                                                 </p>
-                                                <p className="text-sm text-text-secondary leading-relaxed">
-                                                    {latestReview.interviewTip}
+                                                <MarkdownRenderer content={latestReview.interviewTip} size="sm" />
+                                            </div>
+                                        )}
+
+                                        {/* Readiness Verdict — Phase 1 */}
+                                        {latestReview.readinessVerdict && (
+                                            <div className="bg-surface-2 border border-border-default
+                   rounded-xl p-4">
+                                                <p className="text-[10px] font-bold text-text-disabled
+                       uppercase tracking-widest mb-2">
+                                                    🏁 Interview Readiness
                                                 </p>
+                                                <MarkdownRenderer content={latestReview.readinessVerdict} size="sm" />
                                             </div>
                                         )}
                                     </motion.div>

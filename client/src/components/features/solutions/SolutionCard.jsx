@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Avatar } from '@components/ui/Avatar'
 import { Badge } from '@components/ui/Badge'
+import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import { LANGUAGE_LABELS, CONFIDENCE_LEVELS } from '@utils/constants'
@@ -12,13 +13,11 @@ import { LANGUAGE_LABELS, CONFIDENCE_LEVELS } from '@utils/constants'
 // ── Code block ─────────────────────────────────────────
 function CodeBlock({ code, language }) {
     const [copied, setCopied] = useState(false)
-
     function copy() {
         navigator.clipboard.writeText(code)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     }
-
     return (
         <div className="relative rounded-xl overflow-hidden border border-border-default">
             <div className="flex items-center justify-between px-4 py-2
@@ -47,19 +46,32 @@ function CodeBlock({ code, language }) {
 }
 
 // ── Section row ────────────────────────────────────────
-function SectionRow({ label, value, mono = false }) {
+// mode: 'markdown' | 'html' | 'mono'
+// markdown — user typed text, may contain Markdown syntax
+// html — written via RichTextEditor, outputs HTML
+// mono — short inline value like pattern or complexity
+function SectionRow({ label, value, mode = 'markdown' }) {
     if (!value) return null
     return (
         <div>
-            <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+            <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">
                 {label}
             </p>
-            <p className={cn(
-                'text-sm text-text-secondary leading-relaxed',
-                mono && 'font-mono text-xs bg-surface-3 px-2 py-1 rounded-lg inline-block'
-            )}>
-                {value}
-            </p>
+            {mode === 'mono' ? (
+                <p className="text-sm text-text-secondary font-mono text-xs
+                               bg-surface-3 px-2 py-1 rounded-lg inline-block">
+                    {value}
+                </p>
+            ) : mode === 'html' ? (
+                // RichTextEditor outputs HTML — render directly
+                <div
+                    className="prose-content text-sm"
+                    dangerouslySetInnerHTML={{ __html: value }}
+                />
+            ) : (
+                // Plain text or Markdown from textarea input
+                <MarkdownRenderer content={value} size="sm" />
+            )}
         </div>
     )
 }
@@ -93,7 +105,6 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
 
     if (!solution) return null
 
-    // v3 field names
     const {
         user,
         createdAt,
@@ -168,13 +179,9 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                         )}
                     </div>
                 </div>
-
-                {/* Confidence */}
                 <div className="hidden sm:block flex-shrink-0">
                     <ConfidenceDisplay level={confidence} />
                 </div>
-
-                {/* Expand chevron */}
                 <motion.div
                     animate={{ rotate: expanded ? 180 : 0 }}
                     transition={{ duration: 0.2 }}
@@ -221,24 +228,24 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                             <div className="p-4 space-y-4">
                                 {tab === 'approach' && (
                                     <>
-                                        <SectionRow label="Pattern" value={pattern} />
-                                        <SectionRow label="Approach" value={approach} />
-
+                                        {/* pattern is a short string — plain text */}
+                                        <SectionRow label="Pattern" value={pattern} mode="mono" />
+                                        {/* approach is from textarea — may contain Markdown */}
+                                        <SectionRow label="Approach" value={approach} mode="markdown" />
                                         {bruteForce && (
                                             <div className="border border-border-subtle rounded-xl p-3 space-y-2">
                                                 <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest">
                                                     Brute Force
                                                 </p>
-                                                <p className="text-sm text-text-secondary">{bruteForce}</p>
+                                                <MarkdownRenderer content={bruteForce} size="sm" />
                                             </div>
                                         )}
-
                                         {optimizedApproach && (
                                             <div className="border border-brand-400/20 rounded-xl p-3 space-y-2 bg-brand-400/3">
                                                 <p className="text-[11px] font-bold text-brand-300 uppercase tracking-widest">
                                                     Optimized
                                                 </p>
-                                                <p className="text-sm text-text-secondary">{optimizedApproach}</p>
+                                                <MarkdownRenderer content={optimizedApproach} size="sm" />
                                                 <div className="flex gap-3">
                                                     {timeComplexity && (
                                                         <Badge variant="brand" size="xs">⏱ {timeComplexity}</Badge>
@@ -251,16 +258,17 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                         )}
                                     </>
                                 )}
-
                                 {tab === 'code' && code && (
                                     <CodeBlock code={code} language={language} />
                                 )}
-
                                 {tab === 'depth' && (
                                     <>
-                                        <SectionRow label="Key Insight" value={keyInsight} />
-                                        <SectionRow label="Feynman Explanation" value={feynmanExplanation} />
-                                        <SectionRow label="Real World Connection" value={realWorldConnection} />
+                                        {/* keyInsight is from textarea — Markdown */}
+                                        <SectionRow label="Key Insight" value={keyInsight} mode="markdown" />
+                                        {/* feynmanExplanation is from RichTextEditor — HTML */}
+                                        <SectionRow label="Feynman Explanation" value={feynmanExplanation} mode="html" />
+                                        {/* realWorldConnection is from RichTextEditor — HTML */}
+                                        <SectionRow label="Real World Connection" value={realWorldConnection} mode="html" />
                                     </>
                                 )}
                             </div>
