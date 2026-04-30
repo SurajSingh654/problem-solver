@@ -64,6 +64,7 @@ export const LANGUAGE = {
   GO: "GO",
   RUST: "RUST",
   TYPESCRIPT: "TYPESCRIPT",
+  GROOVY: 'GROOVY',
   SWIFT: "SWIFT",
   KOTLIN: "KOTLIN",
   OTHER: "OTHER",
@@ -80,6 +81,7 @@ export const LANGUAGE_LABELS = {
   TYPESCRIPT: "TypeScript",
   SWIFT: "Swift",
   KOTLIN: "Kotlin",
+  GROOVY: "Groovy",
   OTHER: "Other",
 };
 
@@ -93,6 +95,7 @@ export const LANGUAGE_HLJS = {
   GO: "go",
   RUST: "rust",
   TYPESCRIPT: "typescript",
+  GROOVY: "groovy",
   SWIFT: "swift",
   KOTLIN: "kotlin",
   OTHER: "plaintext",

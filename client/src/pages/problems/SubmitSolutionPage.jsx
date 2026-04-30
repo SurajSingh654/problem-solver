@@ -1,5 +1,5 @@
 // ============================================================================
-// ProbSolver v3.0 — Submit Solution Page (Redesigned)
+// ProbSolver v3.0 — Submit Solution Page
 // ============================================================================
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -7,7 +7,7 @@ import { motion } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
 import { useSubmitSolution } from '@hooks/useSolutions'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
-import { CodeEditor } from '@components/ui/CodeEditor'
+import { CodeEditor, SUBMIT_LANGUAGES } from '@components/ui/CodeEditor'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
@@ -53,7 +53,6 @@ function PatternSelector({ config, value, onChange }) {
     const suggestions = config.suggestions?.length > 0
         ? config.suggestions
         : PATTERNS.map(p => p.label)
-
     return (
         <div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
@@ -122,7 +121,6 @@ function ConfidencePicker({ value, onChange }) {
 function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
     const [showHint, setShowHint] = useState(false)
     const hasAnswer = !!(answer?.trim())
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -135,7 +133,6 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
                     : 'bg-surface-2 border-border-default'
             )}
         >
-            {/* Question */}
             <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-start gap-2.5 flex-1">
                     <span className={cn(
@@ -156,8 +153,6 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
                     {followUp.difficulty}
                 </Badge>
             </div>
-
-            {/* Hint */}
             {followUp.hint && (
                 <div className="mb-3 ml-7">
                     <button
@@ -177,8 +172,6 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
                     )}
                 </div>
             )}
-
-            {/* Answer field */}
             <div className="ml-7">
                 <textarea
                     rows={3}
@@ -213,7 +206,6 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
 export default function SubmitSolutionPage() {
     const { problemId } = useParams()
     const navigate = useNavigate()
-
     const { data: problem, isLoading } = useProblem(problemId)
     const submitSolution = useSubmitSolution()
 
@@ -225,14 +217,15 @@ export default function SubmitSolutionPage() {
 
     // ── Form state ─────────────────────────────────────
     const [code, setCode] = useState('')
-    const [language, setLanguage] = useState(localStorage.getItem('ps_last_language') || 'PYTHON')
+    const [language, setLanguage] = useState(
+        localStorage.getItem('ps_last_language') || 'PYTHON'
+    )
     const [approach, setApproach] = useState('')
     const [pattern, setPattern] = useState('')
     const [keyInsight, setKeyInsight] = useState('')
     const [feynmanExplanation, setFeynmanExplanation] = useState('')
     const [realWorldConnection, setRealWorldConnection] = useState('')
     const [confidence, setConfidence] = useState(0)
-    // followUpAnswers: { [followUpQuestionId]: answerText }
     const [followUpAnswers, setFollowUpAnswers] = useState({})
 
     function handleFollowUpAnswer(questionId, text) {
@@ -249,9 +242,6 @@ export default function SubmitSolutionPage() {
             return
         }
 
-        localStorage.setItem('ps_last_language', language)
-
-        // Build follow-up answers array (only answered ones)
         const followUpAnswersArray = Object.entries(followUpAnswers)
             .filter(([, text]) => text?.trim())
             .map(([questionId, text]) => ({
@@ -285,7 +275,6 @@ export default function SubmitSolutionPage() {
     }
 
     if (isLoading) return <PageSpinner />
-
     if (!problem) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -329,12 +318,13 @@ export default function SubmitSolutionPage() {
                             {catInfo.icon} {catInfo.label}
                         </span>
                     )}
-                    {problem.source && !['MANUAL', 'AI_GENERATED'].includes(problem.source) && (
-                        <span className="text-[10px] font-bold text-text-disabled bg-surface-3
-                           border border-border-subtle rounded-full px-2 py-px">
-                            {problem.source}
-                        </span>
-                    )}
+                    {problem.categoryData?.platform &&
+                        problem.categoryData.platform !== 'OTHER' && (
+                            <span className="text-[10px] font-bold text-text-disabled bg-surface-3
+                               border border-border-subtle rounded-full px-2 py-px">
+                                {problem.categoryData.platform}
+                            </span>
+                        )}
                 </div>
                 <h2 className="text-base font-bold text-text-primary mb-2">
                     {problem.title}
@@ -356,7 +346,9 @@ export default function SubmitSolutionPage() {
                             <polyline points="15 3 21 3 21 9" />
                             <line x1="10" y1="14" x2="21" y2="3" />
                         </svg>
-                        Solve on {problem.source || 'External Site'} →
+                        Solve on {problem.categoryData?.platform && problem.categoryData.platform !== 'OTHER'
+                            ? problem.categoryData.platform
+                            : 'External Site'} →
                     </a>
                 )}
             </div>
@@ -375,7 +367,9 @@ export default function SubmitSolutionPage() {
                             Solve first, then reflect here
                         </p>
                         <p className="text-xs text-text-tertiary leading-relaxed">
-                            Solve on {problem.source || 'the external site'}, then paste your code below.
+                            Solve on {problem.categoryData?.platform && problem.categoryData.platform !== 'OTHER'
+                                ? problem.categoryData.platform
+                                : 'the external site'}, then paste your code below.
                             AI will analyze complexity, correctness, and give specific feedback.
                         </p>
                     </div>
@@ -385,39 +379,32 @@ export default function SubmitSolutionPage() {
             {/* Form sections */}
             <div className="space-y-5">
 
-                {/* Code section */}
+                {/* ── Code section — Monaco editor with dropdown language selector ── */}
                 {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
                     <FormSection
                         icon="💻"
-                        title={hasExternalLink ? "Paste Your Solution Code" : (formConfig.solutionTabConfig?.codeLabel || "Your Code")}
+                        title={hasExternalLink
+                            ? "Paste Your Solution Code"
+                            : (formConfig.solutionTabConfig?.codeLabel || "Your Code")}
                         hint="AI will analyze correctness, complexity, and detect any issues"
                     >
-                        <div className="flex flex-wrap gap-1.5 mb-3">
-                            {['PYTHON', 'JAVASCRIPT', 'JAVA', 'CPP', 'TYPESCRIPT', 'GO', 'RUST', 'SQL'].map(lang => (
-                                <button
-                                    key={lang}
-                                    type="button"
-                                    onClick={() => setLanguage(lang)}
-                                    className={cn(
-                                        'px-2.5 py-1 rounded-lg border text-[10px] font-bold transition-all',
-                                        language === lang
-                                            ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
-                                            : 'bg-surface-3 border-border-default text-text-disabled hover:text-text-tertiary'
-                                    )}
-                                >
-                                    {lang === 'CPP' ? 'C++' : lang === 'JAVASCRIPT' ? 'JS' : lang === 'TYPESCRIPT' ? 'TS' : lang}
-                                </button>
-                            ))}
-                        </div>
                         <CodeEditor
-                            value={code}
+                            code={code}
                             onChange={setCode}
-                            language={language?.toLowerCase() === 'cpp' ? 'cpp' : language?.toLowerCase() || 'python'}
-                            placeholder={formConfig.solutionTabConfig?.codePlaceholder || "// Paste your solution here..."}
-                            minHeight="200px"
+                            language={language}
+                            onLanguageChange={(lang) => {
+                                setLanguage(lang)
+                                // Save preference immediately on change, not just on submit
+                                localStorage.setItem('ps_last_language', lang)
+                            }}
+                            selectorStyle="dropdown"
+                            languages={SUBMIT_LANGUAGES}
+                            height="320px"
+                            showLanguageSelector
                         />
                         <p className="text-[10px] text-text-disabled mt-2">
-                            🤖 AI will check correctness, detect edge cases, analyze complexity, and flag any issues
+                            🤖 AI will check correctness, detect edge cases, analyze complexity,
+                            and flag any issues
                         </p>
                     </FormSection>
                 )}
@@ -434,7 +421,7 @@ export default function SubmitSolutionPage() {
                     }
                     hint={
                         hasExternalLink
-                            ? 'Explain your thought process. What pattern did you use and why? What alternatives did you consider?'
+                            ? 'Explain your thought process. What pattern did you use and why?'
                             : category === 'BEHAVIORAL'
                                 ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.')
                                 : 'Describe your approach step by step.'
@@ -528,13 +515,15 @@ export default function SubmitSolutionPage() {
                     <ConfidencePicker value={confidence} onChange={setConfidence} />
                 </FormSection>
 
-                {/* Follow-up questions — INTERACTIVE */}
+                {/* Follow-up questions */}
                 {problem.followUpQuestions?.length > 0 && (
                     <FormSection
                         icon="🧠"
                         title="Follow-up Questions"
-                        badge={answeredCount > 0 ? `${answeredCount}/${followUpCount} answered` : 'Optional — earn bonus points'}
-                        hint="Each answer you provide earns bonus points in your AI review. Skipped questions are noted."
+                        badge={answeredCount > 0
+                            ? `${answeredCount}/${followUpCount} answered`
+                            : 'Optional — earn bonus points'}
+                        hint="Each answer earns bonus points in your AI review. Skipped questions are noted."
                     >
                         <div className="space-y-3">
                             {problem.followUpQuestions.map((fq, i) => (
@@ -547,8 +536,6 @@ export default function SubmitSolutionPage() {
                                 />
                             ))}
                         </div>
-
-                        {/* Progress indicator */}
                         {followUpCount > 0 && (
                             <div className="mt-4 pt-4 border-t border-border-subtle">
                                 <div className="flex items-center justify-between text-xs mb-1.5">
@@ -590,7 +577,6 @@ export default function SubmitSolutionPage() {
                     >
                         Cancel
                     </Button>
-
                     <div className="flex items-center gap-3">
                         {confidence === 0 && (
                             <span className="text-xs text-text-disabled hidden sm:block">

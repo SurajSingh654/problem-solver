@@ -4,6 +4,7 @@ import { cn } from '@utils/cn'
 import { LANGUAGE_LABELS } from '@utils/constants'
 
 // ── Monaco language mapping ────────────────────────────
+// Maps uppercase enum keys to Monaco language identifiers
 const MONACO_LANG = {
     PYTHON: 'python',
     JAVASCRIPT: 'javascript',
@@ -15,8 +16,27 @@ const MONACO_LANG = {
     TYPESCRIPT: 'typescript',
     SWIFT: 'swift',
     KOTLIN: 'kotlin',
+    GROOVY: 'groovy',
+    SQL: 'sql',       // Added — used in SQL category problems
     OTHER: 'plaintext',
 }
+
+// Languages shown in the submit form dropdown — interview-relevant only
+// Full list available in CodeEditor when showLanguageSelector=true (all buttons mode)
+export const SUBMIT_LANGUAGES = [
+    'PYTHON',
+    'JAVASCRIPT',
+    'TYPESCRIPT',
+    'JAVA',
+    'CPP',
+    'C',
+    'GO',
+    'RUST',
+    'SWIFT',
+    'KOTLIN',
+    'GROOVY',
+    'SQL',
+]
 
 // ── Dark theme definition ──────────────────────────────
 function defineTheme(monaco) {
@@ -49,7 +69,6 @@ function defineTheme(monaco) {
             'scrollbarSlider.hoverBackground': '#28283280',
         },
     })
-
     monaco.editor.defineTheme('probsolver-light', {
         base: 'vs',
         inherit: true,
@@ -84,14 +103,18 @@ export function CodeEditor({
     label,
     optional = false,
     hint,
-    height = '300px',
+    height = '320px',
     showLanguageSelector = true,
+    // 'buttons' — horizontal scrollable button row (original behavior)
+    // 'dropdown' — compact select dropdown (used in submit/edit forms)
+    selectorStyle = 'buttons',
+    // Optional filter for which languages to show in the selector
+    languages = null,
     className,
 }) {
     const [copied, setCopied] = useState(false)
     const [mounted, setMounted] = useState(false)
 
-    // Detect theme from html class
     const isDark = typeof document !== 'undefined'
         ? document.documentElement.classList.contains('dark') ||
         !document.documentElement.classList.contains('light')
@@ -101,8 +124,6 @@ export function CodeEditor({
         defineTheme(monaco)
         monaco.editor.setTheme(isDark ? 'probsolver-dark' : 'probsolver-light')
         setMounted(true)
-
-        // Set editor options after mount
         editor.updateOptions({
             fontSize: 13,
             fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace",
@@ -144,6 +165,7 @@ export function CodeEditor({
     }
 
     const monacoLang = MONACO_LANG[language] || 'plaintext'
+    const displayLanguages = languages || Object.keys(LANGUAGE_LABELS)
 
     return (
         <div className={cn('space-y-1.5', className)}>
@@ -161,8 +183,7 @@ export function CodeEditor({
             {hint && <p className="text-xs text-text-tertiary">{hint}</p>}
 
             {/* Editor container */}
-            <div className="border border-border-strong rounded-xl overflow-hidden
-                      bg-surface-1">
+            <div className="border border-border-strong rounded-xl overflow-hidden bg-surface-1">
 
                 {/* Header bar */}
                 <div className="flex items-center justify-between px-3 py-2
@@ -170,28 +191,76 @@ export function CodeEditor({
 
                     {/* Language selector */}
                     {showLanguageSelector && onLanguageChange ? (
-                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                            {Object.entries(LANGUAGE_LABELS).map(([key, lbl]) => (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    onClick={() => onLanguageChange(key)}
-                                    className={cn(
-                                        'px-2 py-1 rounded-md text-[11px] font-semibold',
-                                        'transition-all duration-100 whitespace-nowrap',
-                                        language === key
-                                            ? 'bg-brand-400/20 text-brand-300 border border-brand-400/30'
-                                            : 'text-text-disabled hover:text-text-tertiary border border-transparent'
-                                    )}
+                        selectorStyle === 'dropdown' ? (
+                            // ── Dropdown mode ──────────────────────────────
+                            <div className="flex items-center gap-2">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2"
+                                    strokeLinecap="round" strokeLinejoin="round"
+                                    className="text-text-disabled flex-shrink-0">
+                                    <polyline points="16 18 22 12 16 6" />
+                                    <polyline points="8 6 2 12 8 18" />
+                                </svg>
+                                <select
+                                    value={language}
+                                    onChange={e => onLanguageChange(e.target.value)}
+                                    className="bg-transparent text-xs font-semibold text-text-primary
+                                               outline-none cursor-pointer border-none
+                                               appearance-none pr-4"
+                                    style={{ backgroundImage: 'none' }}
                                 >
-                                    {lbl}
-                                </button>
-                            ))}
-                        </div>
+                                    {displayLanguages.map(key => (
+                                        <option
+                                            key={key}
+                                            value={key}
+                                            className="bg-surface-2 text-text-primary"
+                                        >
+                                            {LANGUAGE_LABELS[key] || key}
+                                        </option>
+                                    ))}
+                                </select>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2.5"
+                                    strokeLinecap="round" strokeLinejoin="round"
+                                    className="text-text-disabled flex-shrink-0 -ml-3 pointer-events-none">
+                                    <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                            </div>
+                        ) : (
+                            // ── Buttons mode (original) ─────────────────────
+                            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                                {displayLanguages.map(key => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => onLanguageChange(key)}
+                                        className={cn(
+                                            'px-2 py-1 rounded-md text-[11px] font-semibold',
+                                            'transition-all duration-100 whitespace-nowrap',
+                                            language === key
+                                                ? 'bg-brand-400/20 text-brand-300 border border-brand-400/30'
+                                                : 'text-text-disabled hover:text-text-tertiary border border-transparent'
+                                        )}
+                                    >
+                                        {LANGUAGE_LABELS[key] || key}
+                                    </button>
+                                ))}
+                            </div>
+                        )
                     ) : (
-                        <span className="text-xs font-mono text-text-tertiary">
-                            {LANGUAGE_LABELS[language] || language}
-                        </span>
+                        // Read-only language label
+                        <div className="flex items-center gap-1.5">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2"
+                                strokeLinecap="round" strokeLinejoin="round"
+                                className="text-text-disabled">
+                                <polyline points="16 18 22 12 16 6" />
+                                <polyline points="8 6 2 12 8 18" />
+                            </svg>
+                            <span className="text-xs font-mono text-text-tertiary">
+                                {LANGUAGE_LABELS[language] || language}
+                            </span>
+                        </div>
                     )}
 
                     {/* Copy button */}

@@ -19,6 +19,7 @@ const SUPPORTED_LANGUAGES = [
   "GO",
   "RUST",
   "TYPESCRIPT",
+  "GROOVY",
   "SWIFT",
   "KOTLIN",
   "SQL",
