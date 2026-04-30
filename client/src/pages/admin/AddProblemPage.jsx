@@ -15,11 +15,10 @@ import { cn } from '@utils/cn'
 import { PROBLEM_CATEGORIES } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
-
 const PLATFORM_SOURCES = ['LEETCODE', 'GFG', 'HACKERRANK', 'CODECHEF', 'INTERVIEWBIT', 'CODEFORCES']
 
 // ── AI Generated Problem Preview Card ──────────────────
-function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving }) {
+function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving, disabled }) {
     const [expanded, setExpanded] = useState(false)
     return (
         <motion.div
@@ -89,10 +88,12 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                         >
                             {expanded ? 'Collapse' : 'Preview'}
                         </button>
+                        {/* Bug 5 fix: disabled during handleApproveAll to prevent race condition */}
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => onReject(index)}
+                            disabled={disabled}
                             className="text-danger hover:text-danger"
                         >
                             Skip
@@ -101,6 +102,7 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                             variant="primary"
                             size="sm"
                             loading={isApproving}
+                            disabled={disabled}
                             onClick={() => onApprove(problem, index)}
                         >
                             Add to Team
@@ -187,13 +189,15 @@ function AIGenerateScreen({ onBack }) {
     const [generated, setGenerated] = useState(null)
     const [reasoning, setReasoning] = useState('')
     const [approvingIdx, setApprovingIdx] = useState(null)
+    // Bug 5 fix: track whether bulk approve is running to disable individual buttons
+    const [isApprovingAll, setIsApprovingAll] = useState(false)
 
     const generateAI = useGenerateProblemsAI()
     const createProblem = useCreateProblem()
 
     const totalCustom = (customMix.easy || 0) + (customMix.medium || 0) + (customMix.hard || 0)
 
-    // ── Single source of truth for problem data shape ──
+    // ── Single source of truth for problem data shape ──────
     // Both handleApprove and handleApproveAll use this.
     // If the shape ever changes, fix it here only.
     function buildProblemData(problem) {
@@ -271,8 +275,13 @@ function AIGenerateScreen({ onBack }) {
 
     async function handleApproveAll() {
         if (!generated?.length) return
-        // Snapshot the array before iterating — do not mutate mid-loop
+        // Bug 5 fix: lock individual buttons during bulk approve
+        setIsApprovingAll(true)
+        // Bug 1 fix: snapshot array before iterating — do not mutate mid-loop.
+        // Track failures so we can leave them in the list for retry instead
+        // of clearing everything unconditionally at the end.
         const problems = [...generated]
+        const failed = []
         for (let i = 0; i < problems.length; i++) {
             setApprovingIdx(i)
             try {
@@ -280,10 +289,13 @@ function AIGenerateScreen({ onBack }) {
                 toast.success(`"${problems[i].title}" added to team`)
             } catch {
                 toast.error(`Failed to add "${problems[i].title}"`)
+                failed.push(problems[i])
             }
         }
         setApprovingIdx(null)
-        setGenerated([])  // clear all at the end, not mid-loop
+        setIsApprovingAll(false)
+        // Only keep failed problems in the list — successfully added ones are gone
+        setGenerated(failed.length > 0 ? failed : [])
     }
 
     const displayCount = difficulty === 'custom' ? totalCustom : count
@@ -545,12 +557,25 @@ function AIGenerateScreen({ onBack }) {
                             )}
                         </div>
                         <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => setGenerated(null)}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isApprovingAll}
+                                onClick={() => setGenerated(null)}
+                            >
                                 ← Generate More
                             </Button>
                             {generated.length > 1 && (
-                                <Button variant="primary" size="sm" onClick={handleApproveAll}>
-                                    Add All ({generated.length})
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    loading={isApprovingAll}
+                                    onClick={handleApproveAll}
+                                >
+                                    {isApprovingAll
+                                        ? `Adding ${approvingIdx + 1}/${generated.length}...`
+                                        : `Add All (${generated.length})`
+                                    }
                                 </Button>
                             )}
                         </div>
@@ -571,6 +596,17 @@ function AIGenerateScreen({ onBack }) {
                         </div>
                     ) : (
                         <div className="space-y-3">
+                            {/* Bug 5 fix: show retry banner when some problems failed */}
+                            {!isApprovingAll && generated.length > 0 && generated.length < 5 && (
+                                <div className="bg-warning/5 border border-warning/20 rounded-xl p-3
+                                               flex items-center gap-3">
+                                    <span className="text-base flex-shrink-0">⚠️</span>
+                                    <p className="text-xs text-text-secondary">
+                                        {generated.length} problem{generated.length !== 1 ? 's' : ''} failed
+                                        to add. Review and retry below.
+                                    </p>
+                                </div>
+                            )}
                             {generated.map((problem, i) => (
                                 <GeneratedProblemCard
                                     key={`${problem.title}-${i}`}
@@ -579,6 +615,7 @@ function AIGenerateScreen({ onBack }) {
                                     onApprove={handleApprove}
                                     onReject={handleReject}
                                     isApproving={approvingIdx === i}
+                                    disabled={isApprovingAll}
                                 />
                             ))}
                         </div>

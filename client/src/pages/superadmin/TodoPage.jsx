@@ -25,14 +25,98 @@ Server: Create server/src/services/search.service.js
 - searchProblemUrl(title, platform) → returns verified URL
 - Integrates with Serper.dev API (simple, just one API key)
 - Falls back to platform search URL if API fails
-
 Integration point: ai.controller.js generateProblemsAI()
 - After Stage 2 (problem selection), for each selection call searchProblemUrl()
 - Replace AI-generated URL with verified search result URL
 - Cache resolved URLs in a problems_catalog table for future use
-
 Environment variables needed:
 - SERPER_API_KEY or GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_CX
+        `.trim(),
+    },
+    {
+        id: 'ai-url-fallback',
+        category: 'Problem Generation',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'Platform search URL fallback for low-confidence problem URLs',
+        description: 'When AI marks a generated problem URL as low-confidence, the URL is currently cleared entirely (empty string). This means users see a problem with no external link at all. Instead, fall back to a platform search URL so users can still find the problem even if the exact URL is wrong.',
+        why: 'A broken link is better than no link. A search URL like "https://leetcode.com/problemset/?search=Two+Sum" gives the user a fighting chance to find the problem. Currently they have nothing to click.',
+        technicalNotes: `
+Location: server/src/controllers/ai.controller.js — generateProblemsAI() Stage 3
+Current code:
+  sourceUrl: selection.urlConfidence === "low" ? "" : selection.url || "",
+
+Fix:
+  import { getPlatformSearchUrl } from '../utils/platformSearch.js'
+  sourceUrl: selection.urlConfidence === "low"
+    ? getPlatformSearchUrl(selection.platform, selection.title)
+    : selection.url || getPlatformSearchUrl(selection.platform, selection.title),
+
+Create server/src/utils/platformSearch.js:
+  export function getPlatformSearchUrl(platform, title) {
+    const encoded = encodeURIComponent(title)
+    const urls = {
+      LEETCODE: \`https://leetcode.com/problemset/?search=\${encoded}\`,
+      GFG: \`https://www.geeksforgeeks.org/explore?searchQuery=\${encoded}\`,
+      HACKERRANK: \`https://www.hackerrank.com/domains/algorithms?searchQuery=\${encoded}\`,
+    }
+    return urls[platform] || null
+  }
+
+This is a stopgap until the full Search API integration (multi-platform-search) is done.
+        `.trim(),
+    },
+    {
+        id: 'duplicate-problem-detection',
+        category: 'Problem Generation',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'Duplicate problem detection before AI approval',
+        description: 'If the admin generates problems, adds them, then generates again, they can get the same problem title twice in the same team. The server has no uniqueness constraint on (teamId, title). Both handleApprove and handleApproveAll will silently create duplicates.',
+        why: 'Duplicate problems confuse members who see "Two Sum" twice in the list. They also waste embedding storage and distort leaderboard stats.',
+        technicalNotes: `
+Two-layer fix:
+
+1. Server (authoritative): Add unique constraint to schema
+   @@unique([teamId, title])
+   Migration: this will fail if duplicates already exist — run dedup first:
+   DELETE FROM problems WHERE id NOT IN (
+     SELECT MIN(id) FROM problems GROUP BY "teamId", title
+   )
+
+2. Client (UX): Before calling createProblem.mutateAsync in handleApprove,
+   check against a list of existing problem titles fetched via useProblems().
+   Show a warning toast instead of silently skipping:
+   "Two Sum already exists in your team — skipped"
+
+The server constraint is the real fix. The client check is UX polish.
+        `.trim(),
+    },
+    {
+        id: 'custom-difficulty-format',
+        category: 'Problem Generation',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'Harden custom difficulty format parsing on server',
+        description: 'The client sends custom difficulty as "custom:2E,2M,1H" and the server parses it with parseInt("2E") which returns 2 because parseInt stops at non-numeric characters. This works correctly today but is fragile — if the format ever changes slightly it will silently produce wrong difficulty distributions.',
+        why: 'parseInt("2E") returning 2 is a quirk of JavaScript, not intentional design. A format change or typo could silently break difficulty distribution with no error thrown.',
+        technicalNotes: `
+Location: server/src/controllers/ai.controller.js — generateProblemsAI()
+Current (fragile):
+  const parts = difficultyPref.replace("custom:", "").split(",")
+  const easy = parseInt(parts[0]) || 0    // parseInt("2E") → 2, works by accident
+  const medium = parseInt(parts[1]) || 0
+  const hard = parseInt(parts[2]) || 0
+
+Fix option 1 — Change client format to plain numbers:
+  Client sends: "custom:2,2,1"
+  Server: const [easy, medium, hard] = parts.map(Number)
+
+Fix option 2 — Add explicit stripping on server:
+  const easy = parseInt(parts[0]?.replace(/\D/g, '')) || 0
+
+Option 1 is cleaner. Requires changing both client (AddProblemPage.jsx)
+and server (ai.controller.js) in the same commit.
         `.trim(),
     },
     {
@@ -50,14 +134,12 @@ Schema change:
   
   TeamProblem: id, teamId, problemDefinitionId, isPinned, isHidden,
     isPublished, addedById, teamNotes (optional override), createdAt
-
 Migration:
   1. Create ProblemDefinition table
   2. Migrate existing Problem rows → deduplicate by title
   3. Create TeamProblem rows for each unique teamId+problemId pair
   4. Update Solution, SimSession, InterviewSession FKs
   5. Update all controllers and client code
-
 TRIGGER: Do this when you have 50+ teams or when duplicate problems
 become measurable in analytics.
     `.trim(),
@@ -74,11 +156,9 @@ become measurable in analytics.
 Schema: Add ProblemCatalog model
   id, title, platform, url, difficulty, category, tags[], companyTags[], 
   pattern, verifiedAt, addedById, sourceType (manual | auto-resolved)
-
 Seed: 500 well-known interview problems as initial dataset
 Auto-grow: Every search API resolution → save to catalog
 Admin UI: Super Admin can browse, add, verify, and mark deprecated
-
 Integration: generateProblemsAI() checks catalog first before AI selection
         `.trim(),
     },
@@ -93,16 +173,13 @@ Integration: generateProblemsAI() checks catalog first before AI selection
         technicalNotes: `
 Add to Team model: aiScheduleConfig JSON
   { enabled: true, dailyCount: 2, categories: ["CODING"], frequency: "daily" }
-
 Server: Cron job (node-cron) runs daily at configured time
   → Checks each team's schedule config
   → Calls generateProblemsAI() with team context
   → Auto-publishes or sends to admin review queue based on config
-
 UI: Team Admin settings page → "AI Auto-generate" toggle with config options
         `.trim(),
     },
-
     // ── Authentication & Accounts ────────────────────────
     {
         id: 'oauth-social-login',
@@ -116,11 +193,9 @@ UI: Team Admin settings page → "AI Auto-generate" toggle with config options
 Server: Add passport.js with Google and GitHub strategies
   → On first OAuth login: create user, skip email verification, go to onboarding
   → On subsequent: find by email, log in directly
-
 Client: Add OAuth buttons to Login.jsx and Register.jsx
   → Redirect to /auth/google or /auth/github
   → Callback stores token + redirects to app
-
 Environment variables: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
         `.trim(),
     },
@@ -137,16 +212,13 @@ Create server/src/services/notification.service.js
   → sendReviewReminderEmail(user, dueCount)
   → sendWeeklyDigestEmail(user, stats)
   → sendNewProblemsEmail(teamMembers, problems)
-
 Trigger points:
   - Daily cron: check nextReviewDate, send reminder if due > 0
   - On problem creation: notify team members
   - Weekly: digest of progress, streak, upcoming reviews
-
 User preferences: Add notificationPrefs JSON to User model
         `.trim(),
     },
-
     // ── User Features ────────────────────────────────────
     {
         id: 'voice-interviews',
@@ -160,12 +232,10 @@ User preferences: Add notificationPrefs JSON to User model
 Server: Add /api/interview-v2/voice/transcribe endpoint
   → Receives audio blob → OpenAI Whisper → returns transcript
   → Feed transcript into existing interview engine
-
 Client: Add microphone button to interview chat input
   → MediaRecorder API to capture audio
   → Send to transcribe endpoint → populate input field
   → Optional: AI response via browser TTS (SpeechSynthesis API)
-
 Cost: Whisper API is $0.006/minute — very affordable
         `.trim(),
     },
@@ -180,13 +250,11 @@ Cost: Whisper API is $0.006/minute — very affordable
         technicalNotes: `
 Schema: Competition and CompetitionEntry models already exist in schema.prisma
   → Just need to implement the controllers and UI
-
 Server: 
   → POST /api/competitions (SuperAdmin creates)
   → POST /api/competitions/:id/join (user joins)
   → WebSocket: real-time leaderboard updates during competition
   → POST /api/competitions/:id/submit (submit answer)
-
 Client: Competition lobby, live problem view, real-time leaderboard
         `.trim(),
     },
@@ -201,7 +269,6 @@ Client: Competition lobby, live problem view, real-time leaderboard
         technicalNotes: `
 Schema: Add InterviewApplication model
   id, userId, company, role, stage, appliedAt, nextInterviewAt, outcome, notes
-
 Client: New page /interview-tracker with kanban or list view
 Server: CRUD endpoints for applications
 Integration: AI weekly plan reads upcoming interviews and adjusts recommendations
@@ -222,8 +289,7 @@ Auth: Same JWT system, just different client
 API: All existing endpoints work — no server changes needed
         `.trim(),
     },
-
-    // ── Admin & Analytics ────────────────────────────────
+    // ── Technical Debt ───────────────────────────────────
     {
         id: 'typescript-migration',
         category: 'Technical Debt',
@@ -276,7 +342,6 @@ const CATEGORIES = [...new Set(TODO_ITEMS.map(t => t.category))]
 function TodoItem({ item, index }) {
     const [expanded, setExpanded] = useState(false)
     const priority = PRIORITY_CONFIG[item.priority]
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -290,10 +355,7 @@ function TodoItem({ item, index }) {
                 className="w-full flex items-start gap-4 p-5 text-left
                    hover:bg-surface-2/50 transition-colors"
             >
-                <div className={cn(
-                    'w-2 h-2 rounded-full flex-shrink-0 mt-1.5',
-                    priority.dot
-                )} />
+                <div className={cn('w-2 h-2 rounded-full flex-shrink-0 mt-1.5', priority.dot)} />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className={cn(
@@ -330,7 +392,6 @@ function TodoItem({ item, index }) {
                     </svg>
                 </motion.div>
             </button>
-
             {/* Expanded detail */}
             {expanded && (
                 <div className="px-5 pb-5 space-y-4 border-t border-border-subtle pt-4">
@@ -368,15 +429,12 @@ function TodoItem({ item, index }) {
 
 export default function TodoPage() {
     const [activeCategory, setActiveCategory] = useState('All')
-
     const filtered = activeCategory === 'All'
         ? TODO_ITEMS
         : TODO_ITEMS.filter(t => t.category === activeCategory)
-
     const highCount = TODO_ITEMS.filter(t => t.priority === 'HIGH').length
     const mediumCount = TODO_ITEMS.filter(t => t.priority === 'MEDIUM').length
     const lowCount = TODO_ITEMS.filter(t => t.priority === 'LOW').length
-
     return (
         <div className="p-6 max-w-[900px] mx-auto">
             {/* Header */}
@@ -388,7 +446,6 @@ export default function TodoPage() {
                     Planned improvements and technical debt. Items are removed when completed.
                 </p>
             </div>
-
             {/* Stats */}
             <div className="grid grid-cols-3 gap-3 mb-6">
                 {[
@@ -396,8 +453,7 @@ export default function TodoPage() {
                     { label: 'Medium Priority', value: mediumCount, color: 'text-warning', bg: 'bg-warning/5 border-warning/20' },
                     { label: 'Low Priority', value: lowCount, color: 'text-info', bg: 'bg-info/5 border-info/20' },
                 ].map(s => (
-                    <div key={s.label}
-                        className={cn('rounded-xl border p-4 text-center', s.bg)}>
+                    <div key={s.label} className={cn('rounded-xl border p-4 text-center', s.bg)}>
                         <div className={cn('text-2xl font-extrabold font-mono', s.color)}>
                             {s.value}
                         </div>
@@ -407,7 +463,6 @@ export default function TodoPage() {
                     </div>
                 ))}
             </div>
-
             {/* Category filter */}
             <div className="flex flex-wrap gap-1.5 mb-6">
                 {['All', ...CATEGORIES].map(cat => (
@@ -430,20 +485,20 @@ export default function TodoPage() {
                     </button>
                 ))}
             </div>
-
             {/* Todo items */}
             <div className="space-y-3">
                 {filtered.map((item, i) => (
                     <TodoItem key={item.id} item={item} index={i} />
                 ))}
             </div>
-
             {/* Footer note */}
             <div className="mt-8 p-4 bg-surface-1 border border-border-default rounded-xl">
                 <p className="text-xs text-text-tertiary leading-relaxed">
                     <span className="font-bold text-text-secondary">How to use this page:</span>{' '}
-                    When an item is completed, remove it from the <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-[11px]">TODO_ITEMS</code> array
-                    in <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-[11px]">TodoPage.jsx</code>.
+                    When an item is completed, remove it from the{' '}
+                    <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-[11px]">TODO_ITEMS</code>{' '}
+                    array in{' '}
+                    <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-[11px]">TodoPage.jsx</code>.
                     Items are ordered by priority within each category.
                     Technical notes contain implementation details for future developers.
                 </p>
