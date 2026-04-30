@@ -45,13 +45,11 @@ Environment variables needed:
 Location: server/src/controllers/ai.controller.js — generateProblemsAI() Stage 3
 Current code:
   sourceUrl: selection.urlConfidence === "low" ? "" : selection.url || "",
-
 Fix:
   import { getPlatformSearchUrl } from '../utils/platformSearch.js'
   sourceUrl: selection.urlConfidence === "low"
     ? getPlatformSearchUrl(selection.platform, selection.title)
     : selection.url || getPlatformSearchUrl(selection.platform, selection.title),
-
 Create server/src/utils/platformSearch.js:
   export function getPlatformSearchUrl(platform, title) {
     const encoded = encodeURIComponent(title)
@@ -62,7 +60,6 @@ Create server/src/utils/platformSearch.js:
     }
     return urls[platform] || null
   }
-
 This is a stopgap until the full Search API integration (multi-platform-search) is done.
         `.trim(),
     },
@@ -76,19 +73,16 @@ This is a stopgap until the full Search API integration (multi-platform-search) 
         why: 'Duplicate problems confuse members who see "Two Sum" twice in the list. They also waste embedding storage and distort leaderboard stats.',
         technicalNotes: `
 Two-layer fix:
-
 1. Server (authoritative): Add unique constraint to schema
    @@unique([teamId, title])
    Migration: this will fail if duplicates already exist — run dedup first:
    DELETE FROM problems WHERE id NOT IN (
      SELECT MIN(id) FROM problems GROUP BY "teamId", title
    )
-
 2. Client (UX): Before calling createProblem.mutateAsync in handleApprove,
    check against a list of existing problem titles fetched via useProblems().
    Show a warning toast instead of silently skipping:
    "Two Sum already exists in your team — skipped"
-
 The server constraint is the real fix. The client check is UX polish.
         `.trim(),
     },
@@ -98,25 +92,18 @@ The server constraint is the real fix. The client check is UX polish.
         priority: 'LOW',
         effort: 'Small',
         title: 'Harden custom difficulty format parsing on server',
-        description: 'The client sends custom difficulty as "custom:2E,2M,1H" and the server parses it with parseInt("2E") which returns 2 because parseInt stops at non-numeric characters. This works correctly today but is fragile — if the format ever changes slightly it will silently produce wrong difficulty distributions.',
-        why: 'parseInt("2E") returning 2 is a quirk of JavaScript, not intentional design. A format change or typo could silently break difficulty distribution with no error thrown.',
+        description: 'The client sends custom difficulty as "custom:2,2,1" and the server parses it with Number(). This is correct but worth documenting — a future developer might change the format and break the parsing silently.',
+        why: 'Explicit format documentation and validation prevents silent breakage if the format is ever changed during a refactor.',
         technicalNotes: `
 Location: server/src/controllers/ai.controller.js — generateProblemsAI()
-Current (fragile):
-  const parts = difficultyPref.replace("custom:", "").split(",")
-  const easy = parseInt(parts[0]) || 0    // parseInt("2E") → 2, works by accident
-  const medium = parseInt(parts[1]) || 0
-  const hard = parseInt(parts[2]) || 0
-
-Fix option 1 — Change client format to plain numbers:
-  Client sends: "custom:2,2,1"
-  Server: const [easy, medium, hard] = parts.map(Number)
-
-Fix option 2 — Add explicit stripping on server:
-  const easy = parseInt(parts[0]?.replace(/\D/g, '')) || 0
-
-Option 1 is cleaner. Requires changing both client (AddProblemPage.jsx)
-and server (ai.controller.js) in the same commit.
+Current format: "custom:2,2,1" (easy,medium,hard as plain numbers)
+Server: const [easy, medium, hard] = parts.map(Number)
+Add server-side validation:
+  if (isNaN(easy) || isNaN(medium) || isNaN(hard)) {
+    return error(res, "Invalid custom difficulty format.", 400)
+  }
+Add a comment block documenting the format contract so it's never
+changed without updating both sides.
         `.trim(),
     },
     {
@@ -131,7 +118,6 @@ and server (ai.controller.js) in the same commit.
 Schema change:
   ProblemDefinition: id, title, description, difficulty, category, tags,
     sourceUrl, realWorldContext, useCases, adminNotes, embedding, source
-  
   TeamProblem: id, teamId, problemDefinitionId, isPinned, isHidden,
     isPublished, addedById, teamNotes (optional override), createdAt
 Migration:
@@ -142,7 +128,7 @@ Migration:
   5. Update all controllers and client code
 TRIGGER: Do this when you have 50+ teams or when duplicate problems
 become measurable in analytics.
-    `.trim(),
+        `.trim(),
     },
     {
         id: 'problem-catalog',
@@ -154,7 +140,7 @@ become measurable in analytics.
         why: '100% reliable URLs. No API dependency at query time. Builds a strategic asset — your own problem library is a competitive moat that improves over time.',
         technicalNotes: `
 Schema: Add ProblemCatalog model
-  id, title, platform, url, difficulty, category, tags[], companyTags[], 
+  id, title, platform, url, difficulty, category, tags[], companyTags[],
   pattern, verifiedAt, addedById, sourceType (manual | auto-resolved)
 Seed: 500 well-known interview problems as initial dataset
 Auto-grow: Every search API resolution → save to catalog
@@ -178,6 +164,132 @@ Server: Cron job (node-cron) runs daily at configured time
   → Calls generateProblemsAI() with team context
   → Auto-publishes or sends to admin review queue based on config
 UI: Team Admin settings page → "AI Auto-generate" toggle with config options
+        `.trim(),
+    },
+    // ── Admin Tools ──────────────────────────────────────
+    {
+        id: 'interview-stage-selector',
+        category: 'Admin Tools',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'Interview stage selector in AI problem generation',
+        description: 'Add an optional "Interview Stage" field to the AI generation config: Phone Screen / Technical Screen / Onsite Round / Final Round. The AI prompt uses this to calibrate problem selection — a Two Pointers MEDIUM is appropriate for a phone screen at a startup but wrong for a Google L5 onsite.',
+        why: 'Real interview preparation is stage-aware. A candidate with a Google onsite next week needs different problems than one preparing for phone screens. Right now the AI has no way to know which stage the team is preparing for, so it generates generically.',
+        technicalNotes: `
+Client: Add to AIGenerateScreen in AddProblemPage.jsx
+  const [interviewStage, setInterviewStage] = useState(null)
+  Options: null (any), 'PHONE_SCREEN', 'TECHNICAL_SCREEN', 'ONSITE', 'FINAL_ROUND'
+  Pass to generateAI.mutateAsync as optional field: interviewStage
+Server: ai.controller.js generateProblemsAI() — add to req.body destructuring
+  const { category, count, difficulty, targetCompany, focusAreas, interviewStage } = req.body
+AI Prompt: ai.prompts.js problemSelectionPrompt()
+  Add to system prompt:
+  \${interviewStage ? \`INTERVIEW STAGE: \${stageLabels[interviewStage]}.
+  Select problems appropriate for this stage — difficulty, time pressure,
+  and depth expectations should match real interviews at this stage.\` : ''}
+  Stage calibration guidance:
+  - PHONE_SCREEN: EASY-MEDIUM, pattern recognition speed matters most
+  - TECHNICAL_SCREEN: MEDIUM, correctness + communication
+  - ONSITE: MEDIUM-HARD, optimization + edge cases + follow-ups expected
+  - FINAL_ROUND: HARD, system thinking + multiple approaches required
+        `.trim(),
+    },
+    {
+        id: 'url-confidence-indicator',
+        category: 'Admin Tools',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'URL confidence indicator in AI-generated problem preview',
+        description: 'The AI generation pipeline already tracks urlConfidence (high/medium/low) for each generated problem URL, but this information is never shown to the admin. Admins currently blindly approve problems with broken or guessed URLs without knowing.',
+        why: 'An admin who knows a URL is low-confidence will edit it before approving. An admin who doesn\'t know will approve a broken link and team members will discover it later. Surfacing this at approval time costs nothing and prevents a poor member experience.',
+        technicalNotes: `
+Location: client/src/pages/admin/AddProblemPage.jsx — GeneratedProblemCard
+The urlConfidence field is already returned by the AI generation pipeline
+and present in the problem object passed to GeneratedProblemCard.
+Add a visual indicator next to the source URL link:
+  {problem.urlConfidence === 'high' && (
+    <span className="text-[9px] text-success font-bold">✓ URL verified</span>
+  )}
+  {problem.urlConfidence === 'medium' && (
+    <span className="text-[9px] text-warning font-bold">⚠ URL unverified — check before approving</span>
+  )}
+  {problem.urlConfidence === 'low' && (
+    <span className="text-[9px] text-danger font-bold">✗ URL likely wrong — edit before approving</span>
+  )}
+No server changes needed — data is already there.
+        `.trim(),
+    },
+    {
+        id: 'inline-followup-editing',
+        category: 'Admin Tools',
+        priority: 'MEDIUM',
+        effort: 'Medium',
+        title: 'Inline follow-up question editing in AI generation preview',
+        description: 'When AI generates a problem with follow-up questions, the admin can see them in the preview but cannot edit them before approving. If a follow-up is wrong or irrelevant, the admin must approve the whole problem and then go to Edit Problem to fix it. This is unnecessary friction at exactly the wrong moment.',
+        why: 'The preview card is the natural place to curate content before committing it to the team. Follow-up questions directly affect the quality of what team members practice and the AI review scoring. Letting admins fix them at generation time removes a two-step workflow.',
+        technicalNotes: `
+Location: client/src/pages/admin/AddProblemPage.jsx — GeneratedProblemCard
+Add local state for follow-up editing:
+  const [editingFollowUps, setEditingFollowUps] = useState(
+    problem.followUpQuestions || []
+  )
+Replace read-only follow-up display with inline editable rows:
+  {editingFollowUps.map((fq, i) => (
+    <div key={i} className="...">
+      <textarea value={fq.question} onChange={...} />
+      <select value={fq.difficulty} onChange={...}>EASY/MEDIUM/HARD</select>
+      <input value={fq.hint} onChange={...} placeholder="Hint..." />
+      <button onClick={() => removeFollowUp(i)}>Remove</button>
+    </div>
+  ))}
+  <button onClick={addFollowUp}>+ Add follow-up</button>
+Pass editingFollowUps to onApprove instead of problem.followUpQuestions.
+In buildProblemData: use the edited follow-ups, not the original.
+        `.trim(),
+    },
+    {
+        id: 'bulk-problem-import',
+        category: 'Admin Tools',
+        priority: 'LOW',
+        effort: 'Medium',
+        title: 'Bulk problem import from a list of titles',
+        description: 'An admin with a curated personal list of problems (spreadsheet, Notion doc, etc.) currently has no bulk import path. They must manually add each problem through the form. A "paste a list of problem titles" input that batch-generates content for each one would save significant admin setup time.',
+        why: 'Serious team admins — coaches, senior engineers setting up bootcamp prep — have personal problem sets they\'ve curated over years. Making it easy to import these into the platform directly increases the quality of content a team gets from day one.',
+        technicalNotes: `
+UI: Add a third mode to AddProblemPage — "Import List" tab
+  Textarea: "Paste problem titles, one per line"
+  Category selector (applied to all)
+  "Generate Content for All" button
+Flow:
+  1. Parse textarea into array of titles (split by newline, trim, filter empty)
+  2. For each title, call generateProblemContent (existing AI endpoint)
+     — this is the same endpoint used when admin clicks "Generate with AI"
+     in the manual form
+  3. Show results in the same GeneratedProblemCard preview format
+  4. Admin approves/skips/edits each one
+  5. Batch approve uses POST /problems/batch (already built)
+Cap at 10 titles per import session to prevent timeout.
+Server: No new endpoints needed — uses existing generateProblemContent
+and batchCreateProblems endpoints.
+        `.trim(),
+    },
+    {
+        id: 'company-interview-pattern-tagging',
+        category: 'Admin Tools',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'Company interview pattern tagging with stage context',
+        description: 'The companyTags field exists and saves correctly. But there\'s no way to mark a problem as belonging to a specific interview pattern that a company is known for — "Google loves this type of problem in onsite round 2" vs "Amazon asks this in leadership principle assessment". This context would improve AI coaching plans and recommendations.',
+        why: 'Company-specific pattern knowledge is one of the highest-value things an experienced interviewer knows. Encoding it in the problem metadata lets the AI coaching plan say "you have a Google onsite — these 3 patterns appear in 80% of their coding rounds" instead of generic advice.',
+        technicalNotes: `
+Add to categoryData JSON: { companyPatterns: [{ company: "Google", stage: "ONSITE", frequency: "HIGH" }] }
+No schema migration needed — categoryData is already a JSON column.
+UI: In ProblemForm.jsx, below the company tags ChipInput, add a
+    "Company Stage Context" section that lets admin add
+    company + stage + frequency rows for each tagged company.
+AI prompt: In solutionReviewPrompt and problemSelectionPrompt, read
+    companyPatterns from categoryData and include in context:
+    "This problem appears frequently in Google onsite rounds."
         `.trim(),
     },
     // ── Authentication & Accounts ────────────────────────
@@ -250,7 +362,7 @@ Cost: Whisper API is $0.006/minute — very affordable
         technicalNotes: `
 Schema: Competition and CompetitionEntry models already exist in schema.prisma
   → Just need to implement the controllers and UI
-Server: 
+Server:
   → POST /api/competitions (SuperAdmin creates)
   → POST /api/competitions/:id/join (user joins)
   → WebSocket: real-time leaderboard updates during competition
