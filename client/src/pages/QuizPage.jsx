@@ -532,9 +532,8 @@ function SetupScreen({ onStart }) {
 function QuizHistory() {
     const { data: historyData, isLoading } = useQuizHistory()
     const quizzes = historyData?.quizzes || []
-    if (isLoading || !quizzes.length) return null
 
-    // Group by subject to show improvement trends
+    // useMemo must be called before any conditional return
     const bySubject = useMemo(() => {
         const groups = {}
         quizzes.forEach(q => {
@@ -543,6 +542,8 @@ function QuizHistory() {
         })
         return groups
     }, [quizzes])
+
+    if (isLoading || !quizzes.length) return null  // early return AFTER all hooks
 
     return (
         <motion.div
