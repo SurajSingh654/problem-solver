@@ -420,7 +420,7 @@ export async function get6DReport(req, res) {
           communication: Math.min(d3, 100),
           optimization: Math.min(d4, 100),
           pressurePerformance: Math.min(d5, 100),
-          knowledgeRetention: Math.min(d6, 100),
+          retention: Math.min(d6, 100),
         },
         overall: Math.min(overall, 100),
         totalSolutions,

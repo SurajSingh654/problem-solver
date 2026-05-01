@@ -75,7 +75,7 @@ export function RadarChart({ dimensions = {}, size = 280 }) {
                         key={scale}
                         d={toPath(getPoints(scale))}
                         fill="none"
-                        stroke="rgba(255,255,255,0.06)"
+                        stroke="rgba(128,128,128,0.2)"
                         strokeWidth="1"
                     />
                 ))}
@@ -90,7 +90,7 @@ export function RadarChart({ dimensions = {}, size = 280 }) {
                             key={i}
                             x1={cx} y1={cy}
                             x2={outerX} y2={outerY}
-                            stroke="rgba(255,255,255,0.06)"
+                            stroke="rgba(128,128,128,0.2)"
                             strokeWidth="1"
                         />
                     )

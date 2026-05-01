@@ -15,7 +15,7 @@ const DIMENSIONS = [
   { key: 'optimization', label: 'Optimization', color: '#eab308', icon: '⚡' },
   // Bug 6 fix: label was 'Pressure', should be 'Pressure Performance'
   { key: 'pressurePerformance', label: 'Pressure Performance', color: '#ef4444', icon: '🎯' },
-  { key: 'knowledgeRetention', label: 'Knowledge Retention', color: '#a855f7', icon: '📚' },
+  { key: 'retention', label: 'Knowledge Retention', color: '#a855f7', icon: '📚' },
 ]
 
 export default function ReportPage() {
