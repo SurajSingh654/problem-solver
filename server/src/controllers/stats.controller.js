@@ -188,6 +188,7 @@ export async function get6DReport(req, res) {
     const teamId = req.teamId;
     const userId = req.user.id;
 
+    // Fetch all solutions with full data for analytics
     const solutions = await prisma.solution.findMany({
       where: { userId, teamId },
       select: {
@@ -204,7 +205,10 @@ export async function get6DReport(req, res) {
         nextReviewDate: true,
         lastReviewedAt: true,
         reviewCount: true,
+        aiFeedback: true,
+        createdAt: true,
       },
+      orderBy: { createdAt: "asc" },
     });
 
     const totalSolutions = solutions.length;
@@ -218,7 +222,7 @@ export async function get6DReport(req, res) {
             communication: 0,
             optimization: 0,
             pressurePerformance: 0,
-            knowledgeRetention: 0,
+            retention: 0,
           },
           overall: 0,
           totalSolutions: 0,
@@ -227,16 +231,16 @@ export async function get6DReport(req, res) {
       });
     }
 
-    // ── D1: Pattern Recognition ────────────────────────
+    // ── D1: Pattern Recognition ──────────────────────
     const withPattern = solutions.filter((s) => s.pattern).length;
     const uniquePatterns = new Set(
       solutions.filter((s) => s.pattern).map((s) => s.pattern),
-    ).size;
+    );
     const patternRate = (withPattern / totalSolutions) * 60;
-    const diversityRate = Math.min(uniquePatterns / 16, 1) * 40;
+    const diversityRate = Math.min(uniquePatterns.size / 16, 1) * 40;
     const d1 = Math.round(patternRate + diversityRate);
 
-    // ── D2: Solution Depth ─────────────────────────────
+    // ── D2: Solution Depth ───────────────────────────
     const withInsight = solutions.filter((s) => s.keyInsight).length;
     const withFeynman = solutions.filter((s) => s.feynmanExplanation).length;
     const withRealWorld = solutions.filter((s) => s.realWorldConnection).length;
@@ -249,10 +253,12 @@ export async function get6DReport(req, res) {
         (avgConf / 5) * 20,
     );
 
-    // ── D3: Communication ─────────────────────────────
-    // Bug 1 fix: use peer ratings when available, fall back to Feynman
-    // quality proxy when no ratings exist. Proxy caps at 70 to be
-    // honest — peer validation is a stronger signal than self-reported.
+    // ── D3: Communication ────────────────────────────
+    function stripHtml(html) {
+      if (!html) return "";
+      return html.replace(/<[^>]*>/g, "").trim();
+    }
+
     const clarityRatings = await prisma.clarityRating.findMany({
       where: { solution: { userId, teamId } },
       select: { rating: true },
@@ -262,7 +268,6 @@ export async function get6DReport(req, res) {
     let communicationFromProxy = false;
 
     if (clarityRatings.length > 0) {
-      // Real peer ratings — use them directly (scale 1-5 → 0-100)
       d3 = Math.round(
         (clarityRatings.reduce((s, r) => s + r.rating, 0) /
           clarityRatings.length /
@@ -270,10 +275,6 @@ export async function get6DReport(req, res) {
           100,
       );
     } else {
-      // Bug 1 fix: proxy from user's own communication signals
-      // Feynman explanations and real-world connections are written
-      // communication artifacts — they reflect communication ability
-      // even without peer validation
       communicationFromProxy = true;
       const withFeynmanComms = solutions.filter(
         (s) => stripHtml(s.feynmanExplanation).length > 20,
@@ -281,12 +282,16 @@ export async function get6DReport(req, res) {
       const withRealWorldComms = solutions.filter(
         (s) => stripHtml(s.realWorldConnection).length > 15,
       ).length;
-      const feynmanScore = (withFeynmanComms / totalSolutions) * 60;
-      const realWorldScore = (withRealWorldComms / totalSolutions) * 40;
-      d3 = Math.min(Math.round(feynmanScore + realWorldScore), 70);
+      d3 = Math.min(
+        Math.round(
+          (withFeynmanComms / totalSolutions) * 60 +
+            (withRealWorldComms / totalSolutions) * 40,
+        ),
+        70,
+      );
     }
 
-    // ── D4: Optimization ───────────────────────────────
+    // ── D4: Optimization ─────────────────────────────
     const withBrute = solutions.filter((s) => s.bruteForce).length;
     const withOptimized = solutions.filter((s) => s.optimizedApproach).length;
     const withBothComplexity = solutions.filter(
@@ -298,9 +303,7 @@ export async function get6DReport(req, res) {
         (withBothComplexity / totalSolutions) * 35,
     );
 
-    // ── D5: Pressure Performance ───────────────────────
-    // Bug 2 fix: include quiz performance alongside sims and interviews.
-    // Quizzes are timed and directly measure performance under pressure.
+    // ── D5: Pressure Performance ─────────────────────
     const [sims, interviews, quizzesForPressure] = await Promise.all([
       prisma.simSession.findMany({
         where: { userId, teamId, completed: true },
@@ -310,23 +313,22 @@ export async function get6DReport(req, res) {
         where: { userId, teamId, status: "COMPLETED" },
         select: { scores: true },
       }),
-      // Bug 3 fix: quizzes are personal — no teamId filter
       prisma.quizAttempt.findMany({
         where: { userId, completedAt: { not: null }, score: { not: null } },
         select: { score: true, timeSpent: true },
         orderBy: { createdAt: "desc" },
-        take: 20, // Use most recent 20 for performance
+        take: 20,
       }),
     ]);
 
     let d5 = 0;
-    const hasAnyPressureData =
-      sims.length > 0 || interviews.length > 0 || quizzesForPressure.length > 0;
+    const hasSims = sims.length > 0;
+    const hasInterviews = interviews.length > 0;
+    const hasQuizzes = quizzesForPressure.length > 0;
 
-    if (hasAnyPressureData) {
-      // Sim contribution (40% weight when sims exist)
+    if (hasSims || hasInterviews || hasQuizzes) {
       let simScore = 0;
-      if (sims.length > 0) {
+      if (hasSims) {
         const simCompletionRate = Math.min(sims.length / 5, 1) * 40;
         const avgSimScore =
           (sims.reduce((s, r) => s + (r.score || 0), 0) / sims.length / 5) * 40;
@@ -334,26 +336,13 @@ export async function get6DReport(req, res) {
           (sims.filter((s) => s.hintsUsed === 0).length / sims.length) * 20;
         simScore = simCompletionRate + avgSimScore + noHintRate;
       }
-
-      // Interview contribution (standalone signal)
-      const interviewScore =
-        interviews.length > 0 ? Math.min(interviews.length / 3, 1) * 100 : 0;
-
-      // Bug 2 fix: quiz contribution — avg score on timed quizzes
-      let quizPressureScore = 0;
-      if (quizzesForPressure.length > 0) {
-        const avgQuizScore =
-          quizzesForPressure.reduce((s, r) => s + (r.score || 0), 0) /
-          quizzesForPressure.length;
-        // Scale: avg quiz score maps directly to 0-100
-        quizPressureScore = avgQuizScore;
-      }
-
-      // Weight: sims 40%, interviews 30%, quizzes 30%
-      // Adjust weights based on what data actually exists
-      const hasSims = sims.length > 0;
-      const hasInterviews = interviews.length > 0;
-      const hasQuizzes = quizzesForPressure.length > 0;
+      const interviewScore = hasInterviews
+        ? Math.min(interviews.length / 3, 1) * 100
+        : 0;
+      const quizPressureScore = hasQuizzes
+        ? quizzesForPressure.reduce((s, r) => s + (r.score || 0), 0) /
+          quizzesForPressure.length
+        : 0;
 
       if (hasSims && hasInterviews && hasQuizzes) {
         d5 = Math.round(
@@ -366,19 +355,16 @@ export async function get6DReport(req, res) {
       } else if (hasSims && hasInterviews) {
         d5 = Math.round(simScore * 0.6 + interviewScore * 0.4);
       } else if (hasQuizzes) {
-        // Only quizzes — use quiz score directly but cap at 80
-        // Sims and interviews are harder pressure tests
         d5 = Math.min(Math.round(quizPressureScore), 80);
       } else if (hasSims) {
         d5 = Math.round(simScore);
-      } else if (hasInterviews) {
+      } else {
         d5 = Math.round(interviewScore);
       }
-
       d5 = Math.min(d5, 100);
     }
 
-    // ── D6: Knowledge Retention ────────────────────────
+    // ── D6: Knowledge Retention ──────────────────────
     const reviewed = solutions.filter((s) => s.reviewCount > 0).length;
     const reviewedConf = solutions.filter((s) => s.reviewCount > 0);
     const avgReviewConf =
@@ -390,13 +376,9 @@ export async function get6DReport(req, res) {
       (reviewed / totalSolutions) * 50 + (avgReviewConf / 5) * 50,
     );
 
-    // ── Overall ────────────────────────────────────────
-    // Bug 5 fix: when D3 is from proxy (no peer ratings), weight it
-    // slightly less to avoid over-penalizing users with no teammates.
-    // Redistributed weight goes to D1 and D2 which are most reliable.
+    // ── Overall (weighted — D3 proxy gets 0.8 weight) ─
     let overall;
     if (communicationFromProxy) {
-      // D3 proxy: weight 0.8, D1 and D2 each get +0.067 extra weight
       overall = Math.round(
         d1 * (1 / 6 + 0.067) +
           d2 * (1 / 6 + 0.067) +
@@ -409,26 +391,231 @@ export async function get6DReport(req, res) {
       overall = Math.round((d1 + d2 + d3 + d4 + d5 + d6) / 6);
     }
 
-    // Bug 3 fix: quizCount uses userId only — quizzes are personal
+    // ════════════════════════════════════════════════
+    // ANALYTICS LAYER
+    // Everything below is additional intelligence beyond
+    // the raw 6D scores. Used for the coaching sections.
+    // ════════════════════════════════════════════════
+
+    // ── 1. Weekly velocity (last 4 weeks) ─────────────
+    // How many solutions per week over the past month.
+    // Used for: "At this pace, you'll be ready in X weeks"
+    const fourWeeksAgo = new Date();
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+
+    const recentSolutions = solutions.filter(
+      (s) => new Date(s.createdAt) >= fourWeeksAgo,
+    );
+
+    // Build weekly buckets [week4ago, week3ago, week2ago, thisWeek]
+    const weeklyBuckets = [0, 0, 0, 0];
+    recentSolutions.forEach((s) => {
+      const daysAgo = Math.floor(
+        (Date.now() - new Date(s.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const weekIdx = Math.min(Math.floor(daysAgo / 7), 3);
+      weeklyBuckets[3 - weekIdx]++; // reverse so index 3 = this week
+    });
+
+    const avgWeeklyVelocity = weeklyBuckets.reduce((a, b) => a + b, 0) / 4;
+
+    // ── 2. Pattern coverage gap ───────────────────────
+    // The 16 canonical patterns from PATTERNS constant.
+    // Which ones has the user never practiced?
+    const CANONICAL_PATTERNS = [
+      "Array / Hashing",
+      "Two Pointers",
+      "Sliding Window",
+      "Stack",
+      "Binary Search",
+      "Linked List",
+      "Trees",
+      "Tries",
+      "Heap / Priority Queue",
+      "Backtracking",
+      "Graphs",
+      "Dynamic Programming",
+      "Greedy",
+      "Intervals",
+      "Math & Geometry",
+      "Bit Manipulation",
+    ];
+
+    const usedPatterns = new Set(
+      solutions.filter((s) => s.pattern).map((s) => s.pattern),
+    );
+    const missingPatterns = CANONICAL_PATTERNS.filter(
+      (p) => !usedPatterns.has(p),
+    );
+
+    // ── 3. AI review score trend ──────────────────────
+    // Extract overallScore from aiFeedback JSON array.
+    // Used for: "Your AI review scores are improving / declining"
+    const aiScores = [];
+    solutions.forEach((s) => {
+      if (s.aiFeedback && Array.isArray(s.aiFeedback)) {
+        s.aiFeedback.forEach((review) => {
+          if (review.overallScore != null) {
+            aiScores.push({
+              score: review.overallScore,
+              date: review.reviewedAt,
+            });
+          }
+        });
+      }
+    });
+
+    aiScores.sort((a, b) => new Date(a.date) - new Date(b.date));
+    const recentAiScores = aiScores.slice(-5).map((s) => s.score);
+    const avgAiScore =
+      recentAiScores.length > 0
+        ? Math.round(
+            (recentAiScores.reduce((a, b) => a + b, 0) /
+              recentAiScores.length) *
+              10,
+          )
+        : null;
+
+    // Trend: compare first half vs second half of ai scores
+    let aiScoreTrend = null;
+    if (aiScores.length >= 4) {
+      const mid = Math.floor(aiScores.length / 2);
+      const firstHalfAvg =
+        aiScores.slice(0, mid).reduce((a, b) => a + b.score, 0) / mid;
+      const secondHalfAvg =
+        aiScores.slice(mid).reduce((a, b) => a + b.score, 0) /
+        (aiScores.length - mid);
+      if (secondHalfAvg > firstHalfAvg + 0.5) aiScoreTrend = "improving";
+      else if (secondHalfAvg < firstHalfAvg - 0.5) aiScoreTrend = "declining";
+      else aiScoreTrend = "stable";
+    }
+
+    // ── 4. Overdue reviews ────────────────────────────
+    // Ebbinghaus forgetting curve: missed reviews = lost retention
+    const overdueReviews = await prisma.solution.count({
+      where: {
+        userId,
+        teamId,
+        nextReviewDate: { lte: new Date() },
+      },
+    });
+
+    // ── 5. Confidence trend ───────────────────────────
+    // Compare avg confidence of first 5 solutions vs last 5
+    let confidenceTrend = null;
+    if (solutions.length >= 6) {
+      const first5Avg =
+        solutions.slice(0, 5).reduce((a, b) => a + b.confidence, 0) / 5;
+      const last5Avg =
+        solutions.slice(-5).reduce((a, b) => a + b.confidence, 0) / 5;
+      if (last5Avg > first5Avg + 0.3) confidenceTrend = "improving";
+      else if (last5Avg < first5Avg - 0.3) confidenceTrend = "declining";
+      else confidenceTrend = "stable";
+    }
+
+    // ── 6. Optimization completion rate ──────────────
+    // What % of solutions have BOTH brute force and optimized
+    // This is the single most actionable metric for most users
+    const bothApproachesRate =
+      totalSolutions > 0
+        ? Math.round(
+            (solutions.filter((s) => s.bruteForce && s.optimizedApproach)
+              .length /
+              totalSolutions) *
+              100,
+          )
+        : 0;
+
+    // ── 7. Quiz data for coaching ─────────────────────
     const quizCount = await prisma.quizAttempt.count({ where: { userId } });
+
+    // Get quiz performance by subject for coaching recommendations
+    const quizHistory = await prisma.quizAttempt.findMany({
+      where: { userId, completedAt: { not: null }, score: { not: null } },
+      select: { subject: true, score: true, difficulty: true },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    });
+
+    // Group by subject, compute avg score
+    const quizBySubject = {};
+    quizHistory.forEach((q) => {
+      if (!quizBySubject[q.subject]) quizBySubject[q.subject] = [];
+      quizBySubject[q.subject].push(q.score);
+    });
+
+    const weakQuizSubjects = Object.entries(quizBySubject)
+      .map(([subject, scores]) => ({
+        subject,
+        avg: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+        attempts: scores.length,
+      }))
+      .filter((s) => s.avg < 60)
+      .sort((a, b) => a.avg - b.avg)
+      .slice(0, 3);
+
+    // ── 8. Weeks to readiness estimate ───────────────
+    // Based on current velocity and gap to next threshold
+    // Thresholds: phone_screen=55, technical_screen=65, onsite=75
+    const THRESHOLDS = {
+      phone_screen: 55,
+      technical_screen: 65,
+      onsite: 75,
+      faang: 85,
+    };
+
+    // Each week of practice at current velocity contributes ~1.5 points
+    // to overall (empirical estimate based on 6D formula weights)
+    const pointsPerWeek = Math.max(avgWeeklyVelocity * 1.5, 0.5);
+
+    const weeksToThresholds = {};
+    Object.entries(THRESHOLDS).forEach(([tier, threshold]) => {
+      const gap = threshold - Math.min(overall, 100);
+      weeksToThresholds[tier] = gap <= 0 ? 0 : Math.ceil(gap / pointsPerWeek);
+    });
+
+    // ── Finalize dimensions ───────────────────────────
+    const dimensions = {
+      patternRecognition: Math.min(d1, 100),
+      solutionDepth: Math.min(d2, 100),
+      communication: Math.min(d3, 100),
+      optimization: Math.min(d4, 100),
+      pressurePerformance: Math.min(d5, 100),
+      retention: Math.min(d6, 100),
+    };
 
     return success(res, {
       report: {
-        dimensions: {
-          patternRecognition: Math.min(d1, 100),
-          solutionDepth: Math.min(d2, 100),
-          communication: Math.min(d3, 100),
-          optimization: Math.min(d4, 100),
-          pressurePerformance: Math.min(d5, 100),
-          retention: Math.min(d6, 100),
-        },
+        dimensions,
         overall: Math.min(overall, 100),
         totalSolutions,
         quizCount,
         interviewCount: interviews.length,
         simCount: sims.length,
-        // Surface proxy flag to client so UI can show appropriate context
         communicationFromProxy,
+        // Analytics layer — used by coaching sections
+        analytics: {
+          weeklyVelocity: {
+            avg: Math.round(avgWeeklyVelocity * 10) / 10,
+            weekly: weeklyBuckets, // [week4ago, week3ago, week2ago, thisWeek]
+          },
+          patternCoverage: {
+            used: usedPatterns.size,
+            total: CANONICAL_PATTERNS.length,
+            missing: missingPatterns,
+          },
+          aiReview: {
+            avgScore: avgAiScore,
+            trend: aiScoreTrend,
+            recentScores: recentAiScores,
+          },
+          overdueReviews,
+          confidenceTrend,
+          optimizationRate: bothApproachesRate,
+          weakQuizSubjects,
+          weeksToThresholds,
+          pointsPerWeek: Math.round(pointsPerWeek * 10) / 10,
+        },
       },
     });
   } catch (err) {
