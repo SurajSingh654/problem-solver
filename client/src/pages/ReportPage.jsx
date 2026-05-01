@@ -821,7 +821,7 @@ function ActivitySummary({ report, analytics }) {
                       'w-full rounded-sm transition-all',
                       isThisWeek ? 'bg-brand-400' : 'bg-surface-3'
                     )}
-                    style={{ height: `${heightPct}%` }}
+                    style={{ height: `${heightPct}%`, minHeight: '3px' }}
                   />
                   <span className="text-[9px] text-text-disabled font-mono">
                     {count}
