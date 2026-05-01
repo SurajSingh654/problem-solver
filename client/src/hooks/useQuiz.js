@@ -28,9 +28,22 @@ export function useSubmitQuiz() {
   });
 }
 
-// Polls GET /:quizId every 3 seconds until aiAnalysis is populated.
-// The 'enabled' prop is controlled by the consumer to stop polling.
-// Consumer should disable after a timeout to prevent infinite polling.
+// Creates a fresh attempt with the same questions as a completed quiz.
+// Used for "Retry Quiz" — completely fresh slate, no pre-filled answers.
+export function useRetryQuiz() {
+  const queryClient = useQueryClient();
+  const { teamQueryKey } = useTeamContext();
+  return useMutation({
+    mutationFn: (quizId) => api.post(`/quizzes/${quizId}/retry`),
+    onSuccess: () => {
+      // Invalidate history so retry appears in the list
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "quiz-history"],
+      });
+    },
+  });
+}
+
 export function useQuizAnalysis(quizId, enabled = true) {
   return useQuery({
     queryKey: ["quiz-analysis", quizId],
@@ -40,9 +53,7 @@ export function useQuizAnalysis(quizId, enabled = true) {
     },
     enabled: !!quizId && enabled,
     refetchInterval: (data) => {
-      // Stop polling once analysis is present
       if (data?.aiAnalysis) return false;
-      // Poll every 3 seconds
       return 3000;
     },
     retry: false,

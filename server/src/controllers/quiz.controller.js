@@ -21,19 +21,13 @@ export async function generateQuiz(req, res) {
     const count = Math.min(countRaw || questionCount || 10, 20);
 
     // ── Stage 1: Gather past-attempt intelligence ──────
-    // Fetch last 5 COMPLETED attempts on this subject for this user.
-    // Only completed attempts have graded answers we can analyze.
     let pastIntelligence = null;
     try {
       const pastAttempts = await prisma.quizAttempt.findMany({
         where: {
           userId,
-          subject: {
-            // Case-insensitive match — "data structures" == "Data Structures"
-            contains: subject.trim(),
-            mode: "insensitive",
-          },
-          answers: { not: null }, // Only completed quizzes
+          subject: { contains: subject.trim(), mode: "insensitive" },
+          answers: { not: null },
         },
         select: {
           id: true,
@@ -48,9 +42,7 @@ export async function generateQuiz(req, res) {
       });
 
       if (pastAttempts.length > 0) {
-        // ── Extract questions already asked ──────────────
-        // Collect all question texts across all past attempts.
-        // Deduplicated so the same question doesn't appear multiple times.
+        // Extract questions already asked
         const askedQuestionsSet = new Set();
         pastAttempts.forEach((attempt) => {
           const qs = attempt.questions;
@@ -62,9 +54,7 @@ export async function generateQuiz(req, res) {
         });
         const askedQuestions = [...askedQuestionsSet];
 
-        // ── Identify persistent weak areas ───────────────
-        // A question is "persistently weak" if the user got it wrong
-        // in 2 or more separate attempts.
+        // Identify persistent weak areas
         const wrongCounts = {};
         pastAttempts.forEach((attempt) => {
           const ans = attempt.answers;
@@ -80,27 +70,35 @@ export async function generateQuiz(req, res) {
         const persistentlyWeak = Object.entries(wrongCounts)
           .filter(([, count]) => count >= 2)
           .map(([question]) => question)
-          .slice(0, 5); // Top 5 most frequently wrong
+          .slice(0, 5);
 
-        // ── Compute score trend ───────────────────────────
+        // Compute score trend
         const scores = pastAttempts
           .map((a) => a.score)
           .filter((s) => s !== null)
-          .reverse(); // Oldest first for trend direction
-
+          .reverse();
         const avgScore =
           scores.length > 0
             ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
             : null;
-
         const improving =
           scores.length >= 2 ? scores[scores.length - 1] > scores[0] : null;
 
-        // ── Collect weak topics from AI analysis ─────────
+        // Collect weak topics from AI analysis
         const allWeakTopics = new Set();
         pastAttempts.forEach((attempt) => {
           if (attempt.aiAnalysis?.weakTopics) {
             attempt.aiAnalysis.weakTopics.forEach((t) => allWeakTopics.add(t));
+          }
+        });
+
+        // ── Collect past user feedback ────────────────
+        // Read userFeedback saved by saveQuizFeedback endpoint
+        // so AI can adjust question style based on what the user asked for
+        const userFeedbacks = [];
+        pastAttempts.forEach((attempt) => {
+          if (attempt.aiAnalysis?.userFeedback) {
+            userFeedbacks.push(attempt.aiAnalysis.userFeedback);
           }
         });
 
@@ -112,10 +110,10 @@ export async function generateQuiz(req, res) {
           askedQuestions,
           persistentlyWeak,
           weakTopics: [...allWeakTopics],
+          userFeedbacks, // ← new
         };
       }
     } catch (err) {
-      // Non-fatal — continue with standard generation if intelligence fails
       console.error("Past intelligence gathering failed:", err.message);
     }
 
@@ -123,18 +121,15 @@ export async function generateQuiz(req, res) {
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
-    // Build the deduplication instruction
     let deduplicationInstruction = "";
     if (pastIntelligence && pastIntelligence.askedQuestions.length > 0) {
       const sampleAsked = pastIntelligence.askedQuestions.slice(0, 30);
       deduplicationInstruction = `
 QUESTIONS ALREADY ASKED — do not repeat these or ask questions that test the same concept from the same angle:
 ${sampleAsked.map((q, i) => `${i + 1}. ${q}`).join("\n")}
-
 Generate questions that cover DIFFERENT concepts or test the SAME concepts from completely different angles.`;
     }
 
-    // Build the weakness targeting instruction
     let weaknessInstruction = "";
     if (
       pastIntelligence &&
@@ -145,7 +140,6 @@ Generate questions that cover DIFFERENT concepts or test the SAME concepts from 
         ...pastIntelligence.persistentlyWeak.slice(0, 3),
         ...pastIntelligence.weakTopics.slice(0, 3),
       ].slice(0, 4);
-
       if (weakAreas.length > 0) {
         weaknessInstruction = `
 WEAK AREAS TO TARGET — the user has struggled with these concepts. Include ${Math.min(Math.ceil(count * 0.4), 4)} questions that probe these areas from fresh angles:
@@ -154,7 +148,6 @@ Do NOT reuse the exact same question text — test the same concept differently.
       }
     }
 
-    // Build the progression instruction
     let progressionInstruction = "";
     if (pastIntelligence) {
       if (
@@ -175,6 +168,18 @@ Do NOT reuse the exact same question text — test the same concept differently.
       }
     }
 
+    // ── Feedback instruction — closes the loop ─────────
+    // If user gave feedback on previous quizzes, adjust question style
+    let feedbackInstruction = "";
+    if (pastIntelligence?.userFeedbacks?.length > 0) {
+      feedbackInstruction = `
+USER FEEDBACK FROM PREVIOUS QUIZZES — adjust your question style accordingly:
+${pastIntelligence.userFeedbacks
+  .slice(0, 3)
+  .map((f, i) => `${i + 1}. ${f}`)
+  .join("\n")}`;
+    }
+
     const systemPrompt = `You are an expert quiz generator for interview preparation.
 Generate exactly ${count} multiple-choice questions on the given subject.
 Each question must have exactly 4 options labeled A, B, C, D.
@@ -184,6 +189,7 @@ Make ALL four options plausible — wrong options should represent common miscon
 ${deduplicationInstruction}
 ${weaknessInstruction}
 ${progressionInstruction}
+${feedbackInstruction}
 Return JSON:
 {
   "questions": [
@@ -231,7 +237,6 @@ Return JSON:
       );
     }
 
-    // Create quiz attempt record
     const quiz = await prisma.quizAttempt.create({
       data: {
         userId,
@@ -249,7 +254,6 @@ Return JSON:
       },
     });
 
-    // Strip correct answers and explanations before sending to client
     const clientQuestions = questions.map((q) => ({
       id: q.id,
       question: q.question,
@@ -266,7 +270,6 @@ Return JSON:
           difficulty: quiz.difficulty,
           questionCount: clientQuestions.length,
           questions: clientQuestions,
-          // Send back intelligence summary for client display
           pastAttempts: pastIntelligence
             ? {
                 count: pastIntelligence.attemptCount,
@@ -462,6 +465,75 @@ export async function getQuiz(req, res) {
   } catch (err) {
     console.error("Get quiz error:", err);
     return error(res, "Failed to fetch quiz.", 500);
+  }
+}
+
+// ============================================================================
+// RETRY QUIZ — create new attempt with same questions
+// ============================================================================
+export async function retryQuiz(req, res) {
+  try {
+    const { quizId } = req.params;
+    const userId = req.user.id;
+    const teamId = req.teamId || null;
+
+    const original = await prisma.quizAttempt.findFirst({
+      where: { id: quizId, userId },
+      select: {
+        id: true,
+        subject: true,
+        difficulty: true,
+        questions: true,
+      },
+    });
+
+    if (!original) return error(res, "Quiz not found.", 404);
+    if (!original.questions || !Array.isArray(original.questions)) {
+      return error(res, "Original quiz has no questions to retry.", 400);
+    }
+
+    const newQuiz = await prisma.quizAttempt.create({
+      data: {
+        userId,
+        teamId,
+        subject: original.subject,
+        difficulty: original.difficulty,
+        questions: original.questions,
+      },
+      select: {
+        id: true,
+        subject: true,
+        difficulty: true,
+        questions: true,
+        createdAt: true,
+      },
+    });
+
+    // Strip correct answers before sending to client
+    const clientQuestions = original.questions.map((q) => ({
+      id: q.id,
+      question: q.question,
+      options: q.options,
+      difficulty: q.difficulty,
+    }));
+
+    return success(
+      res,
+      {
+        quiz: {
+          id: newQuiz.id,
+          subject: newQuiz.subject,
+          difficulty: newQuiz.difficulty,
+          questionCount: clientQuestions.length,
+          questions: clientQuestions,
+          isRetry: true,
+        },
+      },
+      201,
+    );
+  } catch (err) {
+    console.error("Retry quiz error:", err);
+    return error(res, "Failed to create retry quiz.", 500);
   }
 }
 

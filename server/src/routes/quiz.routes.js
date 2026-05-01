@@ -4,6 +4,7 @@ import { optionalTeamContext } from "../middleware/team.middleware.js";
 import {
   generateQuiz,
   submitQuizAnswers,
+  retryQuiz,
   saveQuizFeedback,
   getQuizHistory,
   getQuiz,
@@ -17,6 +18,7 @@ router.post("/generate", generateQuiz);
 router.get("/history", getQuizHistory);
 
 // Parameterized routes last
+router.post("/:quizId/retry", retryQuiz);
 router.post("/:quizId/submit", submitQuizAnswers);
 router.post("/:quizId/feedback", saveQuizFeedback);
 router.get("/:quizId", getQuiz);

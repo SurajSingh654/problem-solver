@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     useGenerateQuiz, useSubmitQuiz, useQuizHistory,
-    useQuizAnalysis, useSaveQuizFeedback,
+    useQuizAnalysis, useSaveQuizFeedback, useRetryQuiz,
 } from '@hooks/useQuiz'
 import { useAIStatus } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
@@ -146,7 +146,7 @@ function QuizTimer({ totalSecs, running, onTimeUp }) {
 // ══════════════════════════════════════════════════════
 // SCREEN 1 — Setup
 // ══════════════════════════════════════════════════════
-function SetupScreen({ onStart }) {
+function SetupScreen({ onStart, onRetry }) {
     const [subject, setSubject] = useState('')
     const [difficulty, setDifficulty] = useState('MEDIUM')
     const [count, setCount] = useState(10)
@@ -166,7 +166,6 @@ function SetupScreen({ onStart }) {
             .map(a => ({ subject: a.subject, bestScore: a.score, difficulty: a.difficulty }))
     }, [pastQuizzes])
 
-    // Subject performance context — shows inline when subject matches history
     const subjectHistory = useMemo(() => {
         if (!subject.trim() || !pastQuizzes.length) return null
         const matching = pastQuizzes.filter(q =>
@@ -177,9 +176,6 @@ function SetupScreen({ onStart }) {
         const scores = matching.map(q => q.score).filter(s => s !== null)
         const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
         const best = Math.max(...scores)
-        // History is desc order (newest first)
-        // scores[0] = latest, scores[last] = oldest
-        // improving = latest score > oldest score
         const trendDirection = scores.length >= 2
             ? scores[0] > scores[scores.length - 1] ? 'improving'
                 : scores[0] < scores[scores.length - 1] ? 'declining'
@@ -265,7 +261,6 @@ function SetupScreen({ onStart }) {
                         onKeyDown={e => { if (e.key === 'Enter' && subject.trim()) handleGenerate() }}
                     />
 
-                    {/* Subject performance context */}
                     <AnimatePresence>
                         {subjectHistory && (
                             <motion.div
@@ -514,27 +509,53 @@ function SetupScreen({ onStart }) {
                     </div>
                 </motion.div>
             )}
-            <QuizHistory />
+
+            {/* Redesigned Past Quizzes */}
+            <QuizHistory onRetry={onRetry} onPracticeAgain={(subject, difficulty) => {
+                setSubject(subject)
+                setDifficulty(difficulty)
+                // Scroll to top of form
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+            }} />
         </div>
     )
 }
 
-// ── Quiz history ───────────────────────────────────────
-function QuizHistory() {
+// ══════════════════════════════════════════════════════
+// PAST QUIZZES — Redesigned as subject-grouped cards
+// ══════════════════════════════════════════════════════
+function QuizHistory({ onRetry, onPracticeAgain }) {
     const { data: historyData, isLoading } = useQuizHistory()
     const quizzes = historyData?.quizzes || []
 
-    // All hooks must be called before any conditional return
-    const bySubject = useMemo(() => {
+    // Group by subject — all hooks before early return
+    const subjectGroups = useMemo(() => {
+        if (!quizzes.length) return []
         const groups = {}
         quizzes.forEach(q => {
-            if (!groups[q.subject]) groups[q.subject] = []
-            groups[q.subject].push(q)
+            if (!groups[q.subject]) {
+                groups[q.subject] = {
+                    subject: q.subject,
+                    attempts: [],
+                    latestDifficulty: q.difficulty,
+                    latestId: q.id,
+                }
+            }
+            groups[q.subject].attempts.push(q)
         })
-        return groups
+        // Sort each group by date desc (already should be, but ensure it)
+        Object.values(groups).forEach(g => {
+            g.attempts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            g.latestId = g.attempts[0].id
+            g.latestDifficulty = g.attempts[0].difficulty
+        })
+        // Sort groups by most recently attempted
+        return Object.values(groups)
+            .sort((a, b) => new Date(b.attempts[0].createdAt) - new Date(a.attempts[0].createdAt))
+            .slice(0, 6) // Show top 6 subjects
     }, [quizzes])
 
-    if (isLoading || !quizzes.length) return null
+    if (isLoading || !subjectGroups.length) return null
 
     return (
         <motion.div
@@ -544,60 +565,161 @@ function QuizHistory() {
             className="mt-6"
         >
             <h2 className="text-sm font-bold text-text-primary mb-3 flex items-center gap-2">
-                <span>📊</span> Past Quizzes
+                <span>📊</span> Your Progress by Subject
             </h2>
-            <div className="space-y-2">
-                {quizzes.slice(0, 8).map((a, i) => {
-                    const subjectAttempts = bySubject[a.subject] || []
-                    const subjectIdx = subjectAttempts.findIndex(q => q.id === a.id)
-                    const prevAttempt = subjectAttempts[subjectIdx + 1]
-                    const scoreDiff = prevAttempt && a.score !== null && prevAttempt.score !== null
-                        ? a.score - prevAttempt.score
+            <div className="space-y-3">
+                {subjectGroups.map((group, i) => {
+                    const scores = group.attempts
+                        .map(a => a.score)
+                        .filter(s => s !== null)
+                    const avg = scores.length > 0
+                        ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
                         : null
+                    const latest = scores[0] ?? null // newest first
+                    const best = scores.length > 0 ? Math.max(...scores) : null
+
+                    // Trend: compare latest to oldest available score
+                    const trend = scores.length >= 2
+                        ? scores[0] > scores[scores.length - 1] ? 'up'
+                            : scores[0] < scores[scores.length - 1] ? 'down'
+                                : 'flat'
+                        : null
+
+                    // Mastery label
+                    const masteryLabel = avg === null ? null
+                        : avg >= 80 ? { label: 'Strong', color: 'text-success bg-success/10 border-success/20' }
+                            : avg >= 60 ? { label: 'Developing', color: 'text-warning bg-warning/10 border-warning/20' }
+                                : { label: 'Needs work', color: 'text-danger bg-danger/10 border-danger/20' }
+
+                    // Last 5 scores for mini sparkline — oldest to newest for left-to-right reading
+                    const sparkScores = [...scores].reverse().slice(-5)
+
                     return (
                         <motion.div
-                            key={a.id}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.03 }}
-                            className="flex items-center gap-3 p-3 rounded-xl border
-                       bg-surface-1 border-border-default"
+                            key={group.subject}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.04 }}
+                            className="bg-surface-1 border border-border-default rounded-2xl p-4"
                         >
-                            <div className={cn(
-                                'w-10 h-10 rounded-xl flex items-center justify-center',
-                                'text-sm font-extrabold font-mono flex-shrink-0',
-                                a.score >= 80 ? 'bg-success/12 text-success' :
-                                    a.score >= 60 ? 'bg-warning/12 text-warning' :
-                                        'bg-danger/12 text-danger'
-                            )}>
-                                {a.score}%
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-text-primary truncate">
-                                    {a.subject}
-                                </p>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <Badge
-                                        variant={a.difficulty === 'EASY' ? 'easy' : a.difficulty === 'HARD' ? 'hard' : 'medium'}
-                                        size="xs"
-                                    >
-                                        {a.difficulty}
-                                    </Badge>
-                                    <span className="text-[11px] text-text-disabled">
-                                        {formatRelativeDate(a.completedAt)}
-                                    </span>
+                            {/* Header row */}
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="text-sm font-bold text-text-primary truncate">
+                                            {group.subject}
+                                        </h3>
+                                        {masteryLabel && (
+                                            <span className={cn(
+                                                'text-[9px] font-bold px-1.5 py-px rounded-full border',
+                                                masteryLabel.color
+                                            )}>
+                                                {masteryLabel.label}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] text-text-disabled mt-0.5">
+                                        {group.attempts.length} attempt{group.attempts.length !== 1 ? 's' : ''}
+                                        {group.attempts[0]?.completedAt && ` · last ${formatRelativeDate(group.attempts[0].completedAt)}`}
+                                    </p>
+                                </div>
+                                {/* Score stats */}
+                                <div className="flex items-center gap-4 flex-shrink-0">
+                                    {latest !== null && (
+                                        <div className="text-center">
+                                            <div className={cn(
+                                                'text-base font-extrabold font-mono',
+                                                latest >= 70 ? 'text-success' :
+                                                    latest >= 50 ? 'text-warning' : 'text-danger'
+                                            )}>
+                                                {latest}%
+                                            </div>
+                                            <div className="text-[9px] text-text-disabled">latest</div>
+                                        </div>
+                                    )}
+                                    {best !== null && best !== latest && (
+                                        <div className="text-center">
+                                            <div className="text-base font-extrabold font-mono text-brand-300">
+                                                {best}%
+                                            </div>
+                                            <div className="text-[9px] text-text-disabled">best</div>
+                                        </div>
+                                    )}
+                                    {trend && (
+                                        <span className={cn(
+                                            'text-xs font-bold',
+                                            trend === 'up' ? 'text-success' :
+                                                trend === 'down' ? 'text-danger' : 'text-text-disabled'
+                                        )}>
+                                            {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
-                            {scoreDiff !== null && (
-                                <span className={cn(
-                                    'text-[10px] font-bold px-1.5 py-px rounded-full flex-shrink-0',
-                                    scoreDiff > 0 ? 'bg-success/12 text-success' :
-                                        scoreDiff < 0 ? 'bg-danger/12 text-danger' :
-                                            'bg-surface-3 text-text-disabled'
-                                )}>
-                                    {scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff}%
-                                </span>
+
+                            {/* Score sparkline — last 5 attempts as bar chart */}
+                            {sparkScores.length > 1 && (
+                                <div className="flex items-end gap-1 h-8 mb-3">
+                                    {sparkScores.map((s, si) => {
+                                        const heightPct = Math.max((s / 100) * 100, 8)
+                                        const isLatest = si === sparkScores.length - 1
+                                        return (
+                                            <div
+                                                key={si}
+                                                className="flex-1 rounded-sm relative group"
+                                                style={{
+                                                    height: `${heightPct}%`,
+                                                    backgroundColor: isLatest
+                                                        ? s >= 70 ? 'rgb(34 197 94 / 0.6)' : s >= 50 ? 'rgb(234 179 8 / 0.6)' : 'rgb(239 68 68 / 0.6)'
+                                                        : 'rgb(255 255 255 / 0.08)',
+                                                }}
+                                            >
+                                                <div className="absolute -top-5 left-1/2 -translate-x-1/2
+                                                               text-[9px] font-bold text-text-disabled
+                                                               opacity-0 group-hover:opacity-100 transition-opacity
+                                                               whitespace-nowrap">
+                                                    {s}%
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
                             )}
+
+                            {/* Action buttons */}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => onPracticeAgain(group.subject, group.latestDifficulty)}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2
+                                               rounded-xl border border-border-default bg-surface-2
+                                               text-xs font-semibold text-text-secondary
+                                               hover:border-brand-400/30 hover:text-brand-300 transition-all"
+                                >
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2.5"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                                        <path d="M2 17l10 5 10-5" />
+                                        <path d="M2 12l10 5 10-5" />
+                                    </svg>
+                                    New Questions
+                                </button>
+                                <button
+                                    onClick={() => onRetry(group.latestId)}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2
+                                               rounded-xl border border-border-default bg-surface-2
+                                               text-xs font-semibold text-text-secondary
+                                               hover:border-warning/30 hover:text-warning transition-all"
+                                >
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2.5"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="1 4 1 10 7 10" />
+                                        <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
+                                    </svg>
+                                    Retry Last
+                                </button>
+                            </div>
                         </motion.div>
                     )
                 })}
@@ -622,6 +744,33 @@ function ActiveQuizScreen({ quizData, onComplete }) {
     const answered = Object.keys(answers).length
     const progress = (answered / total) * 100
 
+    // ── Progress persistence in localStorage ──────────
+    // Save answers on every change — restore on mount if quizId matches
+    const storageKey = `ps_quiz_${quizData.id}`
+
+    useEffect(() => {
+        // Restore saved progress on mount
+        try {
+            const saved = localStorage.getItem(storageKey)
+            if (saved) {
+                const { answers: savedAnswers, currentQ: savedQ } = JSON.parse(saved)
+                if (savedAnswers && typeof savedAnswers === 'object') {
+                    setAnswers(savedAnswers)
+                }
+                if (typeof savedQ === 'number') {
+                    setCurrentQ(Math.max(0, Math.min(total - 1, savedQ)))
+                }
+            }
+        } catch { /* ignore malformed localStorage */ }
+    }, []) // Only on mount — storageKey and total are stable
+
+    useEffect(() => {
+        // Save progress on every answer change
+        try {
+            localStorage.setItem(storageKey, JSON.stringify({ answers, currentQ }))
+        } catch { /* ignore storage errors */ }
+    }, [answers, currentQ, storageKey])
+
     function handleSelect(optionLetter) {
         setAnswers(prev => ({ ...prev, [currentQ]: optionLetter }))
     }
@@ -632,6 +781,9 @@ function ActiveQuizScreen({ quizData, onComplete }) {
     }
 
     function handleSubmit() {
+        // Clear saved progress on submit — quiz is done
+        try { localStorage.removeItem(storageKey) } catch { }
+
         const timeUsed = Math.round((Date.now() - startTime) / 1000)
         const answersById = {}
         questions.forEach((q, i) => {
@@ -692,6 +844,12 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                     <span className="text-xs font-semibold text-text-tertiary">
                         {quizData.subject}
                     </span>
+                    {quizData.isRetry && (
+                        <span className="ml-2 text-[10px] font-bold text-warning bg-warning/10
+                                         border border-warning/20 rounded-full px-1.5 py-px">
+                            Retry
+                        </span>
+                    )}
                     <span className="text-xs text-text-disabled mx-2">·</span>
                     <span className="text-xs text-text-disabled">
                         {answered}/{total} answered
@@ -857,12 +1015,10 @@ function ActiveQuizScreen({ quizData, onComplete }) {
 // ══════════════════════════════════════════════════════
 // SCREEN 3 — Results
 // ══════════════════════════════════════════════════════
-function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz }) {
+function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, onRetry }) {
     const navigate = useNavigate()
     const saveQuizFeedback = useSaveQuizFeedback()
 
-    // Control polling via enabled flag — disable after 30 seconds
-    // This is the reliable way to cap polling in TanStack Query v5
     const [pollingEnabled, setPollingEnabled] = useState(true)
 
     useEffect(() => {
@@ -874,13 +1030,10 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
     const { data: quizRecord } = useQuizAnalysis(quizId, pollingEnabled)
     const analysis = quizRecord?.aiAnalysis || null
 
-    // Stop polling early once analysis is ready
     useEffect(() => {
         if (analysis) setPollingEnabled(false)
     }, [analysis])
 
-    // True when: quiz record loaded, polling stopped, but still no analysis
-    // This means the background AI job either failed or took too long
     const analysisUnavailable = !pollingEnabled && !analysis
 
     const [flagged, setFlagged] = useState({})
@@ -932,6 +1085,12 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                 <h1 className="text-2xl font-extrabold text-text-primary mb-1">{label}</h1>
                 <p className="text-sm text-text-tertiary">
                     {quizData.subject} · {quizData.difficulty}
+                    {quizData.isRetry && (
+                        <span className="ml-2 text-[10px] font-bold text-warning bg-warning/10
+                                         border border-warning/20 rounded-full px-1.5 py-px">
+                            Retry attempt
+                        </span>
+                    )}
                 </p>
             </motion.div>
 
@@ -992,7 +1151,6 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                             Personalized study advice based on your mistakes
                         </p>
                     </div>
-                    {/* Spinner only shows while actively polling */}
                     {pollingEnabled && !analysis && (
                         <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full border-2 border-brand-400
@@ -1040,12 +1198,10 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                         )}
                     </div>
                 ) : analysisUnavailable ? (
-                    // Polling stopped without analysis — background job failed or timed out
                     <p className="text-xs text-text-disabled">
                         Analysis not available for this attempt.
                     </p>
                 ) : (
-                    // Still polling
                     <p className="text-xs text-text-disabled">
                         Analysis typically ready within a few seconds...
                     </p>
@@ -1221,17 +1377,30 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
 
             {/* Actions */}
             <div className="flex gap-3 flex-wrap">
+                {/* Retry only shown when score < 100% — no point retrying perfect */}
+                {pct < 100 && quizId && (
+                    <Button variant="secondary" size="md" onClick={() => onRetry(quizId)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="1 4 1 10 7 10" />
+                            <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
+                        </svg>
+                        Retry Same Quiz
+                    </Button>
+                )}
                 <Button variant="primary" size="md" onClick={onNewQuiz}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" strokeWidth="2"
                         strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="1 4 1 10 7 10" />
-                        <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                        <path d="M2 17l10 5 10-5" />
+                        <path d="M2 12l10 5 10-5" />
                     </svg>
-                    Take Another Quiz
+                    New Questions
                 </Button>
                 <Button variant="ghost" size="md" onClick={() => navigate('/')}>
-                    Back to Dashboard
+                    Dashboard
                 </Button>
             </div>
         </div>
@@ -1247,11 +1416,29 @@ export default function QuizPage() {
     const [gradedAnswers, setGradedAnswers] = useState([])
     const [timeUsed, setTimeUsed] = useState(0)
     const [quizId, setQuizId] = useState(null)
+
     const submitQuiz = useSubmitQuiz()
+    const retryQuiz = useRetryQuiz()
 
     function handleStart(data) {
         setQuizData(data)
         setScreen('active')
+    }
+
+    // Called from ResultsScreen or QuizHistory — retries an existing quiz
+    async function handleRetry(originalQuizId) {
+        try {
+            const res = await retryQuiz.mutateAsync(originalQuizId)
+            const retryData = res.data.data.quiz
+            setQuizData({
+                ...retryData,
+                timerSecs: null, // No timer on retry — user sets their own pace
+            })
+            setGradedAnswers([])
+            setTimeUsed(0)
+            setQuizId(null)
+            setScreen('active')
+        } catch { }
     }
 
     async function handleComplete(result) {
@@ -1285,7 +1472,7 @@ export default function QuizPage() {
             {screen === 'setup' && (
                 <motion.div key="setup"
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <SetupScreen onStart={handleStart} />
+                    <SetupScreen onStart={handleStart} onRetry={handleRetry} />
                 </motion.div>
             )}
             {screen === 'active' && quizData && (
@@ -1303,6 +1490,7 @@ export default function QuizPage() {
                         timeUsed={timeUsed}
                         quizId={quizId}
                         onNewQuiz={handleNewQuiz}
+                        onRetry={handleRetry}
                     />
                 </motion.div>
             )}
