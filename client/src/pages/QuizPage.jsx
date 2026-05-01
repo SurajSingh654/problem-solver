@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -8,7 +8,6 @@ import {
 import { useAIStatus } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
-import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import { QUIZ_SUGGESTED_SUBJECTS } from '@utils/constants'
@@ -167,9 +166,7 @@ function SetupScreen({ onStart }) {
             .map(a => ({ subject: a.subject, bestScore: a.score, difficulty: a.difficulty }))
     }, [pastQuizzes])
 
-    // ── Subject performance context ────────────────────
-    // Shows past performance inline when subject matches history
-    // Helps user calibrate difficulty before generating
+    // Subject performance context — shows inline when subject matches history
     const subjectHistory = useMemo(() => {
         if (!subject.trim() || !pastQuizzes.length) return null
         const matching = pastQuizzes.filter(q =>
@@ -180,19 +177,15 @@ function SetupScreen({ onStart }) {
         const scores = matching.map(q => q.score).filter(s => s !== null)
         const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
         const best = Math.max(...scores)
-        const trend = scores.length >= 2
-            ? scores[0] > scores[scores.length - 1] ? 'declining' // newest is scores[0] (desc order)
-                : scores[0] > scores[scores.length - 1] ? 'declining'
-                    : scores[0] < scores[scores.length - 1] ? 'improving'  // wait, desc order means scores[0] is latest
-                        : 'stable'
-            : null
-        // History is desc order (newest first), so scores[0] = latest, scores[last] = oldest
+        // History is desc order (newest first)
+        // scores[0] = latest, scores[last] = oldest
+        // improving = latest score > oldest score
         const trendDirection = scores.length >= 2
             ? scores[0] > scores[scores.length - 1] ? 'improving'
                 : scores[0] < scores[scores.length - 1] ? 'declining'
                     : 'stable'
             : null
-        return { count: matching.length, avg, best, trend: trendDirection, scores }
+        return { count: matching.length, avg, best, trend: trendDirection }
     }, [subject, pastQuizzes])
 
     async function handleGenerate() {
@@ -272,7 +265,7 @@ function SetupScreen({ onStart }) {
                         onKeyDown={e => { if (e.key === 'Enter' && subject.trim()) handleGenerate() }}
                     />
 
-                    {/* Subject performance context — shows inline when subject matches history */}
+                    {/* Subject performance context */}
                     <AnimatePresence>
                         {subjectHistory && (
                             <motion.div
@@ -283,11 +276,9 @@ function SetupScreen({ onStart }) {
                             >
                                 <div className="mt-2 p-3 rounded-xl bg-surface-2 border border-border-default
                                                flex items-center gap-4 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-text-disabled uppercase tracking-widest">
-                                            {subjectHistory.count} past attempt{subjectHistory.count !== 1 ? 's' : ''}
-                                        </span>
-                                    </div>
+                                    <span className="text-[10px] text-text-disabled uppercase tracking-widest">
+                                        {subjectHistory.count} past attempt{subjectHistory.count !== 1 ? 's' : ''}
+                                    </span>
                                     <div className="flex items-center gap-3">
                                         <div className="text-center">
                                             <span className={cn(
@@ -469,7 +460,7 @@ function SetupScreen({ onStart }) {
                 >
                     {generateQuiz.isPending ? (
                         subjectHistory
-                            ? `Generating new questions (avoiding ${subjectHistory.count > 0 ? 'repeats, targeting weak areas' : 'basics'})...`
+                            ? 'Generating new questions (avoiding repeats, targeting weak areas)...'
                             : 'AI is generating questions...'
                     ) : (
                         <>
@@ -533,7 +524,7 @@ function QuizHistory() {
     const { data: historyData, isLoading } = useQuizHistory()
     const quizzes = historyData?.quizzes || []
 
-    // useMemo must be called before any conditional return
+    // All hooks must be called before any conditional return
     const bySubject = useMemo(() => {
         const groups = {}
         quizzes.forEach(q => {
@@ -543,7 +534,7 @@ function QuizHistory() {
         return groups
     }, [quizzes])
 
-    if (isLoading || !quizzes.length) return null  // early return AFTER all hooks
+    if (isLoading || !quizzes.length) return null
 
     return (
         <motion.div
@@ -557,14 +548,12 @@ function QuizHistory() {
             </h2>
             <div className="space-y-2">
                 {quizzes.slice(0, 8).map((a, i) => {
-                    // Show trend indicator if multiple attempts on same subject
                     const subjectAttempts = bySubject[a.subject] || []
                     const subjectIdx = subjectAttempts.findIndex(q => q.id === a.id)
-                    const prevAttempt = subjectAttempts[subjectIdx + 1] // older attempt
+                    const prevAttempt = subjectAttempts[subjectIdx + 1]
                     const scoreDiff = prevAttempt && a.score !== null && prevAttempt.score !== null
                         ? a.score - prevAttempt.score
                         : null
-
                     return (
                         <motion.div
                             key={a.id}
@@ -599,7 +588,6 @@ function QuizHistory() {
                                     </span>
                                 </div>
                             </div>
-                            {/* Trend indicator vs previous attempt on same subject */}
                             {scoreDiff !== null && (
                                 <span className={cn(
                                     'text-[10px] font-bold px-1.5 py-px rounded-full flex-shrink-0',
@@ -659,32 +647,22 @@ function ActiveQuizScreen({ quizData, onComplete }) {
         handleSubmit()
     }
 
-    // ── Keyboard navigation ────────────────────────────
-    // A/B/C/D — select option
-    // ArrowRight / Enter — next question (or submit on last)
-    // ArrowLeft — previous question
-    // 1/2/3/4 — also select option A/B/C/D
+    // Keyboard navigation
     useEffect(() => {
         function handleKeyDown(e) {
-            // Don't intercept if user is typing in scratchpad
             if (e.target.tagName === 'TEXTAREA') return
-
             const key = e.key.toUpperCase()
             const optionKeys = ['A', 'B', 'C', 'D']
-
             if (optionKeys.includes(key)) {
                 e.preventDefault()
                 handleSelect(key)
                 return
             }
-
-            // Number keys 1-4 map to A-D
             if (['1', '2', '3', '4'].includes(e.key)) {
                 e.preventDefault()
                 handleSelect(optionKeys[parseInt(e.key) - 1])
                 return
             }
-
             if (e.key === 'ArrowRight' || (e.key === 'Enter' && answers[currentQ] !== undefined)) {
                 e.preventDefault()
                 if (currentQ < total - 1) {
@@ -694,14 +672,12 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                 }
                 return
             }
-
             if (e.key === 'ArrowLeft') {
                 e.preventDefault()
                 goTo(currentQ - 1)
                 return
             }
         }
-
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [currentQ, total, answered, answers])
@@ -794,7 +770,6 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                             Q{currentQ + 1} of {total}
                         </span>
                     </div>
-                    {/* Keyboard hint */}
                     <span className="text-[10px] text-text-disabled hidden sm:block">
                         Press A·B·C·D or ←→ to navigate
                     </span>
@@ -886,10 +861,27 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
     const navigate = useNavigate()
     const saveQuizFeedback = useSaveQuizFeedback()
 
-    // Fixed: useQuizAnalysis now handles polling internally
-    // Returns quiz record — analysis is at quizRecord.aiAnalysis
-    const { data: quizRecord } = useQuizAnalysis(quizId)
+    // Control polling via enabled flag — disable after 30 seconds
+    // This is the reliable way to cap polling in TanStack Query v5
+    const [pollingEnabled, setPollingEnabled] = useState(true)
+
+    useEffect(() => {
+        if (!quizId) return
+        const timer = setTimeout(() => setPollingEnabled(false), 30000)
+        return () => clearTimeout(timer)
+    }, [quizId])
+
+    const { data: quizRecord } = useQuizAnalysis(quizId, pollingEnabled)
     const analysis = quizRecord?.aiAnalysis || null
+
+    // Stop polling early once analysis is ready
+    useEffect(() => {
+        if (analysis) setPollingEnabled(false)
+    }, [analysis])
+
+    // True when: quiz record loaded, polling stopped, but still no analysis
+    // This means the background AI job either failed or took too long
+    const analysisUnavailable = !pollingEnabled && !analysis
 
     const [flagged, setFlagged] = useState({})
     const [feedback, setFeedback] = useState('')
@@ -1000,7 +992,8 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                             Personalized study advice based on your mistakes
                         </p>
                     </div>
-                    {!analysis && (
+                    {/* Spinner only shows while actively polling */}
+                    {pollingEnabled && !analysis && (
                         <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full border-2 border-brand-400
                                 border-t-transparent animate-spin" />
@@ -1046,7 +1039,13 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                             </p>
                         )}
                     </div>
+                ) : analysisUnavailable ? (
+                    // Polling stopped without analysis — background job failed or timed out
+                    <p className="text-xs text-text-disabled">
+                        Analysis not available for this attempt.
+                    </p>
                 ) : (
+                    // Still polling
                     <p className="text-xs text-text-disabled">
                         Analysis typically ready within a few seconds...
                     </p>

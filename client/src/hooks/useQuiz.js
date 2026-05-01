@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@services/api";
 import { useTeamContext } from "./useTeamContext";
 
-// Bug 5 fix: add 60-second timeout to generation call
 const AI_TIMEOUT = { timeout: 60000 };
 
 export function useGenerateQuiz() {
@@ -29,32 +28,29 @@ export function useSubmitQuiz() {
   });
 }
 
-export function useQuizAnalysis(quizId) {
+// Polls GET /:quizId every 3 seconds until aiAnalysis is populated.
+// The 'enabled' prop is controlled by the consumer to stop polling.
+// Consumer should disable after a timeout to prevent infinite polling.
+export function useQuizAnalysis(quizId, enabled = true) {
   return useQuery({
     queryKey: ["quiz-analysis", quizId],
     queryFn: async () => {
       const res = await api.get(`/quizzes/${quizId}`);
       return res.data.data.quiz;
     },
-    enabled: !!quizId,
-    // v5 refetchInterval: receives the query data directly
-    // Return false to stop polling, number to continue
+    enabled: !!quizId && enabled,
     refetchInterval: (data) => {
-      // Stop if analysis is ready
+      // Stop polling once analysis is present
       if (data?.aiAnalysis) return false;
-      // Continue polling every 3 seconds
+      // Poll every 3 seconds
       return 3000;
     },
-    // Do not retry on error — stops polling immediately on any failure
     retry: false,
-    // Don't refetch when window regains focus — prevents extra calls
     refetchOnWindowFocus: false,
-    // Don't refetch on reconnect — analysis either exists or it doesn't
     refetchOnReconnect: false,
   });
 }
 
-// Bug 4 fix: dedicated hook to save feedback
 export function useSaveQuizFeedback() {
   return useMutation({
     mutationFn: ({ quizId, feedback, flaggedQuestions }) =>
