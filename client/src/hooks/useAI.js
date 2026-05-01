@@ -8,7 +8,6 @@ import { useTeamContext } from "./useTeamContext";
 export function useAIReview() {
   const queryClient = useQueryClient();
   const { teamQueryKey } = useTeamContext();
-
   return useMutation({
     mutationFn: (solutionId) => api.post(`/ai/review/${solutionId}`),
     onSuccess: () => {
@@ -50,7 +49,14 @@ export function useGenerateProblemsAI() {
   });
 }
 
-// Returns AI feature availability status
+// Active recall hints — called during review session after user reveals notes
+// Uses existing aiFeedback to generate targeted questions about weak areas
+export function useReviewHints() {
+  return useMutation({
+    mutationFn: (solutionId) => api.post(`/ai/review-hints/${solutionId}`),
+  });
+}
+
 export function useAIStatus() {
   return { data: { enabled: true }, isLoading: false };
 }

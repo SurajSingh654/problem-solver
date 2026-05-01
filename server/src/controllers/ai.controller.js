@@ -1028,3 +1028,135 @@ export async function generateProblemsAI(req, res) {
     return error(res, "Failed to generate problems.", 500);
   }
 }
+
+// ============================================================================
+// GENERATE REVIEW HINTS (Active Recall Support)
+// ============================================================================
+//
+// Called during a review session after the user has attempted recall.
+// Uses the solution's existing aiFeedback to generate targeted questions
+// that probe exactly where the user previously struggled.
+// One fast GPT call using cached data — no new DB reads needed.
+//
+export async function generateReviewHints(req, res) {
+  try {
+    if (!AI_ENABLED) {
+      return error(res, "AI features are not enabled.", 503);
+    }
+
+    const { solutionId } = req.params;
+    const teamId = req.teamId;
+    const userId = req.user.id;
+
+    // Fetch solution with problem and AI feedback history
+    const solution = await prisma.solution.findFirst({
+      where: { id: solutionId, userId, teamId },
+      select: {
+        id: true,
+        pattern: true,
+        keyInsight: true,
+        confidence: true,
+        reviewCount: true,
+        aiFeedback: true,
+        problem: {
+          select: {
+            title: true,
+            category: true,
+            difficulty: true,
+            adminNotes: true,
+          },
+        },
+      },
+    });
+
+    if (!solution) {
+      return error(res, "Solution not found.", 404);
+    }
+
+    // Extract the most recent AI review for context
+    const latestReview = Array.isArray(solution.aiFeedback)
+      ? solution.aiFeedback[solution.aiFeedback.length - 1]
+      : null;
+
+    // Build context from what we know about this solution
+    const previousGaps = latestReview?.gaps || [];
+    const previousFlags = latestReview?.flags || {};
+    const dimensionScores = latestReview?.dimensionScores || {};
+    const previousScore = latestReview?.overallScore || null;
+
+    // Identify the weakest dimensions to probe
+    const weakAreas = [];
+    if (previousFlags.wrongPattern) {
+      weakAreas.push(
+        `pattern identification (user said "${previousFlags.identifiedPattern}" but correct pattern is different)`,
+      );
+    }
+    if (previousFlags.incompleteSubmission) {
+      weakAreas.push("solution completeness");
+    }
+    if ((dimensionScores.understandingDepth || 10) <= 4) {
+      weakAreas.push("conceptual understanding");
+    }
+    if ((dimensionScores.explanationQuality || 10) <= 4) {
+      weakAreas.push("ability to explain the solution clearly");
+    }
+    if (previousGaps.length > 0) {
+      weakAreas.push(...previousGaps.slice(0, 2));
+    }
+
+    const { default: OpenAI } = await import("openai");
+    const openai = new OpenAI();
+
+    const response = await openai.chat.completions.create({
+      model: AI_MODEL_FAST,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      max_tokens: 500,
+      messages: [
+        {
+          role: "system",
+          content: `You are a spaced repetition coach helping someone review a coding problem they previously solved.
+Generate 2 short, targeted recall questions that probe their understanding.
+Focus on the weak areas identified. Questions should be answerable in 1-2 sentences.
+Do NOT ask them to write code. Ask them to explain concepts, trade-offs, or patterns.
+
+Return JSON:
+{
+  "questions": [
+    { "question": "...", "focus": "pattern|complexity|explanation|edge_case|trade_off" },
+    { "question": "...", "focus": "..." }
+  ],
+  "hint": "One short encouraging hint if they're struggling — not the answer"
+}`,
+        },
+        {
+          role: "user",
+          content: `Problem: ${solution.problem.title} (${solution.problem.difficulty} ${solution.problem.category})
+Pattern: ${solution.pattern || "not identified"}
+Previous AI score: ${previousScore !== null ? `${previousScore}/10` : "not reviewed"}
+Review count: ${solution.reviewCount}
+${weakAreas.length > 0 ? `Known weak areas: ${weakAreas.join(", ")}` : ""}
+${solution.problem.adminNotes ? `Key concept: ${solution.problem.adminNotes.substring(0, 200)}` : ""}
+
+Generate 2 questions that will test if they truly remember and understand this problem.`,
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(response.choices[0].message.content);
+
+    return success(res, {
+      questions: parsed.questions || [],
+      hint: parsed.hint || null,
+      context: {
+        problemTitle: solution.problem.title,
+        pattern: solution.pattern,
+        reviewCount: solution.reviewCount,
+        previousScore,
+      },
+    });
+  } catch (err) {
+    console.error("Review hints error:", err);
+    return error(res, "Failed to generate review hints.", 500);
+  }
+}

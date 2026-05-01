@@ -11,13 +11,18 @@ import {
   generateProblemContent,
   findSimilarProblems,
   generateProblemsAI,
+  generateReviewHints,
 } from "../controllers/ai.controller.js";
 
 const router = Router();
-
 router.use(authenticate);
 
 router.post("/review/:solutionId", requireTeamContext, reviewSolution);
+router.post(
+  "/review-hints/:solutionId",
+  requireTeamContext,
+  generateReviewHints,
+);
 router.post("/hint/:problemId", requireTeamContext, getHint);
 router.get("/weekly-plan", requireTeamContext, getWeeklyPlan);
 router.post(
