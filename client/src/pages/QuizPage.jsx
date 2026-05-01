@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-    useGenerateQuiz, useSubmitQuiz, useQuizHistory
+    useGenerateQuiz, useSubmitQuiz, useQuizHistory,
+    useQuizAnalysis, useSaveQuizFeedback,
 } from '@hooks/useQuiz'
 import { useAIStatus } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
@@ -15,10 +16,7 @@ import { QUIZ_SUGGESTED_SUBJECTS } from '@utils/constants'
 // ── Markdown-lite renderer for code blocks ─────────────
 function FormattedText({ text }) {
     if (!text) return null
-
-    // Split by code blocks ```lang\ncode\n```
     const parts = text.split(/(```[\s\S]*?```)/g)
-
     return (
         <span>
             {parts.map((part, i) => {
@@ -35,8 +33,6 @@ function FormattedText({ text }) {
                         </pre>
                     )
                 }
-
-                // Handle inline code `code`
                 const inlineParts = part.split(/(`[^`]+`)/g)
                 return (
                     <span key={i}>
@@ -50,7 +46,22 @@ function FormattedText({ text }) {
                                     </code>
                                 )
                             }
-                            return <span key={j}>{ip}</span>
+                            // Handle **bold**
+                            const boldParts = ip.split(/(\*\*[^*]+\*\*)/g)
+                            return (
+                                <span key={j}>
+                                    {boldParts.map((bp, k) => {
+                                        if (bp.startsWith('**') && bp.endsWith('**')) {
+                                            return (
+                                                <strong key={k} className="font-bold text-text-primary">
+                                                    {bp.slice(2, -2)}
+                                                </strong>
+                                            )
+                                        }
+                                        return <span key={k}>{bp}</span>
+                                    })}
+                                </span>
+                            )
                         })}
                     </span>
                 )
@@ -59,12 +70,10 @@ function FormattedText({ text }) {
     )
 }
 
-// ── Scratchpad component ───────────────────────────────
-function Scratchpad({ visible, onToggle }) {
+// ── Scratchpad ─────────────────────────────────────────
+function Scratchpad({ visible }) {
     const [content, setContent] = useState('')
-
     if (!visible) return null
-
     return (
         <motion.div
             initial={{ opacity: 0, height: 0 }}
@@ -100,36 +109,24 @@ function Scratchpad({ visible, onToggle }) {
     )
 }
 
-// ── Timer component ────────────────────────────────────
+// ── Timer ──────────────────────────────────────────────
 function QuizTimer({ totalSecs, running, onTimeUp }) {
     const [remaining, setRemaining] = useState(totalSecs)
-
-    useEffect(() => {
-        setRemaining(totalSecs)
-    }, [totalSecs])
-
+    useEffect(() => { setRemaining(totalSecs) }, [totalSecs])
     useEffect(() => {
         if (!running || !totalSecs) return
         const interval = setInterval(() => {
             setRemaining(prev => {
-                if (prev <= 1) {
-                    clearInterval(interval)
-                    onTimeUp?.()
-                    return 0
-                }
+                if (prev <= 1) { clearInterval(interval); onTimeUp?.(); return 0 }
                 return prev - 1
             })
         }, 1000)
         return () => clearInterval(interval)
     }, [running, totalSecs])
-
     if (!totalSecs) return null
-
     const mins = Math.floor(remaining / 60).toString().padStart(2, '0')
     const secs = (remaining % 60).toString().padStart(2, '0')
-    const pct = (remaining / totalSecs) * 100
     const isLow = remaining <= 60
-
     return (
         <div className={cn(
             'flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono font-bold',
@@ -157,7 +154,6 @@ function SetupScreen({ onStart }) {
     const [count, setCount] = useState(10)
     const [context, setContext] = useState('')
     const [timerMins, setTimerMins] = useState(0)
-
     const generateQuiz = useGenerateQuiz()
     const { data: aiStatus } = useAIStatus()
     const { data: historyData } = useQuizHistory()
@@ -167,17 +163,9 @@ function SetupScreen({ onStart }) {
         if (!pastQuizzes.length) return []
         const seen = new Set()
         return pastQuizzes
-            .filter(a => {
-                if (seen.has(a.subject)) return false
-                seen.add(a.subject)
-                return true
-            })
+            .filter(a => { if (seen.has(a.subject)) return false; seen.add(a.subject); return true })
             .slice(0, 6)
-            .map(a => ({
-                subject: a.subject,
-                bestScore: a.score,
-                difficulty: a.difficulty,
-            }))
+            .map(a => ({ subject: a.subject, bestScore: a.score, difficulty: a.difficulty }))
     }, [pastQuizzes])
 
     async function handleGenerate() {
@@ -186,7 +174,7 @@ function SetupScreen({ onStart }) {
             const res = await generateQuiz.mutateAsync({
                 subject: subject.trim(),
                 difficulty,
-                count,
+                count,   // Bug 1 fix: send 'count' — server now reads this correctly
                 context: context.trim() || undefined,
             })
             onStart({
@@ -200,7 +188,6 @@ function SetupScreen({ onStart }) {
 
     return (
         <div className="p-6 max-w-[700px] mx-auto">
-            {/* Header */}
             <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -255,9 +242,7 @@ function SetupScreen({ onStart }) {
                        px-4 py-3 outline-none
                        focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
                        transition-all duration-150"
-                        onKeyDown={e => {
-                            if (e.key === 'Enter' && subject.trim()) handleGenerate()
-                        }}
+                        onKeyDown={e => { if (e.key === 'Enter' && subject.trim()) handleGenerate() }}
                     />
                     <div className="flex flex-wrap gap-1.5 mt-3">
                         {QUIZ_SUGGESTED_SUBJECTS.slice(0, 12).map(s => (
@@ -391,7 +376,6 @@ function SetupScreen({ onStart }) {
                     />
                 </details>
 
-                {/* Generate */}
                 <Button
                     variant="primary"
                     size="lg"
@@ -418,7 +402,7 @@ function SetupScreen({ onStart }) {
                 </Button>
             </motion.div>
 
-            {/* Recent + History */}
+            {/* Recently practiced */}
             {recentSubjects.length > 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -454,7 +438,6 @@ function SetupScreen({ onStart }) {
                     </div>
                 </motion.div>
             )}
-
             <QuizHistory />
         </div>
     )
@@ -464,9 +447,7 @@ function SetupScreen({ onStart }) {
 function QuizHistory() {
     const { data: historyData, isLoading } = useQuizHistory()
     const quizzes = historyData?.quizzes || []
-
     if (isLoading || !quizzes.length) return null
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -502,10 +483,7 @@ function QuizHistory() {
                             </p>
                             <div className="flex items-center gap-2 mt-0.5">
                                 <Badge
-                                    variant={
-                                        a.difficulty === 'EASY' ? 'easy' :
-                                            a.difficulty === 'HARD' ? 'hard' : 'medium'
-                                    }
+                                    variant={a.difficulty === 'EASY' ? 'easy' : a.difficulty === 'HARD' ? 'hard' : 'medium'}
                                     size="xs"
                                 >
                                     {a.difficulty}
@@ -523,11 +501,13 @@ function QuizHistory() {
 }
 
 // ══════════════════════════════════════════════════════
-// SCREEN 2 — Active Quiz (no instant feedback)
+// SCREEN 2 — Active Quiz
 // ══════════════════════════════════════════════════════
 function ActiveQuizScreen({ quizData, onComplete }) {
     const [currentQ, setCurrentQ] = useState(0)
-    const [answers, setAnswers] = useState({}) // { index: selectedOption }
+    // Bug 2 fix: answers keyed by question index, value is the letter ("A","B","C","D")
+    // This is the raw selection state — we convert to { [questionId]: letter } on submit
+    const [answers, setAnswers] = useState({})
     const [showScratch, setShowScratch] = useState(false)
     const [startTime] = useState(Date.now())
     const [timerRunning, setTimerRunning] = useState(true)
@@ -538,8 +518,8 @@ function ActiveQuizScreen({ quizData, onComplete }) {
     const answered = Object.keys(answers).length
     const progress = (answered / total) * 100
 
-    function handleSelect(optionIndex) {
-        setAnswers(prev => ({ ...prev, [currentQ]: optionIndex }))
+    function handleSelect(optionLetter) {
+        setAnswers(prev => ({ ...prev, [currentQ]: optionLetter }))
     }
 
     function goTo(index) {
@@ -549,14 +529,18 @@ function ActiveQuizScreen({ quizData, onComplete }) {
 
     function handleSubmit() {
         const timeUsed = Math.round((Date.now() - startTime) / 1000)
-        const gradedAnswers = questions.map((q, i) => ({
-            selected: answers[i] ?? null,
-            correct: answers[i] != null && (
-                answers[i] === q.correctIndex ||
-                answers[i] === q.correctAnswer
-            ),
-        }))
-        onComplete({ answers: gradedAnswers, timeUsedSecs: timeUsed })
+
+        // Bug 2 fix: build answers keyed by question ID (what server expects)
+        // questions[i].id is the numeric ID from AI (1, 2, 3...)
+        // answers[i] is the letter the user selected ("A", "B", "C", "D")
+        const answersById = {}
+        questions.forEach((q, i) => {
+            if (answers[i] !== undefined) {
+                answersById[q.id] = answers[i]
+            }
+        })
+
+        onComplete({ answersById, timeUsedSecs: timeUsed })
     }
 
     function handleTimeUp() {
@@ -593,12 +577,12 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                         disabled={answered === 0}
                         onClick={handleSubmit}
                     >
-                        Submit Quiz ({answered}/{total})
+                        Submit ({answered}/{total})
                     </Button>
                 </div>
             </div>
 
-            {/* Progress */}
+            {/* Progress bar */}
             <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden mb-6">
                 <motion.div
                     animate={{ width: `${progress}%` }}
@@ -640,70 +624,57 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                 transition={{ duration: 0.2 }}
                 className="bg-surface-1 border border-border-default rounded-2xl p-6"
             >
-                {/* Question header */}
                 <div className="flex items-center gap-2 mb-4">
                     <Badge
-                        variant={
-                            question.difficulty === 'EASY' ? 'easy' :
-                                question.difficulty === 'HARD' ? 'hard' : 'medium'
-                        }
+                        variant={question.difficulty === 'EASY' ? 'easy' : question.difficulty === 'HARD' ? 'hard' : 'medium'}
                         size="xs"
                     >
-                        {question.difficulty}
+                        {question.difficulty || 'MEDIUM'}
                     </Badge>
                     <span className="text-[11px] text-text-disabled font-mono">
                         Q{currentQ + 1} of {total}
                     </span>
                 </div>
 
-                {/* Question text with formatting */}
                 <div className="text-base font-semibold text-text-primary leading-relaxed mb-6">
                     <FormattedText text={question.question} />
                 </div>
 
-                {/* Options — handles both array and object {A:"...",B:"..."} formats */}
+                {/* Options */}
                 <div className="space-y-2.5">
-                    {(() => {
-                        const isObj = !Array.isArray(question.options)
-                        const entries = isObj
-                            ? Object.entries(question.options)
-                            : question.options.map((opt, idx) => [String.fromCharCode(65 + idx), opt])
-
-                        return entries.map(([key, value], i) => {
-                            const selectKey = isObj ? key : i
-                            const isSelected = answers[currentQ] === selectKey
-                            return (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    onClick={() => handleSelect(selectKey)}
-                                    className={cn(
-                                        'w-full flex items-start gap-3 p-4 rounded-xl border',
-                                        'text-left transition-all duration-150',
-                                        isSelected
-                                            ? 'bg-brand-400/8 border-brand-400/50'
-                                            : 'bg-surface-2 border-border-default hover:border-brand-400/30 hover:bg-brand-400/3',
-                                    )}
-                                >
-                                    <div className={cn(
-                                        'w-7 h-7 rounded-lg flex items-center justify-center',
-                                        'text-xs font-bold flex-shrink-0 border mt-0.5',
-                                        isSelected
-                                            ? 'bg-brand-400/20 border-brand-400/50 text-brand-300'
-                                            : 'bg-surface-3 border-border-default text-text-disabled'
-                                    )}>
-                                        {key}
-                                    </div>
-                                    <div className="text-sm leading-relaxed pt-0.5 text-text-secondary flex-1">
-                                        <FormattedText text={value} />
-                                    </div>
-                                </button>
-                            )
-                        })
-                    })()}
+                    {Object.entries(question.options).map(([key, value]) => {
+                        const isSelected = answers[currentQ] === key
+                        return (
+                            <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleSelect(key)}
+                                className={cn(
+                                    'w-full flex items-start gap-3 p-4 rounded-xl border',
+                                    'text-left transition-all duration-150',
+                                    isSelected
+                                        ? 'bg-brand-400/8 border-brand-400/50'
+                                        : 'bg-surface-2 border-border-default hover:border-brand-400/30 hover:bg-brand-400/3',
+                                )}
+                            >
+                                <div className={cn(
+                                    'w-7 h-7 rounded-lg flex items-center justify-center',
+                                    'text-xs font-bold flex-shrink-0 border mt-0.5',
+                                    isSelected
+                                        ? 'bg-brand-400/20 border-brand-400/50 text-brand-300'
+                                        : 'bg-surface-3 border-border-default text-text-disabled'
+                                )}>
+                                    {key}
+                                </div>
+                                <div className="text-sm leading-relaxed pt-0.5 text-text-secondary flex-1">
+                                    <FormattedText text={value} />
+                                </div>
+                            </button>
+                        )
+                    })}
                 </div>
 
-                {/* Scratchpad toggle */}
+                {/* Scratchpad */}
                 <div className="mt-4 flex items-center gap-3">
                     <button
                         onClick={() => setShowScratch(v => !v)}
@@ -719,40 +690,22 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                         {showScratch ? 'Hide Scratchpad' : 'Scratchpad'}
                     </button>
                 </div>
-
-                <Scratchpad visible={showScratch} onToggle={() => setShowScratch(v => !v)} />
+                <Scratchpad visible={showScratch} />
 
                 {/* Navigation */}
-                <div className="flex items-center justify-between mt-6 pt-5
-                        border-t border-border-default">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={currentQ === 0}
-                        onClick={() => goTo(currentQ - 1)}
-                    >
+                <div className="flex items-center justify-between mt-6 pt-5 border-t border-border-default">
+                    <Button variant="ghost" size="sm" disabled={currentQ === 0} onClick={() => goTo(currentQ - 1)}>
                         ← Previous
                     </Button>
-
                     <span className="text-xs text-text-disabled font-mono">
                         {currentQ + 1} / {total}
                     </span>
-
                     {currentQ < total - 1 ? (
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => goTo(currentQ + 1)}
-                        >
+                        <Button variant="secondary" size="sm" onClick={() => goTo(currentQ + 1)}>
                             Next →
                         </Button>
                     ) : (
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            disabled={answered === 0}
-                            onClick={handleSubmit}
-                        >
+                        <Button variant="primary" size="sm" disabled={answered === 0} onClick={handleSubmit}>
                             Submit Quiz
                         </Button>
                     )}
@@ -763,36 +716,37 @@ function ActiveQuizScreen({ quizData, onComplete }) {
 }
 
 // ══════════════════════════════════════════════════════
-// SCREEN 3 — Results (with feedback system)
+// SCREEN 3 — Results
 // ══════════════════════════════════════════════════════
-function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
+function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz }) {
     const navigate = useNavigate()
-    const analyzeQuiz = useSubmitQuiz()
-    const [analysis, setAnalysis] = useState(null)
-    const [flagged, setFlagged] = useState({}) // { qIndex: reason }
+    const saveQuizFeedback = useSaveQuizFeedback()
+
+    // Bug 3 fix: fetch analysis via dedicated endpoint, poll until ready
+    const [analysisEnabled, setAnalysisEnabled] = useState(true)
+    const { data: analysisData } = useQuizAnalysis(quizId, analysisEnabled)
+
+    // Stop polling once we have the analysis
+    useEffect(() => {
+        if (analysisData?.ready) {
+            setAnalysisEnabled(false)
+        }
+    }, [analysisData])
+
+    const analysis = analysisData?.analysis || null
+
+    const [flagged, setFlagged] = useState({})
     const [feedback, setFeedback] = useState('')
     const [feedbackSent, setFeedbackSent] = useState(false)
 
+    // Bug 2 fix: use server-graded answers, not client-computed
     const questions = quizData.questions || []
-    const score = answers.filter(a => a.correct).length
-    const total = questions.length
-    const pct = Math.round((score / total) * 100)
+    const score = gradedAnswers.filter(a => a.isCorrect).length
+    const total = gradedAnswers.length
+    const pct = total > 0 ? Math.round((score / total) * 100) : 0
 
-    const emoji =
-        pct >= 90 ? '🏆' : pct >= 70 ? '🔥' :
-            pct >= 50 ? '💪' : pct >= 30 ? '📈' : '🌱'
-
-    const label =
-        pct >= 90 ? 'Outstanding!' : pct >= 70 ? 'Great job!' :
-            pct >= 50 ? 'Good effort!' : pct >= 30 ? 'Keep practicing!' : 'Room to grow!'
-
-    async function handleAnalyze() {
-        if (!attemptId) return
-        try {
-            const res = await analyzeQuiz.mutateAsync(attemptId)
-            setAnalysis(res.data.data)
-        } catch { }
-    }
+    const emoji = pct >= 90 ? '🏆' : pct >= 70 ? '🔥' : pct >= 50 ? '💪' : pct >= 30 ? '📈' : '🌱'
+    const label = pct >= 90 ? 'Outstanding!' : pct >= 70 ? 'Great job!' : pct >= 50 ? 'Good effort!' : pct >= 30 ? 'Keep practicing!' : 'Room to grow!'
 
     function toggleFlag(i) {
         setFlagged(prev => {
@@ -801,6 +755,25 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
             else next[i] = 'wrongly framed'
             return next
         })
+    }
+
+    // Bug 4 fix: actually send feedback to server
+    async function handleSubmitFeedback() {
+        if (!quizId) return
+        try {
+            await saveQuizFeedback.mutateAsync({
+                quizId,
+                feedback: feedback.trim() || null,
+                flaggedQuestions: Object.keys(flagged).map(k => ({
+                    questionIndex: parseInt(k),
+                    reason: flagged[k],
+                })),
+            })
+            setFeedbackSent(true)
+        } catch {
+            // silent — feedback is best-effort
+            setFeedbackSent(true)
+        }
     }
 
     return (
@@ -861,75 +834,72 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                 </div>
             </motion.div>
 
-            {/* AI Analysis */}
-            {attemptId && !analysis && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6"
-                >
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <span className="text-xl">🤖</span>
-                            <div>
-                                <p className="text-sm font-bold text-text-primary">AI Analysis</p>
-                                <p className="text-xs text-text-tertiary">
-                                    Personalized study advice based on your mistakes
-                                </p>
-                            </div>
-                        </div>
-                        <Button variant="primary" size="sm"
-                            loading={analyzeQuiz.isPending} onClick={handleAnalyze}>
-                            {analyzeQuiz.isPending ? 'Analyzing...' : 'Analyze'}
-                        </Button>
-                    </div>
-                </motion.div>
-            )}
-
-            {analysis && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6 space-y-4"
-                >
-                    <div className="flex items-center gap-2">
-                        <span className="text-xl">🤖</span>
+            {/* AI Analysis — Bug 3 fix: auto-loads via polling, no manual trigger */}
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6"
+            >
+                <div className="flex items-center gap-3 mb-3">
+                    <span className="text-xl">🤖</span>
+                    <div>
                         <h3 className="text-sm font-bold text-text-primary">AI Analysis</h3>
+                        <p className="text-xs text-text-tertiary">
+                            Personalized study advice based on your mistakes
+                        </p>
                     </div>
-                    <p className="text-sm text-text-secondary leading-relaxed">{analysis.summary}</p>
-                    {analysis.weakTopics?.length > 0 && (
-                        <div>
-                            <p className="text-xs font-bold text-warning uppercase tracking-widest mb-2">
-                                Weak Areas
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {analysis.weakTopics.map((t, i) => (
-                                    <span key={i}
-                                        className="text-xs bg-warning/10 text-warning border border-warning/25
+                    {!analysis && (
+                        <div className="ml-auto flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full border-2 border-brand-400
+                                border-t-transparent animate-spin" />
+                            <span className="text-xs text-text-disabled">Analyzing...</span>
+                        </div>
+                    )}
+                </div>
+
+                {analysis ? (
+                    <div className="space-y-3">
+                        <p className="text-sm text-text-secondary leading-relaxed">
+                            {analysis.summary}
+                        </p>
+                        {analysis.weakTopics?.length > 0 && (
+                            <div>
+                                <p className="text-xs font-bold text-warning uppercase tracking-widest mb-2">
+                                    Weak Areas
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {analysis.weakTopics.map((t, i) => (
+                                        <span key={i}
+                                            className="text-xs bg-warning/10 text-warning border border-warning/25
                                    rounded-full px-2.5 py-0.5 font-medium">
-                                        {t}
-                                    </span>
+                                            {t}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {analysis.studyAdvice?.length > 0 && (
+                            <div className="space-y-1.5">
+                                {analysis.studyAdvice.map((a, i) => (
+                                    <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                                        <span className="text-brand-400 flex-shrink-0 mt-0.5">→</span>
+                                        <span>{a}</span>
+                                    </div>
                                 ))}
                             </div>
-                        </div>
-                    )}
-                    {analysis.studyAdvice?.length > 0 && (
-                        <div className="space-y-1.5">
-                            {analysis.studyAdvice.map((a, i) => (
-                                <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
-                                    <span className="text-brand-400 flex-shrink-0 mt-0.5">→</span>
-                                    <span>{a}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    {analysis.encouragement && (
-                        <p className="text-sm text-success font-medium italic">
-                            {analysis.encouragement}
-                        </p>
-                    )}
-                </motion.div>
-            )}
+                        )}
+                        {analysis.encouragement && (
+                            <p className="text-sm text-success font-medium italic">
+                                {analysis.encouragement}
+                            </p>
+                        )}
+                    </div>
+                ) : (
+                    <p className="text-xs text-text-disabled">
+                        Analysis typically ready within a few seconds after submission...
+                    </p>
+                )}
+            </motion.div>
 
             {/* Question review */}
             <div className="mb-6">
@@ -937,88 +907,65 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                     <span>📋</span> Question Review
                 </h2>
                 <div className="space-y-3">
-                    {questions.map((q, i) => {
-                        const answer = answers[i]
-                        const isCorrect = answer?.correct
+                    {gradedAnswers.map((answer, i) => {
+                        const isCorrect = answer.isCorrect
                         const isFlagged = !!flagged[i]
-
                         return (
                             <div
                                 key={i}
                                 className={cn(
                                     'rounded-xl border overflow-hidden',
-                                    isCorrect
-                                        ? 'border-success/20 bg-success/3'
-                                        : 'border-danger/20 bg-danger/3'
+                                    isCorrect ? 'border-success/20 bg-success/3' : 'border-danger/20 bg-danger/3'
                                 )}
                             >
-                                {/* Question header */}
                                 <div className="p-4">
                                     <div className="flex items-start gap-3 mb-3">
                                         <span className={cn(
                                             'w-6 h-6 rounded-full flex items-center justify-center',
                                             'text-xs font-bold flex-shrink-0',
-                                            isCorrect
-                                                ? 'bg-success/15 text-success'
-                                                : 'bg-danger/15 text-danger'
+                                            isCorrect ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
                                         )}>
                                             {isCorrect ? '✓' : '✗'}
                                         </span>
                                         <div className="flex-1 text-sm font-semibold text-text-primary leading-relaxed">
-                                            <FormattedText text={q.question} />
+                                            <FormattedText text={answer.question} />
                                         </div>
                                     </div>
 
-                                    {/* Options with results — handles both array and object formats */}
+                                    {/* Options with results */}
                                     <div className="space-y-1.5 ml-9">
-                                        {(() => {
-                                            const isObj = !Array.isArray(q.options)
-                                            const entries = isObj
-                                                ? Object.entries(q.options)
-                                                : q.options.map((opt, idx) => [String.fromCharCode(65 + idx), opt])
-
-                                            return entries.map(([key, value], oi) => {
-                                                const selectKey = isObj ? key : oi
-                                                const isUserAnswer = answer?.selected === selectKey
-                                                const isCorrectOpt = isObj
-                                                    ? key === q.correctAnswer
-                                                    : oi === q.correctIndex
-                                                return (
-                                                    <div key={key} className={cn(
-                                                        'text-xs px-3 py-2 rounded-lg flex items-start gap-2',
-                                                        isCorrectOpt
-                                                            ? 'bg-success/10 text-success font-semibold'
-                                                            : isUserAnswer
-                                                                ? 'bg-danger/10 text-danger line-through'
-                                                                : 'text-text-tertiary'
-                                                    )}>
-                                                        <span className="font-bold flex-shrink-0 mt-px">
-                                                            {key}.
-                                                        </span>
-                                                        <FormattedText text={value} />
-                                                        {isCorrectOpt && (
-                                                            <span className="ml-auto flex-shrink-0 text-success">✓</span>
-                                                        )}
-                                                        {isUserAnswer && !isCorrectOpt && (
-                                                            <span className="ml-auto flex-shrink-0 text-danger">✗</span>
-                                                        )}
-                                                    </div>
-                                                )
-                                            })
-                                        })()}
+                                        {answer.options && Object.entries(answer.options).map(([key, value]) => {
+                                            const isUserAnswer = answer.userAnswer === key
+                                            const isCorrectOpt = key === answer.correctAnswer
+                                            return (
+                                                <div key={key} className={cn(
+                                                    'text-xs px-3 py-2 rounded-lg flex items-start gap-2',
+                                                    isCorrectOpt
+                                                        ? 'bg-success/10 text-success font-semibold'
+                                                        : isUserAnswer
+                                                            ? 'bg-danger/10 text-danger line-through'
+                                                            : 'text-text-tertiary'
+                                                )}>
+                                                    <span className="font-bold flex-shrink-0 mt-px">{key}.</span>
+                                                    <FormattedText text={value} />
+                                                    {isCorrectOpt && <span className="ml-auto flex-shrink-0 text-success">✓</span>}
+                                                    {isUserAnswer && !isCorrectOpt && <span className="ml-auto flex-shrink-0 text-danger">✗</span>}
+                                                </div>
+                                            )
+                                        })}
                                     </div>
 
-                                    {/* Explanation */}
-                                    {q.explanation && (
+                                    {/* Explanation — Bug 2 fix: now includes explanation from server */}
+                                    {answer.explanation && (
                                         <div className="ml-9 mt-3 p-3 bg-info/5 border border-info/15 rounded-lg">
                                             <p className="text-xs text-text-secondary leading-relaxed">
                                                 <span className="font-bold text-info">💡 </span>
-                                                <FormattedText text={q.explanation} />
+                                                <FormattedText text={answer.explanation} />
                                             </p>
                                         </div>
                                     )}
 
-                                    {/* Flag button */}
+                                    {/* Flag */}
                                     <div className="ml-9 mt-2">
                                         <button
                                             onClick={() => toggleFlag(i)}
@@ -1046,7 +993,7 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                 </div>
             </div>
 
-            {/* User feedback section */}
+            {/* Feedback — Bug 4 fix: now actually sends to server */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1059,8 +1006,6 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                 <p className="text-xs text-text-tertiary mb-3">
                     Your feedback improves future quizzes — AI learns from it.
                 </p>
-
-                {/* Quick feedback chips */}
                 <div className="flex flex-wrap gap-1.5 mb-3">
                     {[
                         'Questions were too hard',
@@ -1087,7 +1032,6 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                         </button>
                     ))}
                 </div>
-
                 <textarea
                     value={feedback}
                     onChange={e => setFeedback(e.target.value)}
@@ -1098,8 +1042,6 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                      px-3.5 py-2.5 outline-none resize-none
                      focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 mb-3"
                 />
-
-                {/* Flagged questions summary */}
                 {Object.keys(flagged).length > 0 && (
                     <div className="bg-danger/5 border border-danger/15 rounded-lg p-3 mb-3">
                         <p className="text-xs font-bold text-danger mb-1">
@@ -1107,20 +1049,16 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
                         </p>
                         <p className="text-[11px] text-text-tertiary">
                             Questions {Object.keys(flagged).map(k => `#${parseInt(k) + 1}`).join(', ')} marked as problematic.
-                            This will be considered in future quiz generation.
                         </p>
                     </div>
                 )}
-
                 {!feedbackSent ? (
                     <Button
                         variant="secondary"
                         size="sm"
+                        loading={saveQuizFeedback.isPending}
                         disabled={!feedback.trim() && Object.keys(flagged).length === 0}
-                        onClick={() => {
-                            // TODO: Send feedback to server for AI learning
-                            setFeedbackSent(true)
-                        }}
+                        onClick={handleSubmitFeedback}
                     >
                         Submit Feedback
                     </Button>
@@ -1161,9 +1099,10 @@ function ResultsScreen({ quizData, answers, timeUsed, attemptId, onNewQuiz }) {
 export default function QuizPage() {
     const [screen, setScreen] = useState('setup')
     const [quizData, setQuizData] = useState(null)
-    const [answers, setAnswers] = useState([])
+    // Bug 2 fix: store server-graded answers, not client-computed
+    const [gradedAnswers, setGradedAnswers] = useState([])
     const [timeUsed, setTimeUsed] = useState(0)
-    const [attemptId, setAttemptId] = useState(null)
+    const [quizId, setQuizId] = useState(null)
 
     const submitQuiz = useSubmitQuiz()
 
@@ -1173,27 +1112,32 @@ export default function QuizPage() {
     }
 
     async function handleComplete(result) {
-        setAnswers(result.answers)
         setTimeUsed(result.timeUsedSecs)
-
         try {
+            // Bug 2 fix: send answersById (keyed by question ID) to server
             const res = await submitQuiz.mutateAsync({
                 quizId: quizData.id,
-                answers: result.answers,
+                answers: result.answersById,
                 timeSpent: result.timeUsedSecs,
             })
-            setAttemptId(res.data.data.result?.quizId || quizData.id)
-        } catch { }
-
+            // Use server-graded results — these have correct answers + explanations
+            const serverGraded = res.data.data.result?.graded || []
+            setGradedAnswers(serverGraded)
+            setQuizId(res.data.data.result?.quizId || quizData.id)
+        } catch {
+            // If submit fails, set empty graded answers so results screen still renders
+            setGradedAnswers([])
+            setQuizId(quizData.id)
+        }
         setScreen('results')
     }
 
     function handleNewQuiz() {
         setScreen('setup')
         setQuizData(null)
-        setAnswers([])
+        setGradedAnswers([])
         setTimeUsed(0)
-        setAttemptId(null)
+        setQuizId(null)
     }
 
     return (
@@ -1215,9 +1159,9 @@ export default function QuizPage() {
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <ResultsScreen
                         quizData={quizData}
-                        answers={answers}
+                        gradedAnswers={gradedAnswers}
                         timeUsed={timeUsed}
-                        attemptId={attemptId}
+                        quizId={quizId}
                         onNewQuiz={handleNewQuiz}
                     />
                 </motion.div>
