@@ -619,6 +619,46 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                     </motion.div>
                                 )}
 
+                                {/* Pattern Baseline — shows how this compares to user's own history */}
+                                {latestReview.patternBaseline && latestReview.patternBaseline.solutionCount > 0 && (
+                                    <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+                                            📊 Your {latestReview.patternBaseline.pattern} Baseline
+                                        </p>
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-center">
+                                                <p className="text-base font-extrabold font-mono text-text-primary">
+                                                    {latestReview.patternBaseline.avgOverallScore}/10
+                                                </p>
+                                                <p className="text-[9px] text-text-disabled">avg score</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-base font-extrabold font-mono text-text-disabled">
+                                                    {latestReview.patternBaseline.solutionCount}
+                                                </p>
+                                                <p className="text-[9px] text-text-disabled">solutions</p>
+                                            </div>
+                                            {latestReview.patternBaseline.trend && (
+                                                <span className={cn(
+                                                    'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                                                    latestReview.patternBaseline.trend === 'improving'
+                                                        ? 'bg-success/12 text-success'
+                                                        : latestReview.patternBaseline.trend === 'declining'
+                                                            ? 'bg-danger/12 text-danger'
+                                                            : 'bg-surface-3 text-text-disabled'
+                                                )}>
+                                                    {latestReview.patternBaseline.trend === 'improving' ? '↑ Improving'
+                                                        : latestReview.patternBaseline.trend === 'declining' ? '↓ Declining'
+                                                            : '→ Stable'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-[11px] text-text-tertiary mt-2 leading-relaxed">
+                                            AI feedback above compares this solution against your own {latestReview.patternBaseline.pattern} history.
+                                        </p>
+                                    </div>
+                                )}
+
                                 {/* DIMENSIONS */}
                                 {activeTab === 'dimensions' && (
                                     <motion.div

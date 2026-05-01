@@ -31,12 +31,10 @@ export async function reviewSolution(req, res) {
     if (!AI_ENABLED) {
       return error(res, "AI features are not enabled.", 503);
     }
-
     const { solutionId } = req.params;
     const teamId = req.teamId;
     const userId = req.user.id;
 
-    // ── Fetch solution with problem + follow-up context ──
     const solution = await prisma.solution.findFirst({
       where: { id: solutionId, userId, teamId },
       include: {
@@ -63,11 +61,7 @@ export async function reviewSolution(req, res) {
         followUpAnswers: {
           include: {
             followUpQuestion: {
-              select: {
-                id: true,
-                question: true,
-                difficulty: true,
-              },
+              select: { id: true, question: true, difficulty: true },
             },
           },
         },
@@ -86,34 +80,19 @@ export async function reviewSolution(req, res) {
         solution.keyInsight || "",
         solution.code ? solution.code.substring(0, 300) : "",
       ].join(" ");
-
       const { generateEmbedding } =
         await import("../services/embedding.service.js");
       const queryEmbedding = await generateEmbedding(solutionText);
-
       if (queryEmbedding) {
         const vectorStr = `[${queryEmbedding.join(",")}]`;
         teammateSolutions = await prisma.$queryRawUnsafe(
-          `
-  SELECT
-    s.id,
-    s.approach,
-    s."keyInsight" as "key_insight",
-    s."timeComplexity" as "time_complexity",
-    s."spaceComplexity" as "space_complexity",
-    s.confidence,
-    s.pattern,
-    u.name as author_name,
-    1 - (s.embedding <=> $1::vector) as similarity
-  FROM solutions s
-  JOIN users u ON s."userId" = u.id
-  WHERE s."teamId" = $2
-    AND s."problemId" = $3
-    AND s."userId" != $4
-    AND s.embedding IS NOT NULL
-  ORDER BY s.embedding <=> $1::vector
-  LIMIT 3
-`,
+          `SELECT s.id, s.approach, s."keyInsight" as "key_insight",
+           s."timeComplexity" as "time_complexity", s."spaceComplexity" as "space_complexity",
+           s.confidence, s.pattern, u.name as author_name,
+           1 - (s.embedding <=> $1::vector) as similarity
+           FROM solutions s JOIN users u ON s."userId" = u.id
+           WHERE s."teamId" = $2 AND s."problemId" = $3 AND s."userId" != $4
+           AND s.embedding IS NOT NULL ORDER BY s.embedding <=> $1::vector LIMIT 3`,
           vectorStr,
           teamId,
           solution.problemId,
@@ -140,14 +119,106 @@ export async function reviewSolution(req, res) {
         .join("\n\n");
     }
 
-    // ── Build follow-up context WITH real IDs ──────────
-    // Map: followUpQuestion.id → answerText (or null if skipped)
+    // ── Pattern baseline: user's historical performance on this pattern ──
+    // Fetch last 5 AI-reviewed solutions with same pattern to compute baseline.
+    // Tells the AI: "this user usually scores X/10 on [pattern] problems."
+    // Non-fatal — review continues without it if query fails.
+    let patternBaseline = null;
+    if (solution.pattern) {
+      try {
+        const patternSolutions = await prisma.solution.findMany({
+          where: {
+            userId,
+            teamId,
+            pattern: solution.pattern,
+            id: { not: solutionId },
+            aiFeedback: { not: null },
+          },
+          select: {
+            aiFeedback: true,
+            problem: { select: { difficulty: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        });
+
+        if (patternSolutions.length > 0) {
+          const historicalScores = patternSolutions
+            .map((s) => {
+              const feedback = s.aiFeedback;
+              if (!Array.isArray(feedback) || feedback.length === 0)
+                return null;
+              const latest = feedback[feedback.length - 1];
+              return latest?.overallScore ?? null;
+            })
+            .filter((score) => score !== null);
+
+          if (historicalScores.length > 0) {
+            const avgScore =
+              Math.round(
+                (historicalScores.reduce((a, b) => a + b, 0) /
+                  historicalScores.length) *
+                  10,
+              ) / 10;
+
+            const dimFields = [
+              "codeCorrectness",
+              "patternAccuracy",
+              "understandingDepth",
+              "explanationQuality",
+            ];
+            const dimAvgs = {};
+            dimFields.forEach((dim) => {
+              const dimScores = patternSolutions.flatMap((s) => {
+                const feedback = s.aiFeedback;
+                if (!Array.isArray(feedback)) return [];
+                return feedback
+                  .map((r) => r.dimensionScores?.[dim])
+                  .filter((v) => v != null);
+              });
+              if (dimScores.length > 0) {
+                dimAvgs[dim] =
+                  Math.round(
+                    (dimScores.reduce((a, b) => a + b, 0) / dimScores.length) *
+                      10,
+                  ) / 10;
+              }
+            });
+
+            // historicalScores is desc order: [0] = most recent, [last] = oldest
+            let trend = null;
+            if (historicalScores.length >= 2) {
+              const recent = historicalScores[0];
+              const oldest = historicalScores[historicalScores.length - 1];
+              trend =
+                recent > oldest
+                  ? "improving"
+                  : recent < oldest
+                    ? "declining"
+                    : "stable";
+            }
+
+            patternBaseline = {
+              pattern: solution.pattern,
+              solutionCount: patternSolutions.length,
+              avgOverallScore: avgScore,
+              dimensionAverages: dimAvgs,
+              trend,
+            };
+          }
+        }
+      } catch (baselineErr) {
+        console.error(
+          "Pattern baseline fetch failed (continuing):",
+          baselineErr.message,
+        );
+      }
+    }
+
+    // ── Build follow-up context ────────────────────────
     const answeredMap = new Map(
       solution.followUpAnswers.map((a) => [a.followUpQuestionId, a.answerText]),
     );
-
-    // Include ALL follow-up questions (answered + skipped)
-    // Pass real IDs so AI can reference them correctly
     const followUpAnswersForPrompt = solution.problem.followUpQuestions.map(
       (fq) => ({
         id: fq.id,
@@ -171,14 +242,16 @@ export async function reviewSolution(req, res) {
       feynmanExplanation: solution.feynmanExplanation,
       realWorldConnection: solution.realWorldConnection,
       confidence: solution.confidence,
+      timeTaken: solution.timeTaken || null,
+      solveMethod: solution.solveMethod || null,
       adminNotes: solution.problem.adminNotes,
       ragContext,
       followUpAnswers: followUpAnswersForPrompt,
+      patternBaseline, // ← new
     });
 
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
-
     const response = await openai.chat.completions.create({
       model: AI_MODEL_FAST,
       temperature: 0.6,
@@ -197,10 +270,9 @@ export async function reviewSolution(req, res) {
       return error(res, "Failed to parse AI feedback.", 500);
     }
 
-    // ── Compute weighted score in code ─────────────────
+    // ── Compute weighted score ─────────────────────────
     const dimScores = aiResponse.scores || {};
     const aiFlags = aiResponse.flags || {};
-
     let computedScore =
       (dimScores.codeCorrectness || 5) * 0.35 +
       (dimScores.patternAccuracy || 5) * 0.2 +
@@ -208,7 +280,6 @@ export async function reviewSolution(req, res) {
       (dimScores.explanationQuality || 5) * 0.15 +
       (dimScores.confidenceCalibration || 5) * 0.1;
 
-    // Hard cap: code clearly wrong or incomplete → max 5
     if (
       (dimScores.codeCorrectness || 10) <= 3 ||
       aiFlags.incompleteSubmission
@@ -216,23 +287,16 @@ export async function reviewSolution(req, res) {
       computedScore = Math.min(computedScore, 5.0);
     }
 
-    // Follow-up bonus: +0.5 per answered question, max +2
     const answeredCount = solution.followUpAnswers.length;
     const followUpBonus = Math.min(answeredCount * 0.5, 2.0);
-
-    // Final score
     const overallScore = Math.min(
       Math.round(computedScore + followUpBonus),
       10,
     );
 
-    // ── Compute overconfidence flag IN CODE (not by AI) ─
-    // This is deterministic: confidence 4-5 but code score 1-3
-    // Solution.confidence is 1-5 scale
     const overconfidenceDetected =
       solution.confidence >= 4 && (dimScores.codeCorrectness || 10) <= 3;
 
-    // ── Merge flags: AI flags + computed flags ──────────
     const flags = {
       languageMismatch: aiFlags.languageMismatch || false,
       detectedLanguage: aiFlags.detectedLanguage || null,
@@ -241,19 +305,15 @@ export async function reviewSolution(req, res) {
       wrongPattern: aiFlags.wrongPattern || false,
       identifiedPattern: solution.pattern || aiFlags.identifiedPattern || null,
       correctPattern: aiFlags.correctPattern || null,
-      // Computed deterministically — never trust AI for this
       overconfidenceDetected,
       candidateConfidence: solution.confidence,
       codeCorrectnessScore: dimScores.codeCorrectness || null,
     };
 
-    // ── Build follow-up evaluations with verified IDs ───
-    // AI returns evaluations ordered by the questions we sent
-    // Map them back to real IDs by index position
     const followUpEvaluations = followUpAnswersForPrompt.map((fq, i) => {
       const aiEval = aiResponse.followUpEvaluations?.[i];
       return {
-        questionId: fq.id, // Use our real ID, not AI's potentially wrong ID
+        questionId: fq.id,
         question: fq.question,
         difficulty: fq.difficulty,
         wasAnswered: !!fq.answerText,
@@ -264,27 +324,19 @@ export async function reviewSolution(req, res) {
       };
     });
 
-    // ── Update follow-up answer AI scores ───────────────
     await Promise.all(
       followUpEvaluations
         .filter((e) => e.wasAnswered && e.score != null)
         .map((e) =>
           prisma.solutionFollowUpAnswer
             .updateMany({
-              where: {
-                solutionId,
-                followUpQuestionId: e.questionId,
-              },
-              data: {
-                aiScore: e.score,
-                aiFeedback: e.feedback,
-              },
+              where: { solutionId, followUpQuestionId: e.questionId },
+              data: { aiScore: e.score, aiFeedback: e.feedback },
             })
             .catch(() => {}),
         ),
     );
 
-    // ── Build review record ────────────────────────────
     const reviewRecord = {
       reviewedAt: new Date().toISOString(),
       reviewNumber: (solution.reviewCount || 0) + 1,
@@ -295,6 +347,7 @@ export async function reviewSolution(req, res) {
       gaps: aiResponse.gaps || [],
       improvement: aiResponse.improvement || null,
       interviewTip: aiResponse.interviewTip || null,
+      readinessVerdict: aiResponse.readinessVerdict || null,
       complexityCheck: aiResponse.complexityCheck || null,
       followUpEvaluations,
       followUpBonus,
@@ -302,15 +355,14 @@ export async function reviewSolution(req, res) {
         teammateCount: teammateSolutions.length,
         hasAdminNotes: !!solution.problem.adminNotes,
       },
+      patternBaseline, // ← stored — AIReviewCard can display baseline context
     };
 
-    // ── Store as array — preserves review history ───────
     const existingFeedback = Array.isArray(solution.aiFeedback)
       ? solution.aiFeedback
       : solution.aiFeedback
-        ? [solution.aiFeedback] // migrate old single-object format
+        ? [solution.aiFeedback]
         : [];
-
     const updatedFeedback = [...existingFeedback, reviewRecord];
 
     await prisma.solution.update({

@@ -86,7 +86,24 @@ SQL correctness analysis:
 
   const ctx = categoryContext[data.category] || categoryContext.CODING;
 
-  // Build follow-up context WITH real IDs so AI can reference them
+  // Solve method context for confidence calibration
+  const solveMethodContext =
+    data.solveMethod === "SAW_APPROACH"
+      ? "IMPORTANT: Candidate saw the approach before implementing. Confidence rating must be heavily discounted."
+      : data.solveMethod === "HINTS"
+        ? "NOTE: Candidate used hints during solving. Factor this into confidence calibration."
+        : "Candidate solved this COLD (no hints or external help).";
+
+  const timeTakenLabel =
+    {
+      UNDER_15: "Under 15 minutes",
+      MINS_15_30: "15-30 minutes",
+      MINS_30_60: "30-60 minutes",
+      HOURS_1_2: "1-2 hours",
+      OVER_2_HOURS: "Over 2 hours",
+    }[data.timeTaken] || null;
+
+  // Build follow-up context
   let followUpContext = "";
   if (data.followUpAnswers?.length > 0) {
     followUpContext = "\n\n--- FOLLOW-UP QUESTIONS ---\n";
@@ -104,58 +121,82 @@ SQL correctness analysis:
       "\n\n--- FOLLOW-UP QUESTIONS: All skipped (no answers provided) ---\n";
   }
 
+  // ── Pattern baseline context ───────────────────────
+  // Built from historical AI review scores on the same pattern.
+  // Personalizes feedback: "you're above/below your own baseline here."
+  const patternBaselineContext = data.patternBaseline
+    ? `
+CANDIDATE'S PATTERN HISTORY — ${data.patternBaseline.pattern}:
+Previous solutions reviewed with this pattern: ${data.patternBaseline.solutionCount}
+Their average overall score on ${data.patternBaseline.pattern} problems: ${data.patternBaseline.avgOverallScore}/10
+${data.patternBaseline.trend ? `Score trend across their ${data.patternBaseline.pattern} solutions: ${data.patternBaseline.trend}` : ""}
+${
+  Object.keys(data.patternBaseline.dimensionAverages).length > 0
+    ? `Their average dimension scores on this pattern:
+${Object.entries(data.patternBaseline.dimensionAverages)
+  .map(([dim, avg]) => `  ${dim}: ${avg}/10`)
+  .join("\n")}`
+    : ""
+}
+
+BASELINE COMPARISON REQUIREMENT:
+- Compare this submission explicitly against their own baseline on ${data.patternBaseline.pattern}
+- If this solution scores ABOVE their ${data.patternBaseline.avgOverallScore}/10 baseline: acknowledge the improvement in strengths
+- If this solution scores BELOW their baseline: call it out in gaps — what regressed?
+- Reference specific dimensions where they are above or below their own history
+- This makes feedback personal and actionable, not generic`
+    : "";
+
   const system = `You are a senior engineering interview coach doing a comprehensive solution review.
 Evaluate this ${data.category} submission across 5 dimensions with independent, honest scores.
-
 PROBLEM: ${data.problem?.title || "Unknown"}
 DIFFICULTY: ${data.difficulty}
 CATEGORY: ${data.category}
 FOCUS: ${ctx.focus}
-
 ${ctx.codeCorrectnessGuide}
-
 SCORING DIMENSIONS — score each 1-10 INDEPENDENTLY:
-
 1. CODE CORRECTNESS (35% weight)
    10 = Completely correct, handles all edge cases, optimal
    7-9 = Correct for main cases, minor edge case issues
    4-6 = Partially correct, has significant logic errors
    1-3 = Fundamentally wrong, does not solve the problem
-
 2. PATTERN ACCURACY (20% weight)
    10 = Correct pattern AND can explain why
    7-9 = Correct pattern family, slightly imprecise
    4-6 = Wrong pattern but code accidentally partially works
    1-3 = Completely wrong pattern
-
 3. UNDERSTANDING DEPTH (20% weight)
    10 = Exceptional key insight, brilliant explanation
    7-9 = Good insight, clear explanation
    4-6 = Surface-level, lacks conceptual depth
    1-3 = Cannot explain their own solution
-
 4. EXPLANATION QUALITY (15% weight)
    10 = Crystal clear, anyone could implement from description
    7-9 = Clear with minor gaps
    4-6 = Vague or incomplete
    1-3 = No explanation or completely unclear
-
 5. CONFIDENCE CALIBRATION (10% weight)
    NOTE: The candidate self-rated confidence as ${data.confidence}/5.
-   Compare this to actual solution quality.
+   ${solveMethodContext}
+   ${timeTakenLabel ? `Time taken: ${timeTakenLabel}.` : ""}
    10 = Self-confidence perfectly matches actual quality
    7-9 = Slightly over/under confident
    4-6 = Noticeably miscalibrated
-   1-3 = Severely miscalibrated (5/5 confidence but code is fundamentally wrong)
-
+   1-3 = Severely miscalibrated
 CROSS-VALIDATION RULES:
 - If code is in a different language than selected: set languageMismatch=true, set detectedLanguage
 - If code is incomplete/pseudocode: set incompleteSubmission=true
-- If pattern is wrong: set wrongPattern=true, set correctPattern to the right one,
-  set identifiedPattern to what they said
-${data.adminNotes ? `\nADMIN TEACHING NOTES:\n${data.adminNotes}` : ""}
+- If pattern is wrong: set wrongPattern=true, set correctPattern to the right one
+${data.adminNotes ? `\nADMIN TEACHING NOTES (gold standard for evaluation):\n${data.adminNotes}` : ""}
 ${data.ragContext ? `\nTEAMMATE SOLUTIONS FOR COMPARISON:\n${data.ragContext}` : ""}
-
+${
+  data.ragContext
+    ? `\nPEER COMPARISON REQUIREMENT:
+You MUST explicitly compare this solution to teammate solutions above.
+If score < 7, call out the specific approach gap with teammate names and details.`
+    : ""
+}
+${patternBaselineContext}
 RESPOND WITH EXACT JSON — no extra fields, no missing fields:
 {
   "scores": {
@@ -177,16 +218,17 @@ RESPOND WITH EXACT JSON — no extra fields, no missing fields:
   "gaps": [<string>, ...],
   "improvement": <string>,
   "interviewTip": <string>,
+  "readinessVerdict": <string — one sentence: what interview stage is this candidate ready for with this specific problem?>,
   "complexityCheck": {
-    "timeComplexity": <string — e.g. "O(n)">,
-    "spaceComplexity": <string — e.g. "O(1)">,
+    "timeComplexity": <string>,
+    "spaceComplexity": <string>,
     "timeCorrect": <boolean>,
     "spaceCorrect": <boolean>,
     "optimizationNote": <string or null>
   },
   "followUpEvaluations": [
     {
-      "questionId": <string — use EXACT questionId from the follow-up questions above>,
+      "questionId": <string — use EXACT questionId from above>,
       "score": <1-10 or null if skipped>,
       "feedback": <string — one sentence, or "Skipped" if not answered>
     }
@@ -194,23 +236,28 @@ RESPOND WITH EXACT JSON — no extra fields, no missing fields:
 }`;
 
   const user = `Review this ${data.category} solution:
-
 PROBLEM: ${data.problem?.title || "Unknown"}
 DESCRIPTION: ${data.problem?.description ? data.problem.description.substring(0, 400) : "Not available"}
-
 --- CANDIDATE SUBMISSION ---
 Language Selected: ${data.language || "Not specified"}
 Pattern Identified: ${data.pattern || "None"}
 Self-Confidence: ${data.confidence}/5 (where 1=forgot it, 5=crystal clear)
-
+Solve Method: ${
+    data.solveMethod === "COLD"
+      ? "Solved cold — no hints or external help"
+      : data.solveMethod === "HINTS"
+        ? "Used platform hints during solving"
+        : data.solveMethod === "SAW_APPROACH"
+          ? "Saw the approach/solution before implementing"
+          : "Not specified"
+  }
+Time Taken: ${timeTakenLabel || "Not specified"}
 Approach:
 ${data.approach || "Not provided"}
-
 Code:
 \`\`\`${(data.language || "plaintext").toLowerCase()}
 ${data.code ? data.code.substring(0, 2000) : "No code provided"}
 \`\`\`
-
 Key Insight: ${data.keyInsight || "Not provided"}
 Feynman Explanation: ${data.feynmanExplanation || "Not provided"}
 Real-World Connection: ${data.realWorldConnection || "Not provided"}
