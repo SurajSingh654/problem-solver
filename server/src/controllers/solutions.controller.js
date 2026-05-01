@@ -253,17 +253,17 @@ export async function updateSolution(req, res) {
       where: { id: solutionId, userId, teamId },
       select: { id: true, problemId: true },
     });
+
     if (!existing) {
       return error(res, "Solution not found.", 404);
     }
 
-    const {
-      followUpAnswers, // Optional: update follow-up answers too
-      ...restBody
-    } = req.body;
+    const { followUpAnswers, ...restBody } = req.body;
 
     const data = {};
-    const fields = [
+
+    // Content fields — editable by user
+    const contentFields = [
       "approach",
       "code",
       "language",
@@ -278,9 +278,21 @@ export async function updateSolution(req, res) {
       "pattern",
       "patternIdentificationTime",
     ];
-    fields.forEach((field) => {
+
+    contentFields.forEach((field) => {
       if (restBody[field] !== undefined) data[field] = restBody[field];
     });
+
+    // Spaced repetition review fields
+    // When nextReviewDate is present, this is a review save — not a content edit.
+    // Increment reviewCount and set lastReviewedAt server-side (never trust client).
+    const isReviewSave = restBody.nextReviewDate !== undefined;
+
+    if (isReviewSave) {
+      data.nextReviewDate = new Date(restBody.nextReviewDate);
+      data.lastReviewedAt = new Date();
+      data.reviewCount = { increment: 1 };
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.solution.update({
@@ -288,7 +300,6 @@ export async function updateSolution(req, res) {
         data,
       });
 
-      // Update follow-up answers if provided
       if (followUpAnswers?.length > 0) {
         const validQuestionIds = await tx.followUpQuestion.findMany({
           where: {
@@ -298,7 +309,6 @@ export async function updateSolution(req, res) {
           select: { id: true },
         });
         const validIds = new Set(validQuestionIds.map((q) => q.id));
-
         for (const answer of followUpAnswers) {
           if (
             !answer.answerText?.trim() ||
@@ -319,7 +329,6 @@ export async function updateSolution(req, res) {
             },
             update: {
               answerText: answer.answerText.trim(),
-              // Reset AI scores when answer is updated — needs re-review
               aiScore: null,
               aiFeedback: null,
             },
@@ -336,11 +345,12 @@ export async function updateSolution(req, res) {
       },
     });
 
-    // Re-generate embedding if content changed
-    if (data.approach || data.code || data.keyInsight) {
+    // Re-generate embedding only for content changes, not review saves
+    if (!isReviewSave && (data.approach || data.code || data.keyInsight)) {
       generateSolutionEmbedding(solutionId).catch(() => {});
     }
 
+    // Invalidate report cache when review is saved — D6 will be recomputed correctly
     return success(res, { message: "Solution updated.", solution });
   } catch (err) {
     console.error("Update solution error:", err);
