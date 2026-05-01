@@ -29,21 +29,28 @@ export function useSubmitQuiz() {
   });
 }
 
-// Bug 3 fix: dedicated hook to fetch analysis — polls until ready
-export function useQuizAnalysis(quizId, enabled = false) {
+export function useQuizAnalysis(quizId) {
   return useQuery({
     queryKey: ["quiz-analysis", quizId],
     queryFn: async () => {
-      const res = await api.get(`/quizzes/${quizId}/analysis`);
-      return res.data.data;
+      const res = await api.get(`/quizzes/${quizId}`);
+      return res.data.data.quiz;
     },
-    enabled: !!quizId && enabled,
-    // Refetch every 2 seconds until analysis is ready
+    enabled: !!quizId,
+    // v5 refetchInterval: receives the query data directly
+    // Return false to stop polling, number to continue
     refetchInterval: (data) => {
-      if (data?.ready) return false; // stop polling once ready
-      return 2000; // poll every 2 seconds
+      // Stop if analysis is ready
+      if (data?.aiAnalysis) return false;
+      // Continue polling every 3 seconds
+      return 3000;
     },
-    refetchIntervalInBackground: false,
+    // Do not retry on error — stops polling immediately on any failure
+    retry: false,
+    // Don't refetch when window regains focus — prevents extra calls
+    refetchOnWindowFocus: false,
+    // Don't refetch on reconnect — analysis either exists or it doesn't
+    refetchOnReconnect: false,
   });
 }
 
