@@ -15,9 +15,11 @@
 // 6. transitionPhase — move to next interview phase
 //
 // ============================================================================
-
 import prisma from "../lib/prisma.js";
 import { AI_MODEL_PRIMARY } from "../config/env.js";
+
+// Phase 1 fix: import persona system that was previously dead code
+import { INTERVIEW_STYLES, getCompanyPersona } from "./interview.phases.js";
 
 // ── Tool definitions for OpenAI function calling ─────────────
 const TOOL_DEFINITIONS = [
@@ -109,14 +111,12 @@ const TOOL_DEFINITIONS = [
 // ============================================================================
 // TOOL IMPLEMENTATIONS (all team-scoped)
 // ============================================================================
-
 const toolHandlers = {
-  // ── 1. Get problem details (team-scoped) ───────────────
   async getProblemDetails({ problemId }, context) {
     const problem = await prisma.problem.findFirst({
       where: {
         id: problemId || context.problemId,
-        teamId: context.teamId, // SCOPING
+        teamId: context.teamId,
       },
       select: {
         title: true,
@@ -133,34 +133,29 @@ const toolHandlers = {
         },
       },
     });
-
     if (!problem) return { error: "Problem not found." };
     return problem;
   },
 
-  // ── 2. Get candidate profile (team-scoped stats) ───────
   async getCandidateProfile(_, context) {
     const [solutionCount, patterns, avgConfidence, simCount, quizCount] =
       await Promise.all([
         prisma.solution.count({
-          where: { userId: context.userId, teamId: context.teamId }, // SCOPING
+          where: { userId: context.userId, teamId: context.teamId },
         }),
-
         prisma.solution.findMany({
           where: {
             userId: context.userId,
-            teamId: context.teamId, // SCOPING
+            teamId: context.teamId,
             pattern: { not: null },
           },
           select: { pattern: true },
           distinct: ["pattern"],
         }),
-
         prisma.solution.aggregate({
-          where: { userId: context.userId, teamId: context.teamId }, // SCOPING
+          where: { userId: context.userId, teamId: context.teamId },
           _avg: { confidence: true },
         }),
-
         prisma.simSession.count({
           where: {
             userId: context.userId,
@@ -168,7 +163,6 @@ const toolHandlers = {
             completed: true,
           },
         }),
-
         prisma.quizAttempt.count({
           where: { userId: context.userId, teamId: context.teamId },
         }),
@@ -193,72 +187,46 @@ const toolHandlers = {
     };
   },
 
-  // ── 3. Search teammate solutions (team-scoped RAG) ─────
   async searchTeammateSolutions({ problemId, query }, context) {
-    // In individual/personal mode, there are no teammates
     if (!context.teamId) {
       return { message: "No teammates available (individual mode)." };
     }
-
-    // Check if this is a personal team
     const team = await prisma.team.findUnique({
       where: { id: context.teamId },
       select: { isPersonal: true },
     });
-
     if (team?.isPersonal) {
       return { message: "No teammates in personal practice mode." };
     }
-
     const targetProblemId = problemId || context.problemId;
-
-    // Try vector search first
     try {
       if (query) {
         const { generateEmbedding } = await import("./embedding.service.js");
         const embedding = await generateEmbedding(query);
-
         if (embedding) {
           const vectorStr = `[${embedding.join(",")}]`;
-
-          // TEAM-SCOPED vector search — the critical query
           const results = await prisma.$queryRawUnsafe(
-            `
-  SELECT
-    s.approach,
-    s."keyInsight" as "key_insight",
-    s."timeComplexity" as "time_complexity",
-    s."spaceComplexity" as "space_complexity",
-    s.pattern,
-    s.confidence,
-    u.name as author_name
-  FROM solutions s
-  JOIN users u ON s."userId" = u.id
-  WHERE s."teamId" = $1
-    AND s."problemId" = $2
-    AND s."userId" != $3
-    AND s.embedding IS NOT NULL
-  ORDER BY s.embedding <=> $4::vector
-  LIMIT 3
-`,
+            `SELECT s.approach, s."keyInsight" as "key_insight",
+             s."timeComplexity" as "time_complexity", s."spaceComplexity" as "space_complexity",
+             s.pattern, s.confidence, u.name as author_name
+             FROM solutions s JOIN users u ON s."userId" = u.id
+             WHERE s."teamId" = $1 AND s."problemId" = $2 AND s."userId" != $3
+             AND s.embedding IS NOT NULL ORDER BY s.embedding <=> $4::vector LIMIT 3`,
             context.teamId,
             targetProblemId,
             context.userId,
             vectorStr,
           );
-
           if (results.length > 0) return { solutions: results };
         }
       }
     } catch (err) {
       console.error("Vector search in interview failed:", err.message);
     }
-
-    // Fallback: regular query
     const solutions = await prisma.solution.findMany({
       where: {
         problemId: targetProblemId,
-        teamId: context.teamId, // SCOPING
+        teamId: context.teamId,
         userId: { not: context.userId },
       },
       select: {
@@ -273,11 +241,9 @@ const toolHandlers = {
       take: 3,
       orderBy: { confidence: "desc" },
     });
-
     if (solutions.length === 0) {
       return { message: "No teammate solutions found for this problem yet." };
     }
-
     return {
       solutions: solutions.map((s) => ({
         ...s,
@@ -287,7 +253,6 @@ const toolHandlers = {
     };
   },
 
-  // ── 4. Save interview note ─────────────────────────────
   async saveInterviewNote({ note, category }, context) {
     await prisma.interviewMessage.create({
       data: {
@@ -297,19 +262,15 @@ const toolHandlers = {
         phase: "note",
       },
     });
-
     return { saved: true };
   },
 
-  // ── 5. Get time remaining ──────────────────────────────
   async getTimeRemaining(_, context) {
     const session = await prisma.interviewSession.findUnique({
       where: { id: context.sessionId },
       select: { startedAt: true, phases: true, category: true },
     });
-
     if (!session) return { error: "Session not found." };
-
     const elapsed = Math.round(
       (Date.now() - new Date(session.startedAt).getTime()) / 1000,
     );
@@ -323,9 +284,7 @@ const toolHandlers = {
     };
     const totalDuration = durationMap[session.category] || 45 * 60;
     const remaining = Math.max(0, totalDuration - elapsed);
-
     const activePhase = session.phases?.find((p) => p.status === "active");
-
     return {
       elapsedSeconds: elapsed,
       elapsedMinutes: Math.round(elapsed / 60),
@@ -337,34 +296,25 @@ const toolHandlers = {
     };
   },
 
-  // ── 6. Transition phase ────────────────────────────────
   async transitionPhase({ nextPhase }, context) {
     const session = await prisma.interviewSession.findUnique({
       where: { id: context.sessionId },
       select: { phases: true },
     });
-
     if (!session) return { error: "Session not found." };
-
     const phases = session.phases || [];
     const now = new Date().toISOString();
-
     const updated = phases.map((p) => {
-      if (p.status === "active") {
+      if (p.status === "active")
         return { ...p, status: "completed", completedAt: now };
-      }
-      if (p.name === nextPhase) {
+      if (p.name === nextPhase)
         return { ...p, status: "active", startedAt: now };
-      }
       return p;
     });
-
     await prisma.interviewSession.update({
       where: { id: context.sessionId },
       data: { phases: updated },
     });
-
-    // Record the transition
     await prisma.interviewMessage.create({
       data: {
         sessionId: context.sessionId,
@@ -373,7 +323,6 @@ const toolHandlers = {
         phase: nextPhase,
       },
     });
-
     return { transitioned: true, currentPhase: nextPhase };
   },
 };
@@ -381,12 +330,10 @@ const toolHandlers = {
 // ============================================================================
 // MAIN MESSAGE HANDLER
 // ============================================================================
-
 export async function handleInterviewMessage(ws, message) {
   try {
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
-
     const { toolContext } = message;
 
     // ── Load conversation history ────────────────────────
@@ -397,21 +344,8 @@ export async function handleInterviewMessage(ws, message) {
       },
       select: { role: true, content: true },
       orderBy: { createdAt: "asc" },
-      take: 20,
+      take: 30, // increased from 20 to capture more context
     });
-
-    // ── Count messages for stage detection ───────────────
-    const messageCount = history.filter((m) => m.role === "USER").length;
-    const stage =
-      messageCount <= 2
-        ? "OPENING"
-        : messageCount <= 6
-          ? "EARLY"
-          : messageCount <= 15
-            ? "MIDDLE"
-            : messageCount <= 25
-              ? "LATE"
-              : "WRAPPING_UP";
 
     // ── Load session for system prompt context ───────────
     const session = await prisma.interviewSession.findUnique({
@@ -422,38 +356,76 @@ export async function handleInterviewMessage(ws, message) {
         interviewStyle: true,
         workspace: true,
         phases: true,
+        startedAt: true,
         problem: {
           select: { title: true, description: true, category: true },
         },
       },
     });
 
-    // ── Check if personal mode (for prompt adjustment) ───
-    const isPersonal = !toolContext.teamId;
+    // Phase 1 fix: stage detection from phases array, not message count
+    // This is how real interviewers track where they are — by phase, not by
+    // counting how many things the candidate has said
+    const activePhase = session?.phases?.find((p) => p.status === "active");
+    const completedPhases =
+      session?.phases?.filter((p) => p.status === "completed").length || 0;
+    const totalPhases = session?.phases?.length || 1;
+    const phaseProgress = completedPhases / totalPhases;
+
+    // Map phase progress to stage for prompt behavior
+    // This is more accurate than counting user messages
+    const stage =
+      phaseProgress === 0
+        ? "OPENING"
+        : phaseProgress <= 0.25
+          ? "EARLY"
+          : phaseProgress <= 0.6
+            ? "MIDDLE"
+            : phaseProgress <= 0.85
+              ? "LATE"
+              : "WRAPPING_UP";
+
+    // Phase 1 fix: dynamic max_tokens by stage
+    // Opening/Early: more tokens for introductions and approach discussion
+    // Middle: shorter — candidate should be coding, AI should be watching
+    // Late/Wrapping: more tokens for wrap-up discussion and summary
+    const maxTokensByStage = {
+      OPENING: 300, // brief intro, wait for candidate
+      EARLY: 400, // discuss approach
+      MIDDLE: 250, // candidate is coding — AI should say less
+      LATE: 400, // testing, edge cases
+      WRAPPING_UP: 600, // summary and debrief prep
+    };
+    const maxTokens = maxTokensByStage[stage] || 350;
+
+    // ── Check team context ───────────────────────────────
     let teamInfo = "";
-    if (!isPersonal) {
+    if (!toolContext.teamId) {
+      teamInfo =
+        "\nThe candidate is practicing individually. Do not reference teammates.";
+    } else {
       const team = await prisma.team.findUnique({
         where: { id: toolContext.teamId },
         select: { isPersonal: true },
       });
-      if (team?.isPersonal) {
-        teamInfo =
-          "\nNote: The candidate is practicing individually. Do not reference teammates.";
-      } else {
-        teamInfo =
-          "\nThe candidate is part of a team. You may reference teammate solutions if available via the searchTeammateSolutions tool.";
-      }
-    } else {
-      teamInfo =
-        "\nNote: The candidate is practicing individually. Do not reference teammates.";
+      teamInfo = team?.isPersonal
+        ? "\nThe candidate is practicing individually. Do not reference teammates."
+        : "\nThe candidate is part of a team. You may reference teammate solutions if available via searchTeammateSolutions.";
     }
 
-    // ── Build system prompt ──────────────────────────────
+    // Phase 1 fix: get current workspace from message payload if available
+    // Previously used stale session.workspace loaded at connection time
+    // Now uses the workspace the candidate is actively editing
+    const currentWorkspace = message.workspace || session?.workspace || {};
+
+    // ── Build system prompt with full persona context ────
     const systemPrompt = buildSystemPrompt({
       session,
       stage,
+      activePhase,
       teamInfo,
-      workspace: session?.workspace,
+      workspace: currentWorkspace,
+      interviewStyle: toolContext.interviewStyle || session?.interviewStyle,
     });
 
     // ── Build messages array ─────────────────────────────
@@ -465,20 +437,23 @@ export async function handleInterviewMessage(ws, message) {
       })),
     ];
 
-    // Add user message if this is a user_message type
     if (message.type === "user_message") {
       messages.push({ role: "user", content: message.content });
     }
 
-    // For system_init, add an instruction to begin
     if (message.type === "system_init") {
+      // Phase 1 fix: persona-specific opening instead of generic instruction
+      // The persona's intro is the first thing the AI says — it sets the tone
+      // for the entire interview. Generic = chatbot. Specific = real interviewer.
+      const persona = getCompanyPersona(
+        toolContext.interviewStyle || session?.interviewStyle,
+      );
       messages.push({
         role: "user",
-        content: "[System: The candidate has joined. Begin the interview.]",
+        content: `[System: The candidate has joined. Begin with your introduction: "${persona.intro}" — then proceed with the interview.]`,
       });
     }
 
-    // For end_interview, generate debrief
     if (message.type === "end_interview") {
       await generateDebrief(ws, toolContext);
       return;
@@ -489,31 +464,24 @@ export async function handleInterviewMessage(ws, message) {
       model: AI_MODEL_PRIMARY,
       messages,
       tools: TOOL_DEFINITIONS,
-      temperature: 0.85,
-      max_tokens: 600,
+      temperature: 0.7, // reduced from 0.85 — more consistent interviewer behavior
+      max_tokens: maxTokens,
       stream: true,
     });
 
     let fullContent = "";
     let toolCalls = [];
-    let currentToolCall = null;
 
-    // ── Stream tokens to client ──────────────────────────
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
 
-      // Text content — stream to client
       if (delta?.content) {
         fullContent += delta.content;
         ws.send(
-          JSON.stringify({
-            type: "interview:token",
-            content: delta.content,
-          }),
+          JSON.stringify({ type: "interview:token", content: delta.content }),
         );
       }
 
-      // Tool call detection
       if (delta?.tool_calls) {
         for (const tc of delta.tool_calls) {
           if (tc.index !== undefined) {
@@ -532,15 +500,18 @@ export async function handleInterviewMessage(ws, message) {
         }
       }
 
-      // Check for finish
       if (chunk.choices[0]?.finish_reason === "tool_calls") {
-        // Execute tools and make follow-up call
-        await executeToolsAndRespond(ws, messages, toolCalls, toolContext);
+        await executeToolsAndRespond(
+          ws,
+          messages,
+          toolCalls,
+          toolContext,
+          currentWorkspace,
+        );
         return;
       }
     }
 
-    // ── Store assistant message ───────────────────────────
     if (fullContent) {
       await prisma.interviewMessage.create({
         data: {
@@ -549,7 +520,6 @@ export async function handleInterviewMessage(ws, message) {
           content: fullContent,
         },
       });
-
       ws.send(JSON.stringify({ type: "interview:done" }));
     }
   } catch (err) {
@@ -566,17 +536,19 @@ export async function handleInterviewMessage(ws, message) {
 // ============================================================================
 // TOOL EXECUTION + FOLLOW-UP
 // ============================================================================
-
-async function executeToolsAndRespond(ws, messages, toolCalls, toolContext) {
+async function executeToolsAndRespond(
+  ws,
+  messages,
+  toolCalls,
+  toolContext,
+  currentWorkspace,
+) {
   const { default: OpenAI } = await import("openai");
   const openai = new OpenAI();
 
-  // ── Execute each tool ──────────────────────────────────
   const toolResults = [];
-
   for (const tc of toolCalls) {
     if (!tc?.function?.name) continue;
-
     const handler = toolHandlers[tc.function.name];
     if (!handler) {
       toolResults.push({
@@ -586,14 +558,11 @@ async function executeToolsAndRespond(ws, messages, toolCalls, toolContext) {
       });
       continue;
     }
-
     let args = {};
     try {
       args = JSON.parse(tc.function.arguments || "{}");
     } catch {}
-
     try {
-      // CRITICAL: Pass toolContext (with teamId) to every tool
       const result = await handler(args, toolContext);
       toolResults.push({
         tool_call_id: tc.id,
@@ -610,7 +579,6 @@ async function executeToolsAndRespond(ws, messages, toolCalls, toolContext) {
     }
   }
 
-  // ── Store tool calls + results ─────────────────────────
   await prisma.interviewMessage.create({
     data: {
       sessionId: toolContext.sessionId,
@@ -621,7 +589,6 @@ async function executeToolsAndRespond(ws, messages, toolCalls, toolContext) {
     },
   });
 
-  // ── Follow-up call with tool results ───────────────────
   const followUpMessages = [
     ...messages,
     {
@@ -636,25 +603,22 @@ async function executeToolsAndRespond(ws, messages, toolCalls, toolContext) {
     ...toolResults,
   ];
 
+  // Phase 1 fix: pass currentWorkspace to maintain context in follow-up
   const stream = await openai.chat.completions.create({
     model: AI_MODEL_PRIMARY,
     messages: followUpMessages,
-    temperature: 0.85,
-    max_tokens: 600,
+    temperature: 0.7,
+    max_tokens: 400,
     stream: true,
   });
 
   let fullContent = "";
-
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta;
     if (delta?.content) {
       fullContent += delta.content;
       ws.send(
-        JSON.stringify({
-          type: "interview:token",
-          content: delta.content,
-        }),
+        JSON.stringify({ type: "interview:token", content: delta.content }),
       );
     }
   }
@@ -668,20 +632,17 @@ async function executeToolsAndRespond(ws, messages, toolCalls, toolContext) {
       },
     });
   }
-
   ws.send(JSON.stringify({ type: "interview:done" }));
 }
 
 // ============================================================================
 // DEBRIEF GENERATION
 // ============================================================================
-
 async function generateDebrief(ws, toolContext) {
   try {
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
-    // ── Load full conversation ───────────────────────────
     const messages = await prisma.interviewMessage.findMany({
       where: { sessionId: toolContext.sessionId },
       select: { role: true, content: true, phase: true },
@@ -722,26 +683,25 @@ async function generateDebrief(ws, toolContext) {
       messages: [
         {
           role: "system",
-          content: `You are generating a structured interview debrief.
-Category: ${session.category}. Difficulty: ${session.difficulty}.
-Style: ${session.interviewStyle || "Standard"}.
+          content: `You are generating a structured interview debrief for a ${session.category} interview.
+Style: ${session.interviewStyle || "Standard"}. Difficulty: ${session.difficulty}.
 Duration: ${elapsed} minutes.
 
 Return JSON:
 {
   "verdict": "STRONG_HIRE" | "HIRE" | "LEAN_HIRE" | "LEAN_NO_HIRE" | "NO_HIRE",
-  "overallScore": 1-10,
+  "overallScore": <1-10>,
   "scores": {
-    "approach": 1-10,
-    "communication": 1-10,
-    "codeQuality": 1-10,
-    "timeManagement": 1-10,
-    "knowledgeDepth": 1-10
+    "approach": <1-10>,
+    "communication": <1-10>,
+    "codeQuality": <1-10>,
+    "timeManagement": <1-10>,
+    "knowledgeDepth": <1-10>
   },
-  "strengths": ["specific strength 1", ...],
-  "improvements": ["specific improvement 1", ...],
-  "keyMoments": ["notable moment from the conversation", ...],
-  "summary": "2-3 sentence overall assessment"
+  "strengths": ["specific strength based on actual conversation moments"],
+  "improvements": ["specific improvement with concrete example from the interview"],
+  "keyMoments": ["turning point or notable moment from the actual conversation"],
+  "summary": "2-3 sentence honest assessment referencing specific things they did or said"
 }`,
         },
         {
@@ -753,7 +713,6 @@ Return JSON:
 
     const debrief = JSON.parse(response.choices[0].message.content);
 
-    // ── Store debrief ────────────────────────────────────
     await prisma.interviewSession.update({
       where: { id: toolContext.sessionId },
       data: {
@@ -764,19 +723,11 @@ Return JSON:
       },
     });
 
-    ws.send(
-      JSON.stringify({
-        type: "interview:debrief",
-        debrief,
-      }),
-    );
+    ws.send(JSON.stringify({ type: "interview:debrief", debrief }));
   } catch (err) {
     console.error("Debrief generation error:", err);
     ws.send(
-      JSON.stringify({
-        type: "error",
-        error: "Failed to generate debrief.",
-      }),
+      JSON.stringify({ type: "error", error: "Failed to generate debrief." }),
     );
   }
 }
@@ -784,35 +735,120 @@ Return JSON:
 // ============================================================================
 // SYSTEM PROMPT BUILDER
 // ============================================================================
-
-function buildSystemPrompt({ session, stage, teamInfo, workspace }) {
+function buildSystemPrompt({
+  session,
+  stage,
+  activePhase,
+  teamInfo,
+  workspace,
+  interviewStyle,
+}) {
   const category = session?.category || "CODING";
-  const style = session?.interviewStyle || "Standard";
   const problem = session?.problem;
 
-  return `You are a senior technical interviewer conducting a ${category} interview.
-Interview style: ${style}.
-Difficulty: ${session?.difficulty || "MEDIUM"}.
-Conversation stage: ${stage}.
+  // Phase 1 fix: get actual persona with behaviorRules
+  // Previously only passed the style name as a string — the behaviorRules
+  // (the detailed instructions that define HOW the interviewer behaves)
+  // were never included in the prompt. This is the root cause of
+  // "AI behaves like a helpful chatbot instead of a real interviewer."
+  const persona = getCompanyPersona(interviewStyle || session?.interviewStyle);
+  const styleConfig =
+    INTERVIEW_STYLES[interviewStyle] ||
+    INTERVIEW_STYLES[
+      Object.keys(INTERVIEW_STYLES).find(
+        (k) => INTERVIEW_STYLES[k].persona.name === persona.name,
+      )
+    ] ||
+    INTERVIEW_STYLES.ALGORITHM_FOCUSED;
 
-Problem: ${problem?.title || "General interview"}
-${problem?.description ? `Description: ${problem.description}` : ""}
+  // Workspace context — what the candidate is actively working on
+  // Phase 1 fix: now receives current workspace, not stale session workspace
+  const workspaceContext =
+    workspace &&
+    (workspace.thinking ||
+      workspace.code ||
+      workspace.response ||
+      workspace.notes)
+      ? `
+CANDIDATE'S CURRENT WORKSPACE (what they are actively writing — read this carefully before responding):
+${workspace.thinking ? `Thinking/Approach: ${workspace.thinking.substring(0, 600)}` : ""}
+${workspace.code ? `Code: ${workspace.code.substring(0, 800)}` : ""}
+${workspace.response ? `Written Response: ${workspace.response.substring(0, 600)}` : ""}
+${workspace.notes ? `Notes: ${workspace.notes.substring(0, 400)}` : ""}
+${workspace.diagram ? `[Diagram is present in workspace]` : ""}
+
+When the candidate references "my code" or "what I wrote" — look at the workspace above.
+Comment on their code/approach when relevant. Don't ask them to repeat what's already written.`
+      : "\nCANDIDATE'S WORKSPACE: [empty — candidate hasn't written anything yet]";
+
+  // Phase-specific guidance from the phases config
+  const phaseGuidance = activePhase?.name
+    ? `\nCURRENT PHASE: ${activePhase.name}`
+    : "";
+
+  // Stage behavior — what the interviewer should focus on right now
+  const stageBehavior = {
+    OPENING: `
+STAGE: OPENING
+- Introduce yourself using your persona (${persona.name}).
+- State the problem clearly but leave intentional ambiguity — do NOT clarify upfront.
+- Then STOP. Wait for the candidate to ask clarifying questions or start thinking.
+- Do NOT start explaining the problem. Do NOT ask "Do you understand?" — just wait.
+- If they jump straight to coding without asking any questions, note this silently via saveInterviewNote.`,
+    EARLY: `
+STAGE: EARLY (Approach Discussion)
+- Candidate should be discussing their approach, not yet coding.
+- Ask "What's your initial approach?" if they haven't stated one.
+- When they propose O(n²) or brute force: respond with ONLY "What's the time complexity of that?" then wait.
+- Do NOT say "that's suboptimal" — let them discover it.
+- Ask about constraints: "What if the input is empty?" "What if n is 10 billion?"`,
+    MIDDLE: `
+STAGE: MIDDLE (Implementation)
+- Candidate should be coding. Monitor their workspace.
+- Keep your responses to 1 sentence maximum. This is their time to code.
+- Only speak if: (a) they ask you something directly, (b) they've been silent for 3+ minutes, (c) there's a critical error in their approach.
+- When they ask for help: ask a guiding question, never give the answer.
+- If they're going in a wrong direction: "Interesting — what's the complexity of that approach?" Let them self-correct.`,
+    LATE: `
+STAGE: LATE (Testing & Optimization)
+- Ask them to walk through their solution with a concrete example.
+- Probe edge cases they haven't handled: "What happens with an empty array?" "What about duplicate values?"
+- Ask about optimization: "Is there a way to reduce the space complexity?"
+- Ask about real-world considerations: "How would this scale to 1 billion inputs?"`,
+    WRAPPING_UP: `
+STAGE: WRAPPING UP
+- Ask the candidate to summarize their solution in 2 sentences.
+- Ask: "If you had 30 more minutes, what would you improve?"
+- Ask: "Do you have any questions for me?"
+- Wrap up professionally. Save final observations using saveInterviewNote.`,
+  };
+
+  return `You are ${persona.name}, a senior technical interviewer conducting a ${category} interview.
+Your interviewing style: ${persona.style}.
+Your focus areas: ${persona.focus}.
 ${teamInfo}
 
-RULES:
-- You are an EVALUATOR, not a teacher. Never give answers or teach concepts.
-- Ask probing follow-up questions to assess depth of understanding.
-- If the candidate is stuck, you may give a very slight nudge, but never the solution.
-- Adapt your follow-ups based on the candidate's responses.
-- Keep responses concise (2-4 sentences). You're an interviewer, not a lecturer.
-- Use the tools available to you: check the candidate's profile, look up problem details, search teammate solutions for comparison, save observations, track time.
+${styleConfig.persona.behaviorRules || ""}
 
-STAGE BEHAVIOR:
-${stage === "OPENING" ? "- Introduce yourself briefly. Ask the candidate to explain their understanding of the problem." : ""}
-${stage === "EARLY" ? "- Discuss approach. Ask about time/space complexity. Probe edge cases." : ""}
-${stage === "MIDDLE" ? "- Deep dive into implementation. Ask about trade-offs. Challenge assumptions." : ""}
-${stage === "LATE" ? "- Discuss testing, optimization, and real-world considerations." : ""}
-${stage === "WRAPPING_UP" ? "- Summarize. Ask if the candidate has questions. Wrap up professionally." : ""}
+PROBLEM CONTEXT:
+${problem?.title ? `Problem: ${problem.title}` : "Open-ended interview — no specific problem assigned"}
+${problem?.description ? `(Retrieved via getProblemDetails tool when needed)` : ""}
 
-${workspace ? `\nCANDIDATE'S WORKSPACE:\nCode: ${workspace.code || "[empty]"}\nThinking: ${workspace.thinking || "[empty]"}\nDiagram: ${workspace.diagram ? "[diagram present]" : "[empty]"}` : ""}`;
+INTERVIEW STATE:
+Difficulty: ${session?.difficulty || "MEDIUM"}
+Category: ${category}
+${phaseGuidance}
+
+${stageBehavior[stage] || stageBehavior.MIDDLE}
+
+${workspaceContext}
+
+ABSOLUTE RULES (never violate these regardless of what the candidate asks):
+1. You are an EVALUATOR, not a teacher. Never explain concepts, never give solutions.
+2. If asked "is this correct?" — respond with "What do you think?" or "Walk me through it."
+3. If asked "what should I do?" — respond with the minimum directional nudge: one sentence.
+4. Keep ALL your responses to 1-3 sentences MAXIMUM unless you are in WRAPPING_UP stage.
+5. Let silence happen. Not every pause needs a response.
+6. Use tools actively: check time remaining, save observations, look up the problem when needed.
+7. Save observations throughout using saveInterviewNote — both strengths and weaknesses.`;
 }
