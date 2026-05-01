@@ -6,7 +6,7 @@ import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_FAST } from "../config/env.js";
 
 // ============================================================================
-// GENERATE QUIZ
+// GENERATE QUIZ — with past-attempt intelligence
 // ============================================================================
 export async function generateQuiz(req, res) {
   try {
@@ -16,30 +16,174 @@ export async function generateQuiz(req, res) {
 
     const userId = req.user.id;
     const teamId = req.teamId || null;
-
     const { subject, difficulty, context } = req.body;
-
-    // Bug 1 fix: accept both 'count' (client sends this) and
-    // 'questionCount' (legacy) so neither breaks
     const { count: countRaw, questionCount } = req.body;
     const count = Math.min(countRaw || questionCount || 10, 20);
 
+    // ── Stage 1: Gather past-attempt intelligence ──────
+    // Fetch last 5 COMPLETED attempts on this subject for this user.
+    // Only completed attempts have graded answers we can analyze.
+    let pastIntelligence = null;
+    try {
+      const pastAttempts = await prisma.quizAttempt.findMany({
+        where: {
+          userId,
+          subject: {
+            // Case-insensitive match — "data structures" == "Data Structures"
+            contains: subject.trim(),
+            mode: "insensitive",
+          },
+          answers: { not: null }, // Only completed quizzes
+        },
+        select: {
+          id: true,
+          score: true,
+          questions: true,
+          answers: true,
+          aiAnalysis: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      });
+
+      if (pastAttempts.length > 0) {
+        // ── Extract questions already asked ──────────────
+        // Collect all question texts across all past attempts.
+        // Deduplicated so the same question doesn't appear multiple times.
+        const askedQuestionsSet = new Set();
+        pastAttempts.forEach((attempt) => {
+          const qs = attempt.questions;
+          if (Array.isArray(qs)) {
+            qs.forEach((q) => {
+              if (q.question) askedQuestionsSet.add(q.question.trim());
+            });
+          }
+        });
+        const askedQuestions = [...askedQuestionsSet];
+
+        // ── Identify persistent weak areas ───────────────
+        // A question is "persistently weak" if the user got it wrong
+        // in 2 or more separate attempts.
+        const wrongCounts = {};
+        pastAttempts.forEach((attempt) => {
+          const ans = attempt.answers;
+          if (Array.isArray(ans)) {
+            ans.forEach((a) => {
+              if (!a.isCorrect && a.question) {
+                const key = a.question.trim();
+                wrongCounts[key] = (wrongCounts[key] || 0) + 1;
+              }
+            });
+          }
+        });
+        const persistentlyWeak = Object.entries(wrongCounts)
+          .filter(([, count]) => count >= 2)
+          .map(([question]) => question)
+          .slice(0, 5); // Top 5 most frequently wrong
+
+        // ── Compute score trend ───────────────────────────
+        const scores = pastAttempts
+          .map((a) => a.score)
+          .filter((s) => s !== null)
+          .reverse(); // Oldest first for trend direction
+
+        const avgScore =
+          scores.length > 0
+            ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+            : null;
+
+        const improving =
+          scores.length >= 2 ? scores[scores.length - 1] > scores[0] : null;
+
+        // ── Collect weak topics from AI analysis ─────────
+        const allWeakTopics = new Set();
+        pastAttempts.forEach((attempt) => {
+          if (attempt.aiAnalysis?.weakTopics) {
+            attempt.aiAnalysis.weakTopics.forEach((t) => allWeakTopics.add(t));
+          }
+        });
+
+        pastIntelligence = {
+          attemptCount: pastAttempts.length,
+          avgScore,
+          improving,
+          scores,
+          askedQuestions,
+          persistentlyWeak,
+          weakTopics: [...allWeakTopics],
+        };
+      }
+    } catch (err) {
+      // Non-fatal — continue with standard generation if intelligence fails
+      console.error("Past intelligence gathering failed:", err.message);
+    }
+
+    // ── Stage 2: Build intelligent prompt ─────────────
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.8,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert quiz generator for interview preparation.
+    // Build the deduplication instruction
+    let deduplicationInstruction = "";
+    if (pastIntelligence && pastIntelligence.askedQuestions.length > 0) {
+      const sampleAsked = pastIntelligence.askedQuestions.slice(0, 30);
+      deduplicationInstruction = `
+QUESTIONS ALREADY ASKED — do not repeat these or ask questions that test the same concept from the same angle:
+${sampleAsked.map((q, i) => `${i + 1}. ${q}`).join("\n")}
+
+Generate questions that cover DIFFERENT concepts or test the SAME concepts from completely different angles.`;
+    }
+
+    // Build the weakness targeting instruction
+    let weaknessInstruction = "";
+    if (
+      pastIntelligence &&
+      (pastIntelligence.persistentlyWeak.length > 0 ||
+        pastIntelligence.weakTopics.length > 0)
+    ) {
+      const weakAreas = [
+        ...pastIntelligence.persistentlyWeak.slice(0, 3),
+        ...pastIntelligence.weakTopics.slice(0, 3),
+      ].slice(0, 4);
+
+      if (weakAreas.length > 0) {
+        weaknessInstruction = `
+WEAK AREAS TO TARGET — the user has struggled with these concepts. Include ${Math.min(Math.ceil(count * 0.4), 4)} questions that probe these areas from fresh angles:
+${weakAreas.map((a, i) => `${i + 1}. ${a}`).join("\n")}
+Do NOT reuse the exact same question text — test the same concept differently.`;
+      }
+    }
+
+    // Build the progression instruction
+    let progressionInstruction = "";
+    if (pastIntelligence) {
+      if (
+        pastIntelligence.improving === true &&
+        pastIntelligence.avgScore >= 70
+      ) {
+        progressionInstruction =
+          "PROGRESSION: User is improving and performing well. Include more challenging questions — push toward harder edge cases and less common scenarios.";
+      } else if (
+        pastIntelligence.improving === false &&
+        pastIntelligence.avgScore < 50
+      ) {
+        progressionInstruction =
+          "PROGRESSION: User is struggling. Vary the question angles significantly — try explaining the same concepts through different scenarios and contexts.";
+      } else if (pastIntelligence.attemptCount >= 3) {
+        progressionInstruction =
+          "PROGRESSION: User has taken this quiz multiple times. Focus on depth over breadth — fewer topics but more nuanced questions.";
+      }
+    }
+
+    const systemPrompt = `You are an expert quiz generator for interview preparation.
 Generate exactly ${count} multiple-choice questions on the given subject.
 Each question must have exactly 4 options labeled A, B, C, D.
 Difficulty level: ${difficulty || "MEDIUM"}.
 ${context ? `Focus specifically on: ${context}` : ""}
 Make ALL four options plausible — wrong options should represent common misconceptions or subtle errors, not obvious wrong answers.
+${deduplicationInstruction}
+${weaknessInstruction}
+${progressionInstruction}
 Return JSON:
 {
   "questions": [
@@ -52,11 +196,21 @@ Return JSON:
       "difficulty": "EASY" | "MEDIUM" | "HARD"
     }
   ]
-}`,
-        },
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: AI_MODEL_FAST,
+      temperature: 0.8,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Generate a ${difficulty || "MEDIUM"} difficulty quiz on: ${subject}`,
+          content: `Generate a ${difficulty || "MEDIUM"} difficulty quiz on: ${subject}${
+            pastIntelligence
+              ? ` (Attempt #${pastIntelligence.attemptCount + 1} for this user)`
+              : ""
+          }`,
         },
       ],
     });
@@ -101,7 +255,6 @@ Return JSON:
       question: q.question,
       options: q.options,
       difficulty: q.difficulty,
-      // correctAnswer and explanation intentionally omitted
     }));
 
     return success(
@@ -113,6 +266,15 @@ Return JSON:
           difficulty: quiz.difficulty,
           questionCount: clientQuestions.length,
           questions: clientQuestions,
+          // Send back intelligence summary for client display
+          pastAttempts: pastIntelligence
+            ? {
+                count: pastIntelligence.attemptCount,
+                avgScore: pastIntelligence.avgScore,
+                improving: pastIntelligence.improving,
+                weakTopics: pastIntelligence.weakTopics.slice(0, 3),
+              }
+            : null,
         },
       },
       201,
@@ -132,28 +294,18 @@ export async function submitQuizAnswers(req, res) {
     const userId = req.user.id;
     const { answers, timeSpent } = req.body;
 
-    // answers expected format: { [questionId]: "A" | "B" | "C" | "D" }
-    // This is the authoritative grading — client sends raw selections,
-    // server grades against stored correct answers
-
     const quiz = await prisma.quizAttempt.findFirst({
       where: { id: quizId, userId },
       select: { id: true, questions: true, answers: true, teamId: true },
     });
 
-    if (!quiz) {
-      return error(res, "Quiz not found.", 404);
-    }
-
-    if (quiz.answers) {
-      return error(res, "Quiz already submitted.", 400);
-    }
+    if (!quiz) return error(res, "Quiz not found.", 404);
+    if (quiz.answers) return error(res, "Quiz already submitted.", 400);
 
     const questions = quiz.questions;
     let correct = 0;
 
     const graded = questions.map((q) => {
-      // Support both numeric and string keys for robustness
       const userAnswer = answers[q.id] ?? answers[String(q.id)] ?? null;
       const isCorrect = userAnswer !== null && userAnswer === q.correctAnswer;
       if (isCorrect) correct++;
@@ -188,7 +340,6 @@ export async function submitQuizAnswers(req, res) {
       },
     });
 
-    // Generate AI analysis in background
     if (AI_ENABLED) {
       generateQuizAnalysis(quizId).catch(() => {});
     }
@@ -201,7 +352,7 @@ export async function submitQuizAnswers(req, res) {
         correct,
         total: questions.length,
         timeSpent: updated.timeSpent,
-        graded, // Full graded array — client uses this for results screen
+        graded,
       },
     });
   } catch (err) {
@@ -211,45 +362,8 @@ export async function submitQuizAnswers(req, res) {
 }
 
 // ============================================================================
-// GET QUIZ ANALYSIS
-// ============================================================================
-// Bug 3 fix: dedicated endpoint to fetch aiAnalysis from the quiz record.
-// generateQuizAnalysis runs in background after submit. This endpoint
-// returns it once ready, or null if still processing.
-export async function getQuizAnalysis(req, res) {
-  try {
-    const { quizId } = req.params;
-    const userId = req.user.id;
-
-    const quiz = await prisma.quizAttempt.findFirst({
-      where: { id: quizId, userId },
-      select: {
-        id: true,
-        aiAnalysis: true,
-        score: true,
-        completedAt: true,
-      },
-    });
-
-    if (!quiz) {
-      return error(res, "Quiz not found.", 404);
-    }
-
-    return success(res, {
-      analysis: quiz.aiAnalysis || null,
-      ready: !!quiz.aiAnalysis,
-    });
-  } catch (err) {
-    console.error("Get quiz analysis error:", err);
-    return error(res, "Failed to fetch quiz analysis.", 500);
-  }
-}
-
-// ============================================================================
 // SAVE QUIZ FEEDBACK
 // ============================================================================
-// Bug 4 fix: actually persist user feedback and flagged questions.
-// Previously the UI showed a feedback form but submitted nothing.
 export async function saveQuizFeedback(req, res) {
   try {
     const { quizId } = req.params;
@@ -261,11 +375,8 @@ export async function saveQuizFeedback(req, res) {
       select: { id: true, aiAnalysis: true },
     });
 
-    if (!quiz) {
-      return error(res, "Quiz not found.", 404);
-    }
+    if (!quiz) return error(res, "Quiz not found.", 404);
 
-    // Merge feedback into aiAnalysis JSON — no schema change needed
     const existingAnalysis = quiz.aiAnalysis || {};
     const updatedAnalysis = {
       ...existingAnalysis,
@@ -287,7 +398,7 @@ export async function saveQuizFeedback(req, res) {
 }
 
 // ============================================================================
-// GET QUIZ HISTORY (team-scoped)
+// GET QUIZ HISTORY
 // ============================================================================
 export async function getQuizHistory(req, res) {
   try {
@@ -334,7 +445,7 @@ export async function getQuizHistory(req, res) {
 }
 
 // ============================================================================
-// GET SINGLE QUIZ (with answers — for review)
+// GET SINGLE QUIZ
 // ============================================================================
 export async function getQuiz(req, res) {
   try {
@@ -345,9 +456,7 @@ export async function getQuiz(req, res) {
       where: { id: quizId, userId },
     });
 
-    if (!quiz) {
-      return error(res, "Quiz not found.", 404);
-    }
+    if (!quiz) return error(res, "Quiz not found.", 404);
 
     return success(res, { quiz });
   } catch (err) {
@@ -369,8 +478,8 @@ async function generateQuizAnalysis(quizId) {
     if (!quiz || !quiz.answers) return;
 
     const wrongAnswers = quiz.answers.filter((a) => !a.isCorrect);
+
     if (wrongAnswers.length === 0) {
-      // Perfect score — save a congratulatory analysis
       await prisma.quizAttempt.update({
         where: { id: quizId },
         data: {

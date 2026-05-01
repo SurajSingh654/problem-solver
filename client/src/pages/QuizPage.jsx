@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -13,7 +13,7 @@ import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import { QUIZ_SUGGESTED_SUBJECTS } from '@utils/constants'
 
-// ── Markdown-lite renderer for code blocks ─────────────
+// ── Markdown-lite renderer ─────────────────────────────
 function FormattedText({ text }) {
     if (!text) return null
     const parts = text.split(/(```[\s\S]*?```)/g)
@@ -46,7 +46,6 @@ function FormattedText({ text }) {
                                     </code>
                                 )
                             }
-                            // Handle **bold**
                             const boldParts = ip.split(/(\*\*[^*]+\*\*)/g)
                             return (
                                 <span key={j}>
@@ -168,13 +167,41 @@ function SetupScreen({ onStart }) {
             .map(a => ({ subject: a.subject, bestScore: a.score, difficulty: a.difficulty }))
     }, [pastQuizzes])
 
+    // ── Subject performance context ────────────────────
+    // Shows past performance inline when subject matches history
+    // Helps user calibrate difficulty before generating
+    const subjectHistory = useMemo(() => {
+        if (!subject.trim() || !pastQuizzes.length) return null
+        const matching = pastQuizzes.filter(q =>
+            q.subject.toLowerCase().includes(subject.trim().toLowerCase()) &&
+            q.score !== null
+        )
+        if (matching.length === 0) return null
+        const scores = matching.map(q => q.score).filter(s => s !== null)
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+        const best = Math.max(...scores)
+        const trend = scores.length >= 2
+            ? scores[0] > scores[scores.length - 1] ? 'declining' // newest is scores[0] (desc order)
+                : scores[0] > scores[scores.length - 1] ? 'declining'
+                    : scores[0] < scores[scores.length - 1] ? 'improving'  // wait, desc order means scores[0] is latest
+                        : 'stable'
+            : null
+        // History is desc order (newest first), so scores[0] = latest, scores[last] = oldest
+        const trendDirection = scores.length >= 2
+            ? scores[0] > scores[scores.length - 1] ? 'improving'
+                : scores[0] < scores[scores.length - 1] ? 'declining'
+                    : 'stable'
+            : null
+        return { count: matching.length, avg, best, trend: trendDirection, scores }
+    }, [subject, pastQuizzes])
+
     async function handleGenerate() {
         if (!subject.trim()) return
         try {
             const res = await generateQuiz.mutateAsync({
                 subject: subject.trim(),
                 difficulty,
-                count,   // Bug 1 fix: send 'count' — server now reads this correctly
+                count,
                 context: context.trim() || undefined,
             })
             onStart({
@@ -244,6 +271,62 @@ function SetupScreen({ onStart }) {
                        transition-all duration-150"
                         onKeyDown={e => { if (e.key === 'Enter' && subject.trim()) handleGenerate() }}
                     />
+
+                    {/* Subject performance context — shows inline when subject matches history */}
+                    <AnimatePresence>
+                        {subjectHistory && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="mt-2 p-3 rounded-xl bg-surface-2 border border-border-default
+                                               flex items-center gap-4 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] text-text-disabled uppercase tracking-widest">
+                                            {subjectHistory.count} past attempt{subjectHistory.count !== 1 ? 's' : ''}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-center">
+                                            <span className={cn(
+                                                'text-sm font-extrabold font-mono',
+                                                subjectHistory.avg >= 70 ? 'text-success' :
+                                                    subjectHistory.avg >= 50 ? 'text-warning' : 'text-danger'
+                                            )}>
+                                                {subjectHistory.avg}%
+                                            </span>
+                                            <p className="text-[9px] text-text-disabled">avg</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="text-sm font-extrabold font-mono text-brand-300">
+                                                {subjectHistory.best}%
+                                            </span>
+                                            <p className="text-[9px] text-text-disabled">best</p>
+                                        </div>
+                                        {subjectHistory.trend && (
+                                            <span className={cn(
+                                                'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                                                subjectHistory.trend === 'improving'
+                                                    ? 'bg-success/12 text-success'
+                                                    : subjectHistory.trend === 'declining'
+                                                        ? 'bg-danger/12 text-danger'
+                                                        : 'bg-surface-3 text-text-disabled'
+                                            )}>
+                                                {subjectHistory.trend === 'improving' ? '↑ Improving' :
+                                                    subjectHistory.trend === 'declining' ? '↓ Declining' : '→ Stable'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-text-disabled ml-auto">
+                                        AI will avoid repeated questions
+                                    </p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
                     <div className="flex flex-wrap gap-1.5 mt-3">
                         {QUIZ_SUGGESTED_SUBJECTS.slice(0, 12).map(s => (
                             <button
@@ -385,7 +468,9 @@ function SetupScreen({ onStart }) {
                     onClick={handleGenerate}
                 >
                     {generateQuiz.isPending ? (
-                        'AI is generating questions...'
+                        subjectHistory
+                            ? `Generating new questions (avoiding ${subjectHistory.count > 0 ? 'repeats, targeting weak areas' : 'basics'})...`
+                            : 'AI is generating questions...'
                     ) : (
                         <>
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -448,6 +533,17 @@ function QuizHistory() {
     const { data: historyData, isLoading } = useQuizHistory()
     const quizzes = historyData?.quizzes || []
     if (isLoading || !quizzes.length) return null
+
+    // Group by subject to show improvement trends
+    const bySubject = useMemo(() => {
+        const groups = {}
+        quizzes.forEach(q => {
+            if (!groups[q.subject]) groups[q.subject] = []
+            groups[q.subject].push(q)
+        })
+        return groups
+    }, [quizzes])
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -459,42 +555,63 @@ function QuizHistory() {
                 <span>📊</span> Past Quizzes
             </h2>
             <div className="space-y-2">
-                {quizzes.slice(0, 8).map((a, i) => (
-                    <motion.div
-                        key={a.id}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.03 }}
-                        className="flex items-center gap-3 p-3 rounded-xl border
+                {quizzes.slice(0, 8).map((a, i) => {
+                    // Show trend indicator if multiple attempts on same subject
+                    const subjectAttempts = bySubject[a.subject] || []
+                    const subjectIdx = subjectAttempts.findIndex(q => q.id === a.id)
+                    const prevAttempt = subjectAttempts[subjectIdx + 1] // older attempt
+                    const scoreDiff = prevAttempt && a.score !== null && prevAttempt.score !== null
+                        ? a.score - prevAttempt.score
+                        : null
+
+                    return (
+                        <motion.div
+                            key={a.id}
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.03 }}
+                            className="flex items-center gap-3 p-3 rounded-xl border
                        bg-surface-1 border-border-default"
-                    >
-                        <div className={cn(
-                            'w-10 h-10 rounded-xl flex items-center justify-center',
-                            'text-sm font-extrabold font-mono flex-shrink-0',
-                            a.score >= 80 ? 'bg-success/12 text-success' :
-                                a.score >= 60 ? 'bg-warning/12 text-warning' :
-                                    'bg-danger/12 text-danger'
-                        )}>
-                            {a.score}%
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-text-primary truncate">
-                                {a.subject}
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <Badge
-                                    variant={a.difficulty === 'EASY' ? 'easy' : a.difficulty === 'HARD' ? 'hard' : 'medium'}
-                                    size="xs"
-                                >
-                                    {a.difficulty}
-                                </Badge>
-                                <span className="text-[11px] text-text-disabled">
-                                    {a.score}% · {formatRelativeDate(a.completedAt)}
-                                </span>
+                        >
+                            <div className={cn(
+                                'w-10 h-10 rounded-xl flex items-center justify-center',
+                                'text-sm font-extrabold font-mono flex-shrink-0',
+                                a.score >= 80 ? 'bg-success/12 text-success' :
+                                    a.score >= 60 ? 'bg-warning/12 text-warning' :
+                                        'bg-danger/12 text-danger'
+                            )}>
+                                {a.score}%
                             </div>
-                        </div>
-                    </motion.div>
-                ))}
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-text-primary truncate">
+                                    {a.subject}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <Badge
+                                        variant={a.difficulty === 'EASY' ? 'easy' : a.difficulty === 'HARD' ? 'hard' : 'medium'}
+                                        size="xs"
+                                    >
+                                        {a.difficulty}
+                                    </Badge>
+                                    <span className="text-[11px] text-text-disabled">
+                                        {formatRelativeDate(a.completedAt)}
+                                    </span>
+                                </div>
+                            </div>
+                            {/* Trend indicator vs previous attempt on same subject */}
+                            {scoreDiff !== null && (
+                                <span className={cn(
+                                    'text-[10px] font-bold px-1.5 py-px rounded-full flex-shrink-0',
+                                    scoreDiff > 0 ? 'bg-success/12 text-success' :
+                                        scoreDiff < 0 ? 'bg-danger/12 text-danger' :
+                                            'bg-surface-3 text-text-disabled'
+                                )}>
+                                    {scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff}%
+                                </span>
+                            )}
+                        </motion.div>
+                    )
+                })}
             </div>
         </motion.div>
     )
@@ -505,8 +622,6 @@ function QuizHistory() {
 // ══════════════════════════════════════════════════════
 function ActiveQuizScreen({ quizData, onComplete }) {
     const [currentQ, setCurrentQ] = useState(0)
-    // Bug 2 fix: answers keyed by question index, value is the letter ("A","B","C","D")
-    // This is the raw selection state — we convert to { [questionId]: letter } on submit
     const [answers, setAnswers] = useState({})
     const [showScratch, setShowScratch] = useState(false)
     const [startTime] = useState(Date.now())
@@ -523,23 +638,18 @@ function ActiveQuizScreen({ quizData, onComplete }) {
     }
 
     function goTo(index) {
-        setCurrentQ(index)
+        setCurrentQ(Math.max(0, Math.min(total - 1, index)))
         setShowScratch(false)
     }
 
     function handleSubmit() {
         const timeUsed = Math.round((Date.now() - startTime) / 1000)
-
-        // Bug 2 fix: build answers keyed by question ID (what server expects)
-        // questions[i].id is the numeric ID from AI (1, 2, 3...)
-        // answers[i] is the letter the user selected ("A", "B", "C", "D")
         const answersById = {}
         questions.forEach((q, i) => {
             if (answers[i] !== undefined) {
                 answersById[q.id] = answers[i]
             }
         })
-
         onComplete({ answersById, timeUsedSecs: timeUsed })
     }
 
@@ -547,6 +657,53 @@ function ActiveQuizScreen({ quizData, onComplete }) {
         setTimerRunning(false)
         handleSubmit()
     }
+
+    // ── Keyboard navigation ────────────────────────────
+    // A/B/C/D — select option
+    // ArrowRight / Enter — next question (or submit on last)
+    // ArrowLeft — previous question
+    // 1/2/3/4 — also select option A/B/C/D
+    useEffect(() => {
+        function handleKeyDown(e) {
+            // Don't intercept if user is typing in scratchpad
+            if (e.target.tagName === 'TEXTAREA') return
+
+            const key = e.key.toUpperCase()
+            const optionKeys = ['A', 'B', 'C', 'D']
+
+            if (optionKeys.includes(key)) {
+                e.preventDefault()
+                handleSelect(key)
+                return
+            }
+
+            // Number keys 1-4 map to A-D
+            if (['1', '2', '3', '4'].includes(e.key)) {
+                e.preventDefault()
+                handleSelect(optionKeys[parseInt(e.key) - 1])
+                return
+            }
+
+            if (e.key === 'ArrowRight' || (e.key === 'Enter' && answers[currentQ] !== undefined)) {
+                e.preventDefault()
+                if (currentQ < total - 1) {
+                    goTo(currentQ + 1)
+                } else if (answered > 0) {
+                    handleSubmit()
+                }
+                return
+            }
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault()
+                goTo(currentQ - 1)
+                return
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [currentQ, total, answered, answers])
 
     if (!question) return null
 
@@ -582,7 +739,7 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                 </div>
             </div>
 
-            {/* Progress bar */}
+            {/* Progress */}
             <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden mb-6">
                 <motion.div
                     animate={{ width: `${progress}%` }}
@@ -624,15 +781,21 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                 transition={{ duration: 0.2 }}
                 className="bg-surface-1 border border-border-default rounded-2xl p-6"
             >
-                <div className="flex items-center gap-2 mb-4">
-                    <Badge
-                        variant={question.difficulty === 'EASY' ? 'easy' : question.difficulty === 'HARD' ? 'hard' : 'medium'}
-                        size="xs"
-                    >
-                        {question.difficulty || 'MEDIUM'}
-                    </Badge>
-                    <span className="text-[11px] text-text-disabled font-mono">
-                        Q{currentQ + 1} of {total}
+                <div className="flex items-center justify-between gap-2 mb-4">
+                    <div className="flex items-center gap-2">
+                        <Badge
+                            variant={question.difficulty === 'EASY' ? 'easy' : question.difficulty === 'HARD' ? 'hard' : 'medium'}
+                            size="xs"
+                        >
+                            {question.difficulty || 'MEDIUM'}
+                        </Badge>
+                        <span className="text-[11px] text-text-disabled font-mono">
+                            Q{currentQ + 1} of {total}
+                        </span>
+                    </div>
+                    {/* Keyboard hint */}
+                    <span className="text-[10px] text-text-disabled hidden sm:block">
+                        Press A·B·C·D or ←→ to navigate
                     </span>
                 </div>
 
@@ -675,7 +838,7 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                 </div>
 
                 {/* Scratchpad */}
-                <div className="mt-4 flex items-center gap-3">
+                <div className="mt-4">
                     <button
                         onClick={() => setShowScratch(v => !v)}
                         className={cn(
@@ -722,25 +885,15 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
     const navigate = useNavigate()
     const saveQuizFeedback = useSaveQuizFeedback()
 
-    // Bug 3 fix: fetch analysis via dedicated endpoint, poll until ready
-    const [analysisEnabled, setAnalysisEnabled] = useState(true)
-    const { data: analysisData } = useQuizAnalysis(quizId, analysisEnabled)
-
-    // Stop polling once we have the analysis
-    useEffect(() => {
-        if (analysisData?.ready) {
-            setAnalysisEnabled(false)
-        }
-    }, [analysisData])
-
-    const analysis = analysisData?.analysis || null
+    // Fixed: useQuizAnalysis now handles polling internally
+    // Returns quiz record — analysis is at quizRecord.aiAnalysis
+    const { data: quizRecord } = useQuizAnalysis(quizId)
+    const analysis = quizRecord?.aiAnalysis || null
 
     const [flagged, setFlagged] = useState({})
     const [feedback, setFeedback] = useState('')
     const [feedbackSent, setFeedbackSent] = useState(false)
 
-    // Bug 2 fix: use server-graded answers, not client-computed
-    const questions = quizData.questions || []
     const score = gradedAnswers.filter(a => a.isCorrect).length
     const total = gradedAnswers.length
     const pct = total > 0 ? Math.round((score / total) * 100) : 0
@@ -757,7 +910,6 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
         })
     }
 
-    // Bug 4 fix: actually send feedback to server
     async function handleSubmitFeedback() {
         if (!quizId) return
         try {
@@ -771,7 +923,6 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
             })
             setFeedbackSent(true)
         } catch {
-            // silent — feedback is best-effort
             setFeedbackSent(true)
         }
     }
@@ -806,8 +957,8 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                             color: pct >= 70 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-danger'
                         },
                         {
-                            label: 'Time', value: timeUsed
-                                ? `${Math.floor(timeUsed / 60)}m ${timeUsed % 60}s` : '—',
+                            label: 'Time',
+                            value: timeUsed ? `${Math.floor(timeUsed / 60)}m ${timeUsed % 60}s` : '—',
                             color: 'text-info'
                         },
                     ].map(s => (
@@ -834,7 +985,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                 </div>
             </motion.div>
 
-            {/* AI Analysis — Bug 3 fix: auto-loads via polling, no manual trigger */}
+            {/* AI Analysis */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -842,14 +993,14 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
             >
                 <div className="flex items-center gap-3 mb-3">
                     <span className="text-xl">🤖</span>
-                    <div>
+                    <div className="flex-1">
                         <h3 className="text-sm font-bold text-text-primary">AI Analysis</h3>
                         <p className="text-xs text-text-tertiary">
                             Personalized study advice based on your mistakes
                         </p>
                     </div>
                     {!analysis && (
-                        <div className="ml-auto flex items-center gap-2">
+                        <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full border-2 border-brand-400
                                 border-t-transparent animate-spin" />
                             <span className="text-xs text-text-disabled">Analyzing...</span>
@@ -896,7 +1047,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                     </div>
                 ) : (
                     <p className="text-xs text-text-disabled">
-                        Analysis typically ready within a few seconds after submission...
+                        Analysis typically ready within a few seconds...
                     </p>
                 )}
             </motion.div>
@@ -931,8 +1082,6 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                                             <FormattedText text={answer.question} />
                                         </div>
                                     </div>
-
-                                    {/* Options with results */}
                                     <div className="space-y-1.5 ml-9">
                                         {answer.options && Object.entries(answer.options).map(([key, value]) => {
                                             const isUserAnswer = answer.userAnswer === key
@@ -954,8 +1103,6 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                                             )
                                         })}
                                     </div>
-
-                                    {/* Explanation — Bug 2 fix: now includes explanation from server */}
                                     {answer.explanation && (
                                         <div className="ml-9 mt-3 p-3 bg-info/5 border border-info/15 rounded-lg">
                                             <p className="text-xs text-text-secondary leading-relaxed">
@@ -964,8 +1111,6 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                                             </p>
                                         </div>
                                     )}
-
-                                    {/* Flag */}
                                     <div className="ml-9 mt-2">
                                         <button
                                             onClick={() => toggleFlag(i)}
@@ -993,7 +1138,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
                 </div>
             </div>
 
-            {/* Feedback — Bug 4 fix: now actually sends to server */}
+            {/* Feedback */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1099,11 +1244,9 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz })
 export default function QuizPage() {
     const [screen, setScreen] = useState('setup')
     const [quizData, setQuizData] = useState(null)
-    // Bug 2 fix: store server-graded answers, not client-computed
     const [gradedAnswers, setGradedAnswers] = useState([])
     const [timeUsed, setTimeUsed] = useState(0)
     const [quizId, setQuizId] = useState(null)
-
     const submitQuiz = useSubmitQuiz()
 
     function handleStart(data) {
@@ -1114,18 +1257,15 @@ export default function QuizPage() {
     async function handleComplete(result) {
         setTimeUsed(result.timeUsedSecs)
         try {
-            // Bug 2 fix: send answersById (keyed by question ID) to server
             const res = await submitQuiz.mutateAsync({
                 quizId: quizData.id,
                 answers: result.answersById,
                 timeSpent: result.timeUsedSecs,
             })
-            // Use server-graded results — these have correct answers + explanations
             const serverGraded = res.data.data.result?.graded || []
             setGradedAnswers(serverGraded)
             setQuizId(res.data.data.result?.quizId || quizData.id)
         } catch {
-            // If submit fails, set empty graded answers so results screen still renders
             setGradedAnswers([])
             setQuizId(quizData.id)
         }
