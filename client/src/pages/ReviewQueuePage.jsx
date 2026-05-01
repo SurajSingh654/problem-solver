@@ -286,8 +286,8 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 <div className="grid grid-cols-3 gap-2">
                                     {[
                                         { icon: '🧩', label: 'Pattern', q: 'What algorithm pattern?' },
-                                        { icon: '💡', label: 'Key Insight', q: 'What's the "aha" moment ? ' },
-                    { icon: '⏱', label: 'Complexity', q: 'Time & space complexity?' },
+                                        { icon: '💡', label: 'Key Insight', q: `What's the "aha" moment?` },
+                                        { icon: '⏱', label: 'Complexity', q: 'Time & space complexity?' },
                                     ].map(p => (
                                         <div key={p.label}
                                             className="bg-surface-2 border border-border-default rounded-xl p-3 text-center">
