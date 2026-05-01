@@ -129,12 +129,7 @@ export default function ReportPage() {
       >
         <h2 className="text-sm font-bold text-text-primary mb-4">6D Radar</h2>
         <div className="h-72">
-          <RadarChart
-            data={DIMENSIONS.map((d) => ({
-              dimension: d.label,
-              score: dims[d.key] || 0,
-            }))}
-          />
+          <RadarChart dimensions={dims} />
         </div>
       </motion.div>
 

@@ -4,6 +4,12 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 
+// Add near top of file, before any export
+function stripHtml(html) {
+  if (!html) return "";
+  return html.replace(/<[^>]*>/g, "").trim();
+}
+
 // ============================================================================
 // PERSONAL STATS (dashboard)
 // ============================================================================
@@ -270,14 +276,13 @@ export async function get6DReport(req, res) {
       // even without peer validation
       communicationFromProxy = true;
       const withFeynmanComms = solutions.filter(
-        (s) => s.feynmanExplanation && s.feynmanExplanation.length > 50,
+        (s) => stripHtml(s.feynmanExplanation).length > 20,
       ).length;
       const withRealWorldComms = solutions.filter(
-        (s) => s.realWorldConnection && s.realWorldConnection.length > 30,
+        (s) => stripHtml(s.realWorldConnection).length > 15,
       ).length;
       const feynmanScore = (withFeynmanComms / totalSolutions) * 60;
       const realWorldScore = (withRealWorldComms / totalSolutions) * 40;
-      // Cap at 70: proxy is an estimate, not peer-validated
       d3 = Math.min(Math.round(feynmanScore + realWorldScore), 70);
     }
 
