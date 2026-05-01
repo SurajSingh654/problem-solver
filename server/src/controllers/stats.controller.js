@@ -1,32 +1,17 @@
 // ============================================================================
 // ProbSolver v3.0 — Stats Controller (Team-Scoped)
 // ============================================================================
-//
-// Three scopes of stats:
-//
-// 1. Personal stats (req.user.id + req.teamId) — for user dashboard
-// 2. Team stats (req.teamId) — for team dashboard/leaderboard
-// 3. Platform stats (no team filter) — for SUPER_ADMIN only
-//
-// The 6D Intelligence Report is computed from the user's activity
-// within their CURRENT team context. If they switch teams, their
-// report changes because it's based on different data.
-//
-// ============================================================================
-
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 
 // ============================================================================
 // PERSONAL STATS (dashboard)
 // ============================================================================
-
 export async function getPersonalStats(req, res) {
   try {
     const teamId = req.teamId;
     const userId = req.user.id;
 
-    // ── All queries scoped to team ─────────────────────
     const [
       totalSolved,
       solvedByDifficulty,
@@ -37,12 +22,7 @@ export async function getPersonalStats(req, res) {
       interviewCount,
       recentSolutions,
     ] = await Promise.all([
-      // Total solutions in this team
-      prisma.solution.count({
-        where: { userId, teamId },
-      }),
-
-      // Breakdown by difficulty (raw SQL for join)
+      prisma.solution.count({ where: { userId, teamId } }),
       prisma.$queryRaw`
         SELECT p.difficulty, COUNT(*)::int as count
         FROM solutions s
@@ -50,8 +30,6 @@ export async function getPersonalStats(req, res) {
         WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
         GROUP BY p.difficulty
       `,
-
-      // Breakdown by category
       prisma.$queryRaw`
         SELECT p.category, COUNT(*)::int as count
         FROM solutions s
@@ -59,33 +37,16 @@ export async function getPersonalStats(req, res) {
         WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
         GROUP BY p.category
       `,
-
-      // Average confidence
       prisma.solution.aggregate({
         where: { userId, teamId },
         _avg: { confidence: true },
       }),
-
-      // Due reviews
       prisma.solution.count({
-        where: {
-          userId,
-          teamId,
-          nextReviewDate: { lte: new Date() },
-        },
+        where: { userId, teamId, nextReviewDate: { lte: new Date() } },
       }),
-
-      // Quiz count
-      prisma.quizAttempt.count({
-        where: { userId, teamId },
-      }),
-
-      // Interview count
-      prisma.interviewSession.count({
-        where: { userId, teamId },
-      }),
-
-      // Recent solutions (last 5)
+      // Bug 3 fix: quizzes are personal — do not filter by teamId
+      prisma.quizAttempt.count({ where: { userId } }),
+      prisma.interviewSession.count({ where: { userId, teamId } }),
       prisma.solution.findMany({
         where: { userId, teamId },
         select: {
@@ -101,7 +62,6 @@ export async function getPersonalStats(req, res) {
       }),
     ]);
 
-    // ── User profile data ──────────────────────────────
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -139,16 +99,14 @@ export async function getPersonalStats(req, res) {
 // ============================================================================
 // TEAM LEADERBOARD
 // ============================================================================
-
 export async function getLeaderboard(req, res) {
   try {
     const teamId = req.teamId;
 
-    // ── Get all active members in this team ────────────
     const members = await prisma.user.findMany({
       where: {
         currentTeamId: teamId,
-        activityStatus: { not: "DORMANT" }, // Exclude dormant users
+        activityStatus: { not: "DORMANT" },
       },
       select: {
         id: true,
@@ -161,22 +119,20 @@ export async function getLeaderboard(req, res) {
       },
     });
 
-    // ── Get solution counts per user ───────────────────
     const solutionCounts = await prisma.$queryRaw`
-  SELECT
-    s."userId" as "userId",
-    COUNT(*)::int as total,
-    COUNT(*) FILTER (WHERE p.difficulty = 'EASY')::int as easy,
-    COUNT(*) FILTER (WHERE p.difficulty = 'MEDIUM')::int as medium,
-    COUNT(*) FILTER (WHERE p.difficulty = 'HARD')::int as hard,
-    ROUND(AVG(s.confidence), 1)::float as avg_confidence
-  FROM solutions s
-  JOIN problems p ON s."problemId" = p.id
-  WHERE s."teamId" = ${teamId}
-  GROUP BY s."userId"
-`;
+      SELECT
+        s."userId" as "userId",
+        COUNT(*)::int as total,
+        COUNT(*) FILTER (WHERE p.difficulty = 'EASY')::int as easy,
+        COUNT(*) FILTER (WHERE p.difficulty = 'MEDIUM')::int as medium,
+        COUNT(*) FILTER (WHERE p.difficulty = 'HARD')::int as hard,
+        ROUND(AVG(s.confidence), 1)::float as avg_confidence
+      FROM solutions s
+      JOIN problems p ON s."problemId" = p.id
+      WHERE s."teamId" = ${teamId}
+      GROUP BY s."userId"
+    `;
 
-    // ── Map counts to members ──────────────────────────
     const countMap = new Map();
     for (const row of solutionCounts) {
       countMap.set(row.userId, row);
@@ -190,7 +146,6 @@ export async function getLeaderboard(req, res) {
         hard: 0,
         avg_confidence: 0,
       };
-
       return {
         ...member,
         totalSolved: counts.total,
@@ -201,14 +156,12 @@ export async function getLeaderboard(req, res) {
       };
     });
 
-    // ── Sort by: hard count desc, then total desc ──────
     leaderboard.sort((a, b) => {
       if (b.hardSolved !== a.hardSolved) return b.hardSolved - a.hardSolved;
       if (b.totalSolved !== a.totalSolved) return b.totalSolved - a.totalSolved;
       return b.streak - a.streak;
     });
 
-    // ── Add rank ───────────────────────────────────────
     const ranked = leaderboard.map((entry, index) => ({
       rank: index + 1,
       ...entry,
@@ -224,13 +177,11 @@ export async function getLeaderboard(req, res) {
 // ============================================================================
 // 6D INTELLIGENCE REPORT (team-scoped)
 // ============================================================================
-
 export async function get6DReport(req, res) {
   try {
     const teamId = req.teamId;
     const userId = req.user.id;
 
-    // ── Fetch all user solutions in this team ──────────
     const solutions = await prisma.solution.findMany({
       where: { userId, teamId },
       select: {
@@ -292,22 +243,43 @@ export async function get6DReport(req, res) {
         (avgConf / 5) * 20,
     );
 
-    // ── D3: Communication (peer clarity ratings) ───────
+    // ── D3: Communication ─────────────────────────────
+    // Bug 1 fix: use peer ratings when available, fall back to Feynman
+    // quality proxy when no ratings exist. Proxy caps at 70 to be
+    // honest — peer validation is a stronger signal than self-reported.
     const clarityRatings = await prisma.clarityRating.findMany({
-      where: {
-        solution: { userId, teamId },
-      },
+      where: { solution: { userId, teamId } },
       select: { rating: true },
     });
-    const d3 =
-      clarityRatings.length > 0
-        ? Math.round(
-            (clarityRatings.reduce((s, r) => s + r.rating, 0) /
-              clarityRatings.length /
-              5) *
-              100,
-          )
-        : 0;
+
+    let d3;
+    let communicationFromProxy = false;
+
+    if (clarityRatings.length > 0) {
+      // Real peer ratings — use them directly (scale 1-5 → 0-100)
+      d3 = Math.round(
+        (clarityRatings.reduce((s, r) => s + r.rating, 0) /
+          clarityRatings.length /
+          5) *
+          100,
+      );
+    } else {
+      // Bug 1 fix: proxy from user's own communication signals
+      // Feynman explanations and real-world connections are written
+      // communication artifacts — they reflect communication ability
+      // even without peer validation
+      communicationFromProxy = true;
+      const withFeynmanComms = solutions.filter(
+        (s) => s.feynmanExplanation && s.feynmanExplanation.length > 50,
+      ).length;
+      const withRealWorldComms = solutions.filter(
+        (s) => s.realWorldConnection && s.realWorldConnection.length > 30,
+      ).length;
+      const feynmanScore = (withFeynmanComms / totalSolutions) * 60;
+      const realWorldScore = (withRealWorldComms / totalSolutions) * 40;
+      // Cap at 70: proxy is an estimate, not peer-validated
+      d3 = Math.min(Math.round(feynmanScore + realWorldScore), 70);
+    }
 
     // ── D4: Optimization ───────────────────────────────
     const withBrute = solutions.filter((s) => s.bruteForce).length;
@@ -322,26 +294,83 @@ export async function get6DReport(req, res) {
     );
 
     // ── D5: Pressure Performance ───────────────────────
-    const sims = await prisma.simSession.findMany({
-      where: { userId, teamId, completed: true },
-      select: { score: true, hintsUsed: true },
-    });
-    const interviews = await prisma.interviewSession.findMany({
-      where: { userId, teamId, status: "COMPLETED" },
-      select: { scores: true },
-    });
-    const totalPressure = sims.length + interviews.length;
+    // Bug 2 fix: include quiz performance alongside sims and interviews.
+    // Quizzes are timed and directly measure performance under pressure.
+    const [sims, interviews, quizzesForPressure] = await Promise.all([
+      prisma.simSession.findMany({
+        where: { userId, teamId, completed: true },
+        select: { score: true, hintsUsed: true },
+      }),
+      prisma.interviewSession.findMany({
+        where: { userId, teamId, status: "COMPLETED" },
+        select: { scores: true },
+      }),
+      // Bug 3 fix: quizzes are personal — no teamId filter
+      prisma.quizAttempt.findMany({
+        where: { userId, completedAt: { not: null }, score: { not: null } },
+        select: { score: true, timeSpent: true },
+        orderBy: { createdAt: "desc" },
+        take: 20, // Use most recent 20 for performance
+      }),
+    ]);
+
     let d5 = 0;
-    if (totalPressure > 0) {
-      const simRate = Math.min(sims.length / 5, 1) * 40;
-      const avgSimScore =
-        sims.length > 0
-          ? (sims.reduce((s, r) => s + (r.score || 0), 0) / sims.length / 5) *
-            40
-          : 0;
-      const noHint = sims.filter((s) => s.hintsUsed === 0).length;
-      const noHintRate = sims.length > 0 ? (noHint / sims.length) * 20 : 0;
-      d5 = Math.round(simRate + avgSimScore + noHintRate);
+    const hasAnyPressureData =
+      sims.length > 0 || interviews.length > 0 || quizzesForPressure.length > 0;
+
+    if (hasAnyPressureData) {
+      // Sim contribution (40% weight when sims exist)
+      let simScore = 0;
+      if (sims.length > 0) {
+        const simCompletionRate = Math.min(sims.length / 5, 1) * 40;
+        const avgSimScore =
+          (sims.reduce((s, r) => s + (r.score || 0), 0) / sims.length / 5) * 40;
+        const noHintRate =
+          (sims.filter((s) => s.hintsUsed === 0).length / sims.length) * 20;
+        simScore = simCompletionRate + avgSimScore + noHintRate;
+      }
+
+      // Interview contribution (standalone signal)
+      const interviewScore =
+        interviews.length > 0 ? Math.min(interviews.length / 3, 1) * 100 : 0;
+
+      // Bug 2 fix: quiz contribution — avg score on timed quizzes
+      let quizPressureScore = 0;
+      if (quizzesForPressure.length > 0) {
+        const avgQuizScore =
+          quizzesForPressure.reduce((s, r) => s + (r.score || 0), 0) /
+          quizzesForPressure.length;
+        // Scale: avg quiz score maps directly to 0-100
+        quizPressureScore = avgQuizScore;
+      }
+
+      // Weight: sims 40%, interviews 30%, quizzes 30%
+      // Adjust weights based on what data actually exists
+      const hasSims = sims.length > 0;
+      const hasInterviews = interviews.length > 0;
+      const hasQuizzes = quizzesForPressure.length > 0;
+
+      if (hasSims && hasInterviews && hasQuizzes) {
+        d5 = Math.round(
+          simScore * 0.4 + interviewScore * 0.3 + quizPressureScore * 0.3,
+        );
+      } else if (hasSims && hasQuizzes) {
+        d5 = Math.round(simScore * 0.5 + quizPressureScore * 0.5);
+      } else if (hasInterviews && hasQuizzes) {
+        d5 = Math.round(interviewScore * 0.5 + quizPressureScore * 0.5);
+      } else if (hasSims && hasInterviews) {
+        d5 = Math.round(simScore * 0.6 + interviewScore * 0.4);
+      } else if (hasQuizzes) {
+        // Only quizzes — use quiz score directly but cap at 80
+        // Sims and interviews are harder pressure tests
+        d5 = Math.min(Math.round(quizPressureScore), 80);
+      } else if (hasSims) {
+        d5 = Math.round(simScore);
+      } else if (hasInterviews) {
+        d5 = Math.round(interviewScore);
+      }
+
+      d5 = Math.min(d5, 100);
     }
 
     // ── D6: Knowledge Retention ────────────────────────
@@ -357,7 +386,26 @@ export async function get6DReport(req, res) {
     );
 
     // ── Overall ────────────────────────────────────────
-    const overall = Math.round((d1 + d2 + d3 + d4 + d5 + d6) / 6);
+    // Bug 5 fix: when D3 is from proxy (no peer ratings), weight it
+    // slightly less to avoid over-penalizing users with no teammates.
+    // Redistributed weight goes to D1 and D2 which are most reliable.
+    let overall;
+    if (communicationFromProxy) {
+      // D3 proxy: weight 0.8, D1 and D2 each get +0.067 extra weight
+      overall = Math.round(
+        d1 * (1 / 6 + 0.067) +
+          d2 * (1 / 6 + 0.067) +
+          d3 * ((1 / 6) * 0.8) +
+          d4 * (1 / 6) +
+          d5 * (1 / 6) +
+          d6 * (1 / 6),
+      );
+    } else {
+      overall = Math.round((d1 + d2 + d3 + d4 + d5 + d6) / 6);
+    }
+
+    // Bug 3 fix: quizCount uses userId only — quizzes are personal
+    const quizCount = await prisma.quizAttempt.count({ where: { userId } });
 
     return success(res, {
       report: {
@@ -371,11 +419,11 @@ export async function get6DReport(req, res) {
         },
         overall: Math.min(overall, 100),
         totalSolutions,
-        quizCount: await prisma.quizAttempt.count({
-          where: { userId, teamId },
-        }),
+        quizCount,
         interviewCount: interviews.length,
         simCount: sims.length,
+        // Surface proxy flag to client so UI can show appropriate context
+        communicationFromProxy,
       },
     });
   } catch (err) {
@@ -387,7 +435,6 @@ export async function get6DReport(req, res) {
 // ============================================================================
 // PLATFORM STATS (SUPER_ADMIN only)
 // ============================================================================
-
 export async function getPlatformStats(req, res) {
   try {
     const [
@@ -444,9 +491,8 @@ export async function getPlatformStats(req, res) {
 }
 
 // ============================================================================
-// SHOWCASE STATS (public-ish, for showcase page)
+// SHOWCASE STATS
 // ============================================================================
-
 export async function getShowcaseStats(req, res) {
   try {
     const teamId = req.teamId;

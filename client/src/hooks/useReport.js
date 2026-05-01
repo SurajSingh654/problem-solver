@@ -13,6 +13,9 @@ export function use6DReport() {
       const res = await api.get("/stats/report");
       return res.data.data.report;
     },
+    // Bug 8 fix: set staleTime so background refetch happens after
+    // 5 minutes — prevents constant refetching on every navigation
+    staleTime: 1000 * 60 * 5,
   });
 }
 
