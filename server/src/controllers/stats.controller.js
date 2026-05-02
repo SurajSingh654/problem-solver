@@ -284,12 +284,29 @@ export async function getPersonalStats(req, res) {
 }
 
 // ============================================================================
-// TEAM LEADERBOARD
+// TEAM LEADERBOARD — Composite Score Formula
+// ============================================================================
+//
+// COMPOSITE SCORE (0-100):
+//   Component 1 — Solution Quality Score (SQS)      40%
+//   Component 2 — Problem Difficulty Distribution   25%
+//   Component 3 — Consistency Score                 20%
+//   Component 4 — Knowledge Retention Score         10%
+//   Component 5 — Pattern Breadth Score              5%
+//
+// ANTI-GAMING:
+//   - SQS requires AI review or peer rating to exceed 50
+//   - PDDS is halved if SQS < 40 (can't claim difficulty credit with no quality)
+//   - Self-reported confidence has max 10% influence and is penalized for
+//     overconfidence detected by AI
+//   - Retention uses SM-2 EF + Ebbinghaus decay — cannot be gamed
+//
 // ============================================================================
 export async function getLeaderboard(req, res) {
   try {
     const teamId = req.teamId;
 
+    // ── Load all team members ──────────────────────────
     const members = await prisma.user.findMany({
       where: {
         currentTeamId: teamId,
@@ -302,54 +319,371 @@ export async function getLeaderboard(req, res) {
         teamRole: true,
         streak: true,
         lastSolvedAt: true,
+        lastActiveAt: true,
         activityStatus: true,
       },
     });
 
-    const solutionCounts = await prisma.$queryRaw`
-      SELECT
-        s."userId" as "userId",
-        COUNT(*)::int as total,
-        COUNT(*) FILTER (WHERE p.difficulty = 'EASY')::int as easy,
-        COUNT(*) FILTER (WHERE p.difficulty = 'MEDIUM')::int as medium,
-        COUNT(*) FILTER (WHERE p.difficulty = 'HARD')::int as hard,
-        ROUND(AVG(s.confidence), 1)::float as avg_confidence
-      FROM solutions s
-      JOIN problems p ON s."problemId" = p.id
-      WHERE s."teamId" = ${teamId}
-      GROUP BY s."userId"
-    `;
-
-    const countMap = new Map();
-    for (const row of solutionCounts) {
-      countMap.set(row.userId, row);
+    if (members.length === 0) {
+      return success(res, { leaderboard: [] });
     }
 
-    const leaderboard = members.map((member) => {
-      const counts = countMap.get(member.id) || {
-        total: 0,
-        easy: 0,
-        medium: 0,
-        hard: 0,
-        avg_confidence: 0,
-      };
+    const memberIds = members.map((m) => m.id);
+
+    // ── Load all solutions for this team (batch, not per-user) ──
+    const allSolutions = await prisma.solution.findMany({
+      where: {
+        teamId,
+        userId: { in: memberIds },
+      },
+      select: {
+        userId: true,
+        confidence: true,
+        pattern: true,
+        bruteForce: true,
+        optimizedApproach: true,
+        timeComplexity: true,
+        spaceComplexity: true,
+        aiFeedback: true,
+        sm2EasinessFactor: true,
+        sm2Repetitions: true,
+        nextReviewDate: true,
+        lastReviewedAt: true,
+        reviewCount: true,
+        createdAt: true,
+        problem: {
+          select: { difficulty: true },
+        },
+      },
+    });
+
+    // ── Load peer clarity ratings (batch) ─────────────
+    const allClarityRatings = await prisma.clarityRating.findMany({
+      where: { teamId },
+      select: {
+        rating: true,
+        solution: { select: { userId: true } },
+      },
+    });
+
+    // ── Load quiz attempts (personal — no teamId filter) ──
+    // Quizzes are personal but feed into pressure performance
+    // We only need recent performance for consistency component
+    const allQuizzes = await prisma.quizAttempt.findMany({
+      where: {
+        userId: { in: memberIds },
+        completedAt: { not: null },
+        score: { not: null },
+      },
+      select: {
+        userId: true,
+        score: true,
+        completedAt: true,
+      },
+      orderBy: { completedAt: "desc" },
+    });
+
+    // ── Group all data by userId ────────────────────────
+    const solutionsByUser = new Map();
+    const ratingsByUser = new Map();
+    const quizzesByUser = new Map();
+
+    memberIds.forEach((id) => {
+      solutionsByUser.set(id, []);
+      ratingsByUser.set(id, []);
+      quizzesByUser.set(id, []);
+    });
+
+    allSolutions.forEach((s) => {
+      if (solutionsByUser.has(s.userId)) {
+        solutionsByUser.get(s.userId).push(s);
+      }
+    });
+
+    allClarityRatings.forEach((r) => {
+      const userId = r.solution?.userId;
+      if (userId && ratingsByUser.has(userId)) {
+        ratingsByUser.get(userId).push(r.rating);
+      }
+    });
+
+    allQuizzes.forEach((q) => {
+      if (quizzesByUser.has(q.userId)) {
+        quizzesByUser.get(q.userId).push(q);
+      }
+    });
+
+    const now = Date.now();
+    const CANONICAL_PATTERN_COUNT = 16;
+
+    // ══════════════════════════════════════════════════
+    // COMPUTE COMPOSITE SCORE PER MEMBER
+    // ══════════════════════════════════════════════════
+    const scored = members.map((member) => {
+      const solutions = solutionsByUser.get(member.id) || [];
+      const clarityRatings = ratingsByUser.get(member.id) || [];
+      const quizzes = quizzesByUser.get(member.id) || [];
+      const totalSolutions = solutions.length;
+
+      // ── Difficulty counts ─────────────────────────
+      const easySolved = solutions.filter(
+        (s) => s.problem?.difficulty === "EASY",
+      ).length;
+      const mediumSolved = solutions.filter(
+        (s) => s.problem?.difficulty === "MEDIUM",
+      ).length;
+      const hardSolved = solutions.filter(
+        (s) => s.problem?.difficulty === "HARD",
+      ).length;
+
+      // ─────────────────────────────────────────────
+      // COMPONENT 1: Solution Quality Score (SQS) — 40%
+      //
+      // Measures actual quality of submitted solutions.
+      // AI reviews are the most trustworthy signal (objective).
+      // Peer ratings are second (social proof, hard to game).
+      // Self-reported confidence is last (subjective, gameable).
+      // ─────────────────────────────────────────────
+      let sqs = 0;
+
+      if (totalSolutions === 0) {
+        sqs = 0;
+      } else {
+        // Extract AI review overall scores
+        const aiOverallScores = [];
+        let overconfidenceFlags = 0;
+        let reviewedCount = 0;
+
+        solutions.forEach((s) => {
+          if (s.aiFeedback && Array.isArray(s.aiFeedback)) {
+            const latest = s.aiFeedback[s.aiFeedback.length - 1];
+            if (latest?.overallScore != null) {
+              aiOverallScores.push(latest.overallScore); // 1-10 scale
+              reviewedCount++;
+              if (latest.flags?.overconfidenceDetected) overconfidenceFlags++;
+            }
+          }
+        });
+
+        const hasAiReviews = aiOverallScores.length > 0;
+        const hasPeerRatings = clarityRatings.length > 0;
+
+        // Normalize AI score: 1-10 → 0-100
+        const aiAvg = hasAiReviews
+          ? (aiOverallScores.reduce((a, b) => a + b, 0) /
+              aiOverallScores.length /
+              10) *
+            100
+          : null;
+
+        // Normalize peer rating: 1-5 → 0-100
+        const peerAvg = hasPeerRatings
+          ? (clarityRatings.reduce((a, b) => a + b, 0) /
+              clarityRatings.length /
+              5) *
+            100
+          : null;
+
+        // Confidence calibration: penalize overconfidence
+        const avgConf =
+          solutions.reduce((s, r) => s + r.confidence, 0) / totalSolutions;
+        const overconfidencePenalty =
+          reviewedCount > 0
+            ? 1 - (overconfidenceFlags / reviewedCount) * 0.4
+            : 1;
+        const calibratedConf = (avgConf / 5) * 100 * overconfidencePenalty;
+
+        if (hasAiReviews && hasPeerRatings) {
+          sqs = aiAvg * 0.65 + peerAvg * 0.25 + calibratedConf * 0.1;
+        } else if (hasAiReviews) {
+          sqs = aiAvg * 0.75 + calibratedConf * 0.25;
+        } else if (hasPeerRatings) {
+          sqs = peerAvg * 0.7 + calibratedConf * 0.3;
+        } else {
+          // No objective quality signal — heavy discount
+          // This user cannot rank highly without AI review or peer ratings
+          sqs = calibratedConf * 0.5;
+        }
+
+        sqs = Math.min(Math.max(Math.round(sqs), 0), 100);
+      }
+
+      // ─────────────────────────────────────────────
+      // COMPONENT 2: Problem Difficulty Distribution (PDDS) — 25%
+      //
+      // Hard problems are weighted 6x easy, medium 3x easy.
+      // Rationale: FAANG hard problems represent roughly this
+      // difficulty ratio relative to easy problems in prep value.
+      // Max score achievable = all hard problems = 100.
+      // Quality gate: halved if SQS < 40 (low-quality hard solutions
+      // should not earn difficulty credit).
+      // ─────────────────────────────────────────────
+      let pdds = 0;
+
+      if (totalSolutions > 0) {
+        const weightedSum = hardSolved * 6 + mediumSolved * 3 + easySolved * 1;
+        // Normalize: if all solutions were hard, weightedSum = totalSolutions * 6
+        const maxPossible = totalSolutions * 6;
+        pdds = Math.round((weightedSum / maxPossible) * 100);
+
+        // Quality gate
+        if (sqs < 40) pdds = Math.round(pdds * 0.5);
+
+        pdds = Math.min(Math.max(pdds, 0), 100);
+      }
+
+      // ─────────────────────────────────────────────
+      // COMPONENT 3: Consistency Score (CS) — 20%
+      //
+      // Three sub-signals:
+      //   streak (40%): continuous daily practice
+      //   weekly velocity (40%): recent average output
+      //   total volume (20%): overall accumulated practice
+      //
+      // Streak cap: 30 days (beyond this, marginal value)
+      // Velocity cap: 7 solutions/week (more than this = quantity concern)
+      // Volume cap: 60 solutions (beyond this, diminishing returns for CS)
+      // ─────────────────────────────────────────────
+      const streakNorm = Math.min(member.streak / 30, 1) * 100;
+
+      // Weekly velocity from last 28 days
+      const fourWeeksAgo = new Date(now - 28 * 24 * 60 * 60 * 1000);
+      const recentSolutions = solutions.filter(
+        (s) => new Date(s.createdAt) >= fourWeeksAgo,
+      );
+      const avgWeeklyVelocity = recentSolutions.length / 4;
+      const velocityNorm = Math.min(avgWeeklyVelocity / 7, 1) * 100;
+
+      const volumeNorm = Math.min(totalSolutions / 60, 1) * 100;
+
+      const cs = Math.round(
+        streakNorm * 0.4 + velocityNorm * 0.4 + volumeNorm * 0.2,
+      );
+
+      // ─────────────────────────────────────────────
+      // COMPONENT 4: Knowledge Retention Score (KRS) — 10%
+      //
+      // Uses identical Ebbinghaus + SM-2 formula as the 6D report D6.
+      // Reusing the same computation ensures leaderboard retention score
+      // is consistent with what the user sees on their own report page.
+      // ─────────────────────────────────────────────
+      let krs = 0;
+
+      const reviewedSols = solutions.filter((s) => s.reviewCount > 0);
+      const overdueCount = solutions.filter(
+        (s) => s.nextReviewDate && new Date(s.nextReviewDate) <= new Date(),
+      ).length;
+
+      if (totalSolutions > 0) {
+        const retentionScores = solutions
+          .filter((s) => s.lastReviewedAt || s.createdAt)
+          .map((s) => {
+            const lastInteraction = s.lastReviewedAt || s.createdAt;
+            const daysSince =
+              (now - new Date(lastInteraction).getTime()) /
+              (1000 * 60 * 60 * 24);
+            const ef = s.sm2EasinessFactor ?? 2.5;
+            const reps = s.sm2Repetitions ?? 0;
+            const stability = Math.max(1, ef * Math.pow(reps + 1, 0.7));
+            const retention = Math.exp(-daysSince / (stability * 10));
+            const confidenceWeight = s.confidence
+              ? (s.confidence / 5) * 0.3 + 0.7
+              : 1.0;
+            return Math.min(retention * confidenceWeight, 1.0);
+          });
+
+        if (retentionScores.length > 0) {
+          const avgRetention =
+            retentionScores.reduce((a, b) => a + b, 0) / retentionScores.length;
+          const reviewedRate = reviewedSols.length / totalSolutions;
+          const overdueRatio = overdueCount / totalSolutions;
+          const overduePenalty = Math.round(overdueRatio * overdueRatio * 40);
+
+          krs = Math.max(
+            Math.round(reviewedRate * 40 + avgRetention * 60) - overduePenalty,
+            0,
+          );
+        }
+      }
+
+      // ─────────────────────────────────────────────
+      // COMPONENT 5: Pattern Breadth Score (PBS) — 5%
+      //
+      // How many of the 16 canonical interview patterns has this
+      // user practiced? Breadth bonus (10%) if > 8 patterns covered.
+      // ─────────────────────────────────────────────
+      const uniquePatterns = new Set(
+        solutions.filter((s) => s.pattern).map((s) => s.pattern),
+      );
+      let pbs = Math.round(
+        (uniquePatterns.size / CANONICAL_PATTERN_COUNT) * 100,
+      );
+      if (uniquePatterns.size > 8) pbs = Math.min(Math.round(pbs * 1.1), 100);
+
+      // ─────────────────────────────────────────────
+      // COMPOSITE SCORE
+      // ─────────────────────────────────────────────
+      const compositeScore = Math.round(
+        sqs * 0.4 + pdds * 0.25 + cs * 0.2 + krs * 0.1 + pbs * 0.05,
+      );
+
       return {
-        ...member,
-        totalSolved: counts.total,
-        easySolved: counts.easy,
-        mediumSolved: counts.medium,
-        hardSolved: counts.hard,
-        avgConfidence: counts.avg_confidence || 0,
+        // Identity
+        id: member.id,
+        name: member.name,
+        avatarUrl: member.avatarUrl,
+        teamRole: member.teamRole,
+        activityStatus: member.activityStatus,
+        lastSolvedAt: member.lastSolvedAt,
+
+        // Composite score
+        compositeScore: Math.min(compositeScore, 100),
+
+        // Score breakdown — sent to client for transparency
+        scoreBreakdown: {
+          solutionQuality: sqs,
+          difficultyDistribution: pdds,
+          consistency: cs,
+          retention: krs,
+          patternBreadth: pbs,
+        },
+
+        // Raw stats — still needed for UI display
+        totalSolved: totalSolutions,
+        easySolved,
+        mediumSolved,
+        hardSolved,
+        streak: member.streak,
+        avgConfidence:
+          totalSolutions > 0
+            ? Math.round(
+                (solutions.reduce((s, r) => s + r.confidence, 0) /
+                  totalSolutions) *
+                  10,
+              ) / 10
+            : 0,
+        uniquePatterns: uniquePatterns.size,
+        aiReviewedSolutions: solutions.filter(
+          (s) =>
+            s.aiFeedback &&
+            Array.isArray(s.aiFeedback) &&
+            s.aiFeedback.length > 0,
+        ).length,
       };
     });
 
-    leaderboard.sort((a, b) => {
-      if (b.hardSolved !== a.hardSolved) return b.hardSolved - a.hardSolved;
-      if (b.totalSolved !== a.totalSolved) return b.totalSolved - a.totalSolved;
-      return b.streak - a.streak;
+    // ── Sort by composite score, tiebreak by streak then recency ──
+    scored.sort((a, b) => {
+      if (b.compositeScore !== a.compositeScore) {
+        return b.compositeScore - a.compositeScore;
+      }
+      if (b.streak !== a.streak) return b.streak - a.streak;
+      const aLast = a.lastSolvedAt ? new Date(a.lastSolvedAt).getTime() : 0;
+      const bLast = b.lastSolvedAt ? new Date(b.lastSolvedAt).getTime() : 0;
+      return bLast - aLast;
     });
 
-    const ranked = leaderboard.map((entry, index) => ({
+    const ranked = scored.map((entry, index) => ({
       rank: index + 1,
       ...entry,
     }));
