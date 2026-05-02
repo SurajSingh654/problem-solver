@@ -36,10 +36,19 @@ export function useSubmitSolution() {
     mutationFn: ({ problemId, data }) =>
       api.post(`/solutions/${problemId}`, data),
     onSuccess: (_, { problemId }) => {
-      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, "solutions"] });
-      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, "problems"] });
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "solutions"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "problems"],
+      });
       queryClient.invalidateQueries({ queryKey: [...teamQueryKey, "stats"] });
-      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, "leaderboard"] });
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "leaderboard"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "review-queue"],
+      });
     },
   });
 }
@@ -51,7 +60,33 @@ export function useUpdateSolution() {
     mutationFn: ({ solutionId, data }) =>
       api.put(`/solutions/${solutionId}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, "solutions"] });
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "solutions"],
+      });
+    },
+  });
+}
+
+// ── SM-2 Review submission ────────────────────────────
+// Separate mutation from useUpdateSolution because:
+// 1. Different endpoint, different validation
+// 2. Review success invalidates the review queue and report (D6)
+// 3. Review response contains SM-2 state for UI feedback
+export function useSubmitReview() {
+  const queryClient = useQueryClient();
+  const { teamQueryKey } = useTeamContext();
+  return useMutation({
+    mutationFn: ({ solutionId, confidence }) =>
+      api.post(`/solutions/${solutionId}/review`, { confidence }),
+    onSuccess: () => {
+      // Invalidate review queue — item should disappear from due list
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "review-queue"],
+      });
+      // Invalidate 6D report — D6 retention score changes
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "report"],
+      });
     },
   });
 }
@@ -63,11 +98,17 @@ export function useRateSolution() {
     mutationFn: ({ solutionId, rating }) =>
       api.post(`/solutions/${solutionId}/rate`, { rating }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...teamQueryKey, "solutions"] });
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "solutions"],
+      });
     },
   });
 }
 
+// ── Review Queue — uses server-side filtered endpoint ─
+// Previously used useMySolutions and filtered client-side.
+// Now uses dedicated endpoint that only returns due/upcoming items
+// with SM-2 state, overdueDays, and retentionEstimate precomputed.
 export function useReviewQueue() {
   const { teamQueryKey } = useTeamContext();
   return useQuery({
@@ -76,6 +117,8 @@ export function useReviewQueue() {
       const res = await api.get("/solutions/review/queue");
       return res.data.data;
     },
+    // Refetch every 5 minutes — due items change as time passes
+    staleTime: 1000 * 60 * 5,
   });
 }
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useMySolutions, useUpdateSolution } from '@hooks/useSolutions'
+import { useReviewQueue, useSubmitReview } from '@hooks/useSolutions'
 import { useReviewHints } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
@@ -12,61 +12,19 @@ import { CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
-// ── SM-2 inspired interval calculator ─────────────────
-// Accounts for review count, not just confidence level.
-// Higher repetitions = longer intervals for the same confidence.
-function calculateNextInterval(confidence, reviewCount) {
-    // Base intervals by confidence (days)
-    const baseIntervals = { 1: 1, 2: 1, 3: 3, 4: 7, 5: 14 }
-    const base = baseIntervals[confidence] || 1
-
-    if (confidence <= 2) {
-        // Forgot it — reset to short interval regardless of history
-        return 1
-    }
-
-    // Scale up based on review count — well-reviewed items get longer gaps
-    const multiplier = Math.min(1 + (reviewCount - 1) * 0.3, 3)
-    return Math.round(base * multiplier)
-}
-
-// ── Date helpers ───────────────────────────────────────
-function getToday() {
-    const d = new Date()
-    d.setHours(0, 0, 0, 0)
-    return d
-}
-
-function isDue(reviewDates) {
-    if (!reviewDates?.length) return false
-    const today = getToday()
-    return reviewDates.some(d => {
-        const rd = new Date(d)
-        rd.setHours(0, 0, 0, 0)
-        return rd <= today
-    })
-}
-
-function getOverdueDays(reviewDates) {
-    if (!reviewDates?.length) return 0
-    const today = getToday()
-    const dueDates = reviewDates
-        .map(d => { const nd = new Date(d); nd.setHours(0, 0, 0, 0); return nd })
-        .filter(d => d <= today)
-        .sort((a, b) => a - b)
-    if (!dueDates.length) return 0
-    return Math.round((today - dueDates[0]) / 86400000)
-}
-
-function getNextUpcoming(reviewDates) {
-    if (!reviewDates?.length) return null
-    const today = getToday()
-    const future = reviewDates
-        .map(d => { const nd = new Date(d); nd.setHours(0, 0, 0, 0); return nd })
-        .filter(d => d > today)
-        .sort((a, b) => a - b)
-    if (!future.length) return null
-    return Math.round((future[0] - today) / 86400000)
+// ── SM-2 client-side preview calculator ───────────────
+// Used ONLY for the "next review in X days" preview in the rate phase.
+// The authoritative SM-2 calculation always happens server-side.
+// This preview uses the same algorithm so the displayed value matches
+// what the server will compute after save.
+function previewNextInterval(confidence, ef, interval, reps) {
+    const qualityMap = { 1: 0, 2: 2, 3: 3, 4: 4, 5: 5 }
+    const q = qualityMap[confidence] ?? 3
+    if (q < 3) return 1
+    const newReps = reps + 1
+    if (newReps === 1) return 1
+    if (newReps === 2) return 6
+    return Math.min(Math.round(interval * ef), 180)
 }
 
 // ── Strip HTML ─────────────────────────────────────────
@@ -144,7 +102,7 @@ function RecallTimer({ seconds, onExpire }) {
 }
 
 // ══════════════════════════════════════════════════════
-// REVIEW MODAL — Two-phase active recall
+// REVIEW MODAL — Three-phase active recall
 // ══════════════════════════════════════════════════════
 function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const navigate = useNavigate()
@@ -159,30 +117,35 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const [showAiHints, setShowAiHints] = useState(false)
     const textareaRef = useRef(null)
 
-    // Focus textarea on mount
+    // Focus textarea on recall phase mount
     useEffect(() => {
         if (phase === 'recall') {
             setTimeout(() => textareaRef.current?.focus(), 200)
         }
     }, [phase])
 
-    // Fetch AI hints when revealing
+    // Fetch AI hints when revealing — fire-and-forget, non-blocking
     async function handleReveal() {
         setPhase('reveal')
-        // Fire AI hint generation in background — don't block reveal
         try {
             const res = await reviewHints.mutateAsync(solution.id)
             setAiQuestions(res.data.data)
         } catch {
-            // Silent — AI hints are enhancement, not critical
+            // Silent — AI hints are enhancement, not critical path
         }
     }
 
-    function handleTimerExpire() {
-        setTimerExpired(true)
-    }
+    // SM-2 preview — uses same algorithm as server for consistent display
+    // sm2EasinessFactor, sm2Interval, sm2Repetitions come from server queue data
+    const nextDays = confidence > 0
+        ? previewNextInterval(
+            confidence,
+            solution.sm2EasinessFactor ?? 2.5,
+            solution.sm2Interval ?? 1,
+            solution.sm2Repetitions ?? 0
+        )
+        : 0
 
-    const nextDays = calculateNextInterval(confidence, (solution.reviewCount || 0) + 1)
     const nextDate = confidence > 0
         ? (() => {
             const d = new Date()
@@ -191,9 +154,12 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
         })()
         : null
 
-    // What fields does this solution have to show in reveal
     const hasNotes = solution.keyInsight || solution.optimizedApproach ||
         stripHtml(solution.feynmanExplanation) || solution.timeComplexity
+
+    // Whether this confidence rating is a "pass" (quality >= 3) or "reset" (quality < 3)
+    // quality 1 → 0, quality 2 → 2, quality 3+ → 3+
+    const isRecallPass = confidence >= 3
 
     return (
         <>
@@ -211,7 +177,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                     exit={{ opacity: 0, scale: 0.95, y: -16 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 35 }}
                     className="w-full max-w-xl bg-surface-1 border border-border-strong
-                     rounded-2xl shadow-xl overflow-hidden max-h-[92vh] flex flex-col"
+                               rounded-2xl shadow-xl overflow-hidden max-h-[92vh] flex flex-col"
                 >
                     {/* ── Header ──────────────────────────────── */}
                     <div className="flex items-start justify-between gap-4 p-5 border-b border-border-default flex-shrink-0">
@@ -223,8 +189,15 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 </Badge>
                                 {solution.problem?.category && (
                                     <span className="text-[10px] font-bold text-text-disabled bg-surface-3
-                                   border border-border-default rounded-full px-2 py-px">
+                                                   border border-border-default rounded-full px-2 py-px">
                                         {solution.problem.category.replace('_', ' ')}
+                                    </span>
+                                )}
+                                {/* SM-2 state indicator */}
+                                {solution.sm2Repetitions > 0 && (
+                                    <span className="text-[9px] font-bold px-2 py-px rounded-full border
+                                                   bg-brand-400/8 text-brand-300 border-brand-400/20">
+                                        EF {(solution.sm2EasinessFactor ?? 2.5).toFixed(1)}
                                     </span>
                                 )}
                                 {/* Phase indicator */}
@@ -241,14 +214,20 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 {solution.problem?.title}
                             </h2>
                             <p className="text-xs text-text-disabled mt-0.5">
-                                Review #{(solution.reviewCount || 0) + 1} · Solved {formatRelativeDate(solution.createdAt)}
+                                Review #{(solution.reviewCount || 0) + 1}
+                                {solution.sm2Repetitions > 0 && ` · ${solution.sm2Repetitions} successful streak`}
+                                {' · '}Solved {formatRelativeDate(solution.createdAt)}
                             </p>
                         </div>
                         {phase !== 'recall' && (
-                            <button onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0">
+                            <button
+                                onClick={onClose}
+                                className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0"
+                            >
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
                                 </svg>
                             </button>
                         )}
@@ -258,8 +237,8 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                     <div className="flex-1 overflow-y-auto">
 
                         {/* ════════════════════════════════════════
-                PHASE 1 — ACTIVE RECALL
-                ════════════════════════════════════════ */}
+                            PHASE 1 — ACTIVE RECALL
+                            ════════════════════════════════════════ */}
                         {phase === 'recall' && (
                             <div className="p-5 space-y-4">
                                 <div className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4">
@@ -267,10 +246,9 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         <p className="text-sm font-bold text-text-primary">
                                             🧠 Before looking at your notes...
                                         </p>
-                                        {!timerExpired && (
-                                            <RecallTimer seconds={90} onExpire={handleTimerExpire} />
-                                        )}
-                                        {timerExpired && (
+                                        {!timerExpired ? (
+                                            <RecallTimer seconds={90} onExpire={() => setTimerExpired(true)} />
+                                        ) : (
                                             <span className="text-[10px] font-bold text-text-disabled">
                                                 Time's up — take your time
                                             </span>
@@ -286,11 +264,13 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 <div className="grid grid-cols-3 gap-2">
                                     {[
                                         { icon: '🧩', label: 'Pattern', q: 'What algorithm pattern?' },
-                                        { icon: '💡', label: 'Key Insight', q: `What's the "aha" moment?` },
+                                        { icon: '💡', label: 'Key Insight', q: "What's the \"aha\" moment?" },
                                         { icon: '⏱', label: 'Complexity', q: 'Time & space complexity?' },
                                     ].map(p => (
-                                        <div key={p.label}
-                                            className="bg-surface-2 border border-border-default rounded-xl p-3 text-center">
+                                        <div
+                                            key={p.label}
+                                            className="bg-surface-2 border border-border-default rounded-xl p-3 text-center"
+                                        >
                                             <span className="text-lg">{p.icon}</span>
                                             <p className="text-[10px] font-bold text-text-primary mt-1">{p.label}</p>
                                             <p className="text-[10px] text-text-disabled mt-0.5 leading-tight">{p.q}</p>
@@ -301,33 +281,33 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 {/* Recall textarea */}
                                 <div>
                                     <label className="block text-xs font-semibold text-text-secondary mb-1.5">
-                                        Your recall (optional — typing helps retention)
+                                        Your recall (optional — typing strengthens memory encoding)
                                     </label>
                                     <textarea
                                         ref={textareaRef}
                                         value={recallText}
                                         onChange={e => setRecallText(e.target.value)}
-                                        placeholder="Write what you remember about this problem... pattern, approach, key insight, complexity..."
+                                        placeholder="Write what you remember... pattern, approach, key insight, complexity..."
                                         rows={4}
                                         className="w-full bg-surface-3 border border-border-strong rounded-xl
-                               text-sm text-text-primary placeholder:text-text-disabled
-                               px-3.5 py-2.5 outline-none resize-none
-                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                               transition-all"
+                                                   text-sm text-text-primary placeholder:text-text-disabled
+                                                   px-3.5 py-2.5 outline-none resize-none
+                                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                                                   transition-all"
                                     />
                                     <p className="text-[10px] text-text-disabled mt-1">
-                                        Research shows writing activates recall better than just reading. Even a few words helps.
+                                        Roediger & Butler (2011): retrieval practice produces stronger long-term retention than re-reading.
                                     </p>
                                 </div>
                             </div>
                         )}
 
                         {/* ════════════════════════════════════════
-                PHASE 2 — REVEAL + COMPARE
-                ════════════════════════════════════════ */}
+                            PHASE 2 — REVEAL + COMPARE
+                            ════════════════════════════════════════ */}
                         {phase === 'reveal' && (
                             <div className="p-5 space-y-4">
-                                {/* Comparison */}
+                                {/* Comparison grid */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {/* What you recalled */}
                                     <div className="rounded-xl border border-border-default bg-surface-2 p-4">
@@ -406,7 +386,6 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         Generating targeted review questions...
                                     </div>
                                 )}
-
                                 {aiQuestions && aiQuestions.questions?.length > 0 && (
                                     <motion.div
                                         initial={{ opacity: 0, y: 8 }}
@@ -443,9 +422,10 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                             </p>
                                                             <span className={cn(
                                                                 'text-[9px] font-bold mt-1 inline-block',
-                                                                q.focus === 'pattern' ? 'text-brand-300' :
-                                                                    q.focus === 'complexity' ? 'text-warning' :
-                                                                        q.focus === 'edge_case' ? 'text-danger' : 'text-text-disabled'
+                                                                q.focus === 'pattern' ? 'text-brand-300'
+                                                                    : q.focus === 'complexity' ? 'text-warning'
+                                                                        : q.focus === 'edge_case' ? 'text-danger'
+                                                                            : 'text-text-disabled'
                                                             )}>
                                                                 {q.focus?.replace('_', ' ')}
                                                             </span>
@@ -474,15 +454,15 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     </p>
                                     <p className="text-xs text-text-tertiary">
                                         If you missed the pattern, key insight, or complexity — rate yourself lower.
-                                        The intervals will adjust and bring it back sooner.
+                                        SM-2 will adjust the interval and bring it back sooner.
                                     </p>
                                 </div>
                             </div>
                         )}
 
                         {/* ════════════════════════════════════════
-                PHASE 3 — RATE
-                ════════════════════════════════════════ */}
+                            PHASE 3 — RATE
+                            ════════════════════════════════════════ */}
                         {phase === 'rate' && (
                             <div className="p-5 space-y-4">
                                 <div>
@@ -490,29 +470,35 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         How well did you remember this?
                                     </p>
                                     <p className="text-xs text-text-tertiary mb-4">
-                                        Be honest — this determines when you'll see it next. Based on {(solution.reviewCount || 0) + 1} total reviews.
+                                        Be honest — this drives the SM-2 algorithm.
+                                        Review #{(solution.reviewCount || 0) + 1}
+                                        {solution.sm2Repetitions > 0 && ` · Current EF: ${(solution.sm2EasinessFactor ?? 2.5).toFixed(2)}`}
                                     </p>
                                     <ConfidencePicker value={confidence} onChange={setConfidence} />
                                 </div>
 
-                                {/* Next review preview */}
+                                {/* SM-2 next review preview */}
                                 {confidence > 0 && nextDate && (
                                     <motion.div
                                         initial={{ opacity: 0, y: 4 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className="flex items-center gap-3 px-4 py-3 rounded-xl
-                               bg-surface-2 border border-border-default"
+                                        className={cn(
+                                            'flex items-start gap-3 px-4 py-3 rounded-xl border',
+                                            isRecallPass
+                                                ? 'bg-surface-2 border-border-default'
+                                                : 'bg-warning/5 border-warning/25'
+                                        )}
                                     >
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                             stroke="currentColor" strokeWidth="2"
                                             strokeLinecap="round" strokeLinejoin="round"
-                                            className="text-brand-300 flex-shrink-0">
+                                            className="text-brand-300 flex-shrink-0 mt-0.5">
                                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                                             <line x1="16" y1="2" x2="16" y2="6" />
                                             <line x1="8" y1="2" x2="8" y2="6" />
                                             <line x1="3" y1="10" x2="21" y2="10" />
                                         </svg>
-                                        <div>
+                                        <div className="flex-1">
                                             <p className="text-xs text-text-secondary">
                                                 Next review:{' '}
                                                 <span className="font-semibold text-brand-300">{nextDate}</span>
@@ -520,18 +506,45 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                     (in {nextDays} day{nextDays !== 1 ? 's' : ''})
                                                 </span>
                                             </p>
+                                            {/* SM-2 outcome explanation */}
                                             {confidence <= 2 && (
-                                                <p className="text-[11px] text-warning mt-0.5">
-                                                    Low confidence — will review again soon to reinforce
+                                                <p className="text-[11px] text-warning mt-1">
+                                                    Didn't recall it — repetition counter resets to 0. Back in 1 day.
+                                                    EF decreases slightly (harder to space out).
                                                 </p>
                                             )}
-                                            {confidence >= 4 && (solution.reviewCount || 0) >= 2 && (
-                                                <p className="text-[11px] text-success mt-0.5">
-                                                    Strong retention — interval extended based on your history
+                                            {confidence === 3 && (
+                                                <p className="text-[11px] text-text-tertiary mt-1">
+                                                    Recalled with effort — interval advances. EF stays stable.
+                                                </p>
+                                            )}
+                                            {confidence === 4 && (
+                                                <p className="text-[11px] text-text-tertiary mt-1">
+                                                    Good recall — interval extends. EF increases slightly.
+                                                </p>
+                                            )}
+                                            {confidence === 5 && (
+                                                <p className="text-[11px] text-success mt-1">
+                                                    Perfect recall — maximum EF increase. Interval extends significantly.
                                                 </p>
                                             )}
                                         </div>
                                     </motion.div>
+                                )}
+
+                                {/* SM-2 explanation for first-time users */}
+                                {(solution.reviewCount || 0) === 0 && (
+                                    <div className="bg-info/5 border border-info/20 rounded-xl p-3">
+                                        <p className="text-[10px] font-bold text-info mb-1">
+                                            How SM-2 works
+                                        </p>
+                                        <p className="text-[10px] text-text-tertiary leading-relaxed">
+                                            Your rating adjusts two things: the <strong>interval</strong> (days until next review)
+                                            and the <strong>easiness factor</strong> (how fast intervals grow).
+                                            High ratings compound into months-long intervals.
+                                            Low ratings reset the clock — the item comes back tomorrow.
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -541,8 +554,11 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                     <div className="flex items-center gap-3 px-5 py-4 border-t border-border-default flex-shrink-0 bg-surface-1">
                         {phase === 'recall' && (
                             <>
-                                <Button variant="ghost" size="sm"
-                                    onClick={() => { onClose(); navigate(`/problems/${solution.problemId}`) }}>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => { onClose(); navigate(`/problems/${solution.problemId}`) }}
+                                >
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" strokeWidth="2"
                                         strokeLinecap="round" strokeLinejoin="round">
@@ -604,7 +620,7 @@ function PatternGroupHeader({ pattern, count, onReviewAll }) {
                     Pattern
                 </span>
                 <span className="text-xs font-bold text-brand-300 bg-brand-400/10
-                         border border-brand-400/20 rounded-full px-2.5 py-0.5">
+                                 border border-brand-400/20 rounded-full px-2.5 py-0.5">
                     {pattern || 'No Pattern Tagged'}
                 </span>
                 <span className="text-[11px] text-text-disabled">
@@ -624,18 +640,20 @@ function PatternGroupHeader({ pattern, count, onReviewAll }) {
 }
 
 // ── Due card ───────────────────────────────────────────
+// overdueDays and retentionEstimate come from the server-side
+// getReviewQueue endpoint — no client-side computation needed.
 function DueCard({ solution, index, onReview }) {
-    const overdueDays = getOverdueDays(solution.reviewDates)
+    const overdueDays = solution.overdueDays ?? 0
+    const retentionEstimate = solution.retentionEstimate ?? null
     const prevConf = CONFIDENCE_LEVELS.find(c => c.value === solution.confidence)
 
-    // Retention health: based on review count and last confidence
-    // Low confidence + many reviews = struggling. High confidence + few reviews = not enough data.
+    // Retention health derived from SM-2 state
     const retentionHealth = (() => {
-        const conf = solution.confidence || 0
-        const reviews = solution.reviewCount || 0
-        if (reviews === 0) return null
-        if (conf >= 4 && reviews >= 2) return 'strong'
-        if (conf >= 3) return 'building'
+        const reps = solution.sm2Repetitions ?? 0
+        const ef = solution.sm2EasinessFactor ?? 2.5
+        if (reps === 0) return null
+        if (reps >= 3 && ef >= 2.3) return 'strong'
+        if (reps >= 1 && ef >= 1.8) return 'building'
         return 'weak'
     })()
 
@@ -681,7 +699,7 @@ function DueCard({ solution, index, onReview }) {
                                         {LANGUAGE_LABELS[solution.language] || solution.language}
                                     </span>
                                 )}
-                                {/* Retention health indicator */}
+                                {/* Retention health from SM-2 state */}
                                 {retentionHealth && (
                                     <span className={cn(
                                         'text-[9px] font-bold px-1.5 py-px rounded-full border',
@@ -691,9 +709,22 @@ function DueCard({ solution, index, onReview }) {
                                                 ? 'bg-warning/10 text-warning border-warning/20'
                                                 : 'bg-danger/10 text-danger border-danger/20'
                                     )}>
-                                        {retentionHealth === 'strong' ? '↑ Strong retention'
+                                        {retentionHealth === 'strong' ? '↑ Strong'
                                             : retentionHealth === 'building' ? '~ Building'
                                                 : '↓ Fragile'}
+                                    </span>
+                                )}
+                                {/* Retention estimate from Ebbinghaus curve */}
+                                {retentionEstimate !== null && (
+                                    <span className={cn(
+                                        'text-[9px] font-mono font-bold px-1.5 py-px rounded-full border',
+                                        retentionEstimate >= 70
+                                            ? 'bg-success/8 text-success border-success/15'
+                                            : retentionEstimate >= 40
+                                                ? 'bg-warning/8 text-warning border-warning/15'
+                                                : 'bg-danger/8 text-danger border-danger/15'
+                                    )}>
+                                        ~{retentionEstimate}% retained
                                     </span>
                                 )}
                             </div>
@@ -701,8 +732,10 @@ function DueCard({ solution, index, onReview }) {
                         {/* Due badge */}
                         <span className={cn(
                             'text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0',
-                            overdueDays > 3 ? 'bg-danger/15 text-danger border border-danger/30'
-                                : overdueDays > 0 ? 'bg-warning/15 text-warning border border-warning/30'
+                            overdueDays > 3
+                                ? 'bg-danger/15 text-danger border border-danger/30'
+                                : overdueDays > 0
+                                    ? 'bg-warning/15 text-warning border border-warning/30'
                                     : 'bg-brand-400/12 text-brand-300 border border-brand-400/25'
                         )}>
                             {overdueDays === 0 ? 'Due today'
@@ -711,15 +744,20 @@ function DueCard({ solution, index, onReview }) {
                         </span>
                     </div>
 
-                    {/* Stats */}
+                    {/* Stats row */}
                     <div className="flex items-center gap-4 text-xs text-text-tertiary mb-3 flex-wrap">
                         <span>Solved {formatRelativeDate(solution.createdAt)}</span>
                         {solution.reviewCount > 0 && (
                             <span>Reviewed {solution.reviewCount}x</span>
                         )}
+                        {solution.sm2Repetitions > 0 && (
+                            <span className="font-mono">
+                                EF {(solution.sm2EasinessFactor ?? 2.5).toFixed(1)}
+                            </span>
+                        )}
                         {prevConf && (
                             <span className="flex items-center gap-1">
-                                Last rating: {prevConf.emoji}
+                                Last: {prevConf.emoji}
                                 <span className={cn('font-semibold', prevConf.color)}>
                                     {prevConf.label}
                                 </span>
@@ -730,7 +768,7 @@ function DueCard({ solution, index, onReview }) {
                     {/* Key insight preview */}
                     {solution.keyInsight && (
                         <p className="text-xs text-text-tertiary leading-relaxed mb-3
-                          border-l-2 border-brand-400/30 pl-3 italic line-clamp-2">
+                                       border-l-2 border-brand-400/30 pl-3 italic line-clamp-2">
                             "{solution.keyInsight}"
                         </p>
                     )}
@@ -750,9 +788,20 @@ function DueCard({ solution, index, onReview }) {
 }
 
 // ── Upcoming card ──────────────────────────────────────
+// daysUntil computed from nextReviewDate provided by server
 function UpcomingCard({ solution, index }) {
     const navigate = useNavigate()
-    const daysUntil = getNextUpcoming(solution.reviewDates)
+
+    const daysUntil = useMemo(() => {
+        if (!solution.nextReviewDate) return null
+        const now = new Date()
+        now.setHours(0, 0, 0, 0)
+        const next = new Date(solution.nextReviewDate)
+        next.setHours(0, 0, 0, 0)
+        const diff = Math.round((next - now) / 86400000)
+        return diff > 0 ? diff : null
+    }, [solution.nextReviewDate])
+
     if (daysUntil === null) return null
 
     return (
@@ -762,11 +811,11 @@ function UpcomingCard({ solution, index }) {
             transition={{ duration: 0.15, delay: index * 0.03 }}
             onClick={() => navigate(`/problems/${solution.problemId}`)}
             className="flex items-center gap-3 p-3.5 rounded-xl border
-                 bg-surface-1 border-border-default
-                 hover:border-border-strong cursor-pointer transition-all"
+                       bg-surface-1 border-border-default
+                       hover:border-border-strong cursor-pointer transition-all"
         >
             <div className="w-8 h-8 rounded-lg bg-surface-3 border border-border-default
-                      flex items-center justify-center flex-shrink-0 text-sm">
+                            flex items-center justify-center flex-shrink-0 text-sm">
                 📅
             </div>
             <div className="flex-1 min-w-0">
@@ -784,13 +833,20 @@ function UpcomingCard({ solution, index }) {
                     <span className="text-[11px] text-text-tertiary">
                         in {daysUntil} day{daysUntil !== 1 ? 's' : ''}
                     </span>
+                    {solution.sm2Interval && (
+                        <span className="text-[9px] font-mono text-text-disabled">
+                            {solution.sm2Interval}d interval
+                        </span>
+                    )}
                 </div>
             </div>
             <span className={cn(
                 'text-[10px] font-bold flex-shrink-0',
                 daysUntil <= 2 ? 'text-warning' : 'text-text-disabled'
             )}>
-                {daysUntil <= 2 ? 'Soon' : formatShortDate(new Date(Date.now() + daysUntil * 86400000))}
+                {daysUntil <= 2
+                    ? 'Soon'
+                    : formatShortDate(new Date(Date.now() + daysUntil * 86400000))}
             </span>
         </motion.div>
     )
@@ -807,38 +863,17 @@ export default function ReviewQueuePage() {
     const [sessionCount, setSessionCount] = useState(0)
     const [groupByPattern, setGroupByPattern] = useState(false)
 
-    const { data: solutions, isLoading } = useMySolutions()
-    const reviewMutation = useUpdateSolution()
+    // Server-side filtered queue — no client-side date math needed
+    const { data: queueData, isLoading } = useReviewQueue()
+    const reviewMutation = useSubmitReview()
 
-    // Categorise solutions
-    const { due, upcoming } = useMemo(() => {
-        if (!solutions) return { due: [], upcoming: [] }
-        const today = getToday()
-        const in7 = new Date(today)
-        in7.setDate(in7.getDate() + 7)
+    // Filter out items reviewed this session (optimistic removal)
+    const due = useMemo(() => {
+        if (!queueData?.due) return []
+        return queueData.due.filter(s => !reviewed.includes(s.id))
+    }, [queueData, reviewed])
 
-        const due = []
-        const upcoming = []
-
-        solutions.forEach(s => {
-            if (!s.reviewDates?.length) return
-            if (reviewed.includes(s.id)) return
-
-            if (isDue(s.reviewDates)) {
-                due.push(s)
-                return
-            }
-            const daysUntil = getNextUpcoming(s.reviewDates)
-            if (daysUntil !== null && daysUntil <= 7) {
-                upcoming.push(s)
-            }
-        })
-
-        // Sort due: most overdue first
-        due.sort((a, b) => getOverdueDays(b.reviewDates) - getOverdueDays(a.reviewDates))
-
-        return { due, upcoming }
-    }, [solutions, reviewed])
+    const upcoming = queueData?.upcoming || []
 
     // Pattern groups for due solutions
     const patternGroups = useMemo(() => {
@@ -852,27 +887,17 @@ export default function ReviewQueuePage() {
         return groups
     }, [due])
 
+    // Save review — sends only confidence to server
+    // Server computes SM-2 state, returns next interval
     async function handleSaveReview(confidenceLevel) {
         if (!reviewing) return
 
-        // Compute smart next review date using SM-2 inspired formula
-        const nextDays = calculateNextInterval(
-            confidenceLevel,
-            (reviewing.reviewCount || 0) + 1
-        )
-        const nextReviewDate = new Date()
-        nextReviewDate.setDate(nextReviewDate.getDate() + nextDays)
-
         await reviewMutation.mutateAsync({
             solutionId: reviewing.id,
-            data: {
-                confidence: confidenceLevel,
-                nextReviewDate: nextReviewDate.toISOString(),
-            },
+            confidence: confidenceLevel,
         })
 
-        const newReviewed = [...reviewed, reviewing.id]
-        setReviewed(newReviewed)
+        setReviewed(prev => [...prev, reviewing.id])
         setSessionCount(c => c + 1)
         setReviewing(null)
 
@@ -887,17 +912,15 @@ export default function ReviewQueuePage() {
         ? Math.round((totalDoneToday / (totalDoneToday + totalDue)) * 100)
         : 0
 
-    // Streak computation — solutions reviewed today
+    // reviewedToday: count from server data + this session
     const reviewedToday = useMemo(() => {
-        if (!solutions) return 0
-        const today = getToday()
-        return solutions.filter(s => {
-            if (!s.lastReviewedAt) return false
-            const lr = new Date(s.lastReviewedAt)
-            lr.setHours(0, 0, 0, 0)
-            return lr.getTime() === today.getTime()
-        }).length + totalDoneToday
-    }, [solutions, totalDoneToday])
+        if (!queueData) return totalDoneToday
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        // Server returns all due items — we approximate today's total
+        // from session count since queue only returns due/upcoming
+        return totalDoneToday
+    }, [queueData, totalDoneToday])
 
     if (isLoading) {
         return (
@@ -912,6 +935,8 @@ export default function ReviewQueuePage() {
         )
     }
 
+    const hasAnyData = due.length > 0 || upcoming.length > 0 || totalDoneToday > 0
+
     return (
         <div className="p-6 max-w-[900px] mx-auto">
             {/* Header */}
@@ -921,7 +946,7 @@ export default function ReviewQueuePage() {
                         Review Queue
                     </h1>
                     <p className="text-sm text-text-tertiary">
-                        Active recall + spaced repetition — the fastest path to retention
+                        SM-2 spaced repetition + active recall — the fastest path to long-term retention
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -959,21 +984,24 @@ export default function ReviewQueuePage() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -12 }}
                         className="bg-success/10 border border-success/30 rounded-2xl p-5
-                       flex items-center gap-4 mb-6"
+                                   flex items-center gap-4 mb-6"
                     >
                         <div className="text-3xl flex-shrink-0">🎉</div>
                         <div className="flex-1">
                             <p className="text-sm font-bold text-success">Review session complete!</p>
                             <p className="text-xs text-text-secondary mt-0.5">
                                 You actively recalled {sessionCount} problem{sessionCount !== 1 ? 's' : ''}.
-                                Each review strengthens the neural pathway.
+                                SM-2 has updated each interval based on your ratings.
                             </p>
                         </div>
-                        <button onClick={() => setShowBanner(false)}
-                            className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0">
+                        <button
+                            onClick={() => setShowBanner(false)}
+                            className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0"
+                        >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
                             </svg>
                         </button>
                     </motion.div>
@@ -991,14 +1019,14 @@ export default function ReviewQueuePage() {
                         bg: totalDue > 0 ? 'bg-warning/10 border-warning/20' : 'bg-success/10 border-success/20',
                     },
                     {
-                        label: 'Done Today',
-                        value: reviewedToday,
+                        label: 'Done This Session',
+                        value: totalDoneToday,
                         icon: '✅',
                         color: 'text-success',
                         bg: 'bg-success/10 border-success/20',
                     },
                     {
-                        label: 'Coming (7d)',
+                        label: 'Coming (14d)',
                         value: upcoming.length,
                         icon: '📅',
                         color: 'text-brand-300',
@@ -1006,7 +1034,7 @@ export default function ReviewQueuePage() {
                     },
                     {
                         label: 'Total Tracked',
-                        value: solutions?.filter(s => s.reviewDates?.length).length || 0,
+                        value: (queueData?.due?.length ?? 0) + (queueData?.upcoming?.length ?? 0),
                         icon: '📚',
                         color: 'text-text-secondary',
                         bg: 'bg-surface-3 border-border-default',
@@ -1034,7 +1062,7 @@ export default function ReviewQueuePage() {
             {(totalDue > 0 || totalDoneToday > 0) && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-6">
                     <div className="flex items-center justify-between text-xs mb-2">
-                        <span className="text-text-tertiary font-medium">Today's session</span>
+                        <span className="text-text-tertiary font-medium">Session progress</span>
                         <span className="font-bold text-text-primary">
                             {totalDoneToday} / {totalDoneToday + totalDue} reviewed
                         </span>
@@ -1050,7 +1078,7 @@ export default function ReviewQueuePage() {
                 </motion.div>
             )}
 
-            {/* Active recall explanation — shown on first use */}
+            {/* Active recall explanation — shown before first review this session */}
             {totalDue > 0 && !reviewed.length && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -1061,13 +1089,14 @@ export default function ReviewQueuePage() {
                         <span className="text-lg flex-shrink-0">🧪</span>
                         <div>
                             <p className="text-xs font-bold text-text-primary mb-1">
-                                Active Recall Mode — New!
+                                SM-2 Spaced Repetition — Active Recall Mode
                             </p>
                             <p className="text-xs text-text-tertiary leading-relaxed">
-                                Each review now has 3 phases: <strong>Recall</strong> (try to remember without notes),
-                                <strong> Reveal</strong> (compare with your original notes + AI-generated questions),
-                                <strong> Rate</strong> (honest confidence rating). Research shows this is 2-3x more effective
-                                than passive re-reading.
+                                3 phases per review: <strong>Recall</strong> (try to remember without notes),
+                                <strong> Reveal</strong> (compare + AI questions),
+                                <strong> Rate</strong> (honest confidence). Your rating drives the SM-2 algorithm —
+                                high ratings space items to weeks, low ratings reset to tomorrow.
+                                Items are sorted by most forgotten first (Ebbinghaus retention estimate).
                             </p>
                         </div>
                     </div>
@@ -1081,10 +1110,11 @@ export default function ReviewQueuePage() {
                         <span className="text-warning">⚡</span>
                         Due Now
                         <Badge variant="warning" size="xs">{totalDue}</Badge>
+                        <span className="text-[10px] font-normal text-text-disabled ml-1">
+                            sorted by most overdue · fragile memories first
+                        </span>
                     </h2>
-
                     {groupByPattern ? (
-                        // Pattern-grouped view
                         <div className="space-y-6">
                             {Object.entries(patternGroups)
                                 .sort(([, a], [, b]) => b.length - a.length)
@@ -1106,7 +1136,6 @@ export default function ReviewQueuePage() {
                                 ))}
                         </div>
                     ) : (
-                        // Flat list view
                         <motion.div layout className="space-y-3">
                             <AnimatePresence mode="popLayout">
                                 {due.map((s, i) => (
@@ -1117,7 +1146,6 @@ export default function ReviewQueuePage() {
                     )}
                 </div>
             ) : (
-                // All caught up
                 <motion.div
                     initial={{ opacity: 0, scale: 0.97 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -1134,8 +1162,8 @@ export default function ReviewQueuePage() {
                     </h2>
                     <p className="text-sm text-text-tertiary max-w-sm mx-auto mb-5">
                         {upcoming.length > 0
-                            ? `You have ${upcoming.length} review${upcoming.length !== 1 ? 's' : ''} coming up in the next 7 days.`
-                            : "No reviews scheduled. Keep solving problems to build your queue."
+                            ? `You have ${upcoming.length} review${upcoming.length !== 1 ? 's' : ''} coming up in the next 14 days.`
+                            : 'No reviews scheduled. Keep solving problems to build your queue.'
                         }
                     </p>
                     <Button variant="secondary" size="md" onClick={() => navigate('/problems')}>
@@ -1150,48 +1178,48 @@ export default function ReviewQueuePage() {
                     <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-4">
                         <span>📅</span>
                         Coming Up
-                        <span className="text-xs text-text-disabled font-normal">next 7 days</span>
+                        <span className="text-xs text-text-disabled font-normal">next 14 days</span>
                     </h2>
                     <div className="space-y-2">
-                        {upcoming
-                            .sort((a, b) => (getNextUpcoming(a.reviewDates) || 99) - (getNextUpcoming(b.reviewDates) || 99))
-                            .map((s, i) => (
-                                <UpcomingCard key={s.id} solution={s} index={i} />
-                            ))}
+                        {upcoming.map((s, i) => (
+                            <UpcomingCard key={s.id} solution={s} index={i} />
+                        ))}
                     </div>
                 </div>
             )}
 
-            {/* How it works — shown when no solutions */}
-            {!solutions?.length && (
+            {/* How it works — shown when no data at all */}
+            {!hasAnyData && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-surface-1 border border-border-default rounded-2xl p-6"
                 >
                     <h2 className="text-sm font-bold text-text-primary mb-4 flex items-center gap-2">
-                        <span>📖</span> How Active Recall + Spaced Repetition Works
+                        <span>📖</span> How SM-2 Spaced Repetition Works
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {[
                             {
                                 step: '1', icon: '📝',
                                 title: 'Solve a problem',
-                                desc: 'Submit a solution. Review dates are automatically scheduled using spaced repetition.',
+                                desc: 'Submit a solution. SM-2 initializes with an easiness factor based on your confidence. First review is scheduled for tomorrow.',
                             },
                             {
                                 step: '2', icon: '🧠',
                                 title: 'Active recall',
-                                desc: 'Come back here when due. Try to recall the solution from memory — then compare with your notes.',
+                                desc: 'When due, try to recall from memory before looking at your notes. Retrieval practice is 2-3x more effective than re-reading (Roediger & Butler, 2011).',
                             },
                             {
                                 step: '3', icon: '📈',
-                                title: 'Adaptive intervals',
-                                desc: 'High confidence + more reviews = longer gap. Forgot it = back in 1 day. Intervals compound over time.',
+                                title: 'SM-2 adaptive intervals',
+                                desc: 'Your rating adjusts the easiness factor and interval. Perfect recall compounds into months-long gaps. Forgetting resets to 1 day — the algorithm finds your personal forgetting rate.',
                             },
                         ].map(item => (
-                            <div key={item.step}
-                                className="bg-surface-2 border border-border-default rounded-xl p-4">
+                            <div
+                                key={item.step}
+                                className="bg-surface-2 border border-border-default rounded-xl p-4"
+                            >
                                 <div className="text-2xl mb-2">{item.icon}</div>
                                 <p className="text-xs font-bold text-text-primary mb-1">{item.title}</p>
                                 <p className="text-xs text-text-tertiary leading-relaxed">{item.desc}</p>

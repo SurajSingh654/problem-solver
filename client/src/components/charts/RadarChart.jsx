@@ -4,7 +4,7 @@ import { cn } from '@utils/cn'
 import { DIMENSIONS } from '@utils/constants'
 
 // Pure SVG radar — no recharts dependency needed for this shape
-export function RadarChart({ dimensions = {}, size = 280 }) {
+export function RadarChart({ dimensions = {}, overall = null, size = 280 }) {
     const cx = size / 2
     const cy = size / 2
     const radius = size * 0.38
@@ -176,10 +176,12 @@ export function RadarChart({ dimensions = {}, size = 280 }) {
                     fontFamily="JetBrains Mono, monospace"
                     fill="#eeeef5"
                 >
-                    {Math.round(
-                        Object.values(dimensions).reduce((a, b) => a + b, 0) /
-                        Math.max(Object.values(dimensions).length, 1)
-                    )}
+                    {overall !== null
+                        ? overall
+                        : Math.round(
+                            Object.values(dimensions).reduce((a, b) => a + b, 0) /
+                            Math.max(Object.values(dimensions).length, 1)
+                        )}
                 </text>
                 <text
                     x={cx} y={cy + 10}

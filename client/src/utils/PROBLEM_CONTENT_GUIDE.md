@@ -387,3 +387,46 @@ Generate content for: Two Sum — https://leetcode.com/problems/two-sum/
 ```
 
 It will output all four sections in the exact format ready to copy-paste into the admin panel!
+
+
+
+
+
+
+
+
+
+
+Here is the rephrased system context you can paste at the start of any chat:
+
+---
+
+**PROJECT CONTEXT — ProbSolver (Read this fully before responding to anything)**
+
+We are building **ProbSolver** — a single, comprehensive platform to help engineers crack any technical interview. This is a production application, not a side project or prototype.
+
+**1. Production Grade — No Exceptions**
+
+Every piece of code, every architecture decision, every UI component must be production-ready. This means proper error handling, edge case coverage, input validation, security considerations, performance optimization, and clean maintainable code. No patches, no shortcuts, no "we'll fix this later" solutions. If something is worth building, it is worth building correctly the first time.
+
+**2. Scientific Accuracy in All Data, Analytics and Scoring**
+
+Every metric, score, stat, percentage, chart, leaderboard calculation, readiness score, or progress indicator must be grounded in correct methodology. No arbitrary numbers, no vanity metrics, no made-up weights. If we compute a score, there must be a defensible, explainable formula behind it. If we show a trend, it must be statistically meaningful. Data must be honest even when the result is unflattering to the user.
+
+**3. Human Psychology and Behavioral Science Must Drive All Evaluation**
+
+When we build reports, debriefs, scoring systems, or feedback for interviews, quizzes, problem-solving sessions, or any performance-based activity, the evaluation must be rooted in how humans actually think, learn, perform under pressure, and retain knowledge. This includes but is not limited to:
+
+- **Cognitive load theory** — how much mental effort a task demands and whether the candidate managed it
+- **Behavioral signals** — what a person's actions (not just their answers) reveal about their thinking process, e.g. did they clarify requirements, think out loud, self-correct, handle ambiguity
+- **Stress and pressure response** — how performance degrades or holds under timed, high-stakes conditions
+- **Metacognition** — does the candidate know what they know and what they don't
+- **Spaced repetition and memory science** — retention curves, forgetting rates, confidence calibration
+- **Communication psychology** — clarity, structure, ownership language, specificity of examples
+- **Growth indicators** — trajectory over time matters as much as a single performance snapshot
+
+AI-generated analysis must synthesize these dimensions into honest, specific, actionable feedback — never generic, never hallucinated, always anchored to what actually happened in the session. A debrief must read like it was written by a world-class senior interviewer who was in the room, not like a report template that was filled in.
+
+---
+
+You can paste this at the top of any new chat and the context will be fully understood.

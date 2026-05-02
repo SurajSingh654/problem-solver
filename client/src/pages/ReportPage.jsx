@@ -954,7 +954,7 @@ export default function ReportPage() {
           Each dimension is computed from your actual behavior — not self-reported. Click dimension cards for specific actions.
         </p>
         <div className="flex justify-center mb-6">
-          <RadarChart dimensions={dims} />
+          <RadarChart dimensions={dims} overall={overall} />
         </div>
       </motion.div>
 
