@@ -82,6 +82,50 @@ export const INTERVIEW_PHASES = {
     ],
   },
 
+  LOW_LEVEL_DESIGN: {
+    defaultDuration: 2700, // 45 minutes
+    phases: [
+      {
+        name: "Requirements",
+        duration: 300, // 5 minutes
+        description:
+          "Clarify the scope — what the system must support and constraints.",
+        aiPrompt:
+          'Ask the candidate to clarify requirements before designing. Push for: What are the core use cases? What scale? Any constraints on extensibility? If they jump to classes, redirect: "Before we design, what operations must this system support?"',
+      },
+      {
+        name: "Entity Identification",
+        duration: 600, // 10 minutes
+        description:
+          "Identify core entities, their responsibilities, and relationships.",
+        aiPrompt:
+          'Ask: "What are the main entities in this system?" Evaluate whether they identify objects with clear Single Responsibility. If they conflate responsibilities, ask: "Should one class handle both X and Y?" Don\'t tell them what\'s wrong — ask questions that reveal it.',
+      },
+      {
+        name: "Class Design",
+        duration: 900, // 15 minutes
+        description:
+          "Design class hierarchy, interfaces, and method signatures.",
+        aiPrompt:
+          'The candidate should be writing class definitions now. Watch their code. Probe design decisions: "Why inheritance here instead of composition?" "What pattern are you applying?" If they\'re missing an interface where one is needed, ask: "What happens when you need a different implementation of X?"',
+      },
+      {
+        name: "Design Patterns",
+        duration: 540, // 9 minutes
+        description: "Identify and justify design pattern usage.",
+        aiPrompt:
+          'Ask: "What design patterns are you using here?" If they haven\'t named any, ask: "How would you categorize the relationship between X and Y?" Test if they know WHY a pattern applies, not just that it exists. Challenge with: "Could you have used [alternative pattern] instead? What would you trade off?"',
+      },
+      {
+        name: "Extensibility",
+        duration: 360, // 6 minutes
+        description:
+          "Test SOLID principles and extensibility with follow-up requirements.",
+        aiPrompt:
+          'Give them a follow-up requirement: "Now add support for [new feature]." Evaluate: Do they need to modify existing classes? Does their design support this cleanly? Ask: "Does adding this violate Open/Closed?" "Which SOLID principles does your design satisfy?"',
+      },
+    ],
+  },
   BEHAVIORAL: {
     defaultDuration: 1800, // 30 minutes
     phases: [
@@ -522,6 +566,8 @@ export function getCompanyPersona(input) {
     adobe: "ALGORITHM_FOCUSED",
     twitter: "ALGORITHM_FOCUSED",
     palantir: "ALGORITHM_FOCUSED",
+    adobe: "ALGORITHM_FOCUSED",
+    flipkart: "ALGORITHM_FOCUSED",
 
     // System-Focused
     aws: "SYSTEM_FOCUSED",
@@ -544,6 +590,7 @@ export function getCompanyPersona(input) {
     atlassian: "COLLABORATIVE",
     gitlab: "COLLABORATIVE",
     github: "COLLABORATIVE",
+    atlassian: "COLLABORATIVE",
 
     // Domain-Specific
     goldman: "DOMAIN_SPECIFIC",

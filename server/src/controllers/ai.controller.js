@@ -688,6 +688,7 @@ export async function getWeeklyPlan(req, res) {
     const ALL_CATEGORIES = [
       "CODING",
       "SYSTEM_DESIGN",
+      "LOW_LEVEL_DESIGN",
       "BEHAVIORAL",
       "CS_FUNDAMENTALS",
       "HR",
@@ -876,11 +877,24 @@ export async function generateProblemContent(req, res) {
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
+    const contentTokenBudget = {
+      SYSTEM_DESIGN: 3500,
+      LOW_LEVEL_DESIGN: 2800,
+      CODING: 2000,
+      BEHAVIORAL: 1800,
+      CS_FUNDAMENTALS: 2000,
+      SQL: 1800,
+      HR: 1500,
+    };
+    const contentModelMap = {
+      SYSTEM_DESIGN: AI_MODEL_PRIMARY,
+      LOW_LEVEL_DESIGN: AI_MODEL_PRIMARY,
+    };
     const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
+      model: contentModelMap[category] || AI_MODEL_FAST,
       temperature: 0.8,
       response_format: { type: "json_object" },
-      max_tokens: 2000,
+      max_tokens: contentTokenBudget[category] || 2000,
       messages: [
         {
           role: "system",
@@ -1252,11 +1266,45 @@ export async function generateProblemsAI(req, res) {
             targetCompany,
           });
 
+        // Category-specific token budgets and model selection.
+        //
+        // Research basis for budgets:
+        // SYSTEM_DESIGN: needs full problem description with scale requirements,
+        //   NFRs, architecture overview, teaching notes (5 sections), follow-ups.
+        //   Minimum viable output is ~2800 tokens. Set to 3500 with buffer.
+        // LOW_LEVEL_DESIGN: needs entity list, class hierarchy description,
+        //   design pattern justification, SOLID analysis, extensibility follow-ups.
+        //   Minimum viable output is ~2200 tokens. Set to 2800 with buffer.
+        // BEHAVIORAL/HR: narrative content, more concise. 1800 is sufficient.
+        // Others: 2000 is adequate with some buffer.
+        //
+        // Model selection:
+        // SYSTEM_DESIGN and LOW_LEVEL_DESIGN require genuine multi-step reasoning
+        // about architecture and object relationships. GPT-4o-mini produces shallow
+        // SD/LLD content — it names components without understanding trade-offs.
+        // GPT-4o produces meaningfully better content for these two categories.
+        // Cost delta at 5 problems max is negligible.
+        const categoryTokenBudget = {
+          SYSTEM_DESIGN: 3500,
+          LOW_LEVEL_DESIGN: 2800,
+          CODING: 2000,
+          BEHAVIORAL: 1800,
+          CS_FUNDAMENTALS: 2000,
+          SQL: 1800,
+          HR: 1500,
+        };
+        const categoryModel = {
+          SYSTEM_DESIGN: AI_MODEL_PRIMARY,
+          LOW_LEVEL_DESIGN: AI_MODEL_PRIMARY,
+        };
+        const contentMaxTokens = categoryTokenBudget[category] || 2000;
+        const contentModel = categoryModel[category] || AI_MODEL_FAST;
+
         const contentResponse = await openai.chat.completions.create({
-          model: AI_MODEL_FAST,
+          model: contentModel,
           temperature: 0.75,
           response_format: { type: "json_object" },
-          max_tokens: 2000,
+          max_tokens: contentMaxTokens,
           messages: [
             { role: "system", content: contentSystem },
             { role: "user", content: contentUser },

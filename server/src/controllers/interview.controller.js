@@ -285,6 +285,13 @@ function getDefaultPhases(category) {
       "Scaling",
       "Trade-offs",
     ],
+    LOW_LEVEL_DESIGN: [
+      "Requirements",
+      "Entity Identification",
+      "Class Design",
+      "Design Patterns",
+      "Extensibility",
+    ],
     BEHAVIORAL: [
       "Introduction",
       "STAR Story",

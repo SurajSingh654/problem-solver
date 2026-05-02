@@ -97,10 +97,13 @@ enum ProblemSource {
   AI_GENERATED
 }
 
-/// The 6 interview categories
+
+/// The 7 interview categories — covers every round type in modern SWE hiring
+/// LOW_LEVEL_DESIGN added in migration 20260801000000_add_lld_category
 enum ProblemCategory {
   CODING
   SYSTEM_DESIGN
+  LOW_LEVEL_DESIGN
   BEHAVIORAL
   CS_FUNDAMENTALS
   HR

@@ -46,6 +46,20 @@ SYSTEM DESIGN correctness analysis:
 - Are key components present and correctly connected?
 - Are the most critical trade-offs identified and explained?`,
     },
+    LOW_LEVEL_DESIGN: {
+      focus:
+        "OOP correctness, SOLID principles, design pattern appropriateness, extensibility",
+      codeCorrectnessGuide: `
+LOW-LEVEL DESIGN correctness analysis:
+- Do the classes have clear Single Responsibility? No god objects?
+- Are relationships correct: inheritance vs composition vs aggregation?
+- Are interfaces used where appropriate (Dependency Inversion)?
+- Is the design Open/Closed? Can new requirements be added without modifying existing classes?
+- Are design patterns applied correctly — not just named, but structurally correct?
+- Does the class hierarchy make semantic sense (Liskov Substitution)?
+- Are method signatures sensible? Do they reveal intent?
+- Is the implementation extensible for the follow-up requirements?`,
+    },
     BEHAVIORAL: {
       focus: "STAR structure, specificity, impact quantification, authenticity",
       codeCorrectnessGuide: `
@@ -527,6 +541,22 @@ Easy: Two Pointers, Sliding Window, Binary Search, Hashing, Basic Sorting, Stack
 Medium: Linked List manipulation, Binary Trees (DFS/BFS), Graph traversal, Dynamic Programming (1D), Heaps, Greedy
 Hard: Advanced Graphs (Dijkstra, Topological Sort), 2D DP, Backtracking, Trie, Segment Tree, Bit Manipulation`,
     SYSTEM_DESIGN: `Systems: URL Shortener, Chat App (WhatsApp/Slack), News Feed (Twitter/Instagram), Search Engine (Google), Ride Sharing (Uber), Video Streaming (YouTube/Netflix), Payment System (Stripe), Notification Service, Rate Limiter, Distributed Cache (Redis), CDN, Key-Value Store`,
+    LOW_LEVEL_DESIGN: `Classic LLD problems to draw from:
+Easy: Parking Lot, Elevator System, Vending Machine, Library Management, ATM
+Medium: Chess Game, Deck of Cards, Hotel Booking, Food Delivery Order Tracking, Notification Service
+Hard: Ride Sharing System (Uber-style class design), Cache with eviction policies (LRU/LFU), Rate Limiter (class level), Online Shopping Cart with discount strategies, Workflow Engine
+
+Design patterns most commonly tested:
+Creational: Factory, Abstract Factory, Singleton, Builder
+Structural: Adapter, Decorator, Facade, Proxy, Composite
+Behavioral: Observer, Strategy, Command, State, Iterator, Template Method
+
+SOLID principles tested in every LLD problem:
+- Single Responsibility: Is each class doing ONE thing?
+- Open/Closed: Can you add new behavior without changing existing classes?
+- Liskov Substitution: Are subtypes truly substitutable?
+- Interface Segregation: Are interfaces small and focused?
+- Dependency Inversion: Do high-level modules depend on abstractions?`,
     BEHAVIORAL: `Competencies: Leadership, Conflict Resolution, Failure & Learning, Initiative & Ownership, Teamwork, Handling Ambiguity, Customer Focus, Time Management, Technical Disagreement with Manager, Cross-team Collaboration`,
     CS_FUNDAMENTALS: `Topics: OS (Process vs Thread, Deadlocks, Virtual Memory, Page Faults), Networking (TCP vs UDP, HTTP vs HTTPS, DNS, Load Balancing, CDN), DBMS (ACID, Indexing, B-Trees, Normalization, CAP Theorem), OOP (SOLID Principles, Design Patterns: Singleton, Factory, Observer, Strategy)`,
     HR: `Scenarios: Why this company specifically, 5-year career goals, Greatest strength with example, Weakness and improvement, Work style preferences, Handling failure, Salary expectations, Why leaving current role, What makes you unique`,
@@ -608,6 +638,16 @@ Admin notes MUST include:
 3. High-level architecture with 3-5 key components
 4. The most important trade-off in this design and why
 5. What separates a Strong answer from a Weak answer`,
+
+    LOW_LEVEL_DESIGN: `This is a Low-Level Design / Object-Oriented Design problem. Generate content that teaches OOP thinking, not just a solution.
+Admin notes MUST include:
+1. Core entities and their responsibilities (Single Responsibility Principle)
+2. The recommended class hierarchy with justification (inheritance vs composition decision)
+3. Which design pattern(s) apply and WHY — structural reasoning, not just naming
+4. SOLID principles analysis — which ones are satisfied and how
+5. 3 extensibility follow-ups: "Now add X" — and how the design handles each
+6. The most common mistakes candidates make (e.g., making everything a subclass, god objects, wrong pattern)
+7. What separates a Strong answer from a Weak answer in this specific problem`,
 
     BEHAVIORAL: `This is a behavioral interview question. Generate content that teaches STAR storytelling.
 
