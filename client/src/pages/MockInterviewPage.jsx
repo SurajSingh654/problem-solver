@@ -716,7 +716,10 @@ function MessageBubble({ message }) {
         <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className={cn('flex gap-3 max-w-[85%]', isUser ? 'ml-auto flex-row-reverse' : '')}
+            className={cn(
+                'flex gap-3 max-w-[85%] min-w-0',
+                isUser ? 'ml-auto flex-row-reverse' : ''
+            )}
         >
             <div className={cn(
                 'w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-1',
@@ -726,6 +729,7 @@ function MessageBubble({ message }) {
             </div>
             <div className={cn(
                 'px-4 py-3 rounded-2xl text-sm leading-relaxed',
+                'break-words whitespace-pre-wrap min-w-0 overflow-hidden',
                 isUser
                     ? 'bg-brand-400/12 border border-brand-400/20 text-text-primary rounded-tr-md'
                     : 'bg-surface-2 border border-border-default text-text-secondary rounded-tl-md'
@@ -841,6 +845,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
     const chatEndRef = useRef(null)
     const inputRef = useRef(null)
     const streamingMsgRef = useRef('')
+    const typingTimeoutRef = useRef(null)
 
     const session = sessionData.session
     const interviewDuration = sessionData.duration || 2700
@@ -848,6 +853,19 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
     const persona = INTERVIEW_STYLES.find(s => s.id === interviewStyle)
     const personaName = persona?.label || interviewStyle
     const phases = session.phases || []
+
+
+    function setTypingWithTimeout() {
+        setIsTyping(true)
+        clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = setTimeout(() => {
+            setIsTyping(false)
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: '[No response received. Please try sending your message again.]',
+            }])
+        }, 30000)
+    }
 
     // ── Keep streaming ref in sync ───────────────────
     useEffect(() => {
@@ -881,12 +899,14 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 
                     // AI is streaming a token
                     case 'interview:token':
+                        clearTimeout(typingTimeoutRef.current)
                         setIsTyping(false)
                         setStreamingMsg(prev => prev + (msg.content || ''))
                         break
 
                     // AI finished one complete message
                     case 'interview:done':
+                        clearTimeout(typingTimeoutRef.current)
                         if (streamingMsgRef.current) {
                             const finalContent = streamingMsgRef.current
                             setMessages(prev => [...prev, {
@@ -921,6 +941,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 
                     // Server error
                     case 'error':
+                        clearTimeout(typingTimeoutRef.current)
                         console.error('[WS] Server error:', msg.error)
                         setIsTyping(false)
                         break
@@ -943,6 +964,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 
         return () => {
             if (ws.readyState === WebSocket.OPEN) ws.close()
+            clearTimeout(typingTimeoutRef.current)
         }
     }, [session.id])
 
@@ -968,7 +990,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
         }))
 
         setInput('')
-        setIsTyping(true)
+        setTypingWithTimeout()
         inputRef.current?.focus()
     }
 
@@ -978,7 +1000,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
             wsRef.current.send(JSON.stringify({ type: 'interview:end' }))
         }
         setShowEndConfirm(false)
-        setIsTyping(true)
+        setTypingWithTimeout()
     }
 
     // ── Workspace auto-save ──────────────────────────
@@ -1201,9 +1223,6 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                     </div>
                 </motion.div>
             )}
-
-            // ── Updated DebriefScreen — add behavioralSignals section ──
-            // Insert this after the dimension scores section and before strengths/improvements
 
             {/* Behavioral Signals — the hard facts from the interview */}
             {debrief.behavioralSignals && (

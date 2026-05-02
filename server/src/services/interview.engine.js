@@ -576,15 +576,15 @@ export async function handleInterviewMessage(ws, message) {
           content: fullContent,
         },
       });
-      // Phase 4: if this is a voice interview, flag response for TTS
-      // Client reads isVoice flag and feeds text to speechSynthesis
-      ws.send(
-        JSON.stringify({
-          type: "interview:done",
-          isVoice: message.isVoice || false,
-        }),
-      );
     }
+    // Always send done — even if fullContent is empty (tool call path)
+    // Without this, client isTyping never resets when AI calls a tool first
+    ws.send(
+      JSON.stringify({
+        type: "interview:done",
+        isVoice: message.isVoice || false,
+      }),
+    );
   } catch (err) {
     console.error("Interview engine error:", err);
     ws.send(
@@ -593,6 +593,8 @@ export async function handleInterviewMessage(ws, message) {
         error: "Interview engine encountered an error.",
       }),
     );
+    // Unblock the client even on error
+    ws.send(JSON.stringify({ type: "interview:done", isVoice: false }));
   }
 }
 
@@ -606,101 +608,124 @@ async function executeToolsAndRespond(
   toolContext,
   currentWorkspace,
 ) {
-  const { default: OpenAI } = await import("openai");
-  const openai = new OpenAI();
+  try {
+    const { default: OpenAI } = await import("openai");
+    const openai = new OpenAI();
 
-  const toolResults = [];
-  for (const tc of toolCalls) {
-    if (!tc?.function?.name) continue;
-    const handler = toolHandlers[tc.function.name];
-    if (!handler) {
-      toolResults.push({
-        tool_call_id: tc.id,
-        role: "tool",
-        content: JSON.stringify({ error: `Unknown tool: ${tc.function.name}` }),
-      });
-      continue;
+    const toolResults = [];
+    for (const tc of toolCalls) {
+      if (!tc?.function?.name) continue;
+      const handler = toolHandlers[tc.function.name];
+      if (!handler) {
+        toolResults.push({
+          tool_call_id: tc.id,
+          role: "tool",
+          content: JSON.stringify({
+            error: `Unknown tool: ${tc.function.name}`,
+          }),
+        });
+        continue;
+      }
+      let args = {};
+      try {
+        args = JSON.parse(tc.function.arguments || "{}");
+      } catch {}
+      try {
+        const result = await handler(args, toolContext);
+        toolResults.push({
+          tool_call_id: tc.id,
+          role: "tool",
+          content: JSON.stringify(result),
+        });
+      } catch (err) {
+        console.error(`Tool ${tc.function.name} error:`, err.message);
+        toolResults.push({
+          tool_call_id: tc.id,
+          role: "tool",
+          content: JSON.stringify({ error: "Tool execution failed." }),
+        });
+      }
     }
-    let args = {};
-    try {
-      args = JSON.parse(tc.function.arguments || "{}");
-    } catch {}
-    try {
-      const result = await handler(args, toolContext);
-      toolResults.push({
-        tool_call_id: tc.id,
-        role: "tool",
-        content: JSON.stringify(result),
-      });
-    } catch (err) {
-      console.error(`Tool ${tc.function.name} error:`, err.message);
-      toolResults.push({
-        tool_call_id: tc.id,
-        role: "tool",
-        content: JSON.stringify({ error: "Tool execution failed." }),
-      });
-    }
-  }
 
-  await prisma.interviewMessage.create({
-    data: {
-      sessionId: toolContext.sessionId,
-      role: "ASSISTANT",
-      content: null,
-      toolCalls: toolCalls,
-      toolResults: toolResults.map((r) => r.content),
-    },
-  });
-
-  const followUpMessages = [
-    ...messages,
-    {
-      role: "assistant",
-      content: null,
-      tool_calls: toolCalls.map((tc) => ({
-        id: tc.id,
-        type: "function",
-        function: { name: tc.function.name, arguments: tc.function.arguments },
-      })),
-    },
-    ...toolResults,
-  ];
-
-  // Phase 1 fix: pass currentWorkspace to maintain context in follow-up
-  const stream = await openai.chat.completions.create({
-    model: AI_MODEL_PRIMARY,
-    messages: followUpMessages,
-    temperature: 0.7,
-    max_tokens: 400,
-    stream: true,
-  });
-
-  let fullContent = "";
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta;
-    if (delta?.content) {
-      fullContent += delta.content;
-      ws.send(
-        JSON.stringify({ type: "interview:token", content: delta.content }),
-      );
-    }
-  }
-
-  if (fullContent) {
     await prisma.interviewMessage.create({
       data: {
         sessionId: toolContext.sessionId,
         role: "ASSISTANT",
-        content: fullContent,
+        content: null,
+        toolCalls: toolCalls,
+        toolResults: toolResults.map((r) => r.content),
       },
     });
+
+    const followUpMessages = [
+      ...messages,
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: {
+            name: tc.function.name,
+            arguments: tc.function.arguments,
+          },
+        })),
+      },
+      ...toolResults,
+    ];
+
+    // Phase 1 fix: pass currentWorkspace to maintain context in follow-up
+    const stream = await openai.chat.completions.create({
+      model: AI_MODEL_PRIMARY,
+      messages: followUpMessages,
+      temperature: 0.7,
+      max_tokens: 400,
+      stream: true,
+    });
+
+    let fullContent = "";
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (delta?.content) {
+        fullContent += delta.content;
+        ws.send(
+          JSON.stringify({ type: "interview:token", content: delta.content }),
+        );
+      }
+    }
+
+    if (fullContent) {
+      await prisma.interviewMessage.create({
+        data: {
+          sessionId: toolContext.sessionId,
+          role: "ASSISTANT",
+          content: fullContent,
+        },
+      });
+    }
+    ws.send(
+      JSON.stringify({
+        type: "interview:done",
+        isVoice: false, // tool responses are always text mode
+      }),
+    );
+
+    if (fullContent) {
+      await prisma.interviewMessage.create({
+        data: {
+          sessionId: toolContext.sessionId,
+          role: "ASSISTANT",
+          content: fullContent,
+        },
+      });
+    }
+    ws.send(JSON.stringify({ type: "interview:done", isVoice: false }));
+  } catch (err) {
+    console.error("executeToolsAndRespond error:", err);
+    ws.send(JSON.stringify({ type: "error", error: "Tool execution failed." }));
+    // Always unblock the client
+    ws.send(JSON.stringify({ type: "interview:done", isVoice: false }));
   }
-  ws.send(
-    JSON.stringify({
-      type: "interview:done",
-      isVoice: false, // tool responses are always text mode
-    }),
-  );
 }
 
 // ============================================================================
@@ -758,6 +783,104 @@ async function generateDebrief(ws, toolContext) {
 
     const userMessages = messages.filter((m) => m.role === "USER");
     const assistantMessages = messages.filter((m) => m.role === "ASSISTANT");
+
+    // ── Hard gate: empty or near-empty interview ─────────
+    const hasSubstantiveContent =
+      userMessages.length >= 2 &&
+      userMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0) > 50;
+
+    if (!hasSubstantiveContent) {
+      const emptyScoreKeys = {
+        CODING: [
+          "clarifyingQuestions",
+          "problemDecomposition",
+          "codeCorrectness",
+          "codeQuality",
+          "communicationWhileCoding",
+          "edgeCaseHandling",
+          "optimizationAbility",
+          "composureUnderPressure",
+          "hintUtilization",
+        ],
+        SYSTEM_DESIGN: [
+          "requirementsClarification",
+          "architectureClarity",
+          "scaleThinking",
+          "failureModeAwareness",
+          "tradeOffReasoning",
+          "componentDepth",
+          "communicationClarity",
+        ],
+        BEHAVIORAL: [
+          "starStructure",
+          "specificity",
+          "personalOwnership",
+          "quantifiedImpact",
+          "growthMindset",
+          "relevanceToRole",
+        ],
+        CS_FUNDAMENTALS: [
+          "conceptualAccuracy",
+          "explanationDepth",
+          "realWorldApplication",
+          "misconceptionAwareness",
+          "communicationClarity",
+        ],
+        SQL: [
+          "schemaUnderstanding",
+          "queryCorrectness",
+          "optimizationAwareness",
+          "edgeCaseHandling",
+          "codeReadability",
+        ],
+        HR: [
+          "authenticity",
+          "companyResearch",
+          "careerNarrative",
+          "questionQuality",
+          "cultureFit",
+        ],
+      };
+      const keys =
+        emptyScoreKeys[session?.category || "CODING"] || emptyScoreKeys.CODING;
+      const emptyDebrief = {
+        verdict: "NO_HIRE",
+        overallScore: 1,
+        scores: Object.fromEntries(keys.map((k) => [k, 1])),
+        behavioralSignals: {
+          clarifyingQuestions: "none — 0 questions asked",
+          hintsRequired: "0 hints",
+          thoughtOutLoud: false,
+          identifiedComplexityIndependently: false,
+          foundEdgeCasesIndependently: false,
+        },
+        strengths: [],
+        improvements: [
+          "Did not engage with the interview — no substantive responses were provided.",
+          "In a real interview this would result in an immediate No Hire decision.",
+        ],
+        keyMoments: [
+          "Candidate ended the interview without providing any solution, approach, or meaningful response.",
+        ],
+        summary:
+          "The candidate did not engage with the interview. No evaluation is possible. A real interviewer would have ended this session immediately.",
+      };
+
+      await prisma.interviewSession.update({
+        where: { id: toolContext.sessionId },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          debrief: emptyDebrief,
+          scores: emptyDebrief.scores,
+        },
+      });
+
+      ws.send(
+        JSON.stringify({ type: "interview:debrief", debrief: emptyDebrief }),
+      );
+      return;
+    }
 
     // ── Signal 1: Clarifying questions ─────────────────
     // Count question marks in the first 3 user messages
@@ -872,7 +995,7 @@ async function generateDebrief(ws, toolContext) {
     // Compute a directional verdict from hard signals before
     // asking AI — this anchors the AI debrief in reality.
     // AI can refine this but cannot override it significantly.
-    let verdictSignal = 0; // -4 to +4
+    let verdictSignal = -2;
     if (clarifyingQuestionCount >= 2) verdictSignal += 1;
     if (clarifyingQuestionCount === 0) verdictSignal -= 1;
     if (identifiedComplexityIndependently) verdictSignal += 1;
@@ -1003,7 +1126,12 @@ ${category === "BEHAVIORAL" ? `- Ownership language (I vs we): ${ownershipSignal
 - Showed recovery from mistakes: ${showedRecovery ? "YES" : "NO"}
 
 PRE-COMPUTED VERDICT SIGNAL: ${preComputedVerdict}
-(Based on hard signals above — your verdict should align with this unless the transcript clearly overrides it)
+VERDICT CONSTRAINT — THIS IS MANDATORY:
+Your verdict MUST be "${preComputedVerdict}".
+You may only move ONE step away (e.g. HIRE → LEAN_HIRE) if the transcript
+contains clear overwhelming evidence contradicting the signals above.
+A candidate who gave no code, no approach, and no substantive answer
+CANNOT score above 3/10 and MUST be NO_HIRE.
 
 FOCUS AREAS FOR THIS INTERVIEW TYPE: ${rubric.focusAreas}
 
