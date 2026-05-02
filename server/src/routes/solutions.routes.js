@@ -8,6 +8,7 @@ import {
   updateSolution,
   rateSolutionClarity,
   getReviewQueue,
+  submitReview,
 } from "../controllers/solutions.controller.js";
 
 const router = Router();
