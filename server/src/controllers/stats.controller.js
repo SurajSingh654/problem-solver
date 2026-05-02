@@ -10,6 +10,188 @@ function stripHtml(html) {
 }
 
 // ============================================================================
+// QUIZ SUBJECT → 6D DIMENSION MAPPER
+// ============================================================================
+//
+// Maps free-text quiz subjects to the 6D dimensions they signal.
+// Uses keyword matching — multiple keywords per dimension to handle
+// how users naturally name quiz subjects ("Binary Search", "BST",
+// "binary search trees" all signal D1).
+//
+// Scientific basis:
+// - D1 Pattern Recognition: knowledge of algorithm patterns and data structures
+//   is a prerequisite for pattern identification speed under pressure.
+// - D2 Solution Depth: CS fundamentals and concept quizzes test the depth of
+//   understanding that underpins Feynman-quality explanations.
+// - D3 Communication: behavioral and soft-skills quizzes signal awareness of
+//   communication frameworks (STAR, etc.) even if not direct communication skill.
+// - D4 Optimization: algorithm complexity and optimization quizzes directly
+//   signal knowledge of the trade-offs D4 measures behaviorally.
+//
+// A quiz can map to multiple dimensions (e.g. "Dynamic Programming" → D1 + D2).
+// Weights are modest (max 15 pts) — quizzes are declarative knowledge signals,
+// not behavioral performance signals. They supplement but never replace
+// actual solution data.
+//
+// ============================================================================
+const QUIZ_DIMENSION_MAP = {
+  d1_patterns: {
+    // Pattern Recognition — algorithm and data structure knowledge
+    keywords: [
+      "array",
+      "hashing",
+      "hash map",
+      "hash table",
+      "two pointer",
+      "sliding window",
+      "binary search",
+      "stack",
+      "queue",
+      "linked list",
+      "tree",
+      "bst",
+      "binary tree",
+      "trie",
+      "heap",
+      "priority queue",
+      "graph",
+      "dynamic programming",
+      "dp ",
+      " dp",
+      "greedy",
+      "backtracking",
+      "recursion",
+      "sorting",
+      "searching",
+      "interval",
+      "bit manipulation",
+      "bitwise",
+      "math",
+      "pattern",
+      "algorithm",
+      "data structure",
+      "leetcode",
+      "coding interview",
+      "neetcode",
+    ],
+    maxContribution: 15,
+  },
+  d2_depth: {
+    // Solution Depth — conceptual understanding and CS fundamentals
+    keywords: [
+      "operating system",
+      "os ",
+      " os",
+      "process",
+      "thread",
+      "concurrency",
+      "networking",
+      "tcp",
+      "udp",
+      "http",
+      "dns",
+      "network",
+      "database",
+      "dbms",
+      "sql",
+      "nosql",
+      "indexing",
+      "b-tree",
+      "acid",
+      "cap theorem",
+      "distributed",
+      "consistency",
+      "availability",
+      "object oriented",
+      "oop",
+      "solid",
+      "design pattern",
+      "singleton",
+      "factory",
+      "observer",
+      "mvc",
+      "rest",
+      "api design",
+      "memory",
+      "cache",
+      "virtual memory",
+      "garbage collection",
+      "computer science",
+      "cs fundamental",
+      "computer architecture",
+      "complexity",
+      "big o",
+      "time complexity",
+      "space complexity",
+      "functional programming",
+      "system design concept",
+    ],
+    maxContribution: 10,
+  },
+  d3_communication: {
+    // Communication — behavioral and communication framework knowledge
+    keywords: [
+      "behavioral",
+      "star method",
+      "star format",
+      "soft skill",
+      "communication",
+      "leadership",
+      "conflict resolution",
+      "teamwork",
+      "collaboration",
+      "hr ",
+      " hr",
+      "interview skill",
+      "situational",
+      "amazon leadership",
+      "leadership principle",
+      "emotional intelligence",
+      "presentation",
+    ],
+    maxContribution: 10,
+  },
+  d4_optimization: {
+    // Optimization — complexity analysis and optimization technique knowledge
+    keywords: [
+      "optimization",
+      "complexity analysis",
+      "performance",
+      "space complexity",
+      "time complexity",
+      "efficient",
+      "scalability",
+      "query optimization",
+      "index",
+      "database optimization",
+      "memory optimization",
+      "big o",
+      "amortized",
+      "trade off",
+      "system optimization",
+      "bottleneck",
+      "profiling",
+    ],
+    maxContribution: 12,
+  },
+};
+
+// Returns which dimensions a quiz subject maps to and at what score weight
+function mapQuizSubjectToDimensions(subject) {
+  const normalized = subject.toLowerCase();
+  const mappings = [];
+
+  for (const [dimKey, config] of Object.entries(QUIZ_DIMENSION_MAP)) {
+    const matched = config.keywords.some((kw) => normalized.includes(kw));
+    if (matched) {
+      mappings.push({ dimKey, maxContribution: config.maxContribution });
+    }
+  }
+
+  return mappings;
+}
+
+// ============================================================================
 // PERSONAL STATS (dashboard)
 // ============================================================================
 export async function getPersonalStats(req, res) {
@@ -235,7 +417,6 @@ export async function get6DReport(req, res) {
 
     // ════════════════════════════════════════════════
     // EXTRACT AI REVIEW DATA
-    // AI reviews are the most honest signal — they see the actual code
     // ════════════════════════════════════════════════
     const allAiReviews = [];
     solutions.forEach((s) => {
@@ -302,7 +483,100 @@ export async function get6DReport(req, res) {
         : null;
 
     // ════════════════════════════════════════════════
-    // D1: Pattern Recognition — quality-weighted
+    // QUIZ CROSS-FEED — Phase 3
+    //
+    // Load all completed quizzes for this user and compute
+    // per-dimension knowledge signals from quiz subject + score.
+    //
+    // Design: quiz subjects are free text. We use keyword matching
+    // to map each subject to one or more 6D dimensions. Only completed
+    // quizzes with a score are used. Scores are 0-100 (percentage correct).
+    //
+    // Per-dimension quiz signal:
+    //   1. Collect all quizzes that map to this dimension
+    //   2. Weight recent quizzes more (exponential decay by age)
+    //   3. Compute weighted average score
+    //   4. Scale to the dimension's maxContribution
+    //
+    // The time-decay weight ensures recent quiz performance matters more
+    // than a quiz taken 3 months ago — knowledge degrades over time.
+    // Decay constant: half-life of 30 days (score halves in weight after 30 days).
+    // ════════════════════════════════════════════════
+    const allQuizzesForDimensions = await prisma.quizAttempt.findMany({
+      where: {
+        userId,
+        completedAt: { not: null },
+        score: { not: null },
+      },
+      select: {
+        subject: true,
+        score: true,
+        difficulty: true,
+        completedAt: true,
+      },
+      orderBy: { completedAt: "desc" },
+      take: 100, // cap at 100 most recent — beyond this, signal quality drops
+    });
+
+    // Compute quiz signals per dimension
+    const quizDimensionSignals = {
+      d1_patterns: { weightedScoreSum: 0, weightSum: 0, count: 0 },
+      d2_depth: { weightedScoreSum: 0, weightSum: 0, count: 0 },
+      d3_communication: { weightedScoreSum: 0, weightSum: 0, count: 0 },
+      d4_optimization: { weightedScoreSum: 0, weightSum: 0, count: 0 },
+    };
+
+    const now = Date.now();
+    const HALF_LIFE_DAYS = 30;
+    const DECAY_CONSTANT = Math.LN2 / HALF_LIFE_DAYS; // ln(2) / 30
+
+    allQuizzesForDimensions.forEach((quiz) => {
+      const mappings = mapQuizSubjectToDimensions(quiz.subject);
+      if (mappings.length === 0) return;
+
+      const daysAgo =
+        (now - new Date(quiz.completedAt).getTime()) / (1000 * 60 * 60 * 24);
+
+      // Exponential decay: weight = e^(-λt)
+      // A quiz from today has weight 1.0, from 30 days ago has weight 0.5,
+      // from 60 days ago has weight 0.25, etc.
+      const timeWeight = Math.exp(-DECAY_CONSTANT * daysAgo);
+
+      // Difficulty multiplier: harder quiz = stronger signal of real knowledge
+      const difficultyMultiplier =
+        quiz.difficulty === "HARD"
+          ? 1.3
+          : quiz.difficulty === "MEDIUM"
+            ? 1.0
+            : 0.8;
+
+      const effectiveWeight = timeWeight * difficultyMultiplier;
+
+      mappings.forEach(({ dimKey }) => {
+        if (quizDimensionSignals[dimKey]) {
+          quizDimensionSignals[dimKey].weightedScoreSum +=
+            (quiz.score || 0) * effectiveWeight;
+          quizDimensionSignals[dimKey].weightSum += effectiveWeight;
+          quizDimensionSignals[dimKey].count += 1;
+        }
+      });
+    });
+
+    // Convert to weighted average scores (0-100) per dimension
+    // Require at least 2 quizzes before trusting the signal (1 quiz is noise)
+    function getQuizSignal(dimKey) {
+      const sig = quizDimensionSignals[dimKey];
+      if (sig.count < 2 || sig.weightSum === 0) return null;
+      return sig.weightedScoreSum / sig.weightSum; // 0-100
+    }
+
+    const quizSignalD1 = getQuizSignal("d1_patterns");
+    const quizSignalD2 = getQuizSignal("d2_depth");
+    const quizSignalD3 = getQuizSignal("d3_communication");
+    const quizSignalD4 = getQuizSignal("d4_optimization");
+
+    // ════════════════════════════════════════════════
+    // D1: Pattern Recognition — quality-weighted + quiz cross-feed
     // ════════════════════════════════════════════════
     const withPattern = solutions.filter((s) => s.pattern).length;
     const uniquePatterns = new Set(
@@ -323,7 +597,7 @@ export async function get6DReport(req, res) {
     const wrongPatternPenalty =
       reviewedSolutions > 0 ? (wrongPatternCount / reviewedSolutions) * 20 : 0;
 
-    const d1 = Math.max(
+    let d1 = Math.max(
       Math.round(
         patternAttemptRate +
           patternQualityScore +
@@ -333,11 +607,22 @@ export async function get6DReport(req, res) {
       0,
     );
 
+    // Quiz cross-feed: pattern/algorithm quizzes supplement behavioral signals
+    // Scale quiz signal (0-100) to maxContribution (15 pts) and blend
+    // Only applies if behavioral signal is low (quiz can fill the gap)
+    // or if there are no AI reviews yet (quiz is the only quality signal)
+    if (quizSignalD1 !== null) {
+      const quizBonus = Math.round(
+        (quizSignalD1 / 100) * QUIZ_DIMENSION_MAP.d1_patterns.maxContribution,
+      );
+      // Blend: quiz bonus only adds up to the gap between current d1 and cap
+      // This prevents quiz-grinding from inflating an already high D1
+      const headroom = Math.max(0, 85 - d1); // max quiz can push D1 to is 85
+      d1 = Math.min(d1 + Math.min(quizBonus, headroom), 100);
+    }
+
     // ════════════════════════════════════════════════
-    // D2: Solution Depth — quality-weighted
-    // Research-calibrated minimums:
-    // Feynman technique requires articulating mechanism, cause, consequence.
-    // Dunlosky et al. (2013) — elaborative interrogation requires explaining "why".
+    // D2: Solution Depth — quality-weighted + quiz cross-feed
     // ════════════════════════════════════════════════
     const INSIGHT_MIN_CHARS = 60;
     const FEYNMAN_MIN_CHARS = 200;
@@ -362,9 +647,7 @@ export async function get6DReport(req, res) {
       solutions.reduce((s, r) => s + r.confidence, 0) / totalSolutions;
     const calibratedConfScore = (avgConf / 5) * overconfidencePenaltyFactor;
 
-    // ── Metacognitive accuracy (Kruger & Dunning 1999, Dunlosky 2013) ──────
-    // Measures how accurately the candidate knows what they know.
-    // 1.0 = perfect calibration, 0.0 = completely miscalibrated.
+    // Metacognitive accuracy (Kruger & Dunning 1999, Dunlosky 2013)
     let metacognitiveAccuracy = null;
     if (allAiReviews.length >= 3) {
       const calibrationDeltas = allAiReviews
@@ -378,8 +661,8 @@ export async function get6DReport(req, res) {
           const selfConfidence = solution?.confidence;
           const aiOverall = review.overallScore;
           if (selfConfidence == null || aiOverall == null) return null;
-          const normalizedSelf = (selfConfidence - 1) / 4; // 1-5 → 0-1
-          const normalizedAI = (aiOverall - 1) / 9; // 1-10 → 0-1
+          const normalizedSelf = (selfConfidence - 1) / 4;
+          const normalizedAI = (aiOverall - 1) / 9;
           return Math.abs(normalizedSelf - normalizedAI);
         })
         .filter((d) => d !== null);
@@ -408,6 +691,15 @@ export async function get6DReport(req, res) {
       d2 = baseDepth;
     }
 
+    // Quiz cross-feed for D2: CS fundamentals and conceptual quizzes
+    if (quizSignalD2 !== null) {
+      const quizBonus = Math.round(
+        (quizSignalD2 / 100) * QUIZ_DIMENSION_MAP.d2_depth.maxContribution,
+      );
+      const headroom = Math.max(0, 80 - d2);
+      d2 = Math.min(d2 + Math.min(quizBonus, headroom), 100);
+    }
+
     // ════════════════════════════════════════════════
     // D3: Communication
     // ════════════════════════════════════════════════
@@ -420,7 +712,6 @@ export async function get6DReport(req, res) {
     let communicationFromProxy = false;
 
     if (clarityRatings.length > 0) {
-      // Peer ratings are the gold standard for communication
       d3 = Math.round(
         (clarityRatings.reduce((s, r) => s + r.rating, 0) /
           clarityRatings.length /
@@ -431,9 +722,6 @@ export async function get6DReport(req, res) {
       communicationFromProxy = true;
       d3 = Math.min(Math.round((avgAiExplanation / 10) * 75), 75);
     } else {
-      // Fallback proxy: approach + real-world connection (different signal from D2)
-      // Measures "can they communicate the what and why" separately from
-      // the deep self-explanation Feynman measures in D2.
       communicationFromProxy = true;
       const withMeaningfulApproach = solutions.filter(
         (s) =>
@@ -448,8 +736,20 @@ export async function get6DReport(req, res) {
       );
     }
 
+    // Quiz cross-feed for D3: behavioral/communication-topic quizzes
+    // These get a smaller headroom cap (70) because quiz can't replace
+    // actual peer ratings or AI explanation quality assessment
+    if (quizSignalD3 !== null) {
+      const quizBonus = Math.round(
+        (quizSignalD3 / 100) *
+          QUIZ_DIMENSION_MAP.d3_communication.maxContribution,
+      );
+      const headroom = Math.max(0, 70 - d3);
+      d3 = Math.min(d3 + Math.min(quizBonus, headroom), 100);
+    }
+
     // ════════════════════════════════════════════════
-    // D4: Optimization — behavioral signals + AI quality gate
+    // D4: Optimization — behavioral signals + AI quality gate + quiz cross-feed
     // ════════════════════════════════════════════════
     const withBrute = solutions.filter(
       (s) => s.bruteForce && s.bruteForce.trim().length > 20,
@@ -477,18 +777,25 @@ export async function get6DReport(req, res) {
 
     let d4;
     if (avgAiCodeCorrectness !== null) {
-      // Correctness gate: optimization claims are meaningless if code is wrong.
-      // Gate formula: d4Base * (AI correctness / 10)^0.6
-      // 0.6 exponent softens the gate — partial credit even for mediocre quality.
       const correctnessGate = Math.pow(avgAiCodeCorrectness / 10, 0.6);
       d4 = Math.round(d4Base * correctnessGate);
     } else {
-      // No AI reviews yet — cap at 70 to reflect uncertainty
       d4 = Math.min(d4Base, 70);
+    }
+
+    // Quiz cross-feed for D4: complexity and optimization quizzes
+    if (quizSignalD4 !== null) {
+      const quizBonus = Math.round(
+        (quizSignalD4 / 100) *
+          QUIZ_DIMENSION_MAP.d4_optimization.maxContribution,
+      );
+      const headroom = Math.max(0, 80 - d4);
+      d4 = Math.min(d4 + Math.min(quizBonus, headroom), 100);
     }
 
     // ════════════════════════════════════════════════
     // D5: Pressure Performance — normalized blend
+    // (unchanged — quiz already feeds D5 via quizPressureScore)
     // ════════════════════════════════════════════════
     const [sims, interviews, quizzesForPressure] = await Promise.all([
       prisma.simSession.findMany({
@@ -522,7 +829,6 @@ export async function get6DReport(req, res) {
         simScore = Math.min((avgSimScore / 5) * 80 + noHintRate * 20, 100);
       }
 
-      // Normalize interview scores — each field has a known scale
       let interviewScore = 0;
       if (hasInterviews) {
         const interviewsWithScores = interviews.filter(
@@ -637,18 +943,9 @@ export async function get6DReport(req, res) {
 
     // ════════════════════════════════════════════════
     // D6: Knowledge Retention — Ebbinghaus + SM-2
-    //
-    // R = e^(-t/S) where:
-    //   t = days since last interaction
-    //   S = stability derived from SM-2 easiness factor and repetitions
-    //
-    // Higher EF and more repetitions = slower forgetting = higher S.
-    // All SM-2 state comes from the actual database columns set by
-    // server/src/utils/sm2.js — never from client-sent values.
     // ════════════════════════════════════════════════
     const now_d6 = Date.now();
 
-    // Compute overdue count at function scope so it's available in return
     const overdueCount = await prisma.solution.count({
       where: { userId, teamId, nextReviewDate: { lte: new Date() } },
     });
@@ -662,20 +959,13 @@ export async function get6DReport(req, res) {
         const daysSince =
           (now_d6 - new Date(lastInteraction).getTime()) /
           (1000 * 60 * 60 * 24);
-
-        // SM-2 EF reflects how well this specific item is encoded.
-        // Higher EF = slower forgetting = higher retention.
         const ef = s.sm2EasinessFactor ?? 2.5;
         const reps = s.sm2Repetitions ?? 0;
         const stability = Math.max(1, ef * Math.pow(reps + 1, 0.7));
         const retention = Math.exp(-daysSince / (stability * 10));
-
-        // Confidence modulates retention — high post-review confidence
-        // indicates a more stable memory trace.
         const confidenceWeight = s.confidence
           ? (s.confidence / 5) * 0.3 + 0.7
           : 1.0;
-
         return Math.min(retention * confidenceWeight, 1.0);
       });
 
@@ -685,19 +975,10 @@ export async function get6DReport(req, res) {
     } else {
       const avgRetention =
         retentionScores.reduce((a, b) => a + b, 0) / retentionScores.length;
-
-      // Review engagement: what fraction of solutions have been reviewed at all?
-      // Unreviewed solutions have unknown retention — penalize.
       const reviewedRate = reviewedSols.length / totalSolutions;
       const engagementScore = reviewedRate * 40;
-
-      // Estimated retention of all solutions (0-60 contribution)
       const retentionScore = avgRetention * 60;
-
       d6 = Math.round(engagementScore + retentionScore);
-
-      // Exponential overdue penalty: ignoring reviews compounds.
-      // A solution 1 day overdue and 30 days overdue are not equal.
       const overdueRatio =
         totalSolutions > 0 ? overdueCount / totalSolutions : 0;
       const overduePenalty = Math.round(overdueRatio * overdueRatio * 40);
@@ -706,10 +987,6 @@ export async function get6DReport(req, res) {
 
     // ════════════════════════════════════════════════
     // OVERALL — weighted average + AI quality gate
-    //
-    // Weights reflect interview importance:
-    // D4 Optimization (22%) and D1 Pattern (20%) are most tested in screens.
-    // D6 Retention (12%) and D3 Communication (12%) are important but proxied.
     // ════════════════════════════════════════════════
     const WEIGHTS = {
       patternRecognition: 0.2,
@@ -730,17 +1007,12 @@ export async function get6DReport(req, res) {
 
     let overall = Math.round(weightedSum);
 
-    // ── AI Quality Gate ────────────────────────────────
-    // Overall cannot exceed AI quality cap by more than 15 points.
-    // The 15-point buffer allows behavioral signals to partially offset
-    // poor AI scores (user who practices but hasn't been reviewed recently).
     if (aiAvgOverall !== null) {
       const aiQualityCap = Math.round((aiAvgOverall / 10) * 100);
       const maxAllowed = Math.min(aiQualityCap + 15, 100);
       overall = Math.min(overall, maxAllowed);
     }
 
-    // Penalty for systematic overconfidence
     if (
       reviewedSolutions > 0 &&
       overconfidenceCount / reviewedSolutions > 0.5
@@ -795,7 +1067,6 @@ export async function get6DReport(req, res) {
       (p) => !usedPatterns.has(p),
     );
 
-    // AI review trend
     const aiScoreTimeline = [];
     solutions.forEach((s) => {
       if (s.aiFeedback && Array.isArray(s.aiFeedback)) {
@@ -892,6 +1163,38 @@ export async function get6DReport(req, res) {
       retention: Math.min(d6, 100),
     };
 
+    // Build quiz signal summary for transparency in scoringSignals
+    const quizDimensionContributions = {
+      patternRecognition:
+        quizSignalD1 !== null
+          ? {
+              avgScore: Math.round(quizSignalD1),
+              quizCount: quizDimensionSignals.d1_patterns.count,
+            }
+          : null,
+      solutionDepth:
+        quizSignalD2 !== null
+          ? {
+              avgScore: Math.round(quizSignalD2),
+              quizCount: quizDimensionSignals.d2_depth.count,
+            }
+          : null,
+      communication:
+        quizSignalD3 !== null
+          ? {
+              avgScore: Math.round(quizSignalD3),
+              quizCount: quizDimensionSignals.d3_communication.count,
+            }
+          : null,
+      optimization:
+        quizSignalD4 !== null
+          ? {
+              avgScore: Math.round(quizSignalD4),
+              quizCount: quizDimensionSignals.d4_optimization.count,
+            }
+          : null,
+    };
+
     return success(res, {
       report: {
         dimensions: finalDimensions,
@@ -914,6 +1217,8 @@ export async function get6DReport(req, res) {
             metacognitiveAccuracy !== null
               ? Math.round(metacognitiveAccuracy * 100)
               : null,
+          // Phase 3: quiz cross-feed transparency
+          quizDimensionContributions,
         },
         analytics: {
           weeklyVelocity: {
