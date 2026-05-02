@@ -655,6 +655,18 @@ model Solution {
   sm2Interval       Int       @default(1)
   sm2Repetitions    Int       @default(0)
 
+
+  // ── Category-specific submission data ──────────────
+  // Stores structured fields that vary by problem category.
+  // For SYSTEM_DESIGN: { functionalRequirements, nonFunctionalRequirements,
+  //   capacityEstimation, apiDesign, schemaDesign, architectureNotes,
+  //   tradeoffReasoning, databaseChoice, databaseJustification }
+  // For LOW_LEVEL_DESIGN: { entities, classHierarchy, designPatterns,
+  //   solidAnalysis, extensibilityAnalysis }
+  // Null for CODING, SQL, BEHAVIORAL, HR, CS_FUNDAMENTALS —
+  // those categories use the existing text fields adequately.
+  categorySpecificData Json?
+
   // ── Vector embedding ───────────────────────────────
   // Column + HNSW index created via raw SQL migration:
   //   ALTER TABLE solutions ADD COLUMN embedding vector(1536);

@@ -38,13 +38,45 @@ CODING correctness analysis:
 - Detect incomplete solutions: pseudocode, TODO comments, missing critical sections`,
     },
     SYSTEM_DESIGN: {
-      focus: "requirements coverage, component design, scalability, trade-offs",
+      focus:
+        "requirements clarity, capacity reasoning, API design quality, architectural decisions, trade-off depth, failure mode awareness",
       codeCorrectnessGuide: `
-SYSTEM DESIGN correctness analysis:
-- Does the design address the core functional requirements?
-- Are the scale requirements considered?
-- Are key components present and correctly connected?
-- Are the most critical trade-offs identified and explained?`,
+SYSTEM DESIGN evaluation framework — evaluate each area independently:
+
+REQUIREMENTS CLARIFICATION:
+- Did the candidate identify functional requirements? Are they specific and scoped?
+- Did the candidate identify non-functional requirements? Do they include concrete numbers (DAU, QPS, latency targets)?
+- Are the requirements realistic and internally consistent?
+
+CAPACITY ESTIMATION:
+- Did the candidate do back-of-envelope math?
+- Are the numbers reasonable and consistent with the requirements?
+- Did they identify read:write ratio, storage requirements, bandwidth?
+
+API DESIGN:
+- Are endpoints named and structured (method + path)?
+- Do request/response shapes make sense for the use cases?
+- Is the API surface area appropriate — not too large, not too small?
+
+ARCHITECTURE:
+- Are the right components present for the stated requirements?
+- Is the data flow logical and complete?
+- Are there obvious missing components for the scale stated?
+
+DATABASE SCHEMA:
+- Does the schema support the stated access patterns?
+- Are appropriate indexes identified?
+- Is the database choice (SQL/NoSQL) justified?
+
+TRADE-OFF REASONING:
+- Are key architectural decisions made explicit?
+- Does the candidate acknowledge what they traded away?
+- Are the trade-offs appropriate for the stated requirements?
+
+FAILURE MODES:
+- Did the candidate identify what breaks first?
+- Are there mitigations proposed?
+- Is the failure analysis realistic?`,
     },
     LOW_LEVEL_DESIGN: {
       focus:
@@ -249,6 +281,44 @@ RESPOND WITH EXACT JSON — no extra fields, no missing fields:
   ]
 }`;
 
+  // For System Design submissions, present structured fields with proper labels.
+  // For all other categories, use the standard generic field presentation.
+  const sdSpecific = data.categorySpecificData;
+  const submissionSection =
+    data.category === "SYSTEM_DESIGN" && sdSpecific
+      ? `Functional Requirements:
+${sdSpecific.functionalRequirements || data.approach || "Not provided"}
+
+Non-Functional Requirements:
+${sdSpecific.nonFunctionalRequirements || data.bruteForce || "Not provided"}
+
+Capacity Estimation:
+${sdSpecific.capacityEstimation || data.realWorldConnection || "Not provided"}
+
+API Design:
+${sdSpecific.apiDesign || data.code || "Not provided"}
+
+Database Schema:
+${sdSpecific.schemaDesign || data.optimizedApproach || "Not provided"}
+
+Architecture Description:
+${sdSpecific.architectureNotes || data.feynmanExplanation || "Not provided"}
+
+Key Trade-offs:
+${sdSpecific.tradeoffReasoning || data.keyInsight || "Not provided"}
+
+Failure Modes:
+${sdSpecific.failureModes || data.timeComplexity || "Not provided"}`
+      : `Approach:
+${data.approach || "Not provided"}
+Code:
+\`\`\`${(data.language || "plaintext").toLowerCase()}
+${data.code ? data.code.substring(0, 2000) : "No code provided"}
+\`\`\`
+Key Insight: ${data.keyInsight || "Not provided"}
+Feynman Explanation: ${data.feynmanExplanation || "Not provided"}
+Real-World Connection: ${data.realWorldConnection || "Not provided"}`;
+
   const user = `Review this ${data.category} solution:
 PROBLEM: ${data.problem?.title || "Unknown"}
 DESCRIPTION: ${data.problem?.description ? data.problem.description.substring(0, 400) : "Not available"}
@@ -266,15 +336,7 @@ Solve Method: ${
           : "Not specified"
   }
 Time Taken: ${timeTakenLabel || "Not specified"}
-Approach:
-${data.approach || "Not provided"}
-Code:
-\`\`\`${(data.language || "plaintext").toLowerCase()}
-${data.code ? data.code.substring(0, 2000) : "No code provided"}
-\`\`\`
-Key Insight: ${data.keyInsight || "Not provided"}
-Feynman Explanation: ${data.feynmanExplanation || "Not provided"}
-Real-World Connection: ${data.realWorldConnection || "Not provided"}
+${submissionSection}
 ${followUpContext}`;
 
   return { system, user };

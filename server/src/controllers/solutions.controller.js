@@ -80,6 +80,7 @@ export async function submitSolution(req, res) {
           confidence: submissionConfidence,
           pattern,
           patternIdentificationTime,
+          categorySpecificData: req.body.categorySpecificData || null,
           // SM-2 initial state
           nextReviewDate: sm2.nextReviewDate,
           sm2EasinessFactor: sm2.easinessFactor,
@@ -436,6 +437,7 @@ export async function updateSolution(req, res) {
       "confidence",
       "pattern",
       "patternIdentificationTime",
+      "categorySpecificData",
     ];
     contentFields.forEach((field) => {
       if (restBody[field] !== undefined) data[field] = restBody[field];

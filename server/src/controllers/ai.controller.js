@@ -248,6 +248,7 @@ export async function reviewSolution(req, res) {
       ragContext,
       followUpAnswers: followUpAnswersForPrompt,
       patternBaseline, // ← new
+      categorySpecificData: solution.categorySpecificData || null, // ADD THIS
     });
 
     const { default: OpenAI } = await import("openai");

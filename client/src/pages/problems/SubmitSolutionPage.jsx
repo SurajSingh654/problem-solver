@@ -8,6 +8,7 @@ import { useProblem } from '@hooks/useProblems'
 import { useSubmitSolution } from '@hooks/useSolutions'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
 import { CodeEditor, SUBMIT_LANGUAGES } from '@components/ui/CodeEditor'
+import { ExcalidrawEditor } from '@components/ui/ExcalidrawEditor'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
@@ -148,8 +149,11 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
                         {followUp.question}
                     </p>
                 </div>
-                <Badge variant={DIFF_VARIANT[followUp.difficulty] || 'brand'}
-                    size="xs" className="flex-shrink-0">
+                <Badge
+                    variant={DIFF_VARIANT[followUp.difficulty] || 'brand'}
+                    size="xs"
+                    className="flex-shrink-0"
+                >
                     {followUp.difficulty}
                 </Badge>
             </div>
@@ -201,6 +205,335 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
 }
 
 // ══════════════════════════════════════════════════════
+// SYSTEM DESIGN WORKSPACE
+//
+// Replaces the generic form entirely for SYSTEM_DESIGN category.
+// Eight structured panels matching the SD interview rubric:
+//   Requirements → Non-Functional → Estimation → API →
+//   Schema → Architecture → Trade-offs → Failure Modes
+//
+// Research basis: SD interviews evaluate structured progression.
+// Each panel matches a distinct evaluation dimension that interviewers
+// score independently (see ai.prompts.js SYSTEM_DESIGN codeCorrectnessGuide).
+// ══════════════════════════════════════════════════════
+function SystemDesignWorkspace({ sdData, onSdDataChange, diagramData, onDiagramChange }) {
+    const [activeSection, setActiveSection] = useState('functionalRequirements')
+
+    function update(field, value) {
+        onSdDataChange({ ...sdData, [field]: value })
+    }
+
+    // getCategoryForm is already imported at the module level — use it directly.
+    // sdFields contains the placeholder text and hints for each section.
+    const sdConfig = getCategoryForm('SYSTEM_DESIGN')
+    const fieldConfigs = sdConfig.sdFields || {}
+
+    const sections = [
+        {
+            key: 'functionalRequirements',
+            label: 'Requirements',
+            icon: '📋',
+            sublabel: 'What the system must do',
+            color: 'text-brand-300',
+            activeBg: 'bg-brand-400/10 border-brand-400/30',
+        },
+        {
+            key: 'nonFunctionalRequirements',
+            label: 'Non-Functional',
+            icon: '⚙️',
+            sublabel: 'Scale, latency, availability',
+            color: 'text-info',
+            activeBg: 'bg-info/10 border-info/30',
+        },
+        {
+            key: 'capacityEstimation',
+            label: 'Estimation',
+            icon: '🔢',
+            sublabel: 'Back-of-envelope math',
+            color: 'text-warning',
+            activeBg: 'bg-warning/10 border-warning/30',
+        },
+        {
+            key: 'apiDesign',
+            label: 'API Design',
+            icon: '🔌',
+            sublabel: 'Endpoints and contracts',
+            color: 'text-success',
+            activeBg: 'bg-success/10 border-success/30',
+        },
+        {
+            key: 'schemaDesign',
+            label: 'Schema',
+            icon: '🗄️',
+            sublabel: 'Database tables/collections',
+            color: 'text-purple-400',
+            activeBg: 'bg-purple-400/10 border-purple-400/30',
+        },
+        {
+            key: 'architecture',
+            label: 'Architecture',
+            icon: '🏗️',
+            sublabel: 'Diagram + description',
+            color: 'text-orange-400',
+            activeBg: 'bg-orange-400/10 border-orange-400/30',
+        },
+        {
+            key: 'tradeoffReasoning',
+            label: 'Trade-offs',
+            icon: '⚖️',
+            sublabel: 'Decisions and why',
+            color: 'text-danger',
+            activeBg: 'bg-danger/10 border-danger/30',
+        },
+        {
+            key: 'failureModes',
+            label: 'Failure Modes',
+            icon: '🔥',
+            sublabel: 'What breaks and mitigations',
+            color: 'text-warning',
+            activeBg: 'bg-warning/10 border-warning/30',
+        },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    // Completion tracking — section is "done" if it has meaningful content (>30 chars)
+    // Architecture is done if the diagram has elements
+    const completedCount = sections.filter(s =>
+        s.key === 'architecture'
+            ? diagramData && (diagramData?.elements?.length > 0 || Object.keys(diagramData || {}).length > 0)
+            : (sdData[s.key]?.trim?.()?.length ?? 0) > 30
+    ).length
+
+    return (
+        <div className="space-y-4">
+            {/* Progress header with section navigation */}
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>🏗️</span> System Design Workspace
+                    </p>
+                    <span className="text-[10px] font-bold text-text-disabled">
+                        {completedCount}/{sections.length} sections filled
+                    </span>
+                </div>
+                {/* Progress bar */}
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className="h-full bg-brand-400 rounded-full"
+                    />
+                </div>
+                {/* Section nav — horizontal scroll on mobile */}
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const isDone = s.key === 'architecture'
+                            ? diagramData && (diagramData?.elements?.length > 0 || Object.keys(diagramData || {}).length > 0)
+                            : (sdData[s.key]?.trim?.()?.length ?? 0) > 30
+                        const isActive = activeSection === s.key
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => setActiveSection(s.key)}
+                                className={cn(
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
+                                    'transition-all duration-150 min-w-[72px]',
+                                    isActive
+                                        ? s.activeBg
+                                        : isDone
+                                            ? 'bg-success/5 border-success/20'
+                                            : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {isDone && !isActive && (
+                                        <span className="text-success text-[9px] font-bold">✓</span>
+                                    )}
+                                </div>
+                                <span className={cn(
+                                    'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
+                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
+                                )}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* Active section panel */}
+            <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
+            >
+                {/* Section header */}
+                <div className={cn(
+                    'flex items-center gap-3 px-5 py-4 border-b border-border-default',
+                    activeSectionConfig.activeBg
+                )}>
+                    <span className="text-xl">{activeSectionConfig.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
+                            {activeSectionConfig.label}
+                        </p>
+                        <p className="text-[11px] text-text-disabled">
+                            {activeSectionConfig.sublabel}
+                        </p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">
+                        {activeIndex + 1} / {sections.length}
+                    </span>
+                </div>
+
+                {/* Section content */}
+                <div className="p-5">
+                    {activeSection === 'architecture' ? (
+                        // Architecture: Excalidraw diagram + optional text description
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-xs font-bold text-text-primary mb-1">
+                                    Architecture Diagram
+                                </p>
+                                <p className="text-[11px] text-text-tertiary mb-3">
+                                    Draw your system components, data flows, and service boundaries.
+                                    Label every box. Show how data moves between components.
+                                </p>
+                                <div className="h-[420px] border border-border-default rounded-xl overflow-hidden bg-surface-0">
+                                    <ExcalidrawEditor
+                                        onChange={onDiagramChange}
+                                        initialData={diagramData}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-text-primary mb-1">
+                                    Architecture Description
+                                    <span className="ml-1.5 text-text-disabled font-normal text-[10px]">
+                                        optional — text companion to your diagram
+                                    </span>
+                                </p>
+                                {fieldConfigs.architectureNotes?.hint && (
+                                    <p className="text-[11px] text-text-tertiary leading-relaxed
+                                                   bg-surface-2 border border-border-subtle rounded-lg
+                                                   px-3 py-2 mb-2">
+                                        💡 {fieldConfigs.architectureNotes.hint}
+                                    </p>
+                                )}
+                                <textarea
+                                    rows={6}
+                                    value={sdData.architectureNotes || ''}
+                                    onChange={e => update('architectureNotes', e.target.value)}
+                                    placeholder={fieldConfigs.architectureNotes?.placeholder || 'Describe your architecture...'}
+                                    className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                               text-sm text-text-primary placeholder:text-text-disabled
+                                               px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                    style={{ minHeight: '120px' }}
+                                />
+                            </div>
+                        </div>
+                    ) : fieldConfigs[activeSection]?.isCode ? (
+                        // Code/monospace sections: API design and schema design
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed
+                                               bg-surface-2 border border-border-subtle
+                                               rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 12}
+                                value={sdData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className="w-full bg-surface-0 border border-border-strong rounded-xl
+                                           text-sm text-text-primary placeholder:text-text-disabled
+                                           font-mono px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                style={{ minHeight: '280px' }}
+                            />
+                        </div>
+                    ) : (
+                        // Standard prose sections: requirements, estimation, trade-offs, failures
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed
+                                               bg-surface-2 border border-border-subtle
+                                               rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 8}
+                                value={sdData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                           text-sm text-text-primary placeholder:text-text-disabled
+                                           px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 8) * 24}px` }}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Prev / Next navigation footer */}
+                <div className="flex items-center justify-between px-5 py-3
+                                border-t border-border-default bg-surface-1/50">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key)
+                        }}
+                        disabled={activeIndex === 0}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12" />
+                            <polyline points="12 19 5 12 12 5" />
+                        </svg>
+                        Previous
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (activeIndex < sections.length - 1) {
+                                setActiveSection(sections[activeIndex + 1].key)
+                            }
+                        }}
+                        disabled={activeIndex === sections.length - 1}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1"
+                    >
+                        Next
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
 export default function SubmitSolutionPage() {
@@ -213,9 +546,10 @@ export default function SubmitSolutionPage() {
     const formConfig = getCategoryForm(category)
     const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
     const hasExternalLink = !!problem?.categoryData?.sourceUrl
-    const fields = formConfig.fields
+    const fields = formConfig.fields || {}
+    const isSystemDesign = category === 'SYSTEM_DESIGN'
 
-    // ── Form state ─────────────────────────────────────
+    // ── Generic form state (CODING, SQL, BEHAVIORAL, CS_FUNDAMENTALS, HR, LLD) ──
     const [code, setCode] = useState('')
     const [language, setLanguage] = useState(
         localStorage.getItem('ps_last_language') || 'PYTHON'
@@ -227,6 +561,21 @@ export default function SubmitSolutionPage() {
     const [realWorldConnection, setRealWorldConnection] = useState('')
     const [confidence, setConfidence] = useState(0)
     const [followUpAnswers, setFollowUpAnswers] = useState({})
+
+    // ── System Design workspace state ──────────────────
+    // Only populated when category === 'SYSTEM_DESIGN'.
+    // Stored in categorySpecificData JSON column on Solution.
+    const [sdData, setSdData] = useState({
+        functionalRequirements: '',
+        nonFunctionalRequirements: '',
+        capacityEstimation: '',
+        apiDesign: '',
+        schemaDesign: '',
+        architectureNotes: '',
+        tradeoffReasoning: '',
+        failureModes: '',
+    })
+    const [sdDiagram, setSdDiagram] = useState(null)
 
     function handleFollowUpAnswer(questionId, text) {
         setFollowUpAnswers(prev => ({ ...prev, [questionId]: text }))
@@ -242,6 +591,17 @@ export default function SubmitSolutionPage() {
             return
         }
 
+        // SD-specific validation: at least one meaningful section must be filled
+        if (isSystemDesign) {
+            const hasMinContent =
+                (sdData.functionalRequirements?.trim().length ?? 0) > 20 ||
+                (sdData.architectureNotes?.trim().length ?? 0) > 20
+            if (!hasMinContent) {
+                toast.error('Fill in Functional Requirements or Architecture before submitting.')
+                return
+            }
+        }
+
         const followUpAnswersArray = Object.entries(followUpAnswers)
             .filter(([, text]) => text?.trim())
             .map(([questionId, text]) => ({
@@ -249,25 +609,46 @@ export default function SubmitSolutionPage() {
                 answerText: text.trim(),
             }))
 
+        // For System Design, map SD fields into the existing Solution columns
+        // so they remain queryable for RAG and 6D report while also storing
+        // the full structured data in categorySpecificData.
+        //
+        // Mapping rationale:
+        //   approach           → functionalRequirements (primary design input)
+        //   bruteForce         → nonFunctionalRequirements
+        //   optimizedApproach  → schemaDesign
+        //   code               → apiDesign (text/code format)
+        //   keyInsight         → tradeoffReasoning (the "aha" of the design)
+        //   feynmanExplanation → architectureNotes (the explanation of the system)
+        //   realWorldConnection→ capacityEstimation
+        //   timeComplexity     → failureModes
         const data = {
-            approach: approach || null,
-            code: code || null,
-            language: code ? language : null,
+            approach: isSystemDesign ? sdData.functionalRequirements : (approach || null),
+            bruteForce: isSystemDesign ? sdData.nonFunctionalRequirements : null,
+            optimizedApproach: isSystemDesign ? sdData.schemaDesign : (approach || null),
+            code: isSystemDesign ? sdData.apiDesign : (code || null),
+            language: isSystemDesign ? 'plaintext' : (code ? language : null),
             pattern: pattern || null,
-            keyInsight: keyInsight || null,
-            feynmanExplanation: feynmanExplanation || null,
-            realWorldConnection: realWorldConnection || null,
-            confidence,
-            timeComplexity: null,
+            keyInsight: isSystemDesign ? sdData.tradeoffReasoning : (keyInsight || null),
+            feynmanExplanation: isSystemDesign ? sdData.architectureNotes : (feynmanExplanation || null),
+            realWorldConnection: isSystemDesign ? sdData.capacityEstimation : (realWorldConnection || null),
+            timeComplexity: isSystemDesign ? sdData.failureModes : null,
             spaceComplexity: null,
-            bruteForce: null,
-            optimizedApproach: approach || null,
+            confidence,
+            // Full structured SD data stored here for clean retrieval
+            categorySpecificData: isSystemDesign
+                ? { ...sdData, diagramData: sdDiagram }
+                : undefined,
             followUpAnswers: followUpAnswersArray,
         }
 
         try {
             await submitSolution.mutateAsync({ problemId, data })
-            toast.success('Solution submitted! AI will analyze it.')
+            toast.success(
+                isSystemDesign
+                    ? 'Design submitted! AI will analyze your architecture.'
+                    : 'Solution submitted! AI will analyze it.'
+            )
             navigate(`/problems/${problemId}`)
         } catch {
             // error handled by mutation
@@ -275,6 +656,7 @@ export default function SubmitSolutionPage() {
     }
 
     if (isLoading) return <PageSpinner />
+
     if (!problem) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -293,7 +675,7 @@ export default function SubmitSolutionPage() {
                 type="button"
                 onClick={() => navigate(`/problems/${problemId}`)}
                 className="flex items-center gap-1.5 text-sm text-text-tertiary
-                   hover:text-text-primary transition-colors mb-6"
+                           hover:text-text-primary transition-colors mb-6"
             >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" strokeWidth="2"
@@ -321,7 +703,7 @@ export default function SubmitSolutionPage() {
                     {problem.categoryData?.platform &&
                         problem.categoryData.platform !== 'OTHER' && (
                             <span className="text-[10px] font-bold text-text-disabled bg-surface-3
-                               border border-border-subtle rounded-full px-2 py-px">
+                                             border border-border-subtle rounded-full px-2 py-px">
                                 {problem.categoryData.platform}
                             </span>
                         )}
@@ -329,15 +711,16 @@ export default function SubmitSolutionPage() {
                 <h2 className="text-base font-bold text-text-primary mb-2">
                     {problem.title}
                 </h2>
-                {hasExternalLink && (
+                {/* External link — shown for CODING/SQL only, not SD */}
+                {hasExternalLink && !isSystemDesign && (
                     <a
                         href={problem.categoryData.sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
-                       bg-brand-400/10 border border-brand-400/25
-                       text-sm font-semibold text-brand-300 hover:text-brand-200
-                       hover:bg-brand-400/15 transition-all"
+                                   bg-brand-400/10 border border-brand-400/25
+                                   text-sm font-semibold text-brand-300 hover:text-brand-200
+                                   hover:bg-brand-400/15 transition-all"
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" strokeWidth="2"
@@ -351,15 +734,26 @@ export default function SubmitSolutionPage() {
                             : 'External Site'} →
                     </a>
                 )}
+                {/* SD: show the problem description inline for quick reference */}
+                {isSystemDesign && problem.description && (
+                    <div className="mt-3 p-3 bg-surface-2 border border-border-default
+                                    rounded-xl text-xs text-text-tertiary leading-relaxed">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase
+                                       tracking-widest mb-1.5">
+                            Design Brief
+                        </p>
+                        <p className="whitespace-pre-wrap">{problem.description}</p>
+                    </div>
+                )}
             </div>
 
-            {/* Info banner for external-link problems */}
-            {hasExternalLink && (
+            {/* Info banner — external link problems (CODING/SQL only) */}
+            {hasExternalLink && !isSystemDesign && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-info/5 border border-info/20 rounded-xl p-4 mb-6
-                     flex items-start gap-3"
+                               flex items-start gap-3"
                 >
                     <span className="text-lg flex-shrink-0">💡</span>
                     <div>
@@ -376,146 +770,191 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
 
-            {/* Form sections */}
+            {/* SD interview tip banner */}
+            {isSystemDesign && (
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mb-6
+                               flex items-start gap-3"
+                >
+                    <span className="text-lg flex-shrink-0">🎯</span>
+                    <div>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">
+                            Work through it like a real interview
+                        </p>
+                        <p className="text-xs text-text-tertiary leading-relaxed">
+                            Start with requirements — never jump to architecture first.
+                            Fill each section in order. Interviewers score each dimension independently.
+                            You don't need to fill every section, but the more you fill, the richer your AI feedback.
+                        </p>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* ── Form sections ──────────────────────────── */}
             <div className="space-y-5">
 
-                {/* ── Code section — Monaco editor with dropdown language selector ── */}
-                {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
-                    <FormSection
-                        icon="💻"
-                        title={hasExternalLink
-                            ? "Paste Your Solution Code"
-                            : (formConfig.solutionTabConfig?.codeLabel || "Your Code")}
-                        hint="AI will analyze correctness, complexity, and detect any issues"
-                    >
-                        <CodeEditor
-                            code={code}
-                            onChange={setCode}
-                            language={language}
-                            onLanguageChange={(lang) => {
-                                setLanguage(lang)
-                                // Save preference immediately on change, not just on submit
-                                localStorage.setItem('ps_last_language', lang)
-                            }}
-                            selectorStyle="dropdown"
-                            languages={SUBMIT_LANGUAGES}
-                            height="320px"
-                            showLanguageSelector
-                        />
-                        <p className="text-[10px] text-text-disabled mt-2">
-                            🤖 AI will check correctness, detect edge cases, analyze complexity,
-                            and flag any issues
-                        </p>
-                    </FormSection>
-                )}
-
-                {/* Approach / Response */}
-                <FormSection
-                    icon={category === 'BEHAVIORAL' ? '🎯' : category === 'HR' ? '💬' : '📝'}
-                    title={
-                        category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response')
-                            : category === 'HR' ? 'Your Answer'
-                                : category === 'SYSTEM_DESIGN' ? 'Your Design'
-                                    : category === 'CS_FUNDAMENTALS' ? 'Your Explanation'
-                                        : 'Your Approach'
-                    }
-                    hint={
-                        hasExternalLink
-                            ? 'Explain your thought process. What pattern did you use and why?'
-                            : category === 'BEHAVIORAL'
-                                ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.')
-                                : 'Describe your approach step by step.'
-                    }
-                >
-                    <RichTextEditor
-                        content={approach}
-                        onChange={setApproach}
-                        placeholder={
-                            hasExternalLink
-                                ? 'Walk through your approach: pattern identification, why this approach, alternatives considered...'
-                                : fields.patternReasoning?.placeholder || 'Write your approach here...'
-                        }
-                        minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'}
+                {isSystemDesign ? (
+                    // ── System Design: structured 8-panel workspace ──
+                    <SystemDesignWorkspace
+                        sdData={sdData}
+                        onSdDataChange={setSdData}
+                        diagramData={sdDiagram}
+                        onDiagramChange={setSdDiagram}
                     />
-                </FormSection>
+                ) : (
+                    // ── All other categories: generic form ────────────
+                    <>
+                        {/* Code section — Monaco editor */}
+                        {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
+                            <FormSection
+                                icon="💻"
+                                title={hasExternalLink
+                                    ? 'Paste Your Solution Code'
+                                    : (formConfig.solutionTabConfig?.codeLabel || 'Your Code')}
+                                hint="AI will analyze correctness, complexity, and detect any issues"
+                            >
+                                <CodeEditor
+                                    code={code}
+                                    onChange={setCode}
+                                    language={language}
+                                    onLanguageChange={lang => {
+                                        setLanguage(lang)
+                                        localStorage.setItem('ps_last_language', lang)
+                                    }}
+                                    selectorStyle="dropdown"
+                                    languages={SUBMIT_LANGUAGES}
+                                    height="320px"
+                                    showLanguageSelector
+                                />
+                                <p className="text-[10px] text-text-disabled mt-2">
+                                    🤖 AI will check correctness, detect edge cases, analyze complexity,
+                                    and flag any issues
+                                </p>
+                            </FormSection>
+                        )}
 
-                {/* Pattern identification */}
-                {fields.patternIdentified?.show && (
-                    <FormSection
-                        icon="🧩"
-                        title={fields.patternIdentified.label || 'Pattern Identified'}
-                        hint="AI will verify if your identified pattern matches your solution"
-                    >
-                        <PatternSelector
-                            config={fields.patternIdentified}
-                            value={pattern}
-                            onChange={setPattern}
-                        />
-                    </FormSection>
+                        {/* Approach / Response */}
+                        <FormSection
+                            icon={
+                                category === 'BEHAVIORAL' ? '🎯'
+                                    : category === 'HR' ? '💬'
+                                        : category === 'LOW_LEVEL_DESIGN' ? '📐'
+                                            : '📝'
+                            }
+                            title={
+                                category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response')
+                                    : category === 'HR' ? 'Your Answer'
+                                        : category === 'CS_FUNDAMENTALS' ? 'Your Explanation'
+                                            : category === 'LOW_LEVEL_DESIGN' ? 'Your Design Approach'
+                                                : 'Your Approach'
+                            }
+                            hint={
+                                hasExternalLink
+                                    ? 'Explain your thought process. What pattern did you use and why?'
+                                    : category === 'BEHAVIORAL'
+                                        ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.')
+                                        : category === 'LOW_LEVEL_DESIGN'
+                                            ? 'Walk through your entity identification and class hierarchy.'
+                                            : 'Describe your approach step by step.'
+                            }
+                        >
+                            <RichTextEditor
+                                content={approach}
+                                onChange={setApproach}
+                                placeholder={
+                                    hasExternalLink
+                                        ? 'Walk through your approach: pattern identification, why this approach, alternatives considered...'
+                                        : fields.patternReasoning?.placeholder || 'Write your approach here...'
+                                }
+                                minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'}
+                            />
+                        </FormSection>
+
+                        {/* Pattern identification */}
+                        {fields.patternIdentified?.show && (
+                            <FormSection
+                                icon="🧩"
+                                title={fields.patternIdentified.label || 'Pattern Identified'}
+                                hint="AI will verify if your identified pattern matches your solution"
+                            >
+                                <PatternSelector
+                                    config={fields.patternIdentified}
+                                    value={pattern}
+                                    onChange={setPattern}
+                                />
+                            </FormSection>
+                        )}
+
+                        {/* Key Insight */}
+                        {fields.keyInsight?.show && (
+                            <FormSection
+                                icon="💡"
+                                title={fields.keyInsight.label || 'Key Insight'}
+                                hint={fields.keyInsight.hint}
+                                className="bg-brand-400/3 border-brand-400/20"
+                            >
+                                <textarea
+                                    rows={2}
+                                    value={keyInsight}
+                                    onChange={e => setKeyInsight(e.target.value)}
+                                    placeholder={fields.keyInsight.placeholder || 'The one thing that makes this click...'}
+                                    className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                               text-sm text-text-primary placeholder:text-text-tertiary
+                                               px-3.5 py-2.5 outline-none resize-none
+                                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                />
+                            </FormSection>
+                        )}
+
+                        {/* Feynman Explanation */}
+                        {fields.simpleExplanation?.show && (
+                            <FormSection
+                                icon="🗣"
+                                title={fields.simpleExplanation.label || 'Explain It Simply'}
+                                hint="Explain to someone who doesn't know the topic"
+                            >
+                                <RichTextEditor
+                                    content={feynmanExplanation}
+                                    onChange={setFeynmanExplanation}
+                                    placeholder={fields.simpleExplanation.placeholder || 'Explain in simple terms...'}
+                                    minHeight="100px"
+                                />
+                            </FormSection>
+                        )}
+
+                        {/* Challenges / Real-world */}
+                        {fields.challenges?.show && (
+                            <FormSection
+                                icon="🌍"
+                                title={fields.challenges.label || 'Challenges & Real-World Connection'}
+                            >
+                                <RichTextEditor
+                                    content={realWorldConnection}
+                                    onChange={setRealWorldConnection}
+                                    placeholder={fields.challenges.placeholder || 'What was challenging? How does this connect to real-world software?'}
+                                    minHeight="80px"
+                                />
+                            </FormSection>
+                        )}
+                    </>
                 )}
 
-                {/* Key Insight */}
-                {fields.keyInsight?.show && (
-                    <FormSection
-                        icon="💡"
-                        title={fields.keyInsight.label || 'Key Insight'}
-                        hint={fields.keyInsight.hint}
-                        className="bg-brand-400/3 border-brand-400/20"
-                    >
-                        <textarea
-                            rows={2}
-                            value={keyInsight}
-                            onChange={e => setKeyInsight(e.target.value)}
-                            placeholder={fields.keyInsight.placeholder || 'The one thing that makes this click...'}
-                            className="w-full bg-surface-3 border border-border-strong rounded-xl
-                           text-sm text-text-primary placeholder:text-text-tertiary
-                           px-3.5 py-2.5 outline-none resize-none
-                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                        />
-                    </FormSection>
-                )}
-
-                {/* Feynman Explanation */}
-                {fields.simpleExplanation?.show && (
-                    <FormSection
-                        icon="🗣"
-                        title={fields.simpleExplanation.label || 'Explain It Simply'}
-                        hint="Explain to someone who doesn't know the topic"
-                    >
-                        <RichTextEditor
-                            content={feynmanExplanation}
-                            onChange={setFeynmanExplanation}
-                            placeholder={fields.simpleExplanation.placeholder || 'Explain in simple terms...'}
-                            minHeight="100px"
-                        />
-                    </FormSection>
-                )}
-
-                {/* Challenges / Real-world */}
-                {fields.challenges?.show && (
-                    <FormSection
-                        icon="🌍"
-                        title={fields.challenges.label || 'Challenges & Real-World Connection'}
-                    >
-                        <RichTextEditor
-                            content={realWorldConnection}
-                            onChange={setRealWorldConnection}
-                            placeholder={fields.challenges.placeholder || 'What was challenging? How does this connect to real-world software?'}
-                            minHeight="80px"
-                        />
-                    </FormSection>
-                )}
-
-                {/* Confidence */}
+                {/* Confidence — shown for ALL categories */}
                 <FormSection
                     icon="📊"
                     title="Confidence Level"
-                    hint="Be honest — AI will flag if your confidence doesn't match your solution quality"
+                    hint={
+                        isSystemDesign
+                            ? 'How confident are you in this design? Be honest — AI flags mismatches between confidence and design quality.'
+                            : 'Be honest — AI will flag if your confidence doesn\'t match your solution quality'
+                    }
                 >
                     <ConfidencePicker value={confidence} onChange={setConfidence} />
                 </FormSection>
 
-                {/* Follow-up questions */}
+                {/* Follow-up questions — shown for all categories that have them */}
                 {problem.followUpQuestions?.length > 0 && (
                     <FormSection
                         icon="🧠"
@@ -542,8 +981,9 @@ export default function SubmitSolutionPage() {
                                     <span className="text-text-disabled">Follow-up progress</span>
                                     <span className={cn(
                                         'font-semibold',
-                                        answeredCount === followUpCount ? 'text-success' :
-                                            answeredCount > 0 ? 'text-brand-300' : 'text-text-disabled'
+                                        answeredCount === followUpCount ? 'text-success'
+                                            : answeredCount > 0 ? 'text-brand-300'
+                                                : 'text-text-disabled'
                                     )}>
                                         {answeredCount}/{followUpCount} answered
                                         {answeredCount > 0 && ` (+${Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus)`}
@@ -565,9 +1005,9 @@ export default function SubmitSolutionPage() {
                 )}
             </div>
 
-            {/* Submit bar */}
+            {/* Sticky submit bar */}
             <div className="sticky bottom-0 bg-surface-0/90 backdrop-blur-lg border-t
-                  border-border-default mt-6 -mx-6 px-6 py-4">
+                            border-border-default mt-6 -mx-6 px-6 py-4">
                 <div className="max-w-[800px] mx-auto flex items-center justify-between">
                     <Button
                         type="button"
@@ -596,7 +1036,7 @@ export default function SubmitSolutionPage() {
                                 strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12" />
                             </svg>
-                            Submit Solution
+                            {isSystemDesign ? 'Submit Design' : 'Submit Solution'}
                         </Button>
                     </div>
                 </div>

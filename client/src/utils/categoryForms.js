@@ -60,77 +60,139 @@ export const CATEGORY_FORMS = {
     showFollowUps: true,
   },
   SYSTEM_DESIGN: {
+    // SD does not use the multi-step stepper concept from coding.
+    // It uses a single-page workspace with 5 structured panels.
+    // The steps array is kept for compatibility but the SD page
+    // uses its own layout.
     steps: [
       {
         id: 1,
         label: "Requirements",
         icon: "📋",
-        desc: "Clarify what you're building",
+        desc: "Functional + non-functional",
       },
       {
         id: 2,
-        label: "Design",
-        icon: "🏗️",
-        desc: "Architecture, components, and data flow",
+        label: "Estimation",
+        icon: "🔢",
+        desc: "Back-of-envelope capacity math",
       },
       {
         id: 3,
-        label: "Depth",
-        icon: "🔬",
-        desc: "Scaling, trade-offs, and real-world comparisons",
+        label: "API Design",
+        icon: "🔌",
+        desc: "Endpoints and data contracts",
+      },
+      {
+        id: 4,
+        label: "Architecture",
+        icon: "🏗️",
+        desc: "Components and data flow diagram",
+      },
+      {
+        id: 5,
+        label: "Trade-offs",
+        icon: "⚖️",
+        desc: "Decisions and failure modes",
       },
     ],
-    fields: {
-      patternIdentified: {
-        label: "Design Pattern",
-        placeholder: "e.g. Microservices, Event-driven, CQRS, Pub/Sub...",
-        show: true,
-      },
-      patternReasoning: {
-        label: "Requirements Clarification",
+
+    // isSystemDesign flag tells SubmitSolutionPage to render the SD workspace
+    // instead of the generic form
+    isSystemDesign: true,
+    fields: {}, // SD uses sdFields — kept empty for API consistency across categories
+
+    // These fields map to categorySpecificData JSON keys
+    sdFields: {
+      functionalRequirements: {
+        label: "Functional Requirements",
         placeholder:
-          "Functional requirements, non-functional requirements, constraints, assumptions...",
-        hint: "What questions would you ask the interviewer?",
-        show: true,
+          "List what the system must DO.\n\nFormat: User can [action] so that [outcome]\n\nExample for WhatsApp:\n• Users can send text messages to other users\n• Users can create group chats (max 256 members)\n• Users can send media (images, video, voice)\n• Users can see message delivery status (sent/delivered/read)\n• Users can set online/offline status",
+        hint: "Focus on WHAT, not HOW. No implementation details here.",
+        rows: 8,
       },
-      keyInsight: {
-        label: "Key Trade-off",
+      nonFunctionalRequirements: {
+        label: "Non-Functional Requirements",
         placeholder:
-          "The most important design decision and why you made it...",
-        hint: "Every system design has a core trade-off — what's yours?",
-        show: true,
+          "System quality attributes — performance, availability, scale.\n\nExample:\n• 50M DAU\n• Messages delivered in < 100ms (P99)\n• 99.99% availability (< 53 min downtime/year)\n• Support 10B messages/day\n• Messages must not be lost (durability)\n• Eventual consistency acceptable for group chats",
+        hint: "NFRs drive your entire architecture. Scale numbers here justify every design decision.",
+        rows: 7,
       },
-      simpleExplanation: {
-        label: "Scaling Strategy",
+      capacityEstimation: {
+        label: "Capacity Estimation",
         placeholder:
-          "How does the system handle 10x, 100x load? What breaks first?",
-        show: true,
+          "Back-of-envelope math. Use round numbers and powers of 10.\n\nExample:\n• DAU: 50M users\n• Avg messages sent/user/day: 40\n• Total writes/day: 50M × 40 = 2B messages/day\n• Writes/second: 2B / 86,400 ≈ 23,000 msg/sec\n• Read:Write ratio: 1:1 (each message read once)\n• Reads/second: ~23,000\n• Avg message size: 100 bytes\n• Storage/day: 2B × 100B = 200GB/day\n• 5-year storage: 200GB × 365 × 5 ≈ 365TB",
+        hint: "Interviewers don't care if numbers are exact. They care that you can reason about scale.",
+        rows: 10,
       },
-      challenges: {
-        label: "Bottlenecks & Failure Modes",
-        placeholder: "What are the weakest points? How do you handle failures?",
-        show: true,
+      apiDesign: {
+        label: "API Design",
+        placeholder:
+          "Define your core API endpoints.\n\nFormat: METHOD /path — description\nRequest: { field: type }\nResponse: { field: type }\n\nExample:\nPOST /messages\n  Request: { senderId, receiverId, content, type: 'text|media' }\n  Response: { messageId, timestamp, status: 'sent' }\n\nGET /conversations/{userId}?page=1\n  Response: { conversations: [{ id, lastMessage, unreadCount }] }\n\nGET /messages/{conversationId}?before={timestamp}&limit=50\n  Response: { messages: [{ id, senderId, content, timestamp, status }] }",
+        hint: "Name your endpoints. Specify request/response shapes. Interviewers use this to check if you understand the system's surface area.",
+        rows: 12,
+        isCode: true,
+        language: "plaintext",
+      },
+      schemaDesign: {
+        label: "Database Schema",
+        placeholder:
+          "Define your key tables/collections.\n\nExample (SQL):\nusers: id, phone_number, name, last_seen, created_at\n\nmessages: id, conversation_id, sender_id, content, type,\n          status ENUM('sent','delivered','read'),\n          created_at\n          INDEX(conversation_id, created_at DESC)\n\nconversations: id, type ENUM('direct','group'), created_at\nconversation_members: conversation_id, user_id, joined_at\n\nExample (NoSQL):\nMessage document: { _id, conversationId, senderId, content,\n                    timestamp, readBy: [userId] }",
+        hint: "Schema design reveals whether you understand your access patterns. Add indexes that match your query patterns.",
+        rows: 12,
+        isCode: true,
+        language: "sql",
+      },
+      architectureNotes: {
+        label: "Architecture Description",
+        placeholder:
+          "Describe your architecture in text (your diagram tells the visual story).\n\nExample:\nClients connect via WebSocket to Chat Service for real-time messaging.\nChat Service writes to Message DB (Cassandra — write-heavy, time-series data).\nFan-out Service handles group message delivery asynchronously via Message Queue.\nPresence Service tracks online status with Redis TTL keys.\nMedia is stored in Object Storage (S3) with CDN for delivery.\nPush Notification Service handles offline delivery via APNs/FCM.",
+        hint: "This is the companion text to your architecture diagram. Explain WHY each component exists.",
+        rows: 8,
+      },
+      tradeoffReasoning: {
+        label: "Key Design Decisions & Trade-offs",
+        placeholder:
+          "For each major decision, explain what you chose and what you traded away.\n\nFormat: Decision → Choice → Trade-off\n\nExample:\n1. Database: Cassandra over PostgreSQL\n   → High write throughput (23K/sec), time-series queries by conversationId\n   → Trade-off: No ACID transactions, eventual consistency\n\n2. Message delivery: WebSockets over HTTP polling\n   → Real-time delivery, no polling overhead\n   → Trade-off: Connection state, harder to scale horizontally\n\n3. Message fan-out: Async queue over synchronous\n   → Sender gets instant ACK, receivers get eventual delivery\n   → Trade-off: Messages can arrive slightly out of order in groups\n\n4. CAP choice: AP over CP\n   → Available even during network partition\n   → Trade-off: Some users may temporarily see stale data",
+        hint: "This is the highest-signal section. Strong candidates make decisions explicit and acknowledge what they traded away.",
+        rows: 12,
+      },
+      failureModes: {
+        label: "Failure Modes & Mitigations",
+        placeholder:
+          "What breaks first? How do you handle it?\n\nExample:\n• Chat Service crash → WebSocket reconnects, client replays from last messageId\n• Message DB node failure → Cassandra replication (RF=3), automatic failover\n• Fan-out queue backlog → Scale consumers horizontally, dead letter queue for failed deliveries\n• Media upload failure → Client retries with exponential backoff, idempotent upload key\n• Network partition → Accept and queue writes, sync on reconnect (offline-first)",
+        hint: "Interviewers always probe failure modes. Answering this proactively signals production experience.",
+        rows: 8,
       },
     },
-    showSolutionTabs: true,
-    solutionTabConfig: {
-      types: [
-        { id: "HIGH_LEVEL", label: "High-Level Design", icon: "🏗️" },
-        { id: "DEEP_DIVE", label: "Deep Dive Component", icon: "🔍" },
-        { id: "ALTERNATIVE", label: "Alternative Design", icon: "🔄" },
+
+    // For the solution display card, map fields to readable labels
+    displayConfig: {
+      sections: [
+        {
+          key: "functionalRequirements",
+          label: "Functional Requirements",
+          icon: "📋",
+        },
+        {
+          key: "nonFunctionalRequirements",
+          label: "Non-Functional Requirements",
+          icon: "⚙️",
+        },
+        { key: "capacityEstimation", label: "Capacity Estimation", icon: "🔢" },
+        { key: "apiDesign", label: "API Design", icon: "🔌", isCode: true },
+        {
+          key: "schemaDesign",
+          label: "Database Schema",
+          icon: "🗄️",
+          isCode: true,
+        },
+        { key: "architectureNotes", label: "Architecture", icon: "🏗️" },
+        { key: "tradeoffReasoning", label: "Trade-offs", icon: "⚖️" },
+        { key: "failureModes", label: "Failure Modes", icon: "🔥" },
       ],
-      approachLabel: "Design Description",
-      approachPlaceholder:
-        "Describe the architecture — components, data flow, APIs, database schema...",
-      complexityLabels: {
-        time: "Estimated QPS / Throughput",
-        space: "Estimated Storage",
-      },
-      codeLabel: "API Design / Schema",
-      codePlaceholder:
-        "// Define key APIs, database schema, or config\n\nPOST /api/messages\n  body: { senderId, receiverId, content }\n  response: { messageId, timestamp }",
-      notesLabel: "Architecture Notes",
     },
+
     showFollowUps: true,
   },
   LOW_LEVEL_DESIGN: {

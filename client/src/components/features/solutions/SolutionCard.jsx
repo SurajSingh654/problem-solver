@@ -10,35 +10,107 @@ import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import { LANGUAGE_LABELS, CONFIDENCE_LEVELS } from '@utils/constants'
 
+// ── System Design structured display ──────────────────
+// Only renders for solutions with SD-specific categorySpecificData keys.
+// LLD and other categories that may eventually use categorySpecificData
+// are handled by the generic tabs below.
+function SDSolutionDisplay({ data }) {
+    const [activeKey, setActiveKey] = useState(() => {
+        // Default to first section that has content
+        const orderedKeys = [
+            'functionalRequirements', 'nonFunctionalRequirements',
+            'capacityEstimation', 'apiDesign', 'schemaDesign',
+            'architectureNotes', 'tradeoffReasoning', 'failureModes',
+        ]
+        return orderedKeys.find(k => data[k]?.trim?.()?.length > 0) || 'functionalRequirements'
+    })
+
+    const sections = [
+        { key: 'functionalRequirements', label: 'Requirements', icon: '📋' },
+        { key: 'nonFunctionalRequirements', label: 'NFRs', icon: '⚙️' },
+        { key: 'capacityEstimation', label: 'Estimation', icon: '🔢' },
+        { key: 'apiDesign', label: 'API', icon: '🔌', isCode: true },
+        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', isCode: true },
+        { key: 'architectureNotes', label: 'Architecture', icon: '🏗️' },
+        { key: 'tradeoffReasoning', label: 'Trade-offs', icon: '⚖️' },
+        { key: 'failureModes', label: 'Failures', icon: '🔥' },
+    ].filter(s => (data[s.key]?.trim?.()?.length ?? 0) > 0)
+
+    if (sections.length === 0) {
+        return (
+            <p className="text-xs text-text-disabled italic">
+                No design content recorded.
+            </p>
+        )
+    }
+
+    const activeSection = sections.find(s => s.key === activeKey) || sections[0]
+
+    return (
+        <div>
+            {/* Section tabs */}
+            <div className="flex flex-wrap gap-1 mb-4">
+                {sections.map(s => (
+                    <button
+                        key={s.key}
+                        onClick={() => setActiveKey(s.key)}
+                        className={cn(
+                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
+                            'text-[10px] font-semibold transition-all border',
+                            activeKey === s.key
+                                ? 'bg-brand-400/15 text-brand-300 border-brand-400/25'
+                                : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3 border-transparent'
+                        )}
+                    >
+                        <span>{s.icon}</span>{s.label}
+                    </button>
+                ))}
+            </div>
+            {/* Active section content */}
+            {activeSection.isCode ? (
+                <pre className="bg-surface-0 border border-border-default rounded-xl p-4
+                                text-xs font-mono text-text-secondary whitespace-pre-wrap
+                                overflow-x-auto max-h-[400px] leading-relaxed">
+                    {data[activeKey]}
+                </pre>
+            ) : (
+                <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                    {data[activeKey]}
+                </div>
+            )}
+        </div>
+    )
+}
+
 // ── Code block ─────────────────────────────────────────
 function CodeBlock({ code, language }) {
     const [copied, setCopied] = useState(false)
+
     function copy() {
         navigator.clipboard.writeText(code)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     }
+
     return (
         <div className="relative rounded-xl overflow-hidden border border-border-default">
             <div className="flex items-center justify-between px-4 py-2
-                      bg-surface-3 border-b border-border-default">
+                            bg-surface-3 border-b border-border-default">
                 <span className="text-xs font-mono text-text-tertiary">
                     {LANGUAGE_LABELS[language] || language}
                 </span>
                 <button
                     onClick={copy}
                     className="text-xs text-text-tertiary hover:text-text-primary
-                     flex items-center gap-1.5 transition-colors"
+                               flex items-center gap-1.5 transition-colors"
                 >
                     {copied ? (
                         <span className="text-success">✓ Copied!</span>
-                    ) : (
-                        'Copy'
-                    )}
+                    ) : 'Copy'}
                 </button>
             </div>
             <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto
-                      max-h-[400px] bg-surface-1 leading-relaxed">
+                            max-h-[400px] bg-surface-1 leading-relaxed">
                 <code>{code}</code>
             </pre>
         </div>
@@ -46,10 +118,6 @@ function CodeBlock({ code, language }) {
 }
 
 // ── Section row ────────────────────────────────────────
-// mode: 'markdown' | 'html' | 'mono'
-// markdown — user typed text, may contain Markdown syntax
-// html — written via RichTextEditor, outputs HTML
-// mono — short inline value like pattern or complexity
 function SectionRow({ label, value, mode = 'markdown' }) {
     if (!value) return null
     return (
@@ -63,13 +131,11 @@ function SectionRow({ label, value, mode = 'markdown' }) {
                     {value}
                 </p>
             ) : mode === 'html' ? (
-                // RichTextEditor outputs HTML — render directly
                 <div
                     className="prose-content text-sm"
                     dangerouslySetInnerHTML={{ __html: value }}
                 />
             ) : (
-                // Plain text or Markdown from textarea input
                 <MarkdownRenderer content={value} size="sm" />
             )}
         </div>
@@ -124,6 +190,20 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         totalRatings,
     } = solution
 
+    // Determine if this is a System Design submission with structured data.
+    // Detected by presence of SD-specific keys in categorySpecificData.
+    // This distinguishes SD from LLD or other future categories that may
+    // also use categorySpecificData with different field shapes.
+    const isSDSubmission = !!(
+        solution.categorySpecificData &&
+        Object.keys(solution.categorySpecificData).length > 0 &&
+        (
+            solution.categorySpecificData.functionalRequirements !== undefined ||
+            solution.categorySpecificData.apiDesign !== undefined ||
+            solution.categorySpecificData.tradeoffReasoning !== undefined
+        )
+    )
+
     const tabs = [
         { id: 'approach', label: 'Approach' },
         { id: 'code', label: 'Code', hidden: !code },
@@ -143,7 +223,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
             {/* Header */}
             <div
                 className="flex items-center gap-3 p-4 cursor-pointer
-                   hover:bg-surface-3/50 transition-colors"
+                           hover:bg-surface-3/50 transition-colors"
                 onClick={() => setExpanded(v => !v)}
             >
                 <Avatar
@@ -158,14 +238,20 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                         </span>
                         {isOwn && (
                             <span className="text-[10px] font-bold px-1.5 py-px rounded-full
-                               bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                                             bg-brand-400/15 text-brand-300 border border-brand-400/25">
                                 You
                             </span>
                         )}
-                        {language && (
+                        {language && !isSDSubmission && (
                             <Badge variant="gray" size="xs">
                                 {LANGUAGE_LABELS[language] || language}
                             </Badge>
+                        )}
+                        {isSDSubmission && (
+                            <span className="text-[10px] font-bold px-1.5 py-px rounded-full
+                                             bg-info/10 text-info border border-info/20">
+                                System Design
+                            </span>
                         )}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 flex-wrap">
@@ -206,69 +292,74 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                         className="overflow-hidden"
                     >
                         <div className="border-t border-border-default">
-                            {/* Tabs */}
-                            <div className="flex gap-1 p-3 border-b border-border-default bg-surface-1/50">
-                                {tabs.map(t => (
-                                    <button
-                                        key={t.id}
-                                        onClick={() => setTab(t.id)}
-                                        className={cn(
-                                            'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
-                                            tab === t.id
-                                                ? 'bg-brand-400/15 text-brand-300 border border-brand-400/25'
-                                                : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
-                                        )}
-                                    >
-                                        {t.label}
-                                    </button>
-                                ))}
-                            </div>
+                            {/* Tabs — only shown for non-SD solutions */}
+                            {!isSDSubmission && (
+                                <div className="flex gap-1 p-3 border-b border-border-default bg-surface-1/50">
+                                    {tabs.map(t => (
+                                        <button
+                                            key={t.id}
+                                            onClick={() => setTab(t.id)}
+                                            className={cn(
+                                                'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                                                tab === t.id
+                                                    ? 'bg-brand-400/15 text-brand-300 border border-brand-400/25'
+                                                    : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
+                                            )}
+                                        >
+                                            {t.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
 
-                            {/* Tab content */}
+                            {/* Content */}
                             <div className="p-4 space-y-4">
-                                {tab === 'approach' && (
+                                {isSDSubmission ? (
+                                    // System Design: structured sectioned display
+                                    <SDSolutionDisplay data={solution.categorySpecificData} />
+                                ) : (
+                                    // All other categories: tab-based display
                                     <>
-                                        {/* pattern is a short string — plain text */}
-                                        <SectionRow label="Pattern" value={pattern} mode="mono" />
-                                        {/* approach is from textarea — may contain Markdown */}
-                                        <SectionRow label="Approach" value={approach} mode="markdown" />
-                                        {bruteForce && (
-                                            <div className="border border-border-subtle rounded-xl p-3 space-y-2">
-                                                <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest">
-                                                    Brute Force
-                                                </p>
-                                                <MarkdownRenderer content={bruteForce} size="sm" />
-                                            </div>
+                                        {tab === 'approach' && (
+                                            <>
+                                                <SectionRow label="Pattern" value={pattern} mode="mono" />
+                                                <SectionRow label="Approach" value={approach} mode="markdown" />
+                                                {bruteForce && (
+                                                    <div className="border border-border-subtle rounded-xl p-3 space-y-2">
+                                                        <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest">
+                                                            Brute Force
+                                                        </p>
+                                                        <MarkdownRenderer content={bruteForce} size="sm" />
+                                                    </div>
+                                                )}
+                                                {optimizedApproach && (
+                                                    <div className="border border-brand-400/20 rounded-xl p-3 space-y-2 bg-brand-400/3">
+                                                        <p className="text-[11px] font-bold text-brand-300 uppercase tracking-widest">
+                                                            Optimized
+                                                        </p>
+                                                        <MarkdownRenderer content={optimizedApproach} size="sm" />
+                                                        <div className="flex gap-3">
+                                                            {timeComplexity && (
+                                                                <Badge variant="brand" size="xs">⏱ {timeComplexity}</Badge>
+                                                            )}
+                                                            {spaceComplexity && (
+                                                                <Badge variant="brand" size="xs">💾 {spaceComplexity}</Badge>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
-                                        {optimizedApproach && (
-                                            <div className="border border-brand-400/20 rounded-xl p-3 space-y-2 bg-brand-400/3">
-                                                <p className="text-[11px] font-bold text-brand-300 uppercase tracking-widest">
-                                                    Optimized
-                                                </p>
-                                                <MarkdownRenderer content={optimizedApproach} size="sm" />
-                                                <div className="flex gap-3">
-                                                    {timeComplexity && (
-                                                        <Badge variant="brand" size="xs">⏱ {timeComplexity}</Badge>
-                                                    )}
-                                                    {spaceComplexity && (
-                                                        <Badge variant="brand" size="xs">💾 {spaceComplexity}</Badge>
-                                                    )}
-                                                </div>
-                                            </div>
+                                        {tab === 'code' && code && (
+                                            <CodeBlock code={code} language={language} />
                                         )}
-                                    </>
-                                )}
-                                {tab === 'code' && code && (
-                                    <CodeBlock code={code} language={language} />
-                                )}
-                                {tab === 'depth' && (
-                                    <>
-                                        {/* keyInsight is from textarea — Markdown */}
-                                        <SectionRow label="Key Insight" value={keyInsight} mode="markdown" />
-                                        {/* feynmanExplanation is from RichTextEditor — HTML */}
-                                        <SectionRow label="Feynman Explanation" value={feynmanExplanation} mode="html" />
-                                        {/* realWorldConnection is from RichTextEditor — HTML */}
-                                        <SectionRow label="Real World Connection" value={realWorldConnection} mode="html" />
+                                        {tab === 'depth' && (
+                                            <>
+                                                <SectionRow label="Key Insight" value={keyInsight} mode="markdown" />
+                                                <SectionRow label="Feynman Explanation" value={feynmanExplanation} mode="html" />
+                                                <SectionRow label="Real World Connection" value={realWorldConnection} mode="html" />
+                                            </>
+                                        )}
                                     </>
                                 )}
                             </div>
