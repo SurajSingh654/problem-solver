@@ -26,16 +26,26 @@
 // 5. Vector columns: Handled via raw SQL in migrations since Prisma
 //    doesn't natively support pgvector types. We use Unsupported("vector(1536)")
 //    as a placeholder and create actual columns + HNSW indexes in migrations.
+//    The db pull output shows these as Unsupported("vector") — both refer to
+//    the same pgvector column. The (1536) dimension is enforced at the DB level.
 //
 // 6. Indexes: Every teamId FK has a composite index with the most common
 //    co-filtered column (usually createdAt or userId). This ensures
 //    the two most frequent query patterns — "all items in this team"
 //    and "all items by this user in this team" — are index-only scans.
+//    Vector HNSW indexes are created via raw SQL and registered here
+//    with explicit map names so Prisma tracks them without drift.
 //
 // 7. Cascade rules: Deleting a Team cascades to all team-scoped data.
 //    Deleting a User nullifies their authored content where possible
 //    (problems stay, attributed to "[deleted user]") and cascades
 //    personal data (solutions, sessions, messages).
+//
+// 8. SM-2 Spaced Repetition: sm2EasinessFactor, sm2Interval, sm2Repetitions
+//    are proper columns on Solution (not JSON) so they can be read server-side
+//    without deserialization. All SM-2 state is computed server-side only —
+//    the client sends only a confidence rating (1-5). Added in migration
+//    20260701000000_add_sm2_fields.
 //
 // ============================================================================
 
@@ -146,8 +156,8 @@ enum CompetitionStatus {
 /// When currentTeamId is null AND the user has a personal team,
 /// they're in "individual mode."
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
+  id        String  @id @default(cuid())
+  email     String  @unique
   password  String
   name      String
   avatarUrl String?
@@ -160,14 +170,14 @@ model User {
   // Null means they haven't joined a team / are in individual mode.
   // This is denormalized for fast JWT embedding and query filtering.
   currentTeamId String?
-  currentTeam   Team?    @relation("CurrentTeamMembers", fields: [currentTeamId], references: [id], onDelete: SetNull)
+  currentTeam   Team?     @relation("CurrentTeamMembers", fields: [currentTeamId], references: [id], onDelete: SetNull)
   teamRole      TeamRole?
 
   // ── Personal space ─────────────────────────────────
   // Every individual-mode user gets a hidden "personal team."
   // This ID links to that team for uniform query patterns.
-  personalTeamId String?  @unique
-  personalTeam   Team?    @relation("PersonalTeam", fields: [personalTeamId], references: [id], onDelete: SetNull)
+  personalTeamId String? @unique
+  personalTeam   Team?   @relation("PersonalTeam", fields: [personalTeamId], references: [id], onDelete: SetNull)
 
   // ── Onboarding ─────────────────────────────────────
   onboardingComplete Boolean @default(false)
@@ -178,14 +188,14 @@ model User {
   verificationExpiry DateTime?
 
   // ── Password reset ─────────────────────────────────
-  resetCode       String?
-  resetExpiry     DateTime?
-  mustChangePassword Boolean @default(false)
+  resetCode          String?
+  resetExpiry        DateTime?
+  mustChangePassword Boolean   @default(false)
 
   // ── Email change ───────────────────────────────────
-  pendingEmail         String?
-  emailChangeCode      String?
-  emailChangeExpiry    DateTime?
+  pendingEmail      String?
+  emailChangeCode   String?
+  emailChangeExpiry DateTime?
 
   // ── Interview prep profile ─────────────────────────
   targetCompany     String?
@@ -193,7 +203,7 @@ model User {
   preferredLanguage String?
 
   // ── Activity tracking ──────────────────────────────
-  streak         Int       @default(0)
+  streak         Int            @default(0)
   lastSolvedAt   DateTime?
   lastActiveAt   DateTime?
   activityStatus ActivityStatus @default(ACTIVE)
@@ -211,15 +221,15 @@ model User {
   updatedAt DateTime @updatedAt
 
   // ── Relations ──────────────────────────────────────
-  createdTeams       Team[]             @relation("TeamCreator")
-  teamInvitesSent    TeamInvitation[]   @relation("InviteSender")
-  problems           Problem[]          @relation("ProblemAuthor")
-  solutions          Solution[]
-  clarityRatingsGiven ClarityRating[]   @relation("RatingAuthor")
-  simSessions        SimSession[]
-  quizAttempts       QuizAttempt[]
-  interviewSessions  InterviewSession[]
-  memberships        TeamMembership[]
+  createdTeams        Team[]             @relation("TeamCreator")
+  teamInvitesSent     TeamInvitation[]   @relation("InviteSender")
+  problems            Problem[]          @relation("ProblemAuthor")
+  solutions           Solution[]
+  clarityRatingsGiven ClarityRating[]    @relation("RatingAuthor")
+  simSessions         SimSession[]
+  quizAttempts        QuizAttempt[]
+  interviewSessions   InterviewSession[]
+  memberships         TeamMembership[]
 
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
@@ -230,10 +240,8 @@ model User {
   @@index([activityStatus, lastActiveAt])
   // Partial index for soft delete — only query non-deleted users
   @@index([deletedAt])
-  // Fast email lookup (already unique, but compound with deletedAt
-  // ensures we only find active accounts)
+  // Fast email lookup compound with deletedAt ensures we only find active accounts
   @@index([email, deletedAt])
-
   @@map("users")
 }
 
@@ -247,7 +255,7 @@ model User {
 /// Individual users get a "personal team" with isPersonal=true that behaves
 /// identically in the database but is presented as "My Practice" in the UI.
 model Team {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
   avatarUrl   String?
@@ -297,7 +305,7 @@ model Team {
   simSessions       SimSession[]
   quizAttempts      QuizAttempt[]
   interviewSessions InterviewSession[]
-  memberships        TeamMembership[]
+  memberships       TeamMembership[]
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -306,7 +314,6 @@ model Team {
   @@index([isPersonal, status])
   // Soft delete filtering
   @@index([deletedAt])
-
   @@map("teams")
 }
 
@@ -346,15 +353,13 @@ model TeamInvitation {
   @@index([email, status])
   // Find all invitations for a team (admin view)
   @@index([teamId, status])
-
   @@map("team_invitations")
 }
-
-
 
 // ============================================================================
 // TEAM MEMBERSHIP
 // ============================================================================
+
 /// Explicit record of every user-team relationship.
 ///
 /// DESIGN DECISIONS:
@@ -395,10 +400,8 @@ model TeamMembership {
   // ── Membership status ──────────────────────────────
   // false = user has left the team (soft leave)
   // Content created while active is preserved.
-  isActive Boolean @default(true)
-
-  // ── Timestamps ─────────────────────────────────────
-  joinedAt DateTime @default(now())
+  isActive Boolean   @default(true)
+  joinedAt DateTime  @default(now())
   leftAt   DateTime?
 
   // ── Constraints ────────────────────────────────────
@@ -409,10 +412,8 @@ model TeamMembership {
   @@index([userId, isActive])
   // "All active members of this team" — for team management
   @@index([teamId, isActive])
-
   @@map("team_memberships")
 }
-
 
 // ============================================================================
 // PROBLEM
@@ -458,10 +459,11 @@ model Problem {
   isHidden Boolean @default(false)
 
   // ── Vector embedding ───────────────────────────────
-  // Actual column created via raw SQL migration:
-  // ALTER TABLE problems ADD COLUMN embedding vector(1536);
-  // CREATE INDEX idx_problems_embedding ON problems
-  //   USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+  // Column + HNSW index created via raw SQL migration:
+  //   ALTER TABLE problems ADD COLUMN embedding vector(1536);
+  //   CREATE INDEX idx_problems_embedding_hnsw ON problems
+  //     USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+  // Registered below with explicit map name to prevent migration drift.
   embedding Unsupported("vector(1536)")?
 
   // ── Timestamps ─────────────────────────────────────
@@ -476,7 +478,6 @@ model Problem {
 
   // ── Indexes ────────────────────────────────────────
   // THE critical multi-tenant index: "all problems in this team"
-  // Composite with category for filtered listings
   @@index([teamId, category, difficulty])
   // For problem listings: team + published + not hidden
   @@index([teamId, isPublished, isHidden])
@@ -486,7 +487,8 @@ model Problem {
   @@index([teamId, title])
   // For AI-generated review queue: unpublished in a team
   @@index([teamId, source, isPublished])
-
+  // HNSW vector index — registered to prevent drift detection
+  @@index([embedding], map: "idx_problems_embedding_hnsw")
   @@map("problems")
 }
 
@@ -520,11 +522,10 @@ model FollowUpQuestion {
   @@map("follow_up_questions")
 }
 
-
-
 // ============================================================================
 // SOLUTION FOLLOW-UP ANSWER
 // ============================================================================
+
 /// A member's answer to a follow-up question as part of their solution.
 ///
 /// DESIGN DECISIONS:
@@ -555,8 +556,8 @@ model SolutionFollowUpAnswer {
 
   // ── AI evaluation ──────────────────────────────────
   // Set after reviewSolution is called — null until then
-  aiScore    Int?     // 1-10
-  aiFeedback String?  // One sentence feedback on this specific answer
+  aiScore    Int?    // 1-10
+  aiFeedback String? // One sentence feedback on this specific answer
 
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
@@ -567,11 +568,9 @@ model SolutionFollowUpAnswer {
   @@unique([solutionId, followUpQuestionId])
 
   // ── Indexes ────────────────────────────────────────
-  // "All answers for this solution"
   @@index([solutionId])
   // "All answers to this follow-up question" — for team analytics
   @@index([followUpQuestionId])
-
   @@map("solution_follow_up_answers")
 }
 
@@ -623,15 +622,42 @@ model Solution {
   // ── AI feedback (stored after review) ──────────────
   aiFeedback Json?
 
-  // ── Spaced repetition ──────────────────────────────
-  // JSON array of review dates: [date1, date2, ...]
-  reviewDates    Json?
-  nextReviewDate DateTime?
-  reviewCount    Int       @default(0)
-  lastReviewedAt DateTime?
+  // ── Spaced repetition — SM-2 Algorithm ─────────────
+  // Based on Wozniak (1990) SuperMemo SM-2 algorithm.
+  //
+  // sm2EasinessFactor: how fast intervals grow (min 1.3, default 2.5)
+  //   Increases on high quality recall, decreases on low quality.
+  //   Higher EF = item spaces out faster over successive reviews.
+  //
+  // sm2Interval: days until next review
+  //   Rep 1 → 1 day, Rep 2 → 6 days, Rep n → prev * EF
+  //   Reset to 1 on quality < 3 (forgot it).
+  //
+  // sm2Repetitions: consecutive successful reviews (quality >= 3)
+  //   Reset to 0 on quality < 3. Drives interval progression.
+  //
+  // reviewDates: JSON array of past review timestamps (audit trail)
+  // nextReviewDate: indexed DateTime for queue queries
+  // reviewCount: total reviews including resets (not same as sm2Repetitions)
+  // lastReviewedAt: set server-side on each review save
+  //
+  // IMPORTANT: All SM-2 state is computed server-side only.
+  // Client sends only confidence (1-5). Server maps to quality (0-5)
+  // and runs calculateSM2() from server/src/utils/sm2.js.
+  reviewDates       Json?
+  nextReviewDate    DateTime?
+  reviewCount       Int       @default(0)
+  lastReviewedAt    DateTime?
+  sm2EasinessFactor Float     @default(2.5)
+  sm2Interval       Int       @default(1)
+  sm2Repetitions    Int       @default(0)
 
   // ── Vector embedding ───────────────────────────────
-  // Actual column created via raw SQL migration
+  // Column + HNSW index created via raw SQL migration:
+  //   ALTER TABLE solutions ADD COLUMN embedding vector(1536);
+  //   CREATE INDEX idx_solutions_embedding_hnsw ON solutions
+  //     USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+  // Registered below with explicit map name to prevent migration drift.
   embedding Unsupported("vector(1536)")?
 
   // ── Timestamps ─────────────────────────────────────
@@ -639,8 +665,12 @@ model Solution {
   updatedAt DateTime @updatedAt
 
   // ── Relations ──────────────────────────────────────
-  clarityRatings   ClarityRating[]
-  followUpAnswers  SolutionFollowUpAnswer[]
+  clarityRatings  ClarityRating[]
+  followUpAnswers SolutionFollowUpAnswer[]
+
+  // ── Constraints ────────────────────────────────────
+  // One solution per user per problem per team
+  @@unique([userId, problemId, teamId])
 
   // ── Indexes ────────────────────────────────────────
   // THE critical query: "all solutions for this problem in this team"
@@ -648,12 +678,14 @@ model Solution {
   // "All solutions by this user in this team" (profile page)
   @@index([teamId, userId])
   // Spaced repetition queue: "my due reviews in this team"
+  // This is the primary index for getReviewQueue — nextReviewDate lte now
   @@index([teamId, userId, nextReviewDate])
-  // Leaderboard computation: count solutions per user per team
+  // General timeline queries
   @@index([teamId, userId, createdAt])
-  // Unique constraint: one solution per user per problem per team
-  @@unique([userId, problemId, teamId])
-
+  // Leaderboard: sorted by most recent per user per team (DESC)
+  @@index([teamId, userId, createdAt(sort: Desc)], map: "idx_solutions_leaderboard")
+  // HNSW vector index — registered to prevent drift detection
+  @@index([embedding], map: "idx_solutions_embedding_hnsw")
   @@map("solutions")
 }
 
@@ -662,7 +694,7 @@ model Solution {
 // ============================================================================
 
 /// Peer rating of a solution's explanation quality (1-5 stars).
-/// Feeds into the Communication dimension of the 6D report.
+/// Feeds into the Communication dimension (D3) of the 6D report.
 model ClarityRating {
   id String @id @default(cuid())
 
@@ -679,19 +711,20 @@ model ClarityRating {
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   // ── Rating ─────────────────────────────────────────
-  rating Int
+  rating Int // 1-5
 
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
 
-  // ── Indexes ────────────────────────────────────────
+  // ── Constraints ────────────────────────────────────
   // One rating per user per solution
   @@unique([raterId, solutionId])
+
+  // ── Indexes ────────────────────────────────────────
   // Aggregate ratings for a solution
   @@index([solutionId])
   // Team-scoped rating queries
   @@index([teamId])
-
   @@map("clarity_ratings")
 }
 
@@ -726,11 +759,8 @@ model SimSession {
   createdAt DateTime @default(now())
 
   // ── Indexes ────────────────────────────────────────
-  // "My sim sessions in this team"
   @@index([teamId, userId, createdAt])
-  // Aggregate team stats
   @@index([teamId, completed])
-
   @@map("sim_sessions")
 }
 
@@ -773,7 +803,6 @@ model QuizAttempt {
   @@index([userId, createdAt])
   // Team-scoped quiz stats
   @@index([teamId, createdAt])
-
   @@map("quiz_attempts")
 }
 
@@ -790,7 +819,7 @@ model InterviewSession {
 
   // ── User & team ────────────────────────────────────
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   teamId String?
   team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
@@ -824,13 +853,10 @@ model InterviewSession {
   messages InterviewMessage[]
 
   // ── Indexes ────────────────────────────────────────
-  // "My interview history" — personal
   @@index([userId, createdAt])
-  // Team-scoped interview stats
   @@index([teamId, createdAt])
   // Active sessions (for cleanup/monitoring)
   @@index([status, createdAt])
-
   @@map("interview_sessions")
 }
 
@@ -867,7 +893,6 @@ model InterviewMessage {
   // ── Indexes ────────────────────────────────────────
   // Sequential message retrieval for a session
   @@index([sessionId, createdAt])
-
   @@map("interview_messages")
 }
 
@@ -880,7 +905,7 @@ model InterviewMessage {
 /// Created by SUPER_ADMIN. Any platform user can participate.
 /// Problems are self-contained within the competition (not linked to teams).
 model Competition {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   title       String
   description String?
 
@@ -913,13 +938,13 @@ model Competition {
 
   // ── Indexes ────────────────────────────────────────
   @@index([status, startTime])
-
   @@map("competitions")
 }
 
 // ============================================================================
 // PLATFORM ANALYSIS (SuperAdmin AI Reports)
 // ============================================================================
+
 /// Stores AI-generated platform health analysis reports.
 ///
 /// Generated on-demand by SUPER_ADMIN. The latest report is displayed
@@ -930,7 +955,7 @@ model PlatformAnalysis {
 
   // ── Who generated it ───────────────────────────────
   generatedById String
-  
+
   // ── Analysis content ───────────────────────────────
   // Full AI response: healthScore, executiveSummary, insights,
   // trends, recommendations, risks
@@ -950,7 +975,6 @@ model PlatformAnalysis {
   // ── Indexes ────────────────────────────────────────
   // Fetch latest analysis quickly
   @@index([createdAt(sort: Desc)])
-
   @@map("platform_analyses")
 }
 
@@ -970,7 +994,7 @@ model CompetitionEntry {
   userId String
 
   // ── Results ────────────────────────────────────────
-  score       Int    @default(0)
+  score       Int       @default(0)
   rank        Int?
   submissions Json?
 
@@ -981,11 +1005,10 @@ model CompetitionEntry {
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
 
-  // ── Indexes ────────────────────────────────────────
-  // One entry per user per competition
+  // ── Constraints ────────────────────────────────────
   @@unique([userId, competitionId])
-  // Leaderboard: competition ranked by score
-  @@index([competitionId, score(sort: Desc)])
 
+  // ── Indexes ────────────────────────────────────────
+  @@index([competitionId, score(sort: Desc)])
   @@map("competition_entries")
 }

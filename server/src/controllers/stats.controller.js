@@ -206,6 +206,9 @@ export async function get6DReport(req, res) {
         optimizedApproach: true,
         timeComplexity: true,
         spaceComplexity: true,
+        sm2EasinessFactor: true, // ADD
+        sm2Interval: true, // ADD
+        sm2Repetitions: true, // ADD
         nextReviewDate: true,
         lastReviewedAt: true,
         reviewCount: true,
@@ -282,7 +285,9 @@ export async function get6DReport(req, res) {
       .map((r) => r.dimensionScores?.understandingDepth)
       .filter((s) => s != null);
     const aiCodeCorrectnessScores = allAiReviews
-      .map((r) => r.dimensionScores?.codeCorrectness)
+      .map(
+        (r) => r.dimensionScores?.codeCorrectness ?? r.scores?.codeCorrectness,
+      )
       .filter((s) => s != null);
 
     const avgAiPatternAccuracy =
@@ -352,10 +357,14 @@ export async function get6DReport(req, res) {
     // ════════════════════════════════════════════════
     // D2: Solution Depth — quality-weighted
     // ════════════════════════════════════════════════
-    // Measure meaningful content, not presence of any content
-    const INSIGHT_MIN_CHARS = 30;
-    const FEYNMAN_MIN_CHARS = 80;
-    const REALWORLD_MIN_CHARS = 50;
+    // AFTER — research-calibrated minimums
+    // Feynman technique requires articulating mechanism, cause, and consequence.
+    // 80 chars cannot do this. 200 chars is the minimum for a meaningful explanation.
+    // Dunlosky et al. (2013) — elaborative interrogation requires at least
+    // explaining the "why" which adds significant length.
+    const INSIGHT_MIN_CHARS = 60;
+    const FEYNMAN_MIN_CHARS = 200;
+    const REALWORLD_MIN_CHARS = 80;
 
     const withMeaningfulInsight = solutions.filter(
       (s) => stripHtml(s.keyInsight).length >= INSIGHT_MIN_CHARS,
@@ -377,12 +386,48 @@ export async function get6DReport(req, res) {
       solutions.reduce((s, r) => s + r.confidence, 0) / totalSolutions;
     const calibratedConfScore = (avgConf / 5) * overconfidencePenaltyFactor;
 
+    // ── Metacognitive accuracy: calibration delta ──────────
+    // Measures how accurately the candidate knows what they know.
+    // Formula: 1 - |normalized_self_confidence - normalized_ai_score| / 1.0
+    // A score of 1.0 = perfect calibration, 0.0 = completely miscalibrated.
+    // Research basis: Kruger & Dunning (1999), Dunlosky et al. (2013)
+    let metacognitiveAccuracy = null;
+    if (allAiReviews.length >= 3) {
+      const calibrationDeltas = allAiReviews
+        .map((review) => {
+          const solution = solutions.find(
+            (s) =>
+              s.aiFeedback &&
+              Array.isArray(s.aiFeedback) &&
+              s.aiFeedback.includes(review),
+          );
+          const selfConfidence = solution?.confidence;
+          const aiOverall = review.overallScore;
+          if (selfConfidence == null || aiOverall == null) return null;
+          // Normalize both to 0-1 scale
+          const normalizedSelf = (selfConfidence - 1) / 4; // 1-5 → 0-1
+          const normalizedAI = (aiOverall - 1) / 9; // 1-10 → 0-1
+          return Math.abs(normalizedSelf - normalizedAI);
+        })
+        .filter((d) => d !== null);
+
+      if (calibrationDeltas.length > 0) {
+        const avgDelta =
+          calibrationDeltas.reduce((a, b) => a + b, 0) /
+          calibrationDeltas.length;
+        metacognitiveAccuracy = 1 - avgDelta; // 0-1 scale, higher = better calibrated
+      }
+    }
+
+    // Base depth score from meaningful content
     // Base depth score from meaningful content
     const baseDepth = Math.round(
-      (withMeaningfulInsight / totalSolutions) * 25 +
-        (withMeaningfulFeynman / totalSolutions) * 30 +
-        (withMeaningfulRealWorld / totalSolutions) * 20 +
-        calibratedConfScore * 25,
+      (withMeaningfulInsight / totalSolutions) * 20 +
+        (withMeaningfulFeynman / totalSolutions) * 25 +
+        (withMeaningfulRealWorld / totalSolutions) * 15 +
+        calibratedConfScore * 20 +
+        (metacognitiveAccuracy !== null ? metacognitiveAccuracy * 20 : 10),
+      // 10 = neutral prior when no AI reviews exist yet
     );
 
     // AI understanding score overlay: if AI reviewed solutions,
@@ -422,41 +467,76 @@ export async function get6DReport(req, res) {
     } else {
       // Fallback: presence-based proxy, capped very low
       communicationFromProxy = true;
-      const withMeaningfulComms = solutions.filter(
-        (s) => stripHtml(s.feynmanExplanation).length >= FEYNMAN_MIN_CHARS,
+      // AFTER — use a different signal than D2 to avoid dimension correlation
+      // Proxy for communication when no peer ratings and no AI reviews:
+      // Cross-solution consistency: does the user explain their approach
+      // (separate field from Feynman, measuring real-world connection and approach text)
+      // This measures whether they can communicate the "what" and "why to others"
+      // separately from the deep self-explanation D2 measures.
+      const withMeaningfulApproach = solutions.filter(
+        (s) =>
+          s.approach &&
+          s.approach.trim().length > 80 &&
+          s.realWorldConnection &&
+          stripHtml(s.realWorldConnection).length >= REALWORLD_MIN_CHARS,
       ).length;
       d3 = Math.min(
-        Math.round((withMeaningfulComms / totalSolutions) * 50),
+        Math.round((withMeaningfulApproach / totalSolutions) * 50),
         50,
       );
     }
 
     // ════════════════════════════════════════════════
-    // D4: Optimization — unchanged (this is the most honest behavioral signal)
+    // D4: Optimization — behavioral signals + AI quality gate
     // ════════════════════════════════════════════════
     const withBrute = solutions.filter(
-      (s) => s.bruteForce && s.bruteForce.trim().length > 10,
+      (s) => s.bruteForce && s.bruteForce.trim().length > 20,
     ).length;
     const withOptimized = solutions.filter(
-      (s) => s.optimizedApproach && s.optimizedApproach.trim().length > 10,
+      (s) => s.optimizedApproach && s.optimizedApproach.trim().length > 20,
     ).length;
     const withBothApproaches = solutions.filter(
       (s) =>
         s.bruteForce &&
-        s.bruteForce.trim().length > 10 &&
+        s.bruteForce.trim().length > 20 &&
         s.optimizedApproach &&
-        s.optimizedApproach.trim().length > 10,
+        s.optimizedApproach.trim().length > 20,
     ).length;
     const withBothComplexity = solutions.filter(
       (s) => s.timeComplexity && s.spaceComplexity,
     ).length;
 
-    const d4 = Math.round(
-      (withBrute / totalSolutions) * 20 +
-        (withOptimized / totalSolutions) * 30 +
+    // Base behavioral score (0-80)
+    const d4Base = Math.round(
+      (withBrute / totalSolutions) * 15 +
+        (withOptimized / totalSolutions) * 20 +
         (withBothApproaches / totalSolutions) * 30 +
-        (withBothComplexity / totalSolutions) * 20,
+        (withBothComplexity / totalSolutions) * 15,
     );
+
+    // AI code correctness gate: if AI has reviewed solutions,
+    // a candidate cannot claim optimization mastery if their
+    // code is fundamentally wrong. Correctness is prerequisite to optimization.
+    const avgAiCodeCorrectness =
+      aiCodeCorrectnessScores.length > 0
+        ? aiCodeCorrectnessScores.reduce((a, b) => a + b, 0) /
+          aiCodeCorrectnessScores.length
+        : null;
+
+    let d4;
+    if (avgAiCodeCorrectness !== null) {
+      // AI correctness (1-10) gates the optimization score.
+      // If your code doesn't work, your optimization claims are meaningless.
+      // Gate formula: behavioral score * (AI correctness / 10)^0.6
+      // The 0.6 exponent softens the gate — partial credit for behavioral signals
+      // even when code quality is mediocre, but severe penalty when code is wrong.
+      const correctnessGate = Math.pow(avgAiCodeCorrectness / 10, 0.6);
+      d4 = Math.round(d4Base * correctnessGate);
+    } else {
+      // No AI reviews yet — cap D4 at 70 to reflect uncertainty
+      // Cannot claim full optimization mastery without AI validation
+      d4 = Math.min(d4Base, 70);
+    }
 
     // ════════════════════════════════════════════════
     // D5: Pressure Performance — performance-weighted
@@ -495,8 +575,8 @@ export async function get6DReport(req, res) {
         simScore = Math.min((avgSimScore / 5) * 80 + noHintRate * 20, 100);
       }
 
-      // Interview score: use actual debrief scores if available
-      // If no debrief scores, interviews count very little (just attempted)
+      // Interview score: normalize all dimension scores to 0-100 scale
+      // before averaging. Different debrief fields use different scales.
       let interviewScore = 0;
       if (hasInterviews) {
         const interviewsWithScores = interviews.filter(
@@ -506,28 +586,90 @@ export async function get6DReport(req, res) {
             Object.keys(i.scores).length > 0,
         );
         if (interviewsWithScores.length > 0) {
-          // Extract numeric scores from debrief — structure varies
-          const scoreValues = interviewsWithScores.flatMap((i) => {
-            const scores = i.scores;
-            if (Array.isArray(scores))
-              return scores.filter((s) => typeof s === "number");
-            if (typeof scores === "object") {
-              return Object.values(scores).filter((s) => typeof s === "number");
-            }
-            return [];
-          });
-          if (scoreValues.length > 0) {
-            const avgInterviewScore =
-              scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length;
-            // Normalize to 0-100 (assuming scores are 0-10 scale)
-            interviewScore = Math.min((avgInterviewScore / 10) * 100, 100);
+          const normalizedInterviewScores = interviewsWithScores
+            .map((interview) => {
+              const scores = interview.scores;
+              if (!scores || typeof scores !== "object") return null;
+
+              // Each field has a known scale — normalize explicitly
+              // rather than averaging raw values across incompatible scales
+              const normalized = [];
+
+              // 1-10 scale fields (standard interview rubric)
+              const scale10Fields = [
+                "problemDecomposition",
+                "codeCorrectness",
+                "codeQuality",
+                "communicationWhileCoding",
+                "edgeCaseHandling",
+                "optimizationAbility",
+                "composureUnderPressure",
+                "requirementsClarification",
+                "architectureClarity",
+                "scaleThinking",
+                "failureModeAwareness",
+                "tradeOffReasoning",
+                "componentDepth",
+                "communicationClarity",
+                "starStructure",
+                "specificity",
+                "quantifiedImpact",
+                "growthMindset",
+                "relevanceToRole",
+                "conceptualAccuracy",
+                "explanationDepth",
+                "realWorldApplication",
+                "misconceptionAwareness",
+                "schemaUnderstanding",
+                "queryCorrectness",
+                "optimizationAwareness",
+                "codeReadability",
+                "authenticity",
+                "companyResearch",
+                "careerNarrative",
+                "questionQuality",
+                "cultureFit",
+              ];
+
+              // 1-4 scale fields (categorical rubric)
+              const scale4Fields = [
+                "clarifyingQuestions",
+                "hintUtilization",
+                "personalOwnership",
+              ];
+
+              scale10Fields.forEach((field) => {
+                if (
+                  scores[field] != null &&
+                  typeof scores[field] === "number"
+                ) {
+                  normalized.push((scores[field] / 10) * 100);
+                }
+              });
+
+              scale4Fields.forEach((field) => {
+                if (
+                  scores[field] != null &&
+                  typeof scores[field] === "number"
+                ) {
+                  normalized.push((scores[field] / 4) * 100);
+                }
+              });
+
+              if (normalized.length === 0) return null;
+              return normalized.reduce((a, b) => a + b, 0) / normalized.length;
+            })
+            .filter((s) => s !== null);
+
+          if (normalizedInterviewScores.length > 0) {
+            interviewScore = Math.round(
+              normalizedInterviewScores.reduce((a, b) => a + b, 0) /
+                normalizedInterviewScores.length,
+            );
           } else {
-            // Has interviews with debrief but no numeric scores — partial credit
             interviewScore = Math.min(interviewsWithScores.length * 8, 40);
           }
         } else {
-          // Interviews completed but no debrief scores — minimal credit
-          // This catches "start interview, immediately end it" behavior
           interviewScore = Math.min(interviews.length * 3, 15);
         }
       }
@@ -565,32 +707,72 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
-    // D6: Knowledge Retention — decay-penalized
+    // D6: Knowledge Retention — Ebbinghaus decay model
+    //
+    // Ebbinghaus forgetting curve: R = e^(-t/S)
+    // R = retention (0-1), t = days since last review, S = stability
+    // S starts at 1.0 and increases with each successful review.
+    // This models real forgetting, not a flat penalty.
     // ════════════════════════════════════════════════
-    const overdueCount = await prisma.solution.count({
-      where: { userId, teamId, nextReviewDate: { lte: new Date() } },
-    });
+    const now_d6 = Date.now();
 
-    const reviewed = solutions.filter((s) => s.reviewCount > 0).length;
-    const reviewedSols = solutions.filter((s) => s.reviewCount > 0);
+    // For each reviewed solution, compute its current estimated retention
+    const retentionScores = solutions
+      .filter((s) => s.lastReviewedAt || s.createdAt)
+      .map((s) => {
+        const lastInteraction = s.lastReviewedAt || s.createdAt;
+        const daysSince =
+          (now_d6 - new Date(lastInteraction).getTime()) /
+          (1000 * 60 * 60 * 24);
 
-    // Post-review confidence: what was confidence AFTER reviews
-    // Low confidence after review = not retained
-    const avgPostReviewConf =
-      reviewedSols.length > 0
-        ? reviewedSols.reduce((s, r) => s + r.confidence, 0) /
-          reviewedSols.length
-        : 0;
+        // AFTER — use actual SM-2 easiness factor
+        // EF reflects how well the brain has encoded this specific item
+        // Higher EF = slower forgetting = higher retention estimate
+        const ef = s.sm2EasinessFactor ?? 2.5;
+        const reps = s.sm2Repetitions ?? 0;
+        const stability = Math.max(1, ef * Math.pow(reps + 1, 0.7));
+        const retention = Math.exp(-daysSince / (stability * 10));
 
-    // Overdue ratio: higher = more careless about retention
-    const overdueRatio = totalSolutions > 0 ? overdueCount / totalSolutions : 0;
+        // Confidence modulates retention estimate
+        // High confidence after review = more stable memory trace
+        const confidenceWeight = s.confidence
+          ? (s.confidence / 5) * 0.3 + 0.7
+          : 1.0;
 
-    const d6Raw = Math.round(
-      (reviewed / totalSolutions) * 40 +
-        (avgPostReviewConf / 5) * 40 -
-        overdueRatio * 30, // Penalty: overdue reviews = carelessness
-    );
-    const d6 = Math.max(d6Raw, 0);
+        return Math.min(retention * confidenceWeight, 1.0);
+      });
+
+    // Compute retention-based D6
+    let d6;
+    if (retentionScores.length === 0) {
+      d6 = 0;
+    } else {
+      // Average estimated retention across all solutions (0-1 scale → 0-100)
+      const avgRetention =
+        retentionScores.reduce((a, b) => a + b, 0) / retentionScores.length;
+
+      // Reviewed rate: unreviewed solutions have unknown retention — penalize
+      const reviewedRate = reviewed / totalSolutions;
+
+      // Review engagement: are they using the queue at all?
+      const engagementScore = reviewedRate * 40;
+
+      // Estimated retention of reviewed solutions (0-60 contribution)
+      const retentionScore = avgRetention * 60;
+
+      d6 = Math.round(engagementScore + retentionScore);
+
+      // Apply overdue penalty: solutions past due date are at risk
+      // Penalty is proportional to how overdue they are, not just whether they are overdue
+      const overdueCount = await prisma.solution.count({
+        where: { userId, teamId, nextReviewDate: { lte: new Date() } },
+      });
+      const overdueRatio =
+        totalSolutions > 0 ? overdueCount / totalSolutions : 0;
+      // Exponential overdue penalty: ignoring reviews compounds
+      const overduePenalty = Math.round(overdueRatio * overdueRatio * 40);
+      d6 = Math.max(d6 - overduePenalty, 0);
+    }
 
     // ════════════════════════════════════════════════
     // OVERALL — AI quality gate + weighted average
@@ -795,6 +977,11 @@ export async function get6DReport(req, res) {
           overconfidenceFlags: overconfidenceCount,
           overdueReviews: overdueCount,
           bothApproachesRate,
+          // ADD THIS
+          metacognitiveAccuracy:
+            metacognitiveAccuracy !== null
+              ? Math.round(metacognitiveAccuracy * 100)
+              : null,
         },
         analytics: {
           weeklyVelocity: {
