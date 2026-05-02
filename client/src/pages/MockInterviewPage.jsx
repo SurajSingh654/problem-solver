@@ -836,6 +836,82 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                 </motion.div>
             )}
 
+            // ── Updated DebriefScreen — add behavioralSignals section ──
+            // Insert this after the dimension scores section and before strengths/improvements
+
+            {/* Behavioral Signals — the hard facts from the interview */}
+            {debrief.behavioralSignals && (
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.07 }}
+                    className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6"
+                >
+                    <h3 className="text-sm font-bold text-text-primary mb-4 flex items-center gap-2">
+                        <span>📊</span> Interview Signals
+                        <span className="text-[10px] font-normal text-text-disabled ml-1">
+                            — computed from your actual behavior
+                        </span>
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[
+                            {
+                                label: 'Clarifying Questions',
+                                value: debrief.behavioralSignals.clarifyingQuestions,
+                                icon: '❓',
+                                good: !debrief.behavioralSignals.clarifyingQuestions?.includes('none'),
+                            },
+                            {
+                                label: 'Hints Required',
+                                value: debrief.behavioralSignals.hintsRequired,
+                                icon: '💡',
+                                good: debrief.behavioralSignals.hintsRequired?.includes('0'),
+                            },
+                            {
+                                label: 'Thought Out Loud',
+                                value: debrief.behavioralSignals.thoughtOutLoud ? 'Yes' : 'No',
+                                icon: '🗣',
+                                good: debrief.behavioralSignals.thoughtOutLoud,
+                            },
+                            {
+                                label: 'Complexity — Independent',
+                                value: debrief.behavioralSignals.identifiedComplexityIndependently ? 'Yes' : 'No',
+                                icon: '⚡',
+                                good: debrief.behavioralSignals.identifiedComplexityIndependently,
+                            },
+                            {
+                                label: 'Edge Cases — Independent',
+                                value: debrief.behavioralSignals.foundEdgeCasesIndependently ? 'Yes' : 'No',
+                                icon: '🔍',
+                                good: debrief.behavioralSignals.foundEdgeCasesIndependently,
+                            },
+                        ].map(signal => (
+                            <div key={signal.label}
+                                className={cn(
+                                    'flex items-center gap-3 p-3 rounded-xl border',
+                                    signal.good
+                                        ? 'bg-success/5 border-success/20'
+                                        : 'bg-danger/5 border-danger/20'
+                                )}
+                            >
+                                <span className="text-base flex-shrink-0">{signal.icon}</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] text-text-disabled uppercase tracking-wider">
+                                        {signal.label}
+                                    </p>
+                                    <p className={cn(
+                                        'text-xs font-semibold mt-0.5',
+                                        signal.good ? 'text-success' : 'text-danger'
+                                    )}>
+                                        {signal.value}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </motion.div>
+            )}
+
             {/* Strengths + Improvements */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 {debrief.strengths?.length > 0 && (

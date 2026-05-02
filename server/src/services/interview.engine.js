@@ -652,14 +652,18 @@ async function executeToolsAndRespond(
 // ============================================================================
 // DEBRIEF GENERATION
 // ============================================================================
+// ============================================================================
+// DEBRIEF GENERATION — Phase 3: Real interviewer rubric + behavioral signals
+// ============================================================================
 async function generateDebrief(ws, toolContext) {
   try {
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
+    // ── Load full conversation ───────────────────────────
     const messages = await prisma.interviewMessage.findMany({
       where: { sessionId: toolContext.sessionId },
-      select: { role: true, content: true, phase: true },
+      select: { role: true, content: true, phase: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });
 
@@ -670,63 +674,334 @@ async function generateDebrief(ws, toolContext) {
         difficulty: true,
         interviewStyle: true,
         startedAt: true,
+        problem: {
+          select: { title: true, category: true, difficulty: true },
+        },
       },
     });
+
+    const elapsed = Math.round(
+      (Date.now() - new Date(session.startedAt).getTime()) / 1000 / 60,
+    );
 
     const transcript = messages
       .filter((m) => m.content && m.role !== "SYSTEM")
       .map((m) => `[${m.role}]: ${m.content}`)
       .join("\n\n");
 
-    const notes = messages
+    // ── Extract interviewer notes saved during session ───
+    const interviewerNotes = messages
       .filter((m) => m.role === "SYSTEM" && m.phase === "note")
       .map((m) => m.content)
       .join("\n");
 
-    const elapsed = Math.round(
-      (Date.now() - new Date(session.startedAt).getTime()) / 1000 / 60,
+    // ════════════════════════════════════════════════════
+    // BEHAVIORAL SIGNAL EXTRACTION
+    // These are computed deterministically from the transcript
+    // before calling AI — hard facts, not impressions.
+    // The AI debrief receives these as ground truth context.
+    // ════════════════════════════════════════════════════
+
+    const userMessages = messages.filter((m) => m.role === "USER");
+    const assistantMessages = messages.filter((m) => m.role === "ASSISTANT");
+
+    // ── Signal 1: Clarifying questions ─────────────────
+    // Count question marks in the first 3 user messages
+    // Real interviewers specifically note whether candidates
+    // asked clarifying questions before starting to code
+    const earlyUserMessages = userMessages.slice(0, 4);
+    const clarifyingQuestionCount = earlyUserMessages.reduce((count, m) => {
+      const text = m.content || "";
+      // Questions about constraints, scale, edge cases, requirements
+      const clarifyingPatterns = [
+        /\?/g,
+        /clarif/i,
+        /constraint/i,
+        /assume/i,
+        /assumption/i,
+        /scale/i,
+        /size/i,
+        /range/i,
+        /edge case/i,
+        /what if/i,
+        /how many/i,
+        /can i assume/i,
+      ];
+      const hasQuestion = text.includes("?");
+      const hasClarifyingIntent = clarifyingPatterns
+        .slice(1)
+        .some((p) => p.test(text));
+      return count + (hasQuestion && hasClarifyingIntent ? 1 : 0);
+    }, 0);
+
+    // Categorize clarifying question quality
+    const clarifyingQuality =
+      clarifyingQuestionCount >= 3
+        ? "exceptional"
+        : clarifyingQuestionCount === 2
+          ? "good"
+          : clarifyingQuestionCount === 1
+            ? "minimal"
+            : "none";
+
+    // ── Signal 2: Complexity identification ────────────
+    // Did candidate independently mention complexity or
+    // only after the interviewer asked?
+    const fullText = userMessages
+      .map((m) => m.content || "")
+      .join(" ")
+      .toLowerCase();
+    const mentionedComplexityFirst =
+      /o\(n\)|o\(log|o\(1\)|time complexity|space complexity|big.?o/i.test(
+        fullText,
+      );
+
+    // Check if interviewer had to ask about complexity first
+    const interviewerAskedComplexity = assistantMessages.some((m) =>
+      /complexity|efficient|better approach|time/i.test(m.content || ""),
     );
+    const identifiedComplexityIndependently =
+      mentionedComplexityFirst && !interviewerAskedComplexity;
+
+    // ── Signal 3: Brute force before optimal ───────────
+    // Did candidate propose brute force first (methodical thinking)?
+    const proposedBruteForce =
+      /brute force|naive|simple approach|o\(n.?2\)|nested loop/i.test(fullText);
+
+    // ── Signal 4: Edge cases ────────────────────────────
+    // Did candidate mention edge cases independently?
+    const mentionedEdgeCases =
+      /edge case|empty|null|zero|negative|duplicate|overflow/i.test(fullText);
+    const interviewerHadToAskEdgeCases = assistantMessages.some((m) =>
+      /empty|null|edge case|what if|what about/i.test(m.content || ""),
+    );
+    const foundEdgeCasesIndependently =
+      mentionedEdgeCases && !interviewerHadToAskEdgeCases;
+
+    // ── Signal 5: Hint usage ────────────────────────────
+    // Count hints given (saved by AI via saveInterviewNote)
+    const hintNotes = messages.filter(
+      (m) =>
+        m.role === "SYSTEM" &&
+        m.phase === "note" &&
+        /hint/i.test(m.content || ""),
+    );
+    const hintsGiven = hintNotes.length;
+
+    // ── Signal 6: Thinking out loud ─────────────────────
+    // Did candidate explain their reasoning while coding?
+    // Proxy: message length distribution — long messages indicate
+    // explanation, short ones indicate only code
+    const avgUserMessageLength =
+      userMessages.length > 0
+        ? userMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0) /
+          userMessages.length
+        : 0;
+    const thoughtOutLoud = avgUserMessageLength > 80; // > 80 chars avg = substantive explanations
+
+    // ── Signal 7: Used "I" vs "we" ─────────────────────
+    // For behavioral interviews specifically
+    const usedI = (fullText.match(/\bI\b/g) || []).length;
+    const usedWe = (fullText.match(/\bwe\b/gi) || []).length;
+    const ownershipSignal =
+      usedI > usedWe ? "strong" : usedWe > usedI ? "weak" : "neutral";
+
+    // ── Signal 8: Recovery from mistakes ───────────────
+    // Did they recover when stuck or called out?
+    const recoveryNotes = interviewerNotes.toLowerCase();
+    const showedRecovery =
+      /recover|corrected|pivoted|self-corrected|found the bug/i.test(
+        recoveryNotes,
+      );
+
+    // ── Pre-computed verdict signal ─────────────────────
+    // Compute a directional verdict from hard signals before
+    // asking AI — this anchors the AI debrief in reality.
+    // AI can refine this but cannot override it significantly.
+    let verdictSignal = 0; // -4 to +4
+    if (clarifyingQuestionCount >= 2) verdictSignal += 1;
+    if (clarifyingQuestionCount === 0) verdictSignal -= 1;
+    if (identifiedComplexityIndependently) verdictSignal += 1;
+    if (proposedBruteForce) verdictSignal += 0.5;
+    if (foundEdgeCasesIndependently) verdictSignal += 1;
+    if (hintsGiven === 0) verdictSignal += 1;
+    if (hintsGiven >= 3) verdictSignal -= 1.5;
+    if (hintsGiven >= 5) verdictSignal -= 1;
+    if (thoughtOutLoud) verdictSignal += 0.5;
+    if (showedRecovery) verdictSignal += 0.5;
+
+    const preComputedVerdict =
+      verdictSignal >= 3
+        ? "STRONG_HIRE"
+        : verdictSignal >= 1.5
+          ? "HIRE"
+          : verdictSignal >= 0
+            ? "LEAN_HIRE"
+            : verdictSignal >= -1.5
+              ? "LEAN_NO_HIRE"
+              : "NO_HIRE";
+
+    // ════════════════════════════════════════════════════
+    // CATEGORY-SPECIFIC RUBRIC
+    // Different interview types evaluate different signals.
+    // A behavioral debrief scoring "code quality" is nonsensical.
+    // ════════════════════════════════════════════════════
+
+    const category = session?.category || "CODING";
+
+    const categoryRubric = {
+      CODING: {
+        scoreFields: `
+  "clarifyingQuestions": <1-4: 1=none, 2=after prompting, 3=asked some independently, 4=exceptional — right constraints and scale>,
+  "problemDecomposition": <1-10: did they break down the problem before jumping to code?>,
+  "codeCorrectness": <1-10: does the solution actually solve the problem correctly?>,
+  "codeQuality": <1-10: naming, structure, readable, maintainable?>,
+  "communicationWhileCoding": <1-10: did they explain their thinking as they coded?>,
+  "edgeCaseHandling": <1-10: found and handled edge cases — especially independently?>,
+  "optimizationAbility": <1-10: reached optimal solution? understood time/space trade-offs?>,
+  "composureUnderPressure": <1-10: stayed methodical when stuck, didn't panic?>,
+  "hintUtilization": <1-4: 4=no hints needed, 3=minimal hints, 2=several hints, 1=needed extensive guidance>`,
+        focusAreas:
+          "algorithmic thinking, code correctness, complexity analysis, edge case handling",
+      },
+      SYSTEM_DESIGN: {
+        scoreFields: `
+  "requirementsClarification": <1-10: did they clarify functional and non-functional requirements first?>,
+  "architectureClarity": <1-10: was the overall design clear and well-structured?>,
+  "scaleThinking": <1-10: did they think about scale — QPS, storage, traffic spikes?>,
+  "failureModeAwareness": <1-10: considered failure scenarios, consistency, availability?>,
+  "tradeOffReasoning": <1-10: justified design decisions with explicit trade-offs?>,
+  "componentDepth": <1-10: went deep on key components — not just high-level boxes?>,
+  "communicationClarity": <1-10: explained complex concepts clearly?>`,
+        focusAreas:
+          "system architecture, scale, reliability, trade-off reasoning",
+      },
+      BEHAVIORAL: {
+        scoreFields: `
+  "starStructure": <1-10: did they follow Situation-Task-Action-Result?>,
+  "specificity": <1-10: gave specific details — project names, team sizes, timelines?>,
+  "personalOwnership": <1-4: 4=used I throughout, 3=mostly I, 2=mixed I/we, 1=mostly we>,
+  "quantifiedImpact": <1-10: quantified results with numbers — %, $, time saved?>,
+  "growthMindset": <1-10: showed learning, self-awareness, would-do-differently thinking?>,
+  "relevanceToRole": <1-10: connected stories to engineering/leadership signals?>`,
+        focusAreas:
+          "STAR structure, specificity, ownership, impact quantification",
+      },
+      CS_FUNDAMENTALS: {
+        scoreFields: `
+  "conceptualAccuracy": <1-10: explained core concept without factual errors?>,
+  "explanationDepth": <1-10: went beyond surface level — explained the why?>,
+  "realWorldApplication": <1-10: connected concept to actual production systems?>,
+  "misconceptionAwareness": <1-10: aware of what people commonly get wrong?>,
+  "communicationClarity": <1-10: could explain to a junior engineer clearly?>`,
+        focusAreas: "conceptual accuracy, depth, real-world connections",
+      },
+      SQL: {
+        scoreFields: `
+  "schemaUnderstanding": <1-10: analyzed the schema before writing queries?>,
+  "queryCorrectness": <1-10: query returns correct results for the given problem?>,
+  "optimizationAwareness": <1-10: understood indexes, query plan, performance?>,
+  "edgeCaseHandling": <1-10: handled NULLs, duplicates, empty tables?>,
+  "codeReadability": <1-10: clear, maintainable SQL with appropriate naming?>`,
+        focusAreas:
+          "schema analysis, query correctness, optimization, edge cases",
+      },
+      HR: {
+        scoreFields: `
+  "authenticity": <1-10: answer felt genuine and specific, not rehearsed?>,
+  "companyResearch": <1-10: showed knowledge of this specific company/role?>,
+  "careerNarrative": <1-10: their story and motivations were coherent and compelling?>,
+  "questionQuality": <1-10: the questions they asked showed thoughtfulness?>,
+  "cultureFit": <1-10: values and work style aligned with company culture?>`,
+        focusAreas: "authenticity, company knowledge, career narrative",
+      },
+    };
+
+    const rubric = categoryRubric[category] || categoryRubric.CODING;
 
     ws.send(JSON.stringify({ type: "interview:debrief_generating" }));
 
+    // ════════════════════════════════════════════════════
+    // AI DEBRIEF GENERATION
+    // ════════════════════════════════════════════════════
     const response = await openai.chat.completions.create({
       model: AI_MODEL_PRIMARY,
-      temperature: 0.7,
+      temperature: 0.6, // lower temp for more consistent evaluation
       response_format: { type: "json_object" },
-      max_tokens: 2000,
+      max_tokens: 2500,
       messages: [
         {
           role: "system",
-          content: `You are generating a structured interview debrief for a ${session.category} interview.
-Style: ${session.interviewStyle || "Standard"}. Difficulty: ${session.difficulty}.
+          content: `You are writing a structured post-interview evaluation for a ${category} interview.
+Style: ${session.interviewStyle || "Standard"}.
+Difficulty: ${session.difficulty}.
 Duration: ${elapsed} minutes.
+Problem: ${session.problem?.title || "Open-ended"}.
+
+BEHAVIORAL SIGNALS (computed from transcript — treat these as FACTS):
+- Clarifying questions asked: ${clarifyingQuestionCount} (${clarifyingQuality})
+- Identified complexity independently: ${identifiedComplexityIndependently ? "YES" : "NO"}
+- Proposed brute force before optimal: ${proposedBruteForce ? "YES" : "NO"}
+- Found edge cases independently: ${foundEdgeCasesIndependently ? "YES" : "NO"}
+- Hints required: ${hintsGiven} hint${hintsGiven !== 1 ? "s" : ""}
+- Thought out loud while working: ${thoughtOutLoud ? "YES" : "NO"}
+${category === "BEHAVIORAL" ? `- Ownership language (I vs we): ${ownershipSignal}` : ""}
+- Showed recovery from mistakes: ${showedRecovery ? "YES" : "NO"}
+
+PRE-COMPUTED VERDICT SIGNAL: ${preComputedVerdict}
+(Based on hard signals above — your verdict should align with this unless the transcript clearly overrides it)
+
+FOCUS AREAS FOR THIS INTERVIEW TYPE: ${rubric.focusAreas}
+
+RULES FOR THIS DEBRIEF:
+1. Every strength and improvement MUST cite a specific moment from the transcript.
+   BAD: "Good communication skills."
+   GOOD: "Explained the two-pointer intuition before writing a line of code — this is exactly what interviewers look for."
+2. Improvements must be actionable and specific.
+   BAD: "Work on edge cases."
+   GOOD: "Did not handle the null input case until directly asked — in a real interview this would be caught during code review phase and noted as a gap."
+3. Key moments must be actual turning points from the conversation — quote or paraphrase what happened.
+4. Summary must reference specific things they said or did — not generic impressions.
+5. Be honest. A LEAN_NO_HIRE with specific reasons is more valuable than a generic HIRE.
 
 Return JSON:
 {
   "verdict": "STRONG_HIRE" | "HIRE" | "LEAN_HIRE" | "LEAN_NO_HIRE" | "NO_HIRE",
   "overallScore": <1-10>,
-  "scores": {
-    "approach": <1-10>,
-    "communication": <1-10>,
-    "codeQuality": <1-10>,
-    "timeManagement": <1-10>,
-    "knowledgeDepth": <1-10>
+  "scores": {${rubric.scoreFields}
   },
-  "strengths": ["specific strength based on actual conversation moments"],
-  "improvements": ["specific improvement with concrete example from the interview"],
-  "keyMoments": ["turning point or notable moment from the actual conversation"],
-  "summary": "2-3 sentence honest assessment referencing specific things they did or said"
+  "behavioralSignals": {
+    "clarifyingQuestions": "${clarifyingQuality} — ${clarifyingQuestionCount} question${clarifyingQuestionCount !== 1 ? "s" : ""} asked",
+    "hintsRequired": "${hintsGiven} hint${hintsGiven !== 1 ? "s" : ""}",
+    "thoughtOutLoud": ${thoughtOutLoud},
+    "identifiedComplexityIndependently": ${identifiedComplexityIndependently},
+    "foundEdgeCasesIndependently": ${foundEdgeCasesIndependently}
+  },
+  "strengths": [
+    "<specific strength with transcript reference>",
+    "<specific strength with transcript reference>"
+  ],
+  "improvements": [
+    "<specific improvement with example from interview and why it matters>",
+    "<specific improvement>"
+  ],
+  "keyMoments": [
+    "<turning point or notable moment — quote or paraphrase what happened>",
+    "<another key moment>"
+  ],
+  "summary": "<2-3 sentences referencing specific things they said or did — honest assessment>"
 }`,
         },
         {
           role: "user",
-          content: `Interview transcript:\n${transcript}\n\nInterviewer notes:\n${notes || "None"}`,
+          content: `Interview transcript:\n${transcript}\n\nInterviewer observations:\n${interviewerNotes || "None recorded"}`,
         },
       ],
     });
 
     const debrief = JSON.parse(response.choices[0].message.content);
 
+    // ── Store debrief ────────────────────────────────────
     await prisma.interviewSession.update({
       where: { id: toolContext.sessionId },
       data: {
