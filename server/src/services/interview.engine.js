@@ -106,6 +106,36 @@ const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "saveBehavioralSignal",
+      description:
+        "Save a behavioral/voice observation during audio interview (speaking pace, hesitation, filler words, etc.) for the debrief.",
+      parameters: {
+        type: "object",
+        properties: {
+          signal: { type: "string", description: "The behavioral observation" },
+          signalType: {
+            type: "string",
+            enum: [
+              "speaking_pace",
+              "hesitation",
+              "filler_words",
+              "confidence",
+              "clarity",
+              "technical_accuracy",
+            ],
+          },
+          severity: {
+            type: "string",
+            enum: ["positive", "neutral", "concerning"],
+          },
+        },
+        required: ["signal", "signalType"],
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -325,6 +355,18 @@ const toolHandlers = {
     });
     return { transitioned: true, currentPhase: nextPhase };
   },
+
+  async saveBehavioralSignal({ signal, signalType, severity }, context) {
+    await prisma.interviewMessage.create({
+      data: {
+        sessionId: context.sessionId,
+        role: "SYSTEM",
+        content: `[BEHAVIORAL_${signalType.toUpperCase()}] ${signal} (${severity || "neutral"})`,
+        phase: "behavioral",
+      },
+    });
+    return { saved: true };
+  },
 };
 
 // ============================================================================
@@ -534,7 +576,14 @@ export async function handleInterviewMessage(ws, message) {
           content: fullContent,
         },
       });
-      ws.send(JSON.stringify({ type: "interview:done" }));
+      // Phase 4: if this is a voice interview, flag response for TTS
+      // Client reads isVoice flag and feeds text to speechSynthesis
+      ws.send(
+        JSON.stringify({
+          type: "interview:done",
+          isVoice: message.isVoice || false,
+        }),
+      );
     }
   } catch (err) {
     console.error("Interview engine error:", err);
@@ -646,7 +695,12 @@ async function executeToolsAndRespond(
       },
     });
   }
-  ws.send(JSON.stringify({ type: "interview:done" }));
+  ws.send(
+    JSON.stringify({
+      type: "interview:done",
+      isVoice: false, // tool responses are always text mode
+    }),
+  );
 }
 
 // ============================================================================

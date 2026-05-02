@@ -39,6 +39,253 @@ function getWsUrl() {
     return 'ws://localhost:8080/ws/interview'
 }
 
+
+
+// ── Voice Interview Mode component ────────────────────
+// Added to ChatScreen alongside the existing text input
+// Shows when interviewMode === 'voice'
+function VoiceModeInput({ onTranscript, disabled, sessionId }) {
+    const [isRecording, setIsRecording] = useState(false)
+    const [isProcessing, setIsProcessing] = useState(false)
+    const [lastTranscript, setLastTranscript] = useState('')
+    const [interimTranscript, setInterimTranscript] = useState('')
+    const [error, setError] = useState(null)
+    const [interviewMode, setInterviewMode] = useState('text')
+
+    const mediaRecorderRef = useRef(null)
+    const chunksRef = useRef([])
+    const streamRef = useRef(null)
+
+    // Web Speech API for real-time interim transcription display
+    // This is NOT used for final transcript — just for visual feedback
+    // The final transcript comes from Whisper via the server
+    const recognitionRef = useRef(null)
+
+    useEffect(() => {
+        // Set up Web Speech API for interim display only
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+            const recognition = new SpeechRecognition()
+            recognition.continuous = true
+            recognition.interimResults = true
+            recognition.lang = 'en-US'
+            recognition.onresult = (event) => {
+                let interim = ''
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (!event.results[i].isFinal) {
+                        interim += event.results[i][0].transcript
+                    }
+                }
+                setInterimTranscript(interim)
+            }
+            recognition.onerror = () => { } // silent — this is just visual
+            recognitionRef.current = recognition
+        }
+        return () => {
+            recognitionRef.current?.stop()
+        }
+    }, [])
+
+    async function startRecording() {
+        try {
+            setError(null)
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            streamRef.current = stream
+
+            const mediaRecorder = new MediaRecorder(stream, {
+                mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : 'audio/webm',
+            })
+            mediaRecorderRef.current = mediaRecorder
+            chunksRef.current = []
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunksRef.current.push(e.data)
+            }
+
+            mediaRecorder.start(250) // collect in 250ms chunks
+            setIsRecording(true)
+            recognitionRef.current?.start()
+        } catch (err) {
+            setError('Microphone access denied. Please allow microphone access.')
+        }
+    }
+
+    async function stopRecording() {
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return
+
+        setIsRecording(false)
+        setInterimTranscript('')
+        recognitionRef.current?.stop()
+
+        return new Promise((resolve) => {
+            mediaRecorderRef.current.onstop = async () => {
+                const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' })
+                chunksRef.current = []
+
+                // Clean up stream
+                streamRef.current?.getTracks().forEach(t => t.stop())
+                streamRef.current = null
+
+                if (audioBlob.size < 1000) {
+                    // Too short — likely accidental tap
+                    resolve()
+                    return
+                }
+
+                setIsProcessing(true)
+                try {
+                    // Send to server for Whisper transcription
+                    const formData = new FormData()
+                    formData.append('audio', audioBlob, 'recording.webm')
+
+                    const token = localStorage.getItem('token')
+                    const apiUrl = import.meta.env.VITE_API_URL || '/api'
+                    const response = await fetch(`${apiUrl}/interview-v2/transcribe`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}` },
+                        body: formData,
+                    })
+
+                    if (!response.ok) throw new Error('Transcription failed')
+
+                    const data = await response.json()
+                    const transcript = data.data?.transcript
+
+                    if (transcript?.trim()) {
+                        setLastTranscript(transcript)
+                        onTranscript(transcript)
+                    }
+                } catch (err) {
+                    setError('Could not transcribe audio. Please try again or switch to text mode.')
+                } finally {
+                    setIsProcessing(false)
+                    resolve()
+                }
+            }
+            mediaRecorderRef.current.stop()
+        })
+    }
+
+    function handleMicClick() {
+        if (isRecording) {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+
+    return (
+        <div className="px-4 py-3 border-t border-border-default bg-surface-1/50">
+            {error && (
+                <p className="text-xs text-danger mb-2 flex items-center gap-1.5">
+                    <span>⚠️</span> {error}
+                </p>
+            )}
+
+            {/* Interim transcript display */}
+            {(interimTranscript || lastTranscript) && (
+                <div className="mb-3 px-3 py-2 rounded-xl bg-surface-2 border border-border-default">
+                    <p className="text-[10px] text-text-disabled uppercase tracking-wider mb-1">
+                        {interimTranscript ? 'Listening...' : 'Last said'}
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        {interimTranscript || lastTranscript}
+                    </p>
+                </div>
+            )}
+
+            <div className="flex items-center justify-center gap-4">
+                {/* Mic button — the core voice control */}
+                <button
+                    onClick={handleMicClick}
+                    disabled={disabled || isProcessing}
+                    className={cn(
+                        'w-16 h-16 rounded-full flex items-center justify-center',
+                        'transition-all duration-200 border-2',
+                        isRecording
+                            ? 'bg-danger border-danger text-white scale-110 shadow-lg animate-pulse'
+                            : isProcessing
+                                ? 'bg-warning/20 border-warning text-warning'
+                                : 'bg-brand-400/15 border-brand-400/30 text-brand-300 hover:bg-brand-400/25 hover:scale-105'
+                    )}
+                >
+                    {isProcessing ? (
+                        <div className="w-5 h-5 rounded-full border-2 border-warning border-t-transparent animate-spin" />
+                    ) : isRecording ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="6" width="12" height="12" rx="2" />
+                        </svg>
+                    ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            <line x1="12" y1="19" x2="12" y2="23" />
+                            <line x1="8" y1="23" x2="16" y2="23" />
+                        </svg>
+                    )}
+                </button>
+
+                <div className="text-center">
+                    <p className={cn(
+                        'text-xs font-semibold',
+                        isRecording ? 'text-danger' : isProcessing ? 'text-warning' : 'text-text-tertiary'
+                    )}>
+                        {isRecording ? 'Recording — tap to stop'
+                            : isProcessing ? 'Transcribing...'
+                                : 'Tap to speak'}
+                    </p>
+                    <p className="text-[10px] text-text-disabled mt-0.5">
+                        {isRecording ? 'Your voice is being captured' : 'Hold and speak naturally'}
+                    </p>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ── TTS Player — speaks AI responses ──────────────────
+function useTTS() {
+    const [isSpeaking, setIsSpeaking] = useState(false)
+    const utteranceRef = useRef(null)
+
+    function speak(text) {
+        // Cancel any current speech
+        window.speechSynthesis.cancel()
+
+        if (!text?.trim()) return
+
+        const utterance = new SpeechSynthesisUtterance(text)
+        utteranceRef.current = utterance
+
+        // Configure voice — prefer natural English voices
+        const voices = window.speechSynthesis.getVoices()
+        const preferredVoice = voices.find(v =>
+            v.lang === 'en-US' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Premium'))
+        ) || voices.find(v => v.lang === 'en-US') || voices[0]
+
+        if (preferredVoice) utterance.voice = preferredVoice
+        utterance.rate = 0.95    // slightly slower than default — interviewer cadence
+        utterance.pitch = 1.0
+        utterance.volume = 1.0
+
+        utterance.onstart = () => setIsSpeaking(true)
+        utterance.onend = () => setIsSpeaking(false)
+        utterance.onerror = () => setIsSpeaking(false)
+
+        window.speechSynthesis.speak(utterance)
+    }
+
+    function stop() {
+        window.speechSynthesis.cancel()
+        setIsSpeaking(false)
+    }
+
+    return { speak, stop, isSpeaking }
+}
+
 // ══════════════════════════════════════════════════════
 // SETUP SCREEN
 // ══════════════════════════════════════════════════════
@@ -72,11 +319,13 @@ function SetupScreen({ onStart }) {
                 interviewStyle: company,
                 category,
                 duration: duration * 60,
+                interviewMode,
             })
             onStart({
                 ...res.data.data,
                 duration: duration * 60,
                 company,
+                interviewMode
             })
         } catch (err) {
             console.error('Failed to start interview:', err)
@@ -230,6 +479,69 @@ function SetupScreen({ onStart }) {
                     </div>
                 </motion.div>
             </div>
+
+
+            {/* Interview Mode — text or voice */}
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.11 }}
+                className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-4"
+            >
+                <h2 className="text-sm font-bold text-text-primary mb-1">Interview Mode</h2>
+                <p className="text-xs text-text-tertiary mb-3">
+                    Voice mode uses your microphone and speaks the interviewer's responses aloud
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                    {[
+                        {
+                            id: 'text',
+                            icon: '⌨️',
+                            label: 'Text',
+                            desc: 'Type your answers — classic interview practice',
+                        },
+                        {
+                            id: 'voice',
+                            icon: '🎙️',
+                            label: 'Voice',
+                            desc: 'Speak your answers — simulates real phone/video screen',
+                            badge: 'New',
+                        },
+                    ].map(mode => (
+                        <button
+                            key={mode.id}
+                            onClick={() => setInterviewMode(mode.id)}
+                            className={cn(
+                                'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
+                                interviewMode === mode.id
+                                    ? 'bg-brand-400/10 border-brand-400/35'
+                                    : 'bg-surface-2 border-border-default hover:border-border-strong'
+                            )}
+                        >
+                            <span className="text-xl flex-shrink-0 mt-0.5">{mode.icon}</span>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className={cn(
+                                        'text-xs font-bold',
+                                        interviewMode === mode.id ? 'text-brand-300' : 'text-text-primary'
+                                    )}>
+                                        {mode.label}
+                                    </span>
+                                    {mode.badge && (
+                                        <span className="text-[9px] font-bold text-success bg-success/10
+                                           border border-success/20 rounded-full px-1.5 py-px">
+                                            {mode.badge}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-[10px] text-text-tertiary leading-relaxed block mt-0.5">
+                                    {mode.desc}
+                                </span>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </motion.div>
 
             {/* Problem selection */}
             <motion.div
@@ -522,6 +834,8 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
     const [streamingMsg, setStreamingMsg] = useState('')
     const [workspace, setWorkspace] = useState({})
     const [showEndConfirm, setShowEndConfirm] = useState(false)
+    const { speak, stop: stopSpeaking, isSpeaking } = useTTS()
+    const isVoiceMode = sessionData.interviewMode === 'voice'
 
     const wsRef = useRef(null)
     const chatEndRef = useRef(null)
@@ -579,10 +893,19 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                                 role: 'assistant',
                                 content: finalContent,
                             }])
+                            // Phase 4: speak AI response in voice mode
+                            if (isVoiceMode && msg.isVoice !== false) {
+                                speak(finalContent)
+                            }
                         }
                         setStreamingMsg('')
                         streamingMsgRef.current = ''
                         setIsTyping(false)
+                        break
+
+                    // Add interview:transcript handler:
+                    case 'interview:transcript':
+                        // Echo of what we sent — already shown in VoiceModeInput
                         break
 
                     // Debrief is being generated
@@ -701,6 +1024,29 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                                 End
                             </button>
                         </div>
+
+                        {/* Add to interviewer header — shows when AI is speaking */}
+                        {isVoiceMode && isSpeaking && (
+                            <span className="flex items-center gap-1 text-[10px] text-brand-300">
+                                <span className="flex gap-0.5">
+                                    {[0, 1, 2].map(i => (
+                                        <motion.span key={i}
+                                            animate={{ scaleY: [1, 2, 1] }}
+                                            transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                                            className="w-0.5 h-3 bg-brand-300 rounded-full inline-block"
+                                        />
+                                    ))}
+                                </span>
+                                Speaking
+                            </span>
+                        )}
+                        {/* Stop speaking button */}
+                        {isVoiceMode && isSpeaking && (
+                            <button onClick={stopSpeaking}
+                                className="text-[10px] text-text-disabled hover:text-text-primary px-2 py-1 rounded-lg border border-border-default transition-colors">
+                                Stop
+                            </button>
+                        )}
                     </div>
 
                     {/* Messages */}
@@ -715,27 +1061,47 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                         <div ref={chatEndRef} />
                     </div>
 
-                    {/* Input */}
-                    <div className="px-4 py-3 border-t border-border-default bg-surface-1/50">
-                        <div className="flex gap-2">
-                            <textarea
-                                ref={inputRef} value={input}
-                                onChange={e => setInput(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
-                                }}
-                                placeholder="Type your response... (Enter to send, Shift+Enter for new line)"
-                                rows={2}
-                                className="flex-1 bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                            />
-                            <Button variant="primary" size="md" disabled={!input.trim() || !connected} onClick={sendMessage} className="self-end">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="22" y1="2" x2="11" y2="13" />
-                                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                                </svg>
-                            </Button>
+
+                    {/* Input — text or voice based on mode */}
+                    {isVoiceMode ? (
+                        <VoiceModeInput
+                            onTranscript={(transcript) => {
+                                // Optimistic: show user message
+                                setMessages(prev => [...prev, { role: 'user', content: transcript }])
+                                // Send via WebSocket as voice transcript
+                                wsRef.current?.send(JSON.stringify({
+                                    type: 'interview:voice_transcript',
+                                    transcript,
+                                    workspace,
+                                }))
+                                setIsTyping(true)
+                            }}
+                            disabled={!connected || isTyping}
+                            sessionId={session.id}
+                        />
+                    ) : (
+                        // Existing text input — unchanged
+                        <div className="px-4 py-3 border-t border-border-default bg-surface-1/50">
+                            <div className="flex gap-2">
+                                <textarea
+                                    ref={inputRef} value={input}
+                                    onChange={e => setInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+                                    }}
+                                    placeholder="Type your response... (Enter to send, Shift+Enter for new line)"
+                                    rows={2}
+                                    className="flex-1 bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                />
+                                <Button variant="primary" size="md" disabled={!input.trim() || !connected} onClick={sendMessage} className="self-end">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="22" y1="2" x2="11" y2="13" />
+                                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                    </svg>
+                                </Button>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Workspace panel */}
