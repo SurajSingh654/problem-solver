@@ -50,7 +50,6 @@ function VoiceModeInput({ onTranscript, disabled, sessionId }) {
     const [lastTranscript, setLastTranscript] = useState('')
     const [interimTranscript, setInterimTranscript] = useState('')
     const [error, setError] = useState(null)
-    const [interviewMode, setInterviewMode] = useState('text')
 
     const mediaRecorderRef = useRef(null)
     const chunksRef = useRef([])
@@ -297,6 +296,7 @@ function SetupScreen({ onStart }) {
     const [problemId, setProblemId] = useState(null)
     const [filter, setFilter] = useState('')
     const [loading, setLoading] = useState(false)
+    const [interviewMode, setInterviewMode] = useState('text')
 
     const { data: problemsData } = useProblems({ limit: '200' })
     const problems = (problemsData?.problems || []).filter(p =>
