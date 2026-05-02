@@ -133,6 +133,100 @@ export const CATEGORY_FORMS = {
     },
     showFollowUps: true,
   },
+  LOW_LEVEL_DESIGN: {
+    steps: [
+      {
+        id: 1,
+        label: "Entities",
+        icon: "📦",
+        desc: "Identify classes, interfaces, and relationships",
+      },
+      {
+        id: 2,
+        label: "Design",
+        icon: "🔧",
+        desc: "Class hierarchy, patterns, and method signatures",
+      },
+      {
+        id: 3,
+        label: "Extensibility",
+        icon: "🔬",
+        desc: "SOLID principles, trade-offs, and what changes next",
+      },
+    ],
+    fields: {
+      patternIdentified: {
+        label: "Design Pattern Used",
+        placeholder: "e.g. Strategy, Factory, Observer, Decorator, Command...",
+        show: true,
+        suggestions: [
+          "Factory",
+          "Abstract Factory",
+          "Singleton",
+          "Builder",
+          "Prototype",
+          "Adapter",
+          "Decorator",
+          "Facade",
+          "Proxy",
+          "Observer",
+          "Strategy",
+          "Command",
+          "State",
+          "Iterator",
+          "Template Method",
+          "Chain of Responsibility",
+          "Composite",
+          "None — vanilla OOP",
+        ],
+      },
+      patternReasoning: {
+        label: "Entity Identification",
+        placeholder:
+          "What are the core entities?\n\nFor a Parking Lot:\n• ParkingLot, ParkingFloor, ParkingSpot\n• Vehicle (Car, Truck, Motorcycle)\n• Ticket, Payment\n• EntrancePanel, ExitPanel\n\nFor each entity: what are its responsibilities?",
+        hint: "Start here before writing any code. Wrong entity identification = wrong design.",
+        show: true,
+      },
+      keyInsight: {
+        label: "Key Design Decision",
+        placeholder: "The most important OOP/design choice you made and why...",
+        hint: "e.g. 'Used Strategy pattern for parking fee calculation so new vehicle types don't require changing ParkingLot class (Open/Closed Principle)'",
+        show: true,
+      },
+      simpleExplanation: {
+        label: "SOLID Principles Applied",
+        placeholder:
+          "Which SOLID principles are satisfied by your design? Give a specific example for each that applies:\n\nS — Single Responsibility: Each class has one reason to change\nO — Open/Closed: Open for extension, closed for modification\nL — Liskov Substitution: Subtypes are substitutable for base types\nI — Interface Segregation: No class implements unused methods\nD — Dependency Inversion: Depend on abstractions, not concretions",
+        show: true,
+      },
+      challenges: {
+        label: "Extensibility Analysis",
+        placeholder:
+          "How does your design handle these common follow-up requirements?\n\n• Add a new vehicle type\n• Change the fee calculation logic\n• Add a new payment method\n• Add a reservation system\n• Support multiple parking lot locations\n\nIf any of these require changing existing classes, where does your design break?",
+        show: true,
+      },
+    },
+    showSolutionTabs: true,
+    solutionTabConfig: {
+      types: [
+        { id: "BRUTE_FORCE", label: "Initial Design", icon: "📐" },
+        { id: "OPTIMIZED", label: "Refined Design", icon: "✨" },
+        { id: "ALTERNATIVE", label: "Alternative Approach", icon: "🔄" },
+      ],
+      approachLabel: "Class Hierarchy Description",
+      approachPlaceholder:
+        "Describe your class structure:\n\nabstract class Vehicle\n  + licensePlate: String\n  + type: VehicleType\n  + getType(): VehicleType\n\nclass Car extends Vehicle\nclass Truck extends Vehicle\nclass Motorcycle extends Vehicle\n\ninterface ParkingStrategy\n  + calculateFee(ticket: Ticket): double\n\nclass HourlyParkingStrategy implements ParkingStrategy\nclass FlatRateParkingStrategy implements ParkingStrategy",
+      complexityLabels: {
+        time: "Number of Classes / Interfaces",
+        space: "Memory per Instance",
+      },
+      codeLabel: "Implementation",
+      codePlaceholder:
+        "// Write your class implementation\n// Focus on: constructors, key methods, and relationships\n\npublic abstract class Vehicle {\n    private String licensePlate;\n    private VehicleType type;\n    \n    public Vehicle(String licensePlate, VehicleType type) {\n        this.licensePlate = licensePlate;\n        this.type = type;\n    }\n    \n    public abstract VehicleType getType();\n}",
+      notesLabel: "Design Notes",
+    },
+    showFollowUps: true,
+  },
   BEHAVIORAL: {
     steps: [
       {

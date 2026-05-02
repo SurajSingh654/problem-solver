@@ -22,7 +22,7 @@ const schema = z.object({
         'HACKERRANK', 'CODEFORCES', 'OTHER']),
     sourceUrl: z.string().url('Enter a valid URL').optional().or(z.literal('')).default(''),
     difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
-    category: z.enum(['CODING', 'SYSTEM_DESIGN', 'BEHAVIORAL',
+    category: z.enum(['CODING', 'SYSTEM_DESIGN', 'LOW_LEVEL_DESIGN', 'BEHAVIORAL',
         'CS_FUNDAMENTALS', 'HR', 'SQL']).default('CODING'),
     description: z.string().optional().default(''),
     realWorldContext: z.string().optional().default(''),
@@ -32,6 +32,7 @@ const schema = z.object({
 const CATEGORY_FIELD_CONFIG = {
     CODING: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Algorithm Tags', tagPlaceholder: 'Type a pattern or pick from suggestions…' },
     SYSTEM_DESIGN: { showUrl: false, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Design Concepts', tagPlaceholder: 'e.g. Microservices, CQRS, Event Sourcing…' },
+    LOW_LEVEL_DESIGN: { showUrl: false, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Design Patterns', tagPlaceholder: 'e.g. Factory, Strategy, Observer, SOLID…' },
     BEHAVIORAL: { showUrl: false, showDifficulty: false, showCompanyTags: true, showUseCases: false, showAlgoTags: false, showFollowUps: true, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
     CS_FUNDAMENTALS: { showUrl: false, showDifficulty: true, showCompanyTags: false, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Topic Tags', tagPlaceholder: 'e.g. Virtual Memory, TCP, Indexing…' },
     HR: { showUrl: false, showDifficulty: false, showCompanyTags: false, showUseCases: false, showAlgoTags: false, showFollowUps: false, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
@@ -41,6 +42,7 @@ const CATEGORY_FIELD_CONFIG = {
 const CATEGORY_DESCRIPTION_CONFIG = {
     CODING: { label: 'Problem Description', placeholder: 'Optional — the external link is the primary resource for coding problems.', hint: 'Add extra context if the external problem statement needs clarification.', required: false, rows: 3 },
     SYSTEM_DESIGN: { label: 'Problem Statement', placeholder: 'Describe what to design:\n• What the system does\n• Expected scale\n• Core features vs nice-to-have\n• Specific constraints', hint: 'This IS the problem — members will read this and design the system.', required: true, rows: 8 },
+    LOW_LEVEL_DESIGN: { label: 'Design Problem Statement', placeholder: 'Describe the system to design at object level:\n• What is the core entity? (e.g. a Parking Lot, a Chess Game)\n• What operations must it support?\n• What are the key constraints or edge cases?\n• What follow-up requirements might arise?', hint: 'This is the problem statement members will read. Be specific about scope.', required: true, rows: 7 },
     BEHAVIORAL: { label: 'Question & Context', placeholder: 'Write the behavioral question and add context:\n• What is the interviewer really assessing?\n• What makes a strong answer?', hint: 'Help members understand what a great answer looks like.', required: true, rows: 6 },
     CS_FUNDAMENTALS: { label: 'Topic Description', placeholder: 'Describe the topic and expected depth:\n• Core concept to explain\n• Sub-topics to cover\n• Common misconceptions to address', hint: 'Guide members on how deep they should go.', required: true, rows: 6 },
     HR: { label: 'Question & Guidance', placeholder: 'Write the HR question and add guidance:\n• What is the interviewer really asking?\n• Tips for an authentic answer', hint: 'Help members prepare thoughtful, specific responses.', required: true, rows: 6 },

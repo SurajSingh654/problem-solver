@@ -64,7 +64,7 @@ export const LANGUAGE = {
   GO: "GO",
   RUST: "RUST",
   TYPESCRIPT: "TYPESCRIPT",
-  GROOVY: 'GROOVY',
+  GROOVY: "GROOVY",
   SWIFT: "SWIFT",
   KOTLIN: "KOTLIN",
   OTHER: "OTHER",
@@ -286,6 +286,19 @@ export const QUIZ_SUGGESTED_SUBJECTS = [
 ];
 
 // ── Problem categories ─────────────────────────────
+//
+// CATEGORY RESEARCH BASIS:
+// 7 categories covering every distinct SWE interview round type:
+// - CODING: Universal. Every company. Algorithmic thinking under pressure.
+// - SYSTEM_DESIGN: Mid/Senior+. Distributed systems, scale, trade-offs.
+// - LOW_LEVEL_DESIGN: Backend/All companies (Amazon, Atlassian, Adobe, Salesforce).
+//   OOP, design patterns, SOLID principles. Distinct from System Design.
+// - BEHAVIORAL: Universal. BEI methodology. STAR format. Competency assessment.
+// - CS_FUNDAMENTALS: Backend/Infra roles. OS, Networking, DB internals.
+//   Display label "Technical Knowledge" — more accurate than "CS Fundamentals".
+// - SQL: Data/Backend roles. Query writing, optimization, schema design.
+// - HR: Universal final round. Motivation, culture fit, expectations.
+//
 export const PROBLEM_CATEGORIES = [
   {
     id: "CODING",
@@ -293,7 +306,7 @@ export const PROBLEM_CATEGORIES = [
     icon: "💻",
     color: "text-brand-300",
     bg: "bg-brand-400/12 border-brand-400/25",
-    desc: "Algorithm and data structure problems",
+    desc: "Algorithms & data structures",
     sources: [
       "LEETCODE",
       "GFG",
@@ -310,7 +323,16 @@ export const PROBLEM_CATEGORIES = [
     icon: "🏗️",
     color: "text-info",
     bg: "bg-info/12 border-info/25",
-    desc: "Design scalable systems and architectures",
+    desc: "Distributed systems & architecture",
+    sources: ["OTHER"],
+  },
+  {
+    id: "LOW_LEVEL_DESIGN",
+    label: "Low-Level Design",
+    icon: "🔧",
+    color: "text-purple-400",
+    bg: "bg-purple-400/12 border-purple-400/25",
+    desc: "OOP, design patterns, SOLID",
     sources: ["OTHER"],
   },
   {
@@ -319,16 +341,16 @@ export const PROBLEM_CATEGORIES = [
     icon: "🗣️",
     color: "text-success",
     bg: "bg-success/12 border-success/25",
-    desc: "STAR format behavioral questions",
+    desc: "STAR format competency questions",
     sources: ["OTHER"],
   },
   {
     id: "CS_FUNDAMENTALS",
-    label: "CS Fundamentals",
-    icon: "📚",
+    label: "Technical Knowledge",
+    icon: "🧠",
     color: "text-warning",
     bg: "bg-warning/12 border-warning/25",
-    desc: "OS, Networking, DBMS, OOP concepts",
+    desc: "OS, networking, DB internals",
     sources: ["OTHER"],
   },
   {
@@ -337,16 +359,16 @@ export const PROBLEM_CATEGORIES = [
     icon: "🤝",
     color: "text-danger",
     bg: "bg-danger/12 border-danger/25",
-    desc: "HR and soft skill questions",
+    desc: "Motivation, culture fit",
     sources: ["OTHER"],
   },
   {
     id: "SQL",
     label: "SQL",
-    icon: "🗄️",
+    icon: "🗃️",
     color: "text-brand-300",
     bg: "bg-brand-400/12 border-brand-400/25",
-    desc: "SQL queries and database problems",
+    desc: "Queries, optimization, schema",
     sources: ["LEETCODE", "GFG", "HACKERRANK", "OTHER"],
   },
 ];
@@ -354,3 +376,65 @@ export const PROBLEM_CATEGORIES = [
 export const PROBLEM_CATEGORY_LABELS = Object.fromEntries(
   PROBLEM_CATEGORIES.map((c) => [c.id, c.label]),
 );
+
+// ── Category visibility config for AI generation UI ───
+//
+// Research basis:
+// TARGET COMPANY STYLE:
+//   Relevant when company culture genuinely changes what "correct" looks like.
+//   CODING: Google values elegant O(n) over brute-force. Amazon values speed.
+//   SYSTEM_DESIGN: Scale requirements differ fundamentally by company type.
+//   LOW_LEVEL_DESIGN: Amazon demands strict SOLID. Startups want working code.
+//   BEHAVIORAL: Amazon LP framing vs Google Googleyness vs Meta — completely different.
+//   Not relevant for SQL (SQL is SQL), CS_FUNDAMENTALS (topics are universal), HR (personal).
+//
+// FOCUS AREAS:
+//   Relevant when sub-topic selection meaningfully changes preparation strategy.
+//   CODING: "DP problems" vs "Graph problems" = completely different prep.
+//   SYSTEM_DESIGN: "Messaging systems" vs "Storage systems" = different knowledge domains.
+//   LOW_LEVEL_DESIGN: "Design patterns" vs "Concurrency" vs "Domain systems" = distinct.
+//   CS_FUNDAMENTALS: "OS" vs "Networking" vs "DB internals" = separate study areas.
+//   Not relevant for BEHAVIORAL (prepare all competencies), HR (personal), SQL (cover all).
+//
+export const CATEGORY_GENERATION_CONFIG = {
+  CODING: {
+    showTargetCompanyStyle: true,
+    showFocusAreas: true,
+    focusAreaPlaceholder:
+      "e.g. Dynamic Programming, Graph algorithms, Sliding Window...",
+    companyStylePlaceholder: "e.g. Google, Amazon, Stripe...",
+  },
+  SYSTEM_DESIGN: {
+    showTargetCompanyStyle: true,
+    showFocusAreas: true,
+    focusAreaPlaceholder:
+      "e.g. Messaging systems, Storage systems, Real-time feeds...",
+    companyStylePlaceholder: "e.g. Google, Uber, Cloudflare...",
+  },
+  LOW_LEVEL_DESIGN: {
+    showTargetCompanyStyle: true,
+    showFocusAreas: true,
+    focusAreaPlaceholder:
+      "e.g. Design patterns, Parking systems, Notification service...",
+    companyStylePlaceholder: "e.g. Amazon, Atlassian, Adobe...",
+  },
+  BEHAVIORAL: {
+    showTargetCompanyStyle: true,
+    showFocusAreas: false,
+    companyStylePlaceholder: "e.g. Amazon, Google, Meta...",
+  },
+  CS_FUNDAMENTALS: {
+    showTargetCompanyStyle: false,
+    showFocusAreas: true,
+    focusAreaPlaceholder:
+      "e.g. Operating Systems, Networking, Database internals...",
+  },
+  HR: {
+    showTargetCompanyStyle: false,
+    showFocusAreas: false,
+  },
+  SQL: {
+    showTargetCompanyStyle: false,
+    showFocusAreas: false,
+  },
+};
