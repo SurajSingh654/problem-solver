@@ -466,7 +466,20 @@ Keep it to 1-2 sentences maximum.`,
 }
 
 // ============================================================================
-// AI WEEKLY COACHING PLAN (Team-Context-Aware)
+// AI WEEKLY COACHING PLAN — Data-Driven, 6D-Grounded
+// ============================================================================
+//
+// PREVIOUS PROBLEM: The old version passed raw counts to the AI.
+// It had no idea what the 6D scores were, which patterns were missing,
+// which quiz subjects were weak, or what SM-2 state looked like.
+// The AI was guessing at gaps from incomplete signals.
+//
+// THIS VERSION: We compute the exact same signals the 6D report uses
+// and pass the full diagnostic picture to the AI. The result is a
+// coaching plan that is genuinely personalized — it references specific
+// patterns, specific quiz subjects, specific dimension scores, and
+// the actual interview readiness verdict.
+//
 // ============================================================================
 export async function getWeeklyPlan(req, res) {
   try {
@@ -477,124 +490,371 @@ export async function getWeeklyPlan(req, res) {
     const userId = req.user.id;
     const teamId = req.teamId;
 
-    // ── Gather user data scoped to team ────────────────
-    // SCOPING NOTE: quizzes are intentionally NOT scoped to teamId here.
-    // Quizzes are personal knowledge checks that apply regardless of
-    // which team the user is in. Scoping them would exclude quizzes
-    // taken in personal mode from the coaching plan — wrong behavior.
-    const [
-      user,
-      solutionCount,
-      recentSolutions,
-      quizzes,
-      interviews,
-      reviewsDue,
-    ] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          targetCompany: true,
-          interviewDate: true,
-          streak: true,
-        },
-      }),
-      prisma.solution.count({ where: { userId, teamId } }),
-      prisma.solution.findMany({
-        where: { userId, teamId },
-        select: {
-          pattern: true,
-          confidence: true,
-          problem: { select: { category: true, difficulty: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      }),
-      // Intentionally NOT scoped to teamId — personal knowledge
-      prisma.quizAttempt.findMany({
-        where: { userId, completedAt: { not: null } },
-        select: { subject: true, score: true },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      }),
-      prisma.interviewSession.count({
-        where: { userId, teamId, status: "COMPLETED" },
-      }),
-      prisma.solution.count({
-        where: { userId, teamId, nextReviewDate: { lte: new Date() } },
-      }),
-    ]);
-
-    // ── Build context for AI ───────────────────────────
-    const categories = {};
-    const patterns = new Set();
-    let totalConf = 0;
-
-    recentSolutions.forEach((s) => {
-      const cat = s.problem?.category || "CODING";
-      categories[cat] = (categories[cat] || 0) + 1;
-      if (s.pattern) patterns.add(s.pattern);
-      totalConf += s.confidence;
+    // ── Load user profile ──────────────────────────────
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        targetCompany: true,
+        interviewDate: true,
+        streak: true,
+        name: true,
+      },
     });
 
-    const avgQuizScore =
-      quizzes.length > 0
+    // ── Load solutions (for pattern/depth analysis) ────
+    const solutions = await prisma.solution.findMany({
+      where: { userId, teamId },
+      select: {
+        pattern: true,
+        confidence: true,
+        bruteForce: true,
+        optimizedApproach: true,
+        timeComplexity: true,
+        spaceComplexity: true,
+        keyInsight: true,
+        feynmanExplanation: true,
+        aiFeedback: true,
+        sm2EasinessFactor: true,
+        sm2Repetitions: true,
+        nextReviewDate: true,
+        reviewCount: true,
+        lastReviewedAt: true,
+        createdAt: true,
+        problem: { select: { category: true, difficulty: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    const totalSolutions = solutions.length;
+
+    // ── Compute 6D dimension scores (lightweight version) ──
+    // We recompute the key signals here rather than calling the full
+    // get6DReport endpoint — avoids circular dependency and is faster
+    // since we only need the scores, not the full analytics layer.
+
+    // D1 proxy
+    const withPattern = solutions.filter((s) => s.pattern).length;
+    const uniquePatterns = new Set(
+      solutions.filter((s) => s.pattern).map((s) => s.pattern),
+    );
+    const patternCoverageRate =
+      totalSolutions > 0 ? Math.round((withPattern / totalSolutions) * 100) : 0;
+
+    // D4 proxy
+    const withBothApproaches = solutions.filter(
+      (s) =>
+        s.bruteForce &&
+        s.bruteForce.trim().length > 20 &&
+        s.optimizedApproach &&
+        s.optimizedApproach.trim().length > 20,
+    ).length;
+    const optimizationRate =
+      totalSolutions > 0
+        ? Math.round((withBothApproaches / totalSolutions) * 100)
+        : 0;
+
+    // AI review signals
+    const allAiReviews = [];
+    solutions.forEach((s) => {
+      if (s.aiFeedback && Array.isArray(s.aiFeedback)) {
+        const latest = s.aiFeedback[s.aiFeedback.length - 1];
+        if (latest) allAiReviews.push(latest);
+      }
+    });
+    const avgAiScore =
+      allAiReviews.length > 0
         ? Math.round(
-            quizzes.reduce((s, q) => s + (q.score || 0), 0) / quizzes.length,
-          )
+            (allAiReviews
+              .map((r) => r.overallScore)
+              .filter((s) => s != null)
+              .reduce((a, b) => a + b, 0) /
+              allAiReviews.length) *
+              10,
+          ) / 10
         : null;
 
+    // Pattern gaps
+    const CANONICAL_PATTERNS = [
+      "Array / Hashing",
+      "Two Pointers",
+      "Sliding Window",
+      "Stack",
+      "Binary Search",
+      "Linked List",
+      "Trees",
+      "Tries",
+      "Heap / Priority Queue",
+      "Backtracking",
+      "Graphs",
+      "Dynamic Programming",
+      "Greedy",
+      "Intervals",
+      "Math & Geometry",
+      "Bit Manipulation",
+    ];
+    const missingPatterns = CANONICAL_PATTERNS.filter(
+      (p) => !uniquePatterns.has(p),
+    );
+
+    // SM-2 overdue with pattern context
+    const overdueItems = solutions
+      .filter(
+        (s) => s.nextReviewDate && new Date(s.nextReviewDate) <= new Date(),
+      )
+      .map((s) => ({
+        pattern: s.pattern,
+        category: s.problem?.category,
+        daysSince: Math.round(
+          (Date.now() - new Date(s.nextReviewDate).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+        ef: s.sm2EasinessFactor ?? 2.5,
+      }))
+      .sort((a, b) => b.daysSince - a.daysSince);
+
+    // Most at-risk patterns (lowest EF + most overdue)
+    const atRiskPatterns = [
+      ...new Set(
+        overdueItems
+          .filter((o) => o.ef < 2.0 || o.daysSince > 3)
+          .map((o) => o.pattern)
+          .filter(Boolean),
+      ),
+    ].slice(0, 3);
+
+    // ── Quiz performance analysis ─────────────────────
+    // Quizzes are personal — not scoped to teamId
+    const recentQuizzes = await prisma.quizAttempt.findMany({
+      where: {
+        userId,
+        completedAt: { not: null },
+        score: { not: null },
+      },
+      select: {
+        subject: true,
+        score: true,
+        difficulty: true,
+        aiAnalysis: true,
+        completedAt: true,
+      },
+      orderBy: { completedAt: "desc" },
+      take: 30,
+    });
+
+    // Group by subject and compute stats
+    const quizBySubject = {};
+    recentQuizzes.forEach((q) => {
+      const key = q.subject.toLowerCase().trim();
+      if (!quizBySubject[key]) {
+        quizBySubject[key] = { subject: q.subject, scores: [], weakTopics: [] };
+      }
+      quizBySubject[key].scores.push(q.score);
+      if (q.aiAnalysis?.weakTopics) {
+        quizBySubject[key].weakTopics.push(...q.aiAnalysis.weakTopics);
+      }
+    });
+
+    const quizSummary = Object.values(quizBySubject)
+      .map((s) => ({
+        subject: s.subject,
+        avgScore: Math.round(
+          s.scores.reduce((a, b) => a + b, 0) / s.scores.length,
+        ),
+        attempts: s.scores.length,
+        weakTopics: [...new Set(s.weakTopics)].slice(0, 3),
+        trend:
+          s.scores.length >= 2
+            ? s.scores[0] > s.scores[s.scores.length - 1]
+              ? "improving"
+              : s.scores[0] < s.scores[s.scores.length - 1]
+                ? "declining"
+                : "stable"
+            : null,
+      }))
+      .sort((a, b) => a.avgScore - b.avgScore);
+
+    const weakQuizSubjects = quizSummary.filter((s) => s.avgScore < 65);
+    const strongQuizSubjects = quizSummary.filter((s) => s.avgScore >= 80);
+
+    // ── Category distribution ──────────────────────────
+    const categoryCount = {};
+    solutions.forEach((s) => {
+      const cat = s.problem?.category || "CODING";
+      categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+    });
+
+    // Missing categories (not practiced at all)
+    const ALL_CATEGORIES = [
+      "CODING",
+      "SYSTEM_DESIGN",
+      "BEHAVIORAL",
+      "CS_FUNDAMENTALS",
+      "HR",
+      "SQL",
+    ];
+    const missingCategories = ALL_CATEGORIES.filter(
+      (c) => !categoryCount[c] || categoryCount[c] < 2,
+    );
+
+    // ── Interview history ──────────────────────────────
+    const recentInterviews = await prisma.interviewSession.findMany({
+      where: { userId, teamId, status: "COMPLETED" },
+      select: { scores: true, category: true, debrief: true },
+      orderBy: { completedAt: "desc" },
+      take: 5,
+    });
+
+    // Extract interview weak areas from debriefs
+    const interviewWeakAreas = [];
+    recentInterviews.forEach((iv) => {
+      if (iv.debrief?.improvements) {
+        interviewWeakAreas.push(...iv.debrief.improvements.slice(0, 2));
+      }
+    });
+
+    // ── Velocity ──────────────────────────────────────
+    const fourWeeksAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
+    const recentSolutionCount = solutions.filter(
+      (s) => new Date(s.createdAt) >= fourWeeksAgo,
+    ).length;
+    const avgWeeklyVelocity = Math.round((recentSolutionCount / 4) * 10) / 10;
+
+    // ── Days until interview ───────────────────────────
     const daysUntilInterview = user?.interviewDate
       ? Math.ceil(
-          (new Date(user.interviewDate) - new Date()) / (1000 * 60 * 60 * 24),
+          (new Date(user.interviewDate).getTime() - Date.now()) /
+            (1000 * 60 * 60 * 24),
         )
       : null;
 
+    // ── Build the AI prompt with full diagnostic context ──
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI();
 
     const response = await openai.chat.completions.create({
       model: AI_MODEL_FAST,
-      temperature: 0.7,
+      temperature: 0.65,
       response_format: { type: "json_object" },
-      max_tokens: 1500,
+      max_tokens: 2000,
       messages: [
         {
           role: "system",
           content: `You are a personal interview coach creating a specific 7-day study plan.
-Based on the candidate's data, create daily tasks that address their weak areas.
-Be SPECIFIC — name exact problem types, categories, and actions.
+You have been given a detailed diagnostic report of the candidate's strengths, gaps, and knowledge state.
+Use this data to create a plan that directly addresses their specific weaknesses — not generic advice.
+
+RULES:
+1. Every daily task must reference a SPECIFIC pattern, category, or topic from the data below.
+   BAD: "Practice dynamic programming problems."
+   GOOD: "Solve 2 Dynamic Programming problems focusing on the 1D DP pattern (your pattern coverage shows DP is missing)."
+2. If there are overdue reviews, assign specific review sessions — name the at-risk patterns.
+3. If quiz scores are low on specific subjects, assign a retake — name the subject.
+4. Tasks must be achievable in the stated time estimate.
+5. If interview date is soon (<14 days), make the plan aggressive — 2-3 topics/day.
+6. The weekly goal must be MEASURABLE (e.g., "Reach 5 patterns covered" not "improve skills").
+
 Return JSON:
 {
-  "weeklyGoal": "One sentence goal for the week",
+  "weeklyGoal": "One specific measurable goal",
+  "urgencyLevel": "low|medium|high|critical",
+  "focusAreas": ["top gap 1", "top gap 2"],
   "days": [
-    { "day": "Monday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
-    { "day": "Tuesday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
-    { "day": "Wednesday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
-    { "day": "Thursday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
-    { "day": "Friday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" },
-    { "day": "Saturday", "focus": "category", "tasks": ["specific task 1", ...], "timeEstimate": "45 min" },
-    { "day": "Sunday", "focus": "review", "tasks": ["specific task 1", ...], "timeEstimate": "30 min" }
+    {
+      "day": "Monday",
+      "focus": "Pattern Recognition|Solution Depth|Communication|Optimization|Pressure Performance|Retention",
+      "tasks": ["specific task referencing actual data", "specific task"],
+      "timeEstimate": "30 min",
+      "priority": "critical|high|medium"
+    }
   ],
-  "keyInsight": "One insight about their preparation gaps"
+  "keyInsight": "One specific, honest insight about the biggest gap in their preparation",
+  "interviewReadinessAssessment": "One sentence on where they stand right now"
 }`,
         },
         {
           role: "user",
-          content: `Stats:
-- Solutions: ${solutionCount}, Avg confidence: ${recentSolutions.length > 0 ? (totalConf / recentSolutions.length).toFixed(1) : "N/A"}
-- Categories practiced: ${JSON.stringify(categories)}
-- Patterns practiced: ${[...patterns].join(", ") || "none"}
-- Quizzes taken: ${quizzes.length}, Avg score: ${avgQuizScore ?? "N/A"}%
-- Mock interviews completed: ${interviews}
-- Reviews overdue: ${reviewsDue}
-- Target company: ${user?.targetCompany || "Not set"}
-- Days until interview: ${daysUntilInterview ?? "Not set"}
-- Current streak: ${user?.streak || 0} days`,
+          content: `CANDIDATE: ${user?.name || "Candidate"}
+TARGET COMPANY: ${user?.targetCompany || "Not specified"}
+DAYS UNTIL INTERVIEW: ${daysUntilInterview !== null ? daysUntilInterview : "Not set"}
+CURRENT STREAK: ${user?.streak || 0} days
+WEEKLY VELOCITY: ${avgWeeklyVelocity} solutions/week
+
+── SOLUTION PRACTICE ──
+Total solutions: ${totalSolutions}
+Category breakdown: ${JSON.stringify(categoryCount)}
+Missing categories (< 2 solutions): ${missingCategories.join(", ") || "None"}
+AI review average: ${avgAiScore !== null ? `${avgAiScore}/10` : "No reviews yet"}
+Optimization rate (brute→optimal): ${optimizationRate}% (target: 80%+)
+
+── PATTERN COVERAGE ──
+Patterns practiced (${uniquePatterns.size}/16): ${[...uniquePatterns].join(", ") || "None"}
+Missing patterns: ${missingPatterns.length > 0 ? missingPatterns.join(", ") : "None — full coverage!"}
+Pattern identification rate: ${patternCoverageRate}%
+
+── KNOWLEDGE RETENTION (SM-2) ──
+Overdue reviews: ${overdueItems.length}
+At-risk patterns (low EF or long overdue): ${atRiskPatterns.length > 0 ? atRiskPatterns.join(", ") : "None"}
+
+── QUIZ PERFORMANCE ──
+${
+  weakQuizSubjects.length > 0
+    ? `Weak quiz subjects (avg < 65%):
+${weakQuizSubjects
+  .slice(0, 5)
+  .map(
+    (s) =>
+      `  - ${s.subject}: ${s.avgScore}% (${s.attempts} attempts)${s.weakTopics.length > 0 ? `, weak on: ${s.weakTopics.join(", ")}` : ""}`,
+  )
+  .join("\n")}`
+    : "No weak quiz subjects identified."
+}
+${
+  strongQuizSubjects.length > 0
+    ? `Strong quiz subjects (avg ≥ 80%):
+${strongQuizSubjects
+  .slice(0, 3)
+  .map((s) => `  - ${s.subject}: ${s.avgScore}%`)
+  .join("\n")}`
+    : ""
+}
+
+── MOCK INTERVIEW HISTORY ──
+Completed interviews: ${recentInterviews.length}
+${
+  interviewWeakAreas.length > 0
+    ? `Recurring weaknesses from debriefs:
+${interviewWeakAreas
+  .slice(0, 4)
+  .map((w) => `  - ${w}`)
+  .join("\n")}`
+    : "No interview history yet."
+}
+
+Build a specific 7-day plan that turns this data into daily actions.`,
         },
       ],
     });
 
     const plan = JSON.parse(response.choices[0].message.content);
+
+    // Attach the diagnostic context so the UI can show what drove the plan
+    plan.diagnosticSummary = {
+      totalSolutions,
+      avgAiScore,
+      optimizationRate,
+      patternCoverage: uniquePatterns.size,
+      missingPatterns: missingPatterns.slice(0, 5),
+      overdueReviews: overdueItems.length,
+      atRiskPatterns,
+      weakQuizSubjects: weakQuizSubjects.slice(0, 3).map((s) => ({
+        subject: s.subject,
+        avgScore: s.avgScore,
+      })),
+      targetCompany: user?.targetCompany,
+      daysUntilInterview,
+    };
+
     return success(res, { plan });
   } catch (err) {
     console.error("Weekly plan error:", err);

@@ -750,6 +750,58 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
+    // FETCH ALL ACTIVITY DATA IN PARALLEL
+    // Must happen before any dimension computation so that
+    // interview signals are available for D1-D4 cross-feed
+    // and pressure data is available for D5.
+    // ════════════════════════════════════════════════
+    const [
+      sims,
+      interviews,
+      quizzesForPressure,
+      clarityRatings,
+      allQuizzesForDimensions,
+      overdueCount,
+    ] = await Promise.all([
+      prisma.simSession.findMany({
+        where: { userId, teamId, completed: true },
+        select: { score: true, hintsUsed: true },
+      }),
+      prisma.interviewSession.findMany({
+        where: { userId, teamId, status: "COMPLETED" },
+        select: { scores: true, debrief: true },
+      }),
+      prisma.quizAttempt.findMany({
+        where: { userId, completedAt: { not: null }, score: { not: null } },
+        select: { score: true, timeSpent: true },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      prisma.clarityRating.findMany({
+        where: { solution: { userId, teamId } },
+        select: { rating: true },
+      }),
+      prisma.quizAttempt.findMany({
+        where: {
+          userId,
+          completedAt: { not: null },
+          score: { not: null },
+        },
+        select: {
+          subject: true,
+          score: true,
+          difficulty: true,
+          completedAt: true,
+        },
+        orderBy: { completedAt: "desc" },
+        take: 100,
+      }),
+      prisma.solution.count({
+        where: { userId, teamId, nextReviewDate: { lte: new Date() } },
+      }),
+    ]);
+
+    // ════════════════════════════════════════════════
     // EXTRACT AI REVIEW DATA
     // ════════════════════════════════════════════════
     const allAiReviews = [];
@@ -817,42 +869,126 @@ export async function get6DReport(req, res) {
         : null;
 
     // ════════════════════════════════════════════════
-    // QUIZ CROSS-FEED — Phase 3
+    // INTERVIEW DIMENSION CROSS-FEED
     //
-    // Load all completed quizzes for this user and compute
-    // per-dimension knowledge signals from quiz subject + score.
+    // Must be computed BEFORE D1-D4 so the blend variables
+    // (ivD1, ivD2, ivD3, ivD4, ivBlendWeight) are available.
     //
-    // Design: quiz subjects are free text. We use keyword matching
-    // to map each subject to one or more 6D dimensions. Only completed
-    // quizzes with a score are used. Scores are 0-100 (percentage correct).
-    //
-    // Per-dimension quiz signal:
-    //   1. Collect all quizzes that map to this dimension
-    //   2. Weight recent quizzes more (exponential decay by age)
-    //   3. Compute weighted average score
-    //   4. Scale to the dimension's maxContribution
-    //
-    // The time-decay weight ensures recent quiz performance matters more
-    // than a quiz taken 3 months ago — knowledge degrades over time.
-    // Decay constant: half-life of 30 days (score halves in weight after 30 days).
+    // Dimension mapping:
+    //   D1 ← problemDecomposition, requirementsClarification, clarifyingQuestions
+    //   D2 ← explanationDepth, conceptualAccuracy, realWorldApplication, starStructure
+    //   D3 ← communicationWhileCoding, communicationClarity, specificity,
+    //         authenticity, careerNarrative, personalOwnership
+    //   D4 ← optimizationAbility, edgeCaseHandling, codeCorrectness,
+    //         codeQuality, tradeOffReasoning, scaleThinking,
+    //         optimizationAwareness, hintUtilization
     // ════════════════════════════════════════════════
-    const allQuizzesForDimensions = await prisma.quizAttempt.findMany({
-      where: {
-        userId,
-        completedAt: { not: null },
-        score: { not: null },
-      },
-      select: {
-        subject: true,
-        score: true,
-        difficulty: true,
-        completedAt: true,
-      },
-      orderBy: { completedAt: "desc" },
-      take: 100, // cap at 100 most recent — beyond this, signal quality drops
-    });
+    const interviewDimSignals = { d1: [], d2: [], d3: [], d4: [] };
 
-    // Compute quiz signals per dimension
+    interviews
+      .filter(
+        (i) =>
+          i.scores &&
+          typeof i.scores === "object" &&
+          Object.keys(i.scores).length > 0,
+      )
+      .forEach((interview) => {
+        const s = interview.scores;
+        if (!s || typeof s !== "object") return;
+
+        // D1 — pattern identification (1-10 scale → 0-100)
+        ["problemDecomposition", "requirementsClarification"].forEach((f) => {
+          if (s[f] != null && typeof s[f] === "number") {
+            interviewDimSignals.d1.push((s[f] / 10) * 100);
+          }
+        });
+        // clarifyingQuestions is 1-4 scale
+        if (
+          s.clarifyingQuestions != null &&
+          typeof s.clarifyingQuestions === "number"
+        ) {
+          interviewDimSignals.d1.push((s.clarifyingQuestions / 4) * 100);
+        }
+
+        // D2 — depth of understanding
+        [
+          "explanationDepth",
+          "conceptualAccuracy",
+          "realWorldApplication",
+        ].forEach((f) => {
+          if (s[f] != null && typeof s[f] === "number") {
+            interviewDimSignals.d2.push((s[f] / 10) * 100);
+          }
+        });
+        if (s.starStructure != null && typeof s.starStructure === "number") {
+          interviewDimSignals.d2.push((s.starStructure / 10) * 100);
+        }
+
+        // D3 — communication under interview conditions
+        [
+          "communicationWhileCoding",
+          "communicationClarity",
+          "specificity",
+          "authenticity",
+          "careerNarrative",
+        ].forEach((f) => {
+          if (s[f] != null && typeof s[f] === "number") {
+            interviewDimSignals.d3.push((s[f] / 10) * 100);
+          }
+        });
+        // personalOwnership is 1-4 scale
+        if (
+          s.personalOwnership != null &&
+          typeof s.personalOwnership === "number"
+        ) {
+          interviewDimSignals.d3.push((s.personalOwnership / 4) * 100);
+        }
+
+        // D4 — optimization and technical rigor
+        [
+          "optimizationAbility",
+          "edgeCaseHandling",
+          "codeCorrectness",
+          "codeQuality",
+          "tradeOffReasoning",
+          "scaleThinking",
+          "optimizationAwareness",
+        ].forEach((f) => {
+          if (s[f] != null && typeof s[f] === "number") {
+            interviewDimSignals.d4.push((s[f] / 10) * 100);
+          }
+        });
+        // hintUtilization is 1-4 scale
+        if (
+          s.hintUtilization != null &&
+          typeof s.hintUtilization === "number"
+        ) {
+          interviewDimSignals.d4.push((s.hintUtilization / 4) * 100);
+        }
+      });
+
+    function avgInterviewSignal(arr) {
+      if (arr.length === 0) return null;
+      return arr.reduce((a, b) => a + b, 0) / arr.length;
+    }
+
+    const ivD1 = avgInterviewSignal(interviewDimSignals.d1);
+    const ivD2 = avgInterviewSignal(interviewDimSignals.d2);
+    const ivD3 = avgInterviewSignal(interviewDimSignals.d3);
+    const ivD4 = avgInterviewSignal(interviewDimSignals.d4);
+
+    // Blend weight: 1 interview = 0.15, 2 = 0.20, 3 = 0.25, 5+ = 0.35
+    const interviewsWithDimScores = interviews.filter(
+      (i) =>
+        i.scores &&
+        typeof i.scores === "object" &&
+        Object.keys(i.scores).length > 0,
+    ).length;
+    const ivBlendWeight = Math.min(0.1 + interviewsWithDimScores * 0.05, 0.35);
+
+    // ════════════════════════════════════════════════
+    // QUIZ CROSS-FEED — Phase 3
+    // ════════════════════════════════════════════════
     const quizDimensionSignals = {
       d1_patterns: { weightedScoreSum: 0, weightSum: 0, count: 0 },
       d2_depth: { weightedScoreSum: 0, weightSum: 0, count: 0 },
@@ -862,7 +998,7 @@ export async function get6DReport(req, res) {
 
     const now = Date.now();
     const HALF_LIFE_DAYS = 30;
-    const DECAY_CONSTANT = Math.LN2 / HALF_LIFE_DAYS; // ln(2) / 30
+    const DECAY_CONSTANT = Math.LN2 / HALF_LIFE_DAYS;
 
     allQuizzesForDimensions.forEach((quiz) => {
       const mappings = mapQuizSubjectToDimensions(quiz.subject);
@@ -870,20 +1006,13 @@ export async function get6DReport(req, res) {
 
       const daysAgo =
         (now - new Date(quiz.completedAt).getTime()) / (1000 * 60 * 60 * 24);
-
-      // Exponential decay: weight = e^(-λt)
-      // A quiz from today has weight 1.0, from 30 days ago has weight 0.5,
-      // from 60 days ago has weight 0.25, etc.
       const timeWeight = Math.exp(-DECAY_CONSTANT * daysAgo);
-
-      // Difficulty multiplier: harder quiz = stronger signal of real knowledge
       const difficultyMultiplier =
         quiz.difficulty === "HARD"
           ? 1.3
           : quiz.difficulty === "MEDIUM"
             ? 1.0
             : 0.8;
-
       const effectiveWeight = timeWeight * difficultyMultiplier;
 
       mappings.forEach(({ dimKey }) => {
@@ -896,12 +1025,10 @@ export async function get6DReport(req, res) {
       });
     });
 
-    // Convert to weighted average scores (0-100) per dimension
-    // Require at least 2 quizzes before trusting the signal (1 quiz is noise)
     function getQuizSignal(dimKey) {
       const sig = quizDimensionSignals[dimKey];
       if (sig.count < 2 || sig.weightSum === 0) return null;
-      return sig.weightedScoreSum / sig.weightSum; // 0-100
+      return sig.weightedScoreSum / sig.weightSum;
     }
 
     const quizSignalD1 = getQuizSignal("d1_patterns");
@@ -910,7 +1037,7 @@ export async function get6DReport(req, res) {
     const quizSignalD4 = getQuizSignal("d4_optimization");
 
     // ════════════════════════════════════════════════
-    // D1: Pattern Recognition — quality-weighted + quiz cross-feed
+    // D1: Pattern Recognition
     // ════════════════════════════════════════════════
     const withPattern = solutions.filter((s) => s.pattern).length;
     const uniquePatterns = new Set(
@@ -918,7 +1045,6 @@ export async function get6DReport(req, res) {
     );
 
     const patternAttemptRate = (withPattern / totalSolutions) * 30;
-
     let patternQualityScore;
     if (avgAiPatternAccuracy !== null) {
       patternQualityScore = (avgAiPatternAccuracy / 10) * 50;
@@ -926,7 +1052,6 @@ export async function get6DReport(req, res) {
       patternQualityScore =
         withPattern > 0 ? Math.min((withPattern / totalSolutions) * 30, 30) : 0;
     }
-
     const diversityBonus = Math.min(uniquePatterns.size / 16, 1) * 20;
     const wrongPatternPenalty =
       reviewedSolutions > 0 ? (wrongPatternCount / reviewedSolutions) * 20 : 0;
@@ -941,22 +1066,23 @@ export async function get6DReport(req, res) {
       0,
     );
 
-    // Quiz cross-feed: pattern/algorithm quizzes supplement behavioral signals
-    // Scale quiz signal (0-100) to maxContribution (15 pts) and blend
-    // Only applies if behavioral signal is low (quiz can fill the gap)
-    // or if there are no AI reviews yet (quiz is the only quality signal)
+    // Quiz cross-feed
     if (quizSignalD1 !== null) {
       const quizBonus = Math.round(
         (quizSignalD1 / 100) * QUIZ_DIMENSION_MAP.d1_patterns.maxContribution,
       );
-      // Blend: quiz bonus only adds up to the gap between current d1 and cap
-      // This prevents quiz-grinding from inflating an already high D1
-      const headroom = Math.max(0, 85 - d1); // max quiz can push D1 to is 85
+      const headroom = Math.max(0, 85 - d1);
       d1 = Math.min(d1 + Math.min(quizBonus, headroom), 100);
     }
 
+    // Interview cross-feed
+    if (ivD1 !== null) {
+      d1 = Math.round(d1 * (1 - ivBlendWeight) + ivD1 * ivBlendWeight);
+      d1 = Math.min(d1, 100);
+    }
+
     // ════════════════════════════════════════════════
-    // D2: Solution Depth — quality-weighted + quiz cross-feed
+    // D2: Solution Depth
     // ════════════════════════════════════════════════
     const INSIGHT_MIN_CHARS = 60;
     const FEYNMAN_MIN_CHARS = 200;
@@ -976,7 +1102,6 @@ export async function get6DReport(req, res) {
       reviewedSolutions > 0
         ? 1 - (overconfidenceCount / reviewedSolutions) * 0.4
         : 1;
-
     const avgConf =
       solutions.reduce((s, r) => s + r.confidence, 0) / totalSolutions;
     const calibratedConfScore = (avgConf / 5) * overconfidencePenaltyFactor;
@@ -1025,7 +1150,7 @@ export async function get6DReport(req, res) {
       d2 = baseDepth;
     }
 
-    // Quiz cross-feed for D2: CS fundamentals and conceptual quizzes
+    // Quiz cross-feed
     if (quizSignalD2 !== null) {
       const quizBonus = Math.round(
         (quizSignalD2 / 100) * QUIZ_DIMENSION_MAP.d2_depth.maxContribution,
@@ -1034,14 +1159,15 @@ export async function get6DReport(req, res) {
       d2 = Math.min(d2 + Math.min(quizBonus, headroom), 100);
     }
 
+    // Interview cross-feed
+    if (ivD2 !== null) {
+      d2 = Math.round(d2 * (1 - ivBlendWeight) + ivD2 * ivBlendWeight);
+      d2 = Math.min(d2, 100);
+    }
+
     // ════════════════════════════════════════════════
     // D3: Communication
     // ════════════════════════════════════════════════
-    const clarityRatings = await prisma.clarityRating.findMany({
-      where: { solution: { userId, teamId } },
-      select: { rating: true },
-    });
-
     let d3;
     let communicationFromProxy = false;
 
@@ -1070,9 +1196,7 @@ export async function get6DReport(req, res) {
       );
     }
 
-    // Quiz cross-feed for D3: behavioral/communication-topic quizzes
-    // These get a smaller headroom cap (70) because quiz can't replace
-    // actual peer ratings or AI explanation quality assessment
+    // Quiz cross-feed
     if (quizSignalD3 !== null) {
       const quizBonus = Math.round(
         (quizSignalD3 / 100) *
@@ -1082,8 +1206,18 @@ export async function get6DReport(req, res) {
       d3 = Math.min(d3 + Math.min(quizBonus, headroom), 100);
     }
 
+    // Interview cross-feed — higher weight when no peer ratings
+    if (ivD3 !== null) {
+      const d3InterviewWeight =
+        clarityRatings.length === 0
+          ? Math.min(ivBlendWeight * 1.5, 0.5)
+          : ivBlendWeight;
+      d3 = Math.round(d3 * (1 - d3InterviewWeight) + ivD3 * d3InterviewWeight);
+      d3 = Math.min(d3, 100);
+    }
+
     // ════════════════════════════════════════════════
-    // D4: Optimization — behavioral signals + AI quality gate + quiz cross-feed
+    // D4: Optimization
     // ════════════════════════════════════════════════
     const withBrute = solutions.filter(
       (s) => s.bruteForce && s.bruteForce.trim().length > 20,
@@ -1117,7 +1251,7 @@ export async function get6DReport(req, res) {
       d4 = Math.min(d4Base, 70);
     }
 
-    // Quiz cross-feed for D4: complexity and optimization quizzes
+    // Quiz cross-feed
     if (quizSignalD4 !== null) {
       const quizBonus = Math.round(
         (quizSignalD4 / 100) *
@@ -1127,27 +1261,15 @@ export async function get6DReport(req, res) {
       d4 = Math.min(d4 + Math.min(quizBonus, headroom), 100);
     }
 
+    // Interview cross-feed
+    if (ivD4 !== null) {
+      d4 = Math.round(d4 * (1 - ivBlendWeight) + ivD4 * ivBlendWeight);
+      d4 = Math.min(d4, 100);
+    }
+
     // ════════════════════════════════════════════════
     // D5: Pressure Performance — normalized blend
-    // (unchanged — quiz already feeds D5 via quizPressureScore)
     // ════════════════════════════════════════════════
-    const [sims, interviews, quizzesForPressure] = await Promise.all([
-      prisma.simSession.findMany({
-        where: { userId, teamId, completed: true },
-        select: { score: true, hintsUsed: true },
-      }),
-      prisma.interviewSession.findMany({
-        where: { userId, teamId, status: "COMPLETED" },
-        select: { scores: true, debrief: true },
-      }),
-      prisma.quizAttempt.findMany({
-        where: { userId, completedAt: { not: null }, score: { not: null } },
-        select: { score: true, timeSpent: true },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      }),
-    ]);
-
     let d5 = 0;
     const hasSims = sims.length > 0;
     const hasInterviews = interviews.length > 0;
@@ -1279,11 +1401,6 @@ export async function get6DReport(req, res) {
     // D6: Knowledge Retention — Ebbinghaus + SM-2
     // ════════════════════════════════════════════════
     const now_d6 = Date.now();
-
-    const overdueCount = await prisma.solution.count({
-      where: { userId, teamId, nextReviewDate: { lte: new Date() } },
-    });
-
     const reviewedSols = solutions.filter((s) => s.reviewCount > 0);
 
     const retentionScores = solutions
@@ -1497,7 +1614,6 @@ export async function get6DReport(req, res) {
       retention: Math.min(d6, 100),
     };
 
-    // Build quiz signal summary for transparency in scoringSignals
     const quizDimensionContributions = {
       patternRecognition:
         quizSignalD1 !== null
@@ -1551,8 +1667,18 @@ export async function get6DReport(req, res) {
             metacognitiveAccuracy !== null
               ? Math.round(metacognitiveAccuracy * 100)
               : null,
-          // Phase 3: quiz cross-feed transparency
           quizDimensionContributions,
+          interviewDimensionContributions:
+            interviewsWithDimScores > 0
+              ? {
+                  d1Signal: ivD1 !== null ? Math.round(ivD1) : null,
+                  d2Signal: ivD2 !== null ? Math.round(ivD2) : null,
+                  d3Signal: ivD3 !== null ? Math.round(ivD3) : null,
+                  d4Signal: ivD4 !== null ? Math.round(ivD4) : null,
+                  blendWeight: Math.round(ivBlendWeight * 100),
+                  interviewCount: interviewsWithDimScores,
+                }
+              : null,
         },
         analytics: {
           weeklyVelocity: {

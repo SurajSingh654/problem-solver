@@ -1,7 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — Intelligence Report (Enhanced Analytics)
 // ============================================================================
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useTeamContext } from '@hooks/useTeamContext'
@@ -9,6 +9,7 @@ import { use6DReport } from '@hooks/useReport'
 import { Spinner } from '@components/ui/Spinner'
 import { RadarChart } from '@components/charts/RadarChart'
 import { cn } from '@utils/cn'
+import { useWeeklyPlan } from '@hooks/useAI'
 
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
@@ -840,6 +841,308 @@ function ActivitySummary({ report, analytics }) {
   )
 }
 
+// ── AI Coaching Plan Card ──────────────────────────────
+function CoachingPlanCard({ dims, analytics, totalSolutions }) {
+  const [plan, setPlan] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const weeklyPlanMutation = useWeeklyPlan()
+
+  async function handleGenerate() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await weeklyPlanMutation.mutateAsync()
+      setPlan(res.data.data.plan)
+    } catch (err) {
+      setError('Failed to generate plan. Try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const urgencyColors = {
+    critical: 'text-danger bg-danger/10 border-danger/25',
+    high: 'text-warning bg-warning/10 border-warning/25',
+    medium: 'text-brand-300 bg-brand-400/10 border-brand-400/25',
+    low: 'text-success bg-success/10 border-success/25',
+  }
+
+  const focusColors = {
+    'Pattern Recognition': '#7c6ff7',
+    'Solution Depth': '#22c55e',
+    'Communication': '#3b82f6',
+    'Optimization': '#eab308',
+    'Pressure Performance': '#ef4444',
+    'Retention': '#a855f7',
+  }
+
+  const priorityConfig = {
+    critical: { color: 'text-danger', bg: 'bg-danger/5 border-danger/20' },
+    high: { color: 'text-warning', bg: 'bg-warning/5 border-warning/20' },
+    medium: { color: 'text-brand-300', bg: 'bg-brand-400/5 border-brand-400/20' },
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6"
+    >
+      <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+            <span>🗓️</span> AI Weekly Coaching Plan
+          </h3>
+          <p className="text-xs text-text-tertiary mt-0.5">
+            Personalized 7-day plan built from your 6D diagnostic — specific patterns, subjects, and actions.
+          </p>
+        </div>
+        {!plan && (
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold',
+              'bg-brand-400 text-white hover:bg-brand-400/90 transition-all',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+          >
+            {loading ? (
+              <>
+                <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5"
+                  strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Generate My Plan
+              </>
+            )}
+          </button>
+        )}
+        {plan && (
+          <button
+            onClick={() => { setPlan(null); setError(null) }}
+            className="text-xs text-text-disabled hover:text-text-primary transition-colors"
+          >
+            Regenerate
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-xs text-danger mb-3">{error}</p>
+      )}
+
+      {!plan && !loading && (
+        <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+          <p className="text-xs text-text-tertiary leading-relaxed">
+            Click "Generate My Plan" to get a 7-day study plan built from your actual diagnostic data —
+            your missing patterns, weak quiz subjects, SM-2 overdue items, and dimension scores.
+            Not a generic plan. Specific to you.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {[
+              { icon: '🔍', text: 'Missing patterns addressed' },
+              { icon: '🧩', text: 'Weak quiz subjects targeted' },
+              { icon: '🧠', text: 'SM-2 overdue items scheduled' },
+              { icon: '📊', text: 'Lowest 6D dimensions prioritized' },
+            ].map(item => (
+              <span key={item.text}
+                className="flex items-center gap-1.5 text-[10px] text-text-tertiary
+                           bg-surface-3 rounded-lg px-2 py-1 border border-border-default">
+                <span>{item.icon}</span>{item.text}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {plan && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          {/* Weekly goal + urgency */}
+          <div className={cn(
+            'flex items-start gap-3 p-3.5 rounded-xl border',
+            urgencyColors[plan.urgencyLevel] || urgencyColors.medium
+          )}>
+            <span className="text-base flex-shrink-0">🎯</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span className="text-xs font-bold text-text-primary">
+                  This Week's Goal
+                </span>
+                {plan.urgencyLevel && (
+                  <span className={cn(
+                    'text-[9px] font-bold px-1.5 py-px rounded-full border uppercase',
+                    urgencyColors[plan.urgencyLevel]
+                  )}>
+                    {plan.urgencyLevel} urgency
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-text-secondary">{plan.weeklyGoal}</p>
+            </div>
+          </div>
+
+          {/* Key insight */}
+          {plan.keyInsight && (
+            <div className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-3.5">
+              <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
+                Key Insight
+              </p>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                {plan.keyInsight}
+              </p>
+            </div>
+          )}
+
+          {/* Focus areas */}
+          {plan.focusAreas?.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-text-disabled uppercase tracking-widest">
+                Focus:
+              </span>
+              {plan.focusAreas.map((area) => (
+                <span
+                  key={area}
+                  className="text-[10px] font-bold px-2 py-px rounded-full border"
+                  style={{
+                    color: focusColors[area] || '#7c6ff7',
+                    backgroundColor: `${focusColors[area] || '#7c6ff7'}15`,
+                    borderColor: `${focusColors[area] || '#7c6ff7'}30`,
+                  }}
+                >
+                  {area}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Daily plan */}
+          <div className="space-y-2">
+            {plan.days?.map((day, i) => {
+              const pc = priorityConfig[day.priority] || priorityConfig.medium
+              return (
+                <motion.div
+                  key={day.day}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className={cn(
+                    'rounded-xl border p-3.5',
+                    pc.bg
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-extrabold text-text-primary w-20">
+                        {day.day}
+                      </span>
+                      <span
+                        className="text-[9px] font-bold px-1.5 py-px rounded-full border"
+                        style={{
+                          color: focusColors[day.focus] || '#7c6ff7',
+                          backgroundColor: `${focusColors[day.focus] || '#7c6ff7'}15`,
+                          borderColor: `${focusColors[day.focus] || '#7c6ff7'}30`,
+                        }}
+                      >
+                        {day.focus}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-text-disabled">
+                      ⏱ {day.timeEstimate}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 ml-1">
+                    {day.tasks?.map((task, j) => (
+                      <div key={j} className="flex items-start gap-2">
+                        <span className={cn('flex-shrink-0 mt-0.5 text-xs font-bold', pc.color)}>
+                          →
+                        </span>
+                        <p className="text-[11px] text-text-secondary leading-relaxed">
+                          {task}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+
+          {/* Diagnostic summary — what drove this plan */}
+          {plan.diagnosticSummary && (
+            <div className="bg-surface-2 border border-border-default rounded-xl p-3.5">
+              <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+                Based on your data
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  {
+                    label: 'Pattern coverage',
+                    value: `${plan.diagnosticSummary.patternCoverage}/16`,
+                    alert: plan.diagnosticSummary.patternCoverage < 8,
+                  },
+                  {
+                    label: 'Optimization rate',
+                    value: `${plan.diagnosticSummary.optimizationRate}%`,
+                    alert: plan.diagnosticSummary.optimizationRate < 50,
+                  },
+                  {
+                    label: 'Overdue reviews',
+                    value: plan.diagnosticSummary.overdueReviews,
+                    alert: plan.diagnosticSummary.overdueReviews > 3,
+                  },
+                  plan.diagnosticSummary.avgAiScore && {
+                    label: 'AI review avg',
+                    value: `${plan.diagnosticSummary.avgAiScore}/10`,
+                    alert: plan.diagnosticSummary.avgAiScore < 6,
+                  },
+                  plan.diagnosticSummary.daysUntilInterview !== null && {
+                    label: 'Days to interview',
+                    value: plan.diagnosticSummary.daysUntilInterview,
+                    alert: plan.diagnosticSummary.daysUntilInterview < 14,
+                  },
+                ]
+                  .filter(Boolean)
+                  .map((item) => (
+                    <div key={item.label} className="text-center">
+                      <p className={cn(
+                        'text-sm font-extrabold font-mono',
+                        item.alert ? 'text-warning' : 'text-text-primary'
+                      )}>
+                        {item.value}
+                      </p>
+                      <p className="text-[9px] text-text-disabled mt-0.5">
+                        {item.label}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Interview readiness assessment */}
+          {plan.interviewReadinessAssessment && (
+            <p className="text-[11px] text-text-disabled italic text-center">
+              {plan.interviewReadinessAssessment}
+            </p>
+          )}
+        </motion.div>
+      )}
+    </motion.div>
+  )
+}
+
 // ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
@@ -938,6 +1241,13 @@ export default function ReportPage() {
 
       {/* ── Section 4: This Week's Actions ─────────────── */}
       <WeeklyActionsCard
+        dims={dims}
+        analytics={analytics}
+        totalSolutions={report?.totalSolutions || 0}
+      />
+
+      {/* ── Section 4b: AI Coaching Plan ───────────────── */}
+      <CoachingPlanCard
         dims={dims}
         analytics={analytics}
         totalSolutions={report?.totalSolutions || 0}
