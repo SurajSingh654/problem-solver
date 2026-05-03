@@ -82,6 +82,91 @@ function SDSolutionDisplay({ data }) {
     )
 }
 
+// ── LLD structured display ─────────────────────────────
+function LLDSolutionDisplay({ data, code, language }) {
+    const [activeKey, setActiveKey] = useState(() => {
+        const orderedKeys = ['entities', 'classHierarchy', 'designPattern', 'solidAnalysis', 'extensibilityAnalysis']
+        return orderedKeys.find(k => data[k]?.trim?.()?.length > 0) || 'entities'
+    })
+    const [showCode, setShowCode] = useState(false)
+
+    const sections = [
+        { key: 'entities', label: 'Entities', icon: '📦' },
+        { key: 'classHierarchy', label: 'Hierarchy', icon: '🗂️', isCode: true },
+        { key: 'designPattern', label: 'Patterns', icon: '🧩' },
+        { key: 'solidAnalysis', label: 'SOLID', icon: '🏛️' },
+        { key: 'extensibilityAnalysis', label: 'Extensibility', icon: '🔬' },
+    ].filter(s => (data[s.key]?.trim?.()?.length ?? 0) > 0)
+
+    const hasImplementation = (data.implementationCode?.trim?.()?.length ?? 0) > 0 ||
+        (code?.trim?.()?.length ?? 0) > 0
+    const implementationCode = data.implementationCode || code
+
+    if (sections.length === 0 && !hasImplementation) {
+        return <p className="text-xs text-text-disabled italic">No design content recorded.</p>
+    }
+
+    const activeSection = sections.find(s => s.key === activeKey) || sections[0]
+
+    return (
+        <div>
+            {/* Section tabs + implementation toggle */}
+            <div className="flex flex-wrap gap-1 mb-4">
+                {sections.map(s => (
+                    <button
+                        key={s.key}
+                        onClick={() => { setActiveKey(s.key); setShowCode(false) }}
+                        className={cn(
+                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
+                            'text-[10px] font-semibold transition-all border',
+                            activeKey === s.key && !showCode
+                                ? 'bg-purple-400/15 text-purple-400 border-purple-400/25'
+                                : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3 border-transparent'
+                        )}
+                    >
+                        <span>{s.icon}</span>{s.label}
+                    </button>
+                ))}
+                {hasImplementation && (
+                    <button
+                        onClick={() => setShowCode(true)}
+                        className={cn(
+                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
+                            'text-[10px] font-semibold transition-all border',
+                            showCode
+                                ? 'bg-success/15 text-success border-success/25'
+                                : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3 border-transparent'
+                        )}
+                    >
+                        <span>💻</span>Code
+                    </button>
+                )}
+            </div>
+
+            {/* Content */}
+            {showCode ? (
+                <pre className="bg-surface-0 border border-border-default rounded-xl p-4
+                                text-xs font-mono text-text-secondary whitespace-pre-wrap
+                                overflow-x-auto max-h-[500px] leading-relaxed">
+                    {implementationCode}
+                </pre>
+            ) : activeSection ? (
+                activeSection.isCode ? (
+                    <pre className="bg-surface-0 border border-border-default rounded-xl p-4
+                                    text-xs font-mono text-text-secondary whitespace-pre-wrap
+                                    overflow-x-auto max-h-[400px] leading-relaxed">
+                        {data[activeKey]}
+                    </pre>
+                ) : (
+                    <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                        {data[activeKey]}
+                    </div>
+                )
+            ) : null}
+        </div>
+    )
+}
+
 // ── Code block ─────────────────────────────────────────
 function CodeBlock({ code, language }) {
     const [copied, setCopied] = useState(false)
@@ -204,6 +289,16 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         )
     )
 
+    const isLLDSubmission = !!(
+        solution.categorySpecificData &&
+        Object.keys(solution.categorySpecificData).length > 0 &&
+        (
+            solution.categorySpecificData.entities !== undefined ||
+            solution.categorySpecificData.solidAnalysis !== undefined ||
+            solution.categorySpecificData.designPattern !== undefined
+        )
+    )
+
     const tabs = [
         { id: 'approach', label: 'Approach' },
         { id: 'code', label: 'Code', hidden: !code },
@@ -242,15 +337,21 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 You
                             </span>
                         )}
-                        {language && !isSDSubmission && (
+                        {language && !isSDSubmission && !isLLDSubmission && (
                             <Badge variant="gray" size="xs">
                                 {LANGUAGE_LABELS[language] || language}
                             </Badge>
                         )}
                         {isSDSubmission && (
                             <span className="text-[10px] font-bold px-1.5 py-px rounded-full
-                                             bg-info/10 text-info border border-info/20">
+                     bg-info/10 text-info border border-info/20">
                                 System Design
+                            </span>
+                        )}
+                        {isLLDSubmission && (
+                            <span className="text-[10px] font-bold px-1.5 py-px rounded-full
+                     bg-purple-400/10 text-purple-400 border border-purple-400/20">
+                                LLD
                             </span>
                         )}
                     </div>
@@ -292,20 +393,17 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                         className="overflow-hidden"
                     >
                         <div className="border-t border-border-default">
-                            {/* Tabs — only shown for non-SD solutions */}
-                            {!isSDSubmission && (
+                            {/* Tabs — only for standard coding solutions */}
+                            {!isSDSubmission && !isLLDSubmission && (
                                 <div className="flex gap-1 p-3 border-b border-border-default bg-surface-1/50">
                                     {tabs.map(t => (
-                                        <button
-                                            key={t.id}
-                                            onClick={() => setTab(t.id)}
+                                        <button key={t.id} onClick={() => setTab(t.id)}
                                             className={cn(
                                                 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                                                 tab === t.id
                                                     ? 'bg-brand-400/15 text-brand-300 border border-brand-400/25'
                                                     : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
-                                            )}
-                                        >
+                                            )}>
                                             {t.label}
                                         </button>
                                     ))}
@@ -315,8 +413,13 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                             {/* Content */}
                             <div className="p-4 space-y-4">
                                 {isSDSubmission ? (
-                                    // System Design: structured sectioned display
                                     <SDSolutionDisplay data={solution.categorySpecificData} />
+                                ) : isLLDSubmission ? (
+                                    <LLDSolutionDisplay
+                                        data={solution.categorySpecificData}
+                                        code={code}
+                                        language={language}
+                                    />
                                 ) : (
                                     // All other categories: tab-based display
                                     <>

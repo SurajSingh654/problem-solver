@@ -117,8 +117,8 @@ export default function ProblemDetailPage() {
     // For SD: real world context and admin notes are hidden until submission.
     // Revealing them upfront defeats the learning — candidates must attempt first.
     // For all other categories: show everything.
-    const showRealWorldContext = !isSystemDesign || isSolved
-    const showAdminNotes = isAdmin || (isSystemDesign && isSolved)
+    const showRealWorldContext = (!isSystemDesign && !isLLD) || isSolved
+    const showAdminNotes = isAdmin || ((isSystemDesign || isLLD) && isSolved)
 
     return (
         <div className="p-6 max-w-[900px] mx-auto">
@@ -402,7 +402,7 @@ export default function ProblemDetailPage() {
             )}
 
             {/* ── Hints locked notice — SD only, before submission ── */}
-            {isSystemDesign && !isSolved && (realWorldContext || useCasesList.length > 0 || adminNotes) && (
+            {(isSystemDesign || isLLD) && !isSolved && (realWorldContext || useCasesList.length > 0 || adminNotes) && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -419,9 +419,10 @@ export default function ProblemDetailPage() {
                                 Real World Context & Teaching Notes
                             </p>
                             <p className="text-xs text-text-tertiary leading-relaxed">
-                                These unlock after you submit your design. This is intentional —
-                                the learning happens when you compare your thinking to the model approach,
-                                not by reading it first. Attempt the design before looking at hints.
+                                {isSystemDesign
+                                    ? 'These unlock after you submit your design. Attempt the design before looking at hints.'
+                                    : 'These unlock after you submit your design. The expected class hierarchy, patterns, and SOLID analysis unlock so you can compare your thinking to the model answer.'
+                                }
                             </p>
                             <button
                                 onClick={() => navigate(`/problems/${problemId}/submit`)}
@@ -550,15 +551,19 @@ export default function ProblemDetailPage() {
                         isAdmin ? 'text-warning' : 'text-brand-300'
                     )}>
                         <span>{isAdmin ? '⚡' : '📖'}</span>
-                        {isAdmin ? 'Admin Notes' : 'Teaching Notes — Compare Your Design'}
+                        {isAdmin
+                            ? 'Admin Notes'
+                            : isSystemDesign
+                                ? 'Teaching Notes — Compare Your Design'
+                                : 'Teaching Notes — Compare Your Design'}
                     </h2>
 
                     {/* Context for members seeing teaching notes post-submission */}
-                    {!isAdmin && isSystemDesign && isSolved && (
+                    {!isAdmin && (isSystemDesign || isLLD) && isSolved && (
                         <p className="text-xs text-text-tertiary mb-3 leading-relaxed">
-                            This is what an experienced interviewer would expect from a strong answer.
-                            Compare each section to your submission — note what you covered,
-                            what you missed, and what you would do differently next time.
+                            {isLLD
+                                ? 'This shows the expected class hierarchy, design patterns, and SOLID analysis. Compare each section to your submission — note what you got right, what you missed, and what design decisions you would change.'
+                                : 'This is what an experienced interviewer would expect from a strong answer. Compare each section to your submission.'}
                         </p>
                     )}
 

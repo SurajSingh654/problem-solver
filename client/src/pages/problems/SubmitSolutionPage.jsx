@@ -534,6 +534,286 @@ function SystemDesignWorkspace({ sdData, onSdDataChange, diagramData, onDiagramC
 }
 
 // ══════════════════════════════════════════════════════
+// LOW-LEVEL DESIGN WORKSPACE
+//
+// Four structured sections matching the LLD interview rubric:
+//   Entities → Class Hierarchy → Design Pattern → SOLID + Extensibility
+//
+// Unlike SD, LLD keeps the code editor — class implementation
+// is expected in most LLD interviews. The structured text fields
+// capture the thinking; the code captures the execution.
+// ══════════════════════════════════════════════════════
+function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, onLanguageChange }) {
+    const [activeSection, setActiveSection] = useState('entities')
+
+    function update(field, value) {
+        onLldDataChange({ ...lldData, [field]: value })
+    }
+
+    const lldConfig = getCategoryForm('LOW_LEVEL_DESIGN')
+    const fieldConfigs = lldConfig.lldFields || {}
+
+    const sections = [
+        {
+            key: 'entities',
+            label: 'Entities',
+            icon: '📦',
+            sublabel: 'Classes, interfaces, responsibilities',
+            color: 'text-purple-400',
+            activeBg: 'bg-purple-400/10 border-purple-400/30',
+        },
+        {
+            key: 'classHierarchy',
+            label: 'Hierarchy',
+            icon: '🗂️',
+            sublabel: 'Inheritance, composition, interfaces',
+            color: 'text-brand-300',
+            activeBg: 'bg-brand-400/10 border-brand-400/30',
+        },
+        {
+            key: 'implementation',
+            label: 'Code',
+            icon: '💻',
+            sublabel: 'Class implementations',
+            color: 'text-success',
+            activeBg: 'bg-success/10 border-success/30',
+        },
+        {
+            key: 'designPattern',
+            label: 'Patterns',
+            icon: '🧩',
+            sublabel: 'Which pattern and why',
+            color: 'text-warning',
+            activeBg: 'bg-warning/10 border-warning/30',
+        },
+        {
+            key: 'solidAnalysis',
+            label: 'SOLID',
+            icon: '🏛️',
+            sublabel: 'Principles satisfied and violated',
+            color: 'text-info',
+            activeBg: 'bg-info/10 border-info/30',
+        },
+        {
+            key: 'extensibilityAnalysis',
+            label: 'Extensibility',
+            icon: '🔬',
+            sublabel: 'Follow-up requirement analysis',
+            color: 'text-danger',
+            activeBg: 'bg-danger/10 border-danger/30',
+        },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    const completedCount = sections.filter(s => {
+        if (s.key === 'implementation') return (code?.trim?.()?.length ?? 0) > 30
+        return (lldData[s.key]?.trim?.()?.length ?? 0) > 30
+    }).length
+
+    return (
+        <div className="space-y-4">
+            {/* Progress header */}
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>🔧</span> Low-Level Design Workspace
+                    </p>
+                    <span className="text-[10px] font-bold text-text-disabled">
+                        {completedCount}/{sections.length} sections filled
+                    </span>
+                </div>
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className="h-full bg-purple-400 rounded-full"
+                    />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const isDone = s.key === 'implementation'
+                            ? (code?.trim?.()?.length ?? 0) > 30
+                            : (lldData[s.key]?.trim?.()?.length ?? 0) > 30
+                        const isActive = activeSection === s.key
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => setActiveSection(s.key)}
+                                className={cn(
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
+                                    'transition-all duration-150 min-w-[72px]',
+                                    isActive
+                                        ? s.activeBg
+                                        : isDone
+                                            ? 'bg-success/5 border-success/20'
+                                            : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {isDone && !isActive && (
+                                        <span className="text-success text-[9px] font-bold">✓</span>
+                                    )}
+                                </div>
+                                <span className={cn(
+                                    'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
+                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
+                                )}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* Active section panel */}
+            <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
+            >
+                {/* Section header */}
+                <div className={cn(
+                    'flex items-center gap-3 px-5 py-4 border-b border-border-default',
+                    activeSectionConfig.activeBg
+                )}>
+                    <span className="text-xl">{activeSectionConfig.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
+                            {activeSectionConfig.label}
+                        </p>
+                        <p className="text-[11px] text-text-disabled">
+                            {activeSectionConfig.sublabel}
+                        </p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">
+                        {activeIndex + 1} / {sections.length}
+                    </span>
+                </div>
+
+                {/* Section content */}
+                <div className="p-5">
+                    {activeSection === 'implementation' ? (
+                        // Code section — Monaco editor
+                        <div className="space-y-3">
+                            <p className="text-[11px] text-text-tertiary leading-relaxed
+                                           bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                💡 Write your key class implementations. Focus on constructors,
+                                core methods, and relationships. You don't need every method —
+                                focus on the design-critical parts.
+                            </p>
+                            <CodeEditor
+                                code={code}
+                                onChange={onCodeChange}
+                                language={language}
+                                onLanguageChange={lang => {
+                                    onLanguageChange(lang)
+                                    localStorage.setItem('ps_last_language', lang)
+                                }}
+                                selectorStyle="dropdown"
+                                languages={SUBMIT_LANGUAGES}
+                                height="400px"
+                                showLanguageSelector
+                            />
+                        </div>
+                    ) : fieldConfigs[activeSection]?.isCode ? (
+                        // Class hierarchy — monospace textarea
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed
+                                               bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 12}
+                                value={lldData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className="w-full bg-surface-0 border border-border-strong rounded-xl
+                                           text-sm text-text-primary placeholder:text-text-disabled
+                                           font-mono px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                style={{ minHeight: '280px' }}
+                            />
+                        </div>
+                    ) : (
+                        // Standard prose sections
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed
+                                               bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 10}
+                                value={lldData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                           text-sm text-text-primary placeholder:text-text-disabled
+                                           px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Prev / Next footer */}
+                <div className="flex items-center justify-between px-5 py-3
+                                border-t border-border-default bg-surface-1/50">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key)
+                        }}
+                        disabled={activeIndex === 0}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12" />
+                            <polyline points="12 19 5 12 12 5" />
+                        </svg>
+                        Previous
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (activeIndex < sections.length - 1) {
+                                setActiveSection(sections[activeIndex + 1].key)
+                            }
+                        }}
+                        disabled={activeIndex === sections.length - 1}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1"
+                    >
+                        Next
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
 export default function SubmitSolutionPage() {
@@ -548,6 +828,7 @@ export default function SubmitSolutionPage() {
     const hasExternalLink = !!problem?.categoryData?.sourceUrl
     const fields = formConfig.fields || {}
     const isSystemDesign = category === 'SYSTEM_DESIGN'
+    const isLowLevelDesign = category === 'LOW_LEVEL_DESIGN'
 
     // ── Generic form state (CODING, SQL, BEHAVIORAL, CS_FUNDAMENTALS, HR, LLD) ──
     const [code, setCode] = useState('')
@@ -574,6 +855,17 @@ export default function SubmitSolutionPage() {
         architectureNotes: '',
         tradeoffReasoning: '',
         failureModes: '',
+    })
+
+    // ── Low-Level Design workspace state ───────────────────
+    // Only populated when category === 'LOW_LEVEL_DESIGN'.
+    // Stored in categorySpecificData JSON column on Solution.
+    const [lldData, setLldData] = useState({
+        entities: '',
+        classHierarchy: '',
+        designPattern: '',
+        solidAnalysis: '',
+        extensibilityAnalysis: '',
     })
     const [sdDiagram, setSdDiagram] = useState(null)
 
@@ -602,6 +894,17 @@ export default function SubmitSolutionPage() {
             }
         }
 
+        // For LLD, validate that at minimum entities are identified
+        if (isLowLevelDesign) {
+            const hasMinContent =
+                (lldData.entities?.trim().length ?? 0) > 20 ||
+                (code?.trim().length ?? 0) > 20
+            if (!hasMinContent) {
+                toast.error('Fill in Entity Identification or write some implementation code before submitting.')
+                return
+            }
+        }
+
         const followUpAnswersArray = Object.entries(followUpAnswers)
             .filter(([, text]) => text?.trim())
             .map(([questionId, text]) => ({
@@ -623,22 +926,52 @@ export default function SubmitSolutionPage() {
         //   realWorldConnection→ capacityEstimation
         //   timeComplexity     → failureModes
         const data = {
-            approach: isSystemDesign ? sdData.functionalRequirements : (approach || null),
-            bruteForce: isSystemDesign ? sdData.nonFunctionalRequirements : null,
-            optimizedApproach: isSystemDesign ? sdData.schemaDesign : (approach || null),
+            // LLD field mapping:
+            //   approach           → entities (primary design input)
+            //   bruteForce         → classHierarchy
+            //   keyInsight         → designPattern justification
+            //   feynmanExplanation → solidAnalysis
+            //   realWorldConnection→ extensibilityAnalysis
+            //   code               → actual class implementation code (unchanged)
+            approach: isSystemDesign
+                ? sdData.functionalRequirements
+                : isLowLevelDesign
+                    ? lldData.entities
+                    : (approach || null),
+            bruteForce: isSystemDesign
+                ? sdData.nonFunctionalRequirements
+                : isLowLevelDesign
+                    ? lldData.classHierarchy
+                    : null,
+            optimizedApproach: isSystemDesign
+                ? sdData.schemaDesign
+                : (approach || null),
             code: isSystemDesign ? sdData.apiDesign : (code || null),
             language: isSystemDesign ? 'plaintext' : (code ? language : null),
             pattern: pattern || null,
-            keyInsight: isSystemDesign ? sdData.tradeoffReasoning : (keyInsight || null),
-            feynmanExplanation: isSystemDesign ? sdData.architectureNotes : (feynmanExplanation || null),
-            realWorldConnection: isSystemDesign ? sdData.capacityEstimation : (realWorldConnection || null),
+            keyInsight: isSystemDesign
+                ? sdData.tradeoffReasoning
+                : isLowLevelDesign
+                    ? lldData.designPattern
+                    : (keyInsight || null),
+            feynmanExplanation: isSystemDesign
+                ? sdData.architectureNotes
+                : isLowLevelDesign
+                    ? lldData.solidAnalysis
+                    : (feynmanExplanation || null),
+            realWorldConnection: isSystemDesign
+                ? sdData.capacityEstimation
+                : isLowLevelDesign
+                    ? lldData.extensibilityAnalysis
+                    : (realWorldConnection || null),
             timeComplexity: isSystemDesign ? sdData.failureModes : null,
             spaceComplexity: null,
             confidence,
-            // Full structured SD data stored here for clean retrieval
             categorySpecificData: isSystemDesign
                 ? { ...sdData, diagramData: sdDiagram }
-                : undefined,
+                : isLowLevelDesign
+                    ? { ...lldData, implementationCode: code }
+                    : undefined,
             followUpAnswers: followUpAnswersArray,
         }
 
@@ -745,6 +1078,18 @@ export default function SubmitSolutionPage() {
                         <p className="whitespace-pre-wrap">{problem.description}</p>
                     </div>
                 )}
+
+                {/* LLD: show the problem description inline */}
+                {isLowLevelDesign && problem.description && (
+                    <div className="mt-3 p-3 bg-surface-2 border border-border-default
+                    rounded-xl text-xs text-text-tertiary leading-relaxed">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase
+                       tracking-widest mb-1.5">
+                            Design Challenge
+                        </p>
+                        <p className="whitespace-pre-wrap">{problem.description}</p>
+                    </div>
+                )}
             </div>
 
             {/* Info banner — external link problems (CODING/SQL only) */}
@@ -792,16 +1137,46 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
 
+            {/* LLD interview tip banner */}
+            {isLowLevelDesign && (
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-purple-400/5 border border-purple-400/20 rounded-xl p-4 mb-6
+                   flex items-start gap-3"
+                >
+                    <span className="text-lg flex-shrink-0">🔧</span>
+                    <div>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">
+                            Start with entities, not code
+                        </p>
+                        <p className="text-xs text-text-tertiary leading-relaxed">
+                            The most common LLD mistake is jumping straight to implementation.
+                            Identify your classes and their single responsibilities first.
+                            Ask: "What is this class responsible for?" If the answer has "and" in it, split it.
+                        </p>
+                    </div>
+                </motion.div>
+            )}
+
             {/* ── Form sections ──────────────────────────── */}
             <div className="space-y-5">
 
                 {isSystemDesign ? (
-                    // ── System Design: structured 8-panel workspace ──
                     <SystemDesignWorkspace
                         sdData={sdData}
                         onSdDataChange={setSdData}
                         diagramData={sdDiagram}
                         onDiagramChange={setSdDiagram}
+                    />
+                ) : isLowLevelDesign ? (
+                    <LLDWorkspace
+                        lldData={lldData}
+                        onLldDataChange={setLldData}
+                        code={code}
+                        onCodeChange={setCode}
+                        language={language}
+                        onLanguageChange={setLanguage}
                     />
                 ) : (
                     // ── All other categories: generic form ────────────
@@ -947,8 +1322,10 @@ export default function SubmitSolutionPage() {
                     title="Confidence Level"
                     hint={
                         isSystemDesign
-                            ? 'How confident are you in this design? Be honest — AI flags mismatches between confidence and design quality.'
-                            : 'Be honest — AI will flag if your confidence doesn\'t match your solution quality'
+                            ? 'How confident are you in this design?'
+                            : isLowLevelDesign
+                                ? 'How confident are you in your object design and SOLID application?'
+                                : "Be honest — AI will flag if your confidence doesn't match your solution quality"
                     }
                 >
                     <ConfidencePicker value={confidence} onChange={setConfidence} />
@@ -1036,7 +1413,9 @@ export default function SubmitSolutionPage() {
                                 strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12" />
                             </svg>
-                            {isSystemDesign ? 'Submit Design' : 'Submit Solution'}
+                            {isSystemDesign ? 'Submit Design'
+                                : isLowLevelDesign ? 'Submit Design'
+                                    : 'Submit Solution'}
                         </Button>
                     </div>
                 </div>

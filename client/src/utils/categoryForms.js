@@ -211,81 +211,109 @@ export const CATEGORY_FORMS = {
       },
       {
         id: 3,
+        label: "Code",
+        icon: "💻",
+        desc: "Class implementations and key methods",
+      },
+      {
+        id: 4,
         label: "Extensibility",
         icon: "🔬",
-        desc: "SOLID principles, trade-offs, and what changes next",
+        desc: "SOLID principles and follow-up requirements",
       },
     ],
-    fields: {
-      patternIdentified: {
-        label: "Design Pattern Used",
-        placeholder: "e.g. Strategy, Factory, Observer, Decorator, Command...",
-        show: true,
-        suggestions: [
-          "Factory",
-          "Abstract Factory",
-          "Singleton",
-          "Builder",
-          "Prototype",
-          "Adapter",
-          "Decorator",
-          "Facade",
-          "Proxy",
-          "Observer",
-          "Strategy",
-          "Command",
-          "State",
-          "Iterator",
-          "Template Method",
-          "Chain of Responsibility",
-          "Composite",
-          "None — vanilla OOP",
-        ],
-      },
-      patternReasoning: {
+
+    // isLowLevelDesign flag tells SubmitSolutionPage to render the LLD workspace
+    isLowLevelDesign: true,
+
+    // Empty fields for API consistency — LLD uses lldFields
+    fields: {},
+
+    // LLD-specific structured fields stored in categorySpecificData
+    lldFields: {
+      entities: {
         label: "Entity Identification",
         placeholder:
-          "What are the core entities?\n\nFor a Parking Lot:\n• ParkingLot, ParkingFloor, ParkingSpot\n• Vehicle (Car, Truck, Motorcycle)\n• Ticket, Payment\n• EntrancePanel, ExitPanel\n\nFor each entity: what are its responsibilities?",
-        hint: "Start here before writing any code. Wrong entity identification = wrong design.",
-        show: true,
+          "List the core classes and interfaces with their responsibilities.\n\nFormat:\nClassName — what it is responsible for\n\nExample (Parking Lot):\nParkingLot — manages floors, entry/exit, capacity tracking\nParkingFloor — manages spots on a floor, tracks availability\nParkingSpot — represents one space, knows its type and occupancy\nVehicle (abstract) — base class with license plate and type\nCar, Truck, Motorcycle — concrete vehicle types\nTicket — records entry time, spot, and vehicle\nPayment (interface) — fee calculation contract\nHourlyPayment, FlatRatePayment — payment strategies\n\nFor each class ask: What is its ONE responsibility?",
+        hint: "Wrong entity identification = wrong design. Spend time here before writing any code.",
+        rows: 14,
       },
-      keyInsight: {
-        label: "Key Design Decision",
-        placeholder: "The most important OOP/design choice you made and why...",
-        hint: "e.g. 'Used Strategy pattern for parking fee calculation so new vehicle types don't require changing ParkingLot class (Open/Closed Principle)'",
-        show: true,
-      },
-      simpleExplanation: {
-        label: "SOLID Principles Applied",
+      classHierarchy: {
+        label: "Class Hierarchy & Relationships",
         placeholder:
-          "Which SOLID principles are satisfied by your design? Give a specific example for each that applies:\n\nS — Single Responsibility: Each class has one reason to change\nO — Open/Closed: Open for extension, closed for modification\nL — Liskov Substitution: Subtypes are substitutable for base types\nI — Interface Segregation: No class implements unused methods\nD — Dependency Inversion: Depend on abstractions, not concretions",
-        show: true,
+          "Describe the structure — inheritance, composition, and interfaces.\n\nUse text UML or plain English:\n\nabstract class Vehicle\n  fields: licensePlate: String, type: VehicleType\n  abstract method: getType(): VehicleType\n\nclass Car extends Vehicle\nclass Truck extends Vehicle\nclass Motorcycle extends Vehicle\n\ninterface PaymentStrategy\n  method: calculateFee(ticket: Ticket): double\n\nclass HourlyPayment implements PaymentStrategy\nclass FlatRatePayment implements PaymentStrategy\n\nParkingLot HAS-A List<ParkingFloor> (composition)\nParkingFloor HAS-A List<ParkingSpot> (composition)\nTicket REFERENCES Vehicle (association)\n\nKey decisions:\n- Used Strategy pattern for payment (open/closed for new fee types)\n- Used abstract class for Vehicle (shared state: licensePlate)\n- Used interface for Payment (no shared state between strategies)",
+        hint: "Explain WHY you chose inheritance vs composition vs interface for each relationship. This is what interviewers probe.",
+        rows: 16,
+        isCode: true,
       },
-      challenges: {
+      designPattern: {
+        label: "Design Pattern Justification",
+        placeholder:
+          "Which pattern(s) did you apply and why?\n\nFormat: Pattern → Problem it solves → Why this pattern fits\n\nExample:\nStrategy Pattern → Fee calculation varies by vehicle type and time\n  → Encapsulates each algorithm in its own class\n  → New fee types (weekend rate, VIP) can be added without modifying ParkingLot\n  → Satisfies Open/Closed Principle\n\nFactory Pattern → Creating Vehicle subclasses from a type enum\n  → Centralizes creation logic, client code doesn't need to know concrete types\n  → Satisfies Dependency Inversion (depend on Vehicle abstraction)\n\nSingleton → ParkingLot itself (there is only one)\n  → But be careful: Singleton makes testing harder — consider dependency injection",
+        hint: "Don't just name the pattern. Explain the structural reason it fits. Interviewers can tell the difference.",
+        rows: 10,
+      },
+      solidAnalysis: {
+        label: "SOLID Principles Analysis",
+        placeholder:
+          "For each SOLID principle, state whether your design satisfies it with a specific example.\n\nS — Single Responsibility Principle:\n  ✓ ParkingLot handles capacity management only. Payment is separate.\n  ✓ ParkingSpot tracks occupancy only. Pricing is in PaymentStrategy.\n\nO — Open/Closed Principle:\n  ✓ Adding a MotorcycleSpot type extends ParkingSpot without modifying existing code.\n  ✓ New payment strategies implement PaymentStrategy without touching ParkingLot.\n\nL — Liskov Substitution Principle:\n  ✓ Any Vehicle subtype (Car, Truck) can be used wherever Vehicle is expected.\n  ✓ No subclass breaks the contract defined by the parent.\n\nI — Interface Segregation Principle:\n  ✓ PaymentStrategy has only one method — calculateFee().\n  ✗ Could be violated if we added unrelated methods to Vehicle base class.\n\nD — Dependency Inversion Principle:\n  ✓ ParkingLot depends on PaymentStrategy interface, not concrete implementations.\n  ✓ High-level modules (ParkingLot) don't depend on low-level details (HourlyPayment).",
+        hint: "Be honest about violations. Identifying where your design breaks SOLID is a strong signal of experience.",
+        rows: 14,
+      },
+      extensibilityAnalysis: {
         label: "Extensibility Analysis",
         placeholder:
-          "How does your design handle these common follow-up requirements?\n\n• Add a new vehicle type\n• Change the fee calculation logic\n• Add a new payment method\n• Add a reservation system\n• Support multiple parking lot locations\n\nIf any of these require changing existing classes, where does your design break?",
-        show: true,
+          "For each follow-up requirement, explain how your design handles it.\n\nAnalyze these common additions:\n\n1. Add a new vehicle type (e.g., Electric Vehicle)\n   → Extend Vehicle abstract class. No existing code changes.\n   → Add EvSpot extending ParkingSpot if needed. ParkingFloor unchanged.\n   → Cost: O(1) — 1-2 new files, 0 modified files ✓\n\n2. Change fee calculation (e.g., surge pricing)\n   → Create SurgePricingPayment implementing PaymentStrategy.\n   → Inject into ParkingLot at runtime. Existing strategies unchanged.\n   → Cost: 1 new file, 0 modified files ✓\n\n3. Add a reservation system\n   → ParkingLot currently has no reservation concept — this requires schema change.\n   → Would add Reservation class, reserveSpot() on ParkingSpot.\n   → Cost: 2-3 new files, 1 modified file (ParkingSpot) — acceptable ✓\n\n4. Support multiple parking lot locations\n   → ParkingLotManager (new) manages multiple ParkingLot instances.\n   → No changes to ParkingLot needed ✓\n\n5. Add a display board showing availability\n   → Observer pattern: ParkingFloor notifies DisplayBoard on spot change.\n   → ParkingFloor was not designed as Observable — this is a gap ✗\n   → Fix: ParkingFloor should implement Observable from the start.",
+        hint: "Honest gap analysis is valued. Saying 'my design breaks here for this reason' signals production experience.",
+        rows: 16,
       },
     },
+
+    // For solution display card
+    displayConfig: {
+      sections: [
+        { key: "entities", label: "Entity Identification", icon: "📦" },
+        {
+          key: "classHierarchy",
+          label: "Class Hierarchy",
+          icon: "🗂️",
+          isCode: true,
+        },
+        {
+          key: "designPattern",
+          label: "Design Pattern Justification",
+          icon: "🧩",
+        },
+        { key: "solidAnalysis", label: "SOLID Analysis", icon: "🏛️" },
+        {
+          key: "extensibilityAnalysis",
+          label: "Extensibility Analysis",
+          icon: "🔬",
+        },
+      ],
+    },
+
+    // LLD keeps showSolutionTabs: true for code implementation
+    // The code tab renders the actual class implementations
     showSolutionTabs: true,
     solutionTabConfig: {
       types: [
-        { id: "BRUTE_FORCE", label: "Initial Design", icon: "📐" },
-        { id: "OPTIMIZED", label: "Refined Design", icon: "✨" },
+        { id: "INITIAL", label: "Initial Design", icon: "📐" },
+        { id: "REFINED", label: "Refined Design", icon: "✨" },
         { id: "ALTERNATIVE", label: "Alternative Approach", icon: "🔄" },
       ],
       approachLabel: "Class Hierarchy Description",
       approachPlaceholder:
-        "Describe your class structure:\n\nabstract class Vehicle\n  + licensePlate: String\n  + type: VehicleType\n  + getType(): VehicleType\n\nclass Car extends Vehicle\nclass Truck extends Vehicle\nclass Motorcycle extends Vehicle\n\ninterface ParkingStrategy\n  + calculateFee(ticket: Ticket): double\n\nclass HourlyParkingStrategy implements ParkingStrategy\nclass FlatRateParkingStrategy implements ParkingStrategy",
+        "Describe the overall class structure before writing code.\n\nWhich classes are abstract? Which implement interfaces?\nWhat are the key relationships (HAS-A vs IS-A)?",
       complexityLabels: {
         time: "Number of Classes / Interfaces",
         space: "Memory per Instance",
       },
       codeLabel: "Implementation",
       codePlaceholder:
-        "// Write your class implementation\n// Focus on: constructors, key methods, and relationships\n\npublic abstract class Vehicle {\n    private String licensePlate;\n    private VehicleType type;\n    \n    public Vehicle(String licensePlate, VehicleType type) {\n        this.licensePlate = licensePlate;\n        this.type = type;\n    }\n    \n    public abstract VehicleType getType();\n}",
-      notesLabel: "Design Notes",
+        "// Write your key class implementations\n// Focus on: constructors, core methods, and relationships\n// You don't need to implement every method — focus on the design\n\npublic abstract class Vehicle {\n    private final String licensePlate;\n    private final VehicleType type;\n\n    public Vehicle(String licensePlate, VehicleType type) {\n        this.licensePlate = licensePlate;\n        this.type = type;\n    }\n\n    public abstract VehicleType getType();\n    public String getLicensePlate() { return licensePlate; }\n}\n\npublic interface PaymentStrategy {\n    double calculateFee(Ticket ticket);\n}\n\npublic class HourlyPayment implements PaymentStrategy {\n    private static final double HOURLY_RATE = 10.0;\n\n    @Override\n    public double calculateFee(Ticket ticket) {\n        long hours = ChronoUnit.HOURS.between(\n            ticket.getEntryTime(), LocalDateTime.now()\n        );\n        return Math.max(1, hours) * HOURLY_RATE;\n    }\n}",
+      defaultLanguage: "JAVA",
+      notesLabel: "Design Notes & Assumptions",
     },
     showFollowUps: true,
   },

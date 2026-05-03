@@ -42,37 +42,30 @@ CODING correctness analysis:
         "requirements clarity, capacity reasoning, API design quality, architectural decisions, trade-off depth, failure mode awareness",
       codeCorrectnessGuide: `
 SYSTEM DESIGN evaluation framework — evaluate each area independently:
-
 REQUIREMENTS CLARIFICATION:
 - Did the candidate identify functional requirements? Are they specific and scoped?
 - Did the candidate identify non-functional requirements? Do they include concrete numbers (DAU, QPS, latency targets)?
 - Are the requirements realistic and internally consistent?
-
 CAPACITY ESTIMATION:
 - Did the candidate do back-of-envelope math?
 - Are the numbers reasonable and consistent with the requirements?
 - Did they identify read:write ratio, storage requirements, bandwidth?
-
 API DESIGN:
 - Are endpoints named and structured (method + path)?
 - Do request/response shapes make sense for the use cases?
 - Is the API surface area appropriate — not too large, not too small?
-
 ARCHITECTURE:
 - Are the right components present for the stated requirements?
 - Is the data flow logical and complete?
 - Are there obvious missing components for the scale stated?
-
 DATABASE SCHEMA:
 - Does the schema support the stated access patterns?
 - Are appropriate indexes identified?
 - Is the database choice (SQL/NoSQL) justified?
-
 TRADE-OFF REASONING:
 - Are key architectural decisions made explicit?
 - Does the candidate acknowledge what they traded away?
 - Are the trade-offs appropriate for the stated requirements?
-
 FAILURE MODES:
 - Did the candidate identify what breaks first?
 - Are there mitigations proposed?
@@ -80,17 +73,40 @@ FAILURE MODES:
     },
     LOW_LEVEL_DESIGN: {
       focus:
-        "OOP correctness, SOLID principles, design pattern appropriateness, extensibility",
+        "OOP correctness, SOLID principles, design pattern appropriateness, extensibility, implementation quality",
       codeCorrectnessGuide: `
-LOW-LEVEL DESIGN correctness analysis:
-- Do the classes have clear Single Responsibility? No god objects?
-- Are relationships correct: inheritance vs composition vs aggregation?
-- Are interfaces used where appropriate (Dependency Inversion)?
-- Is the design Open/Closed? Can new requirements be added without modifying existing classes?
-- Are design patterns applied correctly — not just named, but structurally correct?
-- Does the class hierarchy make semantic sense (Liskov Substitution)?
-- Are method signatures sensible? Do they reveal intent?
-- Is the implementation extensible for the follow-up requirements?`,
+LOW-LEVEL DESIGN evaluation framework — evaluate each area independently:
+ENTITY IDENTIFICATION:
+- Are the right classes identified? No missing entities, no unnecessary ones?
+- Does each class have a clear, single responsibility (SRP)?
+- Are god objects avoided — classes that try to do everything?
+- Are the entity names semantically meaningful?
+CLASS HIERARCHY & RELATIONSHIPS:
+- Are inheritance relationships semantically correct? (IS-A vs HAS-A)
+- Is composition preferred over inheritance where appropriate?
+- Are abstract classes used only where shared state exists?
+- Are interfaces used for behavioral contracts with no shared state?
+- Does the hierarchy make Liskov Substitution sense — can subtypes substitute base types?
+DESIGN PATTERN APPLICATION:
+- Is the identified pattern structurally correct — not just named correctly?
+- Does the pattern actually solve the stated problem?
+- Is the pattern overkill or appropriate for the scope?
+- Are multiple patterns combined sensibly, or does the design over-engineer?
+SOLID PRINCIPLES:
+- Single Responsibility: Does each class change for exactly one reason?
+- Open/Closed: Can new behavior be added without modifying existing classes?
+- Liskov Substitution: Can subtypes be used wherever the base type is expected?
+- Interface Segregation: Are interfaces small and focused, not bloated?
+- Dependency Inversion: Do high-level modules depend on abstractions, not concretions?
+IMPLEMENTATION QUALITY:
+- Are method signatures clean and intention-revealing?
+- Are constructors appropriate — not doing too much work?
+- Is encapsulation respected — no unnecessary public fields?
+- Is the code idiomatic for the chosen language?
+EXTENSIBILITY:
+- Can new requirements be added with minimal modification to existing classes?
+- Does the candidate identify where their design would break under follow-up requirements?
+- Are the identified gaps honest and realistic?`,
     },
     BEHAVIORAL: {
       focus: "STAR structure, specificity, impact quantification, authenticity",
@@ -168,8 +184,6 @@ SQL correctness analysis:
   }
 
   // ── Pattern baseline context ───────────────────────
-  // Built from historical AI review scores on the same pattern.
-  // Personalizes feedback: "you're above/below your own baseline here."
   const patternBaselineContext = data.patternBaseline
     ? `
 CANDIDATE'S PATTERN HISTORY — ${data.patternBaseline.pattern}:
@@ -184,7 +198,6 @@ ${Object.entries(data.patternBaseline.dimensionAverages)
   .join("\n")}`
     : ""
 }
-
 BASELINE COMPARISON REQUIREMENT:
 - Compare this submission explicitly against their own baseline on ${data.patternBaseline.pattern}
 - If this solution scores ABOVE their ${data.patternBaseline.avgOverallScore}/10 baseline: acknowledge the improvement in strengths
@@ -193,6 +206,40 @@ BASELINE COMPARISON REQUIREMENT:
 - This makes feedback personal and actionable, not generic`
     : "";
 
+  // ── Category-specific scoring dimension guidance ───
+  // SD and LLD use different mental models than coding.
+  // The standard 5-dimension rubric is reinterpreted per category
+  // so scores are meaningful in context.
+  const categoryDimensionGuidance =
+    data.category === "SYSTEM_DESIGN"
+      ? `
+SCORING REINTERPRETATION FOR SYSTEM DESIGN:
+1. CODE CORRECTNESS → DESIGN CORRECTNESS (35%)
+   Does the design actually solve the stated system? Does it handle the scale and requirements?
+2. PATTERN ACCURACY → ARCHITECTURAL PATTERN (20%)
+   Is the architectural style (microservices, event-driven, etc.) appropriate?
+3. UNDERSTANDING DEPTH → SYSTEMS THINKING DEPTH (20%)
+   Does the candidate understand WHY each component exists and what it trades off?
+4. EXPLANATION QUALITY → COMMUNICATION CLARITY (15%)
+   Can they explain the system clearly? Would a junior engineer understand this design?
+5. CONFIDENCE CALIBRATION → unchanged`
+      : data.category === "LOW_LEVEL_DESIGN"
+        ? `
+SCORING REINTERPRETATION FOR LOW-LEVEL DESIGN:
+1. CODE CORRECTNESS → OOP CORRECTNESS (35%)
+   Is the class structure semantically correct? Do the relationships make sense?
+   Is the implementation (if provided) structurally sound?
+2. PATTERN ACCURACY → DESIGN PATTERN ACCURACY (20%)
+   Is the identified pattern applied correctly — structurally, not just named?
+   Does it solve the stated problem?
+3. UNDERSTANDING DEPTH → OOP UNDERSTANDING DEPTH (20%)
+   Does the candidate understand WHY the chosen hierarchy/pattern is correct?
+   Can they articulate SOLID violations in their own design?
+4. EXPLANATION QUALITY → DESIGN EXPLANATION CLARITY (15%)
+   Is the class hierarchy clear? Would another engineer implement it correctly from this?
+5. CONFIDENCE CALIBRATION → unchanged`
+        : "";
+
   const system = `You are a senior engineering interview coach doing a comprehensive solution review.
 Evaluate this ${data.category} submission across 5 dimensions with independent, honest scores.
 PROBLEM: ${data.problem?.title || "Unknown"}
@@ -200,6 +247,7 @@ DIFFICULTY: ${data.difficulty}
 CATEGORY: ${data.category}
 FOCUS: ${ctx.focus}
 ${ctx.codeCorrectnessGuide}
+${categoryDimensionGuidance}
 SCORING DIMENSIONS — score each 1-10 INDEPENDENTLY:
 1. CODE CORRECTNESS (35% weight)
    10 = Completely correct, handles all edge cases, optimal
@@ -281,35 +329,71 @@ RESPOND WITH EXACT JSON — no extra fields, no missing fields:
   ]
 }`;
 
-  // For System Design submissions, present structured fields with proper labels.
-  // For all other categories, use the standard generic field presentation.
-  const sdSpecific = data.categorySpecificData;
-  const submissionSection =
-    data.category === "SYSTEM_DESIGN" && sdSpecific
-      ? `Functional Requirements:
-${sdSpecific.functionalRequirements || data.approach || "Not provided"}
+  // ── Submission section — category-specific field presentation ──
+  //
+  // SYSTEM_DESIGN: structured fields from categorySpecificData with proper labels
+  // LOW_LEVEL_DESIGN: structured fields from categorySpecificData with proper labels
+  // All others: standard generic coding-oriented field presentation
+  //
+  // Falls back to the generic field mapping if categorySpecificData is absent,
+  // ensuring backward compatibility with solutions submitted before the
+  // structured workspace existed.
+  const categorySpecific = data.categorySpecificData;
+
+  let submissionSection;
+
+  if (data.category === "SYSTEM_DESIGN" && categorySpecific) {
+    submissionSection = `Functional Requirements:
+${categorySpecific.functionalRequirements || data.approach || "Not provided"}
 
 Non-Functional Requirements:
-${sdSpecific.nonFunctionalRequirements || data.bruteForce || "Not provided"}
+${categorySpecific.nonFunctionalRequirements || data.bruteForce || "Not provided"}
 
 Capacity Estimation:
-${sdSpecific.capacityEstimation || data.realWorldConnection || "Not provided"}
+${categorySpecific.capacityEstimation || data.realWorldConnection || "Not provided"}
 
 API Design:
-${sdSpecific.apiDesign || data.code || "Not provided"}
+${categorySpecific.apiDesign || data.code || "Not provided"}
 
 Database Schema:
-${sdSpecific.schemaDesign || data.optimizedApproach || "Not provided"}
+${categorySpecific.schemaDesign || data.optimizedApproach || "Not provided"}
 
 Architecture Description:
-${sdSpecific.architectureNotes || data.feynmanExplanation || "Not provided"}
+${categorySpecific.architectureNotes || data.feynmanExplanation || "Not provided"}
 
 Key Trade-offs:
-${sdSpecific.tradeoffReasoning || data.keyInsight || "Not provided"}
+${categorySpecific.tradeoffReasoning || data.keyInsight || "Not provided"}
 
 Failure Modes:
-${sdSpecific.failureModes || data.timeComplexity || "Not provided"}`
-      : `Approach:
+${categorySpecific.failureModes || data.timeComplexity || "Not provided"}`;
+  } else if (data.category === "LOW_LEVEL_DESIGN" && categorySpecific) {
+    // LLD: structured OOP-focused presentation
+    // Each section maps to a specific dimension in the LLD evaluation rubric
+    const implementationCode =
+      categorySpecific.implementationCode || data.code || null;
+
+    submissionSection = `Entity Identification:
+${categorySpecific.entities || data.approach || "Not provided"}
+
+Class Hierarchy & Relationships:
+${categorySpecific.classHierarchy || data.bruteForce || "Not provided"}
+
+Design Pattern Justification:
+${categorySpecific.designPattern || data.keyInsight || "Not provided"}
+
+SOLID Principles Analysis:
+${categorySpecific.solidAnalysis || data.feynmanExplanation || "Not provided"}
+
+Extensibility Analysis:
+${categorySpecific.extensibilityAnalysis || data.realWorldConnection || "Not provided"}
+
+Implementation Code:
+\`\`\`${(data.language || "java").toLowerCase()}
+${implementationCode ? implementationCode.substring(0, 2500) : "No implementation provided"}
+\`\`\``;
+  } else {
+    // Standard coding / behavioral / SQL / CS_FUNDAMENTALS / HR
+    submissionSection = `Approach:
 ${data.approach || "Not provided"}
 Code:
 \`\`\`${(data.language || "plaintext").toLowerCase()}
@@ -318,6 +402,7 @@ ${data.code ? data.code.substring(0, 2000) : "No code provided"}
 Key Insight: ${data.keyInsight || "Not provided"}
 Feynman Explanation: ${data.feynmanExplanation || "Not provided"}
 Real-World Connection: ${data.realWorldConnection || "Not provided"}`;
+  }
 
   const user = `Review this ${data.category} solution:
 PROBLEM: ${data.problem?.title || "Unknown"}
