@@ -14,13 +14,21 @@ import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
-import { PATTERNS, CONFIDENCE_LEVELS, PROBLEM_CATEGORIES } from '@utils/constants'
+import {
+    PATTERNS, CONFIDENCE_LEVELS, PROBLEM_CATEGORIES,
+    HR_STAKES, HR_QUESTION_CATEGORIES, HR_QUESTION_CATEGORY_MAP,
+} from '@utils/constants'
 import { getCategoryForm } from '@utils/categoryForms'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
+// ── External link categories ───────────────────────────
+// Only CODING and SQL have external canonical problem sources.
+// All other categories are self-contained.
+const EXTERNAL_LINK_CATEGORIES = ['CODING', 'SQL']
+
 // ── Section wrapper ────────────────────────────────────
-function FormSection({ icon, title, hint, badge, children, className }) {
+function FormSection({ icon, title, hint, badge, required, children, className }) {
     return (
         <div className={cn(
             'bg-surface-1 border border-border-default rounded-2xl p-5',
@@ -28,15 +36,21 @@ function FormSection({ icon, title, hint, badge, children, className }) {
         )}>
             <div className="flex items-start gap-3 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
-                        justify-center text-base flex-shrink-0 mt-0.5">
+                                justify-center text-base flex-shrink-0 mt-0.5">
                     {icon}
                 </div>
                 <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-sm font-bold text-text-primary">{title}</h3>
+                        {required && (
+                            <span className="text-[9px] font-bold px-1.5 py-px rounded-full
+                                             bg-danger/10 text-danger border border-danger/20">
+                                Required
+                            </span>
+                        )}
                         {badge && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                   bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                                             bg-brand-400/15 text-brand-300 border border-brand-400/25">
                                 {badge}
                             </span>
                         )}
@@ -80,9 +94,9 @@ function PatternSelector({ config, value, onChange }) {
                 value={!suggestions.includes(value) ? value : ''}
                 onChange={e => onChange(e.target.value)}
                 className="w-full bg-surface-3 border border-border-strong rounded-xl
-                   text-sm text-text-primary placeholder:text-text-tertiary
-                   px-3.5 py-2.5 outline-none
-                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                           text-sm text-text-primary placeholder:text-text-tertiary
+                           px-3.5 py-2.5 outline-none
+                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
             />
         </div>
     )
@@ -119,7 +133,7 @@ function ConfidencePicker({ value, onChange }) {
 }
 
 // ── Follow-up question with answer field ───────────────
-function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
+function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = false }) {
     const [showHint, setShowHint] = useState(false)
     const hasAnswer = !!(answer?.trim())
     return (
@@ -149,13 +163,25 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
                         {followUp.question}
                     </p>
                 </div>
-                <Badge
-                    variant={DIFF_VARIANT[followUp.difficulty] || 'brand'}
-                    size="xs"
-                    className="flex-shrink-0"
-                >
-                    {followUp.difficulty}
-                </Badge>
+                {/* HR: show stakes label instead of Easy/Medium/Hard */}
+                {isHR ? (
+                    <span className={cn(
+                        'text-[9px] font-bold px-1.5 py-px rounded-full border flex-shrink-0',
+                        HR_STAKES[followUp.difficulty]?.bg
+                    )}>
+                        <span className={HR_STAKES[followUp.difficulty]?.color}>
+                            {HR_STAKES[followUp.difficulty]?.label || followUp.difficulty}
+                        </span>
+                    </span>
+                ) : (
+                    <Badge
+                        variant={DIFF_VARIANT[followUp.difficulty] || 'brand'}
+                        size="xs"
+                        className="flex-shrink-0"
+                    >
+                        {followUp.difficulty}
+                    </Badge>
+                )}
             </div>
             {followUp.hint && (
                 <div className="mb-3 ml-7">
@@ -163,14 +189,14 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
                         type="button"
                         onClick={() => setShowHint(!showHint)}
                         className="text-[10px] text-brand-300 hover:text-brand-200
-                               transition-colors flex items-center gap-1"
+                                   transition-colors flex items-center gap-1"
                     >
                         💡 {showHint ? 'Hide hint' : 'Show hint'}
                     </button>
                     {showHint && (
                         <p className="text-[11px] text-text-tertiary mt-1.5
-                               bg-surface-3 border border-border-subtle
-                               rounded-lg p-2.5 leading-relaxed">
+                                       bg-surface-3 border border-border-subtle
+                                       rounded-lg p-2.5 leading-relaxed">
                             {followUp.hint}
                         </p>
                     )}
@@ -178,21 +204,23 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
             )}
             <div className="ml-7">
                 <textarea
-                    rows={3}
+                    rows={isHR ? 4 : 3}
                     value={answer || ''}
                     onChange={e => onAnswerChange(followUp.id, e.target.value)}
                     placeholder={
-                        followUp.difficulty === 'EASY'
-                            ? 'Answer this follow-up to earn bonus points...'
-                            : followUp.difficulty === 'MEDIUM'
-                                ? 'Challenge yourself — answer this for extra AI feedback...'
-                                : 'Hard bonus question — attempt it to demonstrate mastery...'
+                        isHR
+                            ? 'Prepare your specific answer to this follow-up question...'
+                            : followUp.difficulty === 'EASY'
+                                ? 'Answer this follow-up to earn bonus points...'
+                                : followUp.difficulty === 'MEDIUM'
+                                    ? 'Challenge yourself — answer this for extra AI feedback...'
+                                    : 'Hard bonus question — attempt it to demonstrate mastery...'
                     }
                     className="w-full bg-surface-3 border border-border-strong rounded-xl
-                           text-xs text-text-primary placeholder:text-text-disabled
-                           px-3 py-2.5 outline-none resize-none
-                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                           transition-all"
+                               text-xs text-text-primary placeholder:text-text-disabled
+                               px-3 py-2.5 outline-none resize-none
+                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                               transition-all"
                 />
                 {!hasAnswer && (
                     <p className="text-[10px] text-text-disabled mt-1">
@@ -205,412 +233,78 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange }) {
 }
 
 // ══════════════════════════════════════════════════════
-// SYSTEM DESIGN WORKSPACE
+// HR WORKSPACE
 //
-// Replaces the generic form entirely for SYSTEM_DESIGN category.
-// Eight structured panels matching the SD interview rubric:
-//   Requirements → Non-Functional → Estimation → API →
-//   Schema → Architecture → Trade-offs → Failure Modes
+// Replaces the generic form entirely for HR category.
+// Four purposeful sections matching real HR interview prep:
+//   Analyze → Answer → Tailor → Reflect
 //
-// Research basis: SD interviews evaluate structured progression.
-// Each panel matches a distinct evaluation dimension that interviewers
-// score independently (see ai.prompts.js SYSTEM_DESIGN codeCorrectnessGuide).
+// No code editor. No pattern chips. No algorithm suggestions.
+// No difficulty badge (replaced by stakes on the view page).
+//
+// Research basis: HR answers fail when candidates answer the surface
+// question without understanding the real concern. The form forces
+// the metacognitive step before writing.
 // ══════════════════════════════════════════════════════
-function SystemDesignWorkspace({ sdData, onSdDataChange, diagramData, onDiagramChange }) {
-    const [activeSection, setActiveSection] = useState('functionalRequirements')
+function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCategoryChange }) {
+    const [activeSection, setActiveSection] = useState('underlyingConcern')
 
     function update(field, value) {
-        onSdDataChange({ ...sdData, [field]: value })
+        onHrDataChange({ ...hrData, [field]: value })
     }
 
-    // getCategoryForm is already imported at the module level — use it directly.
-    // sdFields contains the placeholder text and hints for each section.
-    const sdConfig = getCategoryForm('SYSTEM_DESIGN')
-    const fieldConfigs = sdConfig.sdFields || {}
+    const hrConfig = getCategoryForm('HR')
+    const fieldConfigs = hrConfig.hrFields || {}
 
     const sections = [
         {
-            key: 'functionalRequirements',
-            label: 'Requirements',
-            icon: '📋',
-            sublabel: 'What the system must do',
-            color: 'text-brand-300',
-            activeBg: 'bg-brand-400/10 border-brand-400/30',
-        },
-        {
-            key: 'nonFunctionalRequirements',
-            label: 'Non-Functional',
-            icon: '⚙️',
-            sublabel: 'Scale, latency, availability',
-            color: 'text-info',
-            activeBg: 'bg-info/10 border-info/30',
-        },
-        {
-            key: 'capacityEstimation',
-            label: 'Estimation',
-            icon: '🔢',
-            sublabel: 'Back-of-envelope math',
-            color: 'text-warning',
-            activeBg: 'bg-warning/10 border-warning/30',
-        },
-        {
-            key: 'apiDesign',
-            label: 'API Design',
-            icon: '🔌',
-            sublabel: 'Endpoints and contracts',
-            color: 'text-success',
-            activeBg: 'bg-success/10 border-success/30',
-        },
-        {
-            key: 'schemaDesign',
-            label: 'Schema',
-            icon: '🗄️',
-            sublabel: 'Database tables/collections',
-            color: 'text-purple-400',
-            activeBg: 'bg-purple-400/10 border-purple-400/30',
-        },
-        {
-            key: 'architecture',
-            label: 'Architecture',
-            icon: '🏗️',
-            sublabel: 'Diagram + description',
-            color: 'text-orange-400',
-            activeBg: 'bg-orange-400/10 border-orange-400/30',
-        },
-        {
-            key: 'tradeoffReasoning',
-            label: 'Trade-offs',
-            icon: '⚖️',
-            sublabel: 'Decisions and why',
+            key: 'underlyingConcern',
+            label: 'Analyze',
+            icon: '🔍',
+            sublabel: 'What are they really checking?',
             color: 'text-danger',
             activeBg: 'bg-danger/10 border-danger/30',
+            required: true,
         },
         {
-            key: 'failureModes',
-            label: 'Failure Modes',
-            icon: '🔥',
-            sublabel: 'What breaks and mitigations',
+            key: 'answer',
+            label: 'Answer',
+            icon: '💬',
+            sublabel: 'Your complete polished response',
+            color: 'text-brand-300',
+            activeBg: 'bg-brand-400/10 border-brand-400/30',
+            required: true,
+        },
+        {
+            key: 'companyConnection',
+            label: 'Tailor',
+            icon: '🎯',
+            sublabel: 'Make it specific to this company',
+            color: 'text-success',
+            activeBg: 'bg-success/10 border-success/30',
+            required: false,
+        },
+        {
+            key: 'selfAssessment',
+            label: 'Reflect',
+            icon: '🪞',
+            sublabel: 'Honest self-assessment',
             color: 'text-warning',
             activeBg: 'bg-warning/10 border-warning/30',
+            required: false,
         },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
     const activeIndex = sections.findIndex(s => s.key === activeSection)
 
-    // Completion tracking — section is "done" if it has meaningful content (>30 chars)
-    // Architecture is done if the diagram has elements
     const completedCount = sections.filter(s =>
-        s.key === 'architecture'
-            ? diagramData && (diagramData?.elements?.length > 0 || Object.keys(diagramData || {}).length > 0)
-            : (sdData[s.key]?.trim?.()?.length ?? 0) > 30
+        (hrData[s.key]?.trim?.()?.length ?? 0) > 20
     ).length
 
-    return (
-        <div className="space-y-4">
-            {/* Progress header with section navigation */}
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
-                        <span>🏗️</span> System Design Workspace
-                    </p>
-                    <span className="text-[10px] font-bold text-text-disabled">
-                        {completedCount}/{sections.length} sections filled
-                    </span>
-                </div>
-                {/* Progress bar */}
-                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
-                    <motion.div
-                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
-                        transition={{ duration: 0.4 }}
-                        className="h-full bg-brand-400 rounded-full"
-                    />
-                </div>
-                {/* Section nav — horizontal scroll on mobile */}
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-                    {sections.map(s => {
-                        const isDone = s.key === 'architecture'
-                            ? diagramData && (diagramData?.elements?.length > 0 || Object.keys(diagramData || {}).length > 0)
-                            : (sdData[s.key]?.trim?.()?.length ?? 0) > 30
-                        const isActive = activeSection === s.key
-                        return (
-                            <button
-                                key={s.key}
-                                onClick={() => setActiveSection(s.key)}
-                                className={cn(
-                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
-                                    'transition-all duration-150 min-w-[72px]',
-                                    isActive
-                                        ? s.activeBg
-                                        : isDone
-                                            ? 'bg-success/5 border-success/20'
-                                            : 'bg-surface-3 border-border-default hover:border-border-strong'
-                                )}
-                            >
-                                <div className="flex items-center gap-0.5">
-                                    <span className="text-sm">{s.icon}</span>
-                                    {isDone && !isActive && (
-                                        <span className="text-success text-[9px] font-bold">✓</span>
-                                    )}
-                                </div>
-                                <span className={cn(
-                                    'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
-                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
-                                )}>
-                                    {s.label}
-                                </span>
-                            </button>
-                        )
-                    })}
-                </div>
-            </div>
-
-            {/* Active section panel */}
-            <motion.div
-                key={activeSection}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.15 }}
-                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
-            >
-                {/* Section header */}
-                <div className={cn(
-                    'flex items-center gap-3 px-5 py-4 border-b border-border-default',
-                    activeSectionConfig.activeBg
-                )}>
-                    <span className="text-xl">{activeSectionConfig.icon}</span>
-                    <div className="flex-1 min-w-0">
-                        <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
-                            {activeSectionConfig.label}
-                        </p>
-                        <p className="text-[11px] text-text-disabled">
-                            {activeSectionConfig.sublabel}
-                        </p>
-                    </div>
-                    <span className="text-[10px] text-text-disabled flex-shrink-0">
-                        {activeIndex + 1} / {sections.length}
-                    </span>
-                </div>
-
-                {/* Section content */}
-                <div className="p-5">
-                    {activeSection === 'architecture' ? (
-                        // Architecture: Excalidraw diagram + optional text description
-                        <div className="space-y-4">
-                            <div>
-                                <p className="text-xs font-bold text-text-primary mb-1">
-                                    Architecture Diagram
-                                </p>
-                                <p className="text-[11px] text-text-tertiary mb-3">
-                                    Draw your system components, data flows, and service boundaries.
-                                    Label every box. Show how data moves between components.
-                                </p>
-                                <div className="h-[420px] border border-border-default rounded-xl overflow-hidden bg-surface-0">
-                                    <ExcalidrawEditor
-                                        onChange={onDiagramChange}
-                                        initialData={diagramData}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <p className="text-xs font-bold text-text-primary mb-1">
-                                    Architecture Description
-                                    <span className="ml-1.5 text-text-disabled font-normal text-[10px]">
-                                        optional — text companion to your diagram
-                                    </span>
-                                </p>
-                                {fieldConfigs.architectureNotes?.hint && (
-                                    <p className="text-[11px] text-text-tertiary leading-relaxed
-                                                   bg-surface-2 border border-border-subtle rounded-lg
-                                                   px-3 py-2 mb-2">
-                                        💡 {fieldConfigs.architectureNotes.hint}
-                                    </p>
-                                )}
-                                <textarea
-                                    rows={6}
-                                    value={sdData.architectureNotes || ''}
-                                    onChange={e => update('architectureNotes', e.target.value)}
-                                    placeholder={fieldConfigs.architectureNotes?.placeholder || 'Describe your architecture...'}
-                                    className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                               text-sm text-text-primary placeholder:text-text-disabled
-                                               px-3.5 py-2.5 outline-none resize-y leading-relaxed
-                                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                                    style={{ minHeight: '120px' }}
-                                />
-                            </div>
-                        </div>
-                    ) : fieldConfigs[activeSection]?.isCode ? (
-                        // Code/monospace sections: API design and schema design
-                        <div className="space-y-3">
-                            {fieldConfigs[activeSection]?.hint && (
-                                <p className="text-[11px] text-text-tertiary leading-relaxed
-                                               bg-surface-2 border border-border-subtle
-                                               rounded-lg px-3 py-2">
-                                    💡 {fieldConfigs[activeSection].hint}
-                                </p>
-                            )}
-                            <textarea
-                                rows={fieldConfigs[activeSection]?.rows || 12}
-                                value={sdData[activeSection] || ''}
-                                onChange={e => update(activeSection, e.target.value)}
-                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                                className="w-full bg-surface-0 border border-border-strong rounded-xl
-                                           text-sm text-text-primary placeholder:text-text-disabled
-                                           font-mono px-3.5 py-2.5 outline-none resize-y leading-relaxed
-                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                                style={{ minHeight: '280px' }}
-                            />
-                        </div>
-                    ) : (
-                        // Standard prose sections: requirements, estimation, trade-offs, failures
-                        <div className="space-y-3">
-                            {fieldConfigs[activeSection]?.hint && (
-                                <p className="text-[11px] text-text-tertiary leading-relaxed
-                                               bg-surface-2 border border-border-subtle
-                                               rounded-lg px-3 py-2">
-                                    💡 {fieldConfigs[activeSection].hint}
-                                </p>
-                            )}
-                            <textarea
-                                rows={fieldConfigs[activeSection]?.rows || 8}
-                                value={sdData[activeSection] || ''}
-                                onChange={e => update(activeSection, e.target.value)}
-                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                                className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                           text-sm text-text-primary placeholder:text-text-disabled
-                                           px-3.5 py-2.5 outline-none resize-y leading-relaxed
-                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                                style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 8) * 24}px` }}
-                            />
-                        </div>
-                    )}
-                </div>
-
-                {/* Prev / Next navigation footer */}
-                <div className="flex items-center justify-between px-5 py-3
-                                border-t border-border-default bg-surface-1/50">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key)
-                        }}
-                        disabled={activeIndex === 0}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
-                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
-                                   flex items-center gap-1"
-                    >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2.5"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="19" y1="12" x2="5" y2="12" />
-                            <polyline points="12 19 5 12 12 5" />
-                        </svg>
-                        Previous
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            if (activeIndex < sections.length - 1) {
-                                setActiveSection(sections[activeIndex + 1].key)
-                            }
-                        }}
-                        disabled={activeIndex === sections.length - 1}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
-                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
-                                   flex items-center gap-1"
-                    >
-                        Next
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2.5"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                        </svg>
-                    </button>
-                </div>
-            </motion.div>
-        </div>
-    )
-}
-
-// ══════════════════════════════════════════════════════
-// LOW-LEVEL DESIGN WORKSPACE
-//
-// Four structured sections matching the LLD interview rubric:
-//   Entities → Class Hierarchy → Design Pattern → SOLID + Extensibility
-//
-// Unlike SD, LLD keeps the code editor — class implementation
-// is expected in most LLD interviews. The structured text fields
-// capture the thinking; the code captures the execution.
-// ══════════════════════════════════════════════════════
-function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, onLanguageChange }) {
-    const [activeSection, setActiveSection] = useState('entities')
-
-    function update(field, value) {
-        onLldDataChange({ ...lldData, [field]: value })
-    }
-
-    const lldConfig = getCategoryForm('LOW_LEVEL_DESIGN')
-    const fieldConfigs = lldConfig.lldFields || {}
-
-    const sections = [
-        {
-            key: 'entities',
-            label: 'Entities',
-            icon: '📦',
-            sublabel: 'Classes, interfaces, responsibilities',
-            color: 'text-purple-400',
-            activeBg: 'bg-purple-400/10 border-purple-400/30',
-        },
-        {
-            key: 'classHierarchy',
-            label: 'Hierarchy',
-            icon: '🗂️',
-            sublabel: 'Inheritance, composition, interfaces',
-            color: 'text-brand-300',
-            activeBg: 'bg-brand-400/10 border-brand-400/30',
-        },
-        {
-            key: 'implementation',
-            label: 'Code',
-            icon: '💻',
-            sublabel: 'Class implementations',
-            color: 'text-success',
-            activeBg: 'bg-success/10 border-success/30',
-        },
-        {
-            key: 'designPattern',
-            label: 'Patterns',
-            icon: '🧩',
-            sublabel: 'Which pattern and why',
-            color: 'text-warning',
-            activeBg: 'bg-warning/10 border-warning/30',
-        },
-        {
-            key: 'solidAnalysis',
-            label: 'SOLID',
-            icon: '🏛️',
-            sublabel: 'Principles satisfied and violated',
-            color: 'text-info',
-            activeBg: 'bg-info/10 border-info/30',
-        },
-        {
-            key: 'extensibilityAnalysis',
-            label: 'Extensibility',
-            icon: '🔬',
-            sublabel: 'Follow-up requirement analysis',
-            color: 'text-danger',
-            activeBg: 'bg-danger/10 border-danger/30',
-        },
-    ]
-
-    const activeSectionConfig = sections.find(s => s.key === activeSection)
-    const activeIndex = sections.findIndex(s => s.key === activeSection)
-
-    const completedCount = sections.filter(s => {
-        if (s.key === 'implementation') return (code?.trim?.()?.length ?? 0) > 30
-        return (lldData[s.key]?.trim?.()?.length ?? 0) > 30
-    }).length
+    const requiredComplete = sections
+        .filter(s => s.required)
+        .every(s => (hrData[s.key]?.trim?.()?.length ?? 0) > 20)
 
     return (
         <div className="space-y-4">
@@ -618,7 +312,7 @@ function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, 
             <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-bold text-text-primary flex items-center gap-2">
-                        <span>🔧</span> Low-Level Design Workspace
+                        <span>🤝</span> HR Answer Workspace
                     </p>
                     <span className="text-[10px] font-bold text-text-disabled">
                         {completedCount}/{sections.length} sections filled
@@ -628,14 +322,13 @@ function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, 
                     <motion.div
                         animate={{ width: `${(completedCount / sections.length) * 100}%` }}
                         transition={{ duration: 0.4 }}
-                        className="h-full bg-purple-400 rounded-full"
+                        className="h-full bg-danger rounded-full"
                     />
                 </div>
+                {/* Section navigation */}
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
                     {sections.map(s => {
-                        const isDone = s.key === 'implementation'
-                            ? (code?.trim?.()?.length ?? 0) > 30
-                            : (lldData[s.key]?.trim?.()?.length ?? 0) > 30
+                        const isDone = (hrData[s.key]?.trim?.()?.length ?? 0) > 20
                         const isActive = activeSection === s.key
                         return (
                             <button
@@ -653,6 +346,9 @@ function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, 
                             >
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
+                                    {s.required && !isDone && (
+                                        <span className="text-danger text-[9px] font-bold">*</span>
+                                    )}
                                     {isDone && !isActive && (
                                         <span className="text-success text-[9px] font-bold">✓</span>
                                     )}
@@ -684,9 +380,18 @@ function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, 
                 )}>
                     <span className="text-xl">{activeSectionConfig.icon}</span>
                     <div className="flex-1 min-w-0">
-                        <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
-                            {activeSectionConfig.label}
-                        </p>
+                        <div className="flex items-center gap-2">
+                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
+                                {activeSectionConfig.label}
+                            </p>
+                            {activeSectionConfig.required && (
+                                <span className="text-[9px] font-bold text-danger
+                                                 bg-danger/10 border border-danger/20
+                                                 px-1.5 py-px rounded-full">
+                                    Required
+                                </span>
+                            )}
+                        </div>
                         <p className="text-[11px] text-text-disabled">
                             {activeSectionConfig.sublabel}
                         </p>
@@ -698,72 +403,23 @@ function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, 
 
                 {/* Section content */}
                 <div className="p-5">
-                    {activeSection === 'implementation' ? (
-                        // Code section — Monaco editor
-                        <div className="space-y-3">
-                            <p className="text-[11px] text-text-tertiary leading-relaxed
-                                           bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
-                                💡 Write your key class implementations. Focus on constructors,
-                                core methods, and relationships. You don't need every method —
-                                focus on the design-critical parts.
-                            </p>
-                            <CodeEditor
-                                code={code}
-                                onChange={onCodeChange}
-                                language={language}
-                                onLanguageChange={lang => {
-                                    onLanguageChange(lang)
-                                    localStorage.setItem('ps_last_language', lang)
-                                }}
-                                selectorStyle="dropdown"
-                                languages={SUBMIT_LANGUAGES}
-                                height="400px"
-                                showLanguageSelector
-                            />
-                        </div>
-                    ) : fieldConfigs[activeSection]?.isCode ? (
-                        // Class hierarchy — monospace textarea
-                        <div className="space-y-3">
-                            {fieldConfigs[activeSection]?.hint && (
-                                <p className="text-[11px] text-text-tertiary leading-relaxed
-                                               bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
-                                    💡 {fieldConfigs[activeSection].hint}
-                                </p>
-                            )}
-                            <textarea
-                                rows={fieldConfigs[activeSection]?.rows || 12}
-                                value={lldData[activeSection] || ''}
-                                onChange={e => update(activeSection, e.target.value)}
-                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                                className="w-full bg-surface-0 border border-border-strong rounded-xl
-                                           text-sm text-text-primary placeholder:text-text-disabled
-                                           font-mono px-3.5 py-2.5 outline-none resize-y leading-relaxed
-                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                                style={{ minHeight: '280px' }}
-                            />
-                        </div>
-                    ) : (
-                        // Standard prose sections
-                        <div className="space-y-3">
-                            {fieldConfigs[activeSection]?.hint && (
-                                <p className="text-[11px] text-text-tertiary leading-relaxed
-                                               bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
-                                    💡 {fieldConfigs[activeSection].hint}
-                                </p>
-                            )}
-                            <textarea
-                                rows={fieldConfigs[activeSection]?.rows || 10}
-                                value={lldData[activeSection] || ''}
-                                onChange={e => update(activeSection, e.target.value)}
-                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                                className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                           text-sm text-text-primary placeholder:text-text-disabled
-                                           px-3.5 py-2.5 outline-none resize-y leading-relaxed
-                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                                style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }}
-                            />
-                        </div>
+                    {fieldConfigs[activeSection]?.hint && (
+                        <p className="text-[11px] text-text-tertiary leading-relaxed
+                                       bg-surface-2 border border-border-subtle rounded-lg px-3 py-2 mb-3">
+                            💡 {fieldConfigs[activeSection].hint}
+                        </p>
                     )}
+                    <textarea
+                        rows={fieldConfigs[activeSection]?.rows || 10}
+                        value={hrData[activeSection] || ''}
+                        onChange={e => update(activeSection, e.target.value)}
+                        placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                   text-sm text-text-primary placeholder:text-text-disabled
+                                   px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                        style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }}
+                    />
                 </div>
 
                 {/* Prev / Next footer */}
@@ -809,6 +465,359 @@ function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, 
                     </button>
                 </div>
             </motion.div>
+
+            {/* Question Category selector — separate from the main workspace sections */}
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
+                <p className="text-xs font-bold text-text-primary mb-1 flex items-center gap-2">
+                    <span>🏷️</span> Question Category
+                    <span className="text-[9px] font-normal text-text-disabled">optional — for tracking</span>
+                </p>
+                <p className="text-[11px] text-text-tertiary mb-3">
+                    Categorizing this question helps track which types of HR questions you have prepared for.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {HR_QUESTION_CATEGORIES.map(cat => (
+                        <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => onQuestionCategoryChange(
+                                questionCategory === cat.id ? '' : cat.id
+                            )}
+                            className={cn(
+                                'flex items-start gap-2 p-3 rounded-xl border text-left transition-all',
+                                questionCategory === cat.id
+                                    ? `${cat.bg} font-bold`
+                                    : 'bg-surface-3 border-border-default hover:border-border-strong'
+                            )}
+                        >
+                            <span className="text-base flex-shrink-0 mt-0.5">{cat.icon}</span>
+                            <div className="min-w-0">
+                                <p className={cn(
+                                    'text-[10px] font-bold block leading-tight',
+                                    questionCategory === cat.id ? cat.color : 'text-text-secondary'
+                                )}>
+                                    {cat.label}
+                                </p>
+                                <p className="text-[9px] text-text-disabled leading-tight mt-0.5">
+                                    {cat.desc}
+                                </p>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════
+// SYSTEM DESIGN WORKSPACE
+// ══════════════════════════════════════════════════════
+function SystemDesignWorkspace({ sdData, onSdDataChange, diagramData, onDiagramChange }) {
+    const [activeSection, setActiveSection] = useState('functionalRequirements')
+
+    function update(field, value) {
+        onSdDataChange({ ...sdData, [field]: value })
+    }
+
+    const sdConfig = getCategoryForm('SYSTEM_DESIGN')
+    const fieldConfigs = sdConfig.sdFields || {}
+
+    const sections = [
+        { key: 'functionalRequirements', label: 'Requirements', icon: '📋', sublabel: 'What the system must do', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30' },
+        { key: 'nonFunctionalRequirements', label: 'Non-Functional', icon: '⚙️', sublabel: 'Scale, latency, availability', color: 'text-info', activeBg: 'bg-info/10 border-info/30' },
+        { key: 'capacityEstimation', label: 'Estimation', icon: '🔢', sublabel: 'Back-of-envelope math', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30' },
+        { key: 'apiDesign', label: 'API Design', icon: '🔌', sublabel: 'Endpoints and contracts', color: 'text-success', activeBg: 'bg-success/10 border-success/30' },
+        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', sublabel: 'Database tables/collections', color: 'text-purple-400', activeBg: 'bg-purple-400/10 border-purple-400/30' },
+        { key: 'architecture', label: 'Architecture', icon: '🏗️', sublabel: 'Diagram + description', color: 'text-orange-400', activeBg: 'bg-orange-400/10 border-orange-400/30' },
+        { key: 'tradeoffReasoning', label: 'Trade-offs', icon: '⚖️', sublabel: 'Decisions and why', color: 'text-danger', activeBg: 'bg-danger/10 border-danger/30' },
+        { key: 'failureModes', label: 'Failure Modes', icon: '🔥', sublabel: 'What breaks and mitigations', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30' },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    const completedCount = sections.filter(s =>
+        s.key === 'architecture'
+            ? diagramData && (diagramData?.elements?.length > 0 || Object.keys(diagramData || {}).length > 0)
+            : (sdData[s.key]?.trim?.()?.length ?? 0) > 30
+    ).length
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>🏗️</span> System Design Workspace
+                    </p>
+                    <span className="text-[10px] font-bold text-text-disabled">
+                        {completedCount}/{sections.length} sections filled
+                    </span>
+                </div>
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className="h-full bg-brand-400 rounded-full"
+                    />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const isDone = s.key === 'architecture'
+                            ? diagramData && (diagramData?.elements?.length > 0 || Object.keys(diagramData || {}).length > 0)
+                            : (sdData[s.key]?.trim?.()?.length ?? 0) > 30
+                        const isActive = activeSection === s.key
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => setActiveSection(s.key)}
+                                className={cn(
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
+                                    'transition-all duration-150 min-w-[72px]',
+                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                </div>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+            <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
+            >
+                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig.activeBg)}>
+                    <span className="text-xl">{activeSectionConfig.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
+                        <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">{activeIndex + 1} / {sections.length}</span>
+                </div>
+                <div className="p-5">
+                    {activeSection === 'architecture' ? (
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-xs font-bold text-text-primary mb-1">Architecture Diagram</p>
+                                <p className="text-[11px] text-text-tertiary mb-3">Draw your system components, data flows, and service boundaries. Label every box.</p>
+                                <div className="h-[420px] border border-border-default rounded-xl overflow-hidden bg-surface-0">
+                                    <ExcalidrawEditor onChange={onDiagramChange} initialData={diagramData} />
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-text-primary mb-1">
+                                    Architecture Description
+                                    <span className="ml-1.5 text-text-disabled font-normal text-[10px]">optional</span>
+                                </p>
+                                {fieldConfigs.architectureNotes?.hint && (
+                                    <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2 mb-2">
+                                        💡 {fieldConfigs.architectureNotes.hint}
+                                    </p>
+                                )}
+                                <textarea
+                                    rows={6}
+                                    value={sdData.architectureNotes || ''}
+                                    onChange={e => update('architectureNotes', e.target.value)}
+                                    placeholder={fieldConfigs.architectureNotes?.placeholder || 'Describe your architecture...'}
+                                    className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                    style={{ minHeight: '120px' }}
+                                />
+                            </div>
+                        </div>
+                    ) : fieldConfigs[activeSection]?.isCode ? (
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 12}
+                                value={sdData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className="w-full bg-surface-0 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled font-mono px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                style={{ minHeight: '280px' }}
+                            />
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 8}
+                                value={sdData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 8) * 24}px` }}
+                            />
+                        </div>
+                    )}
+                </div>
+                <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
+                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }} disabled={activeIndex === 0} className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+                        Previous
+                    </button>
+                    <button type="button" onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }} disabled={activeIndex === sections.length - 1} className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                        Next
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════
+// LOW-LEVEL DESIGN WORKSPACE
+// ══════════════════════════════════════════════════════
+function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, onLanguageChange }) {
+    const [activeSection, setActiveSection] = useState('entities')
+
+    function update(field, value) {
+        onLldDataChange({ ...lldData, [field]: value })
+    }
+
+    const lldConfig = getCategoryForm('LOW_LEVEL_DESIGN')
+    const fieldConfigs = lldConfig.lldFields || {}
+
+    const sections = [
+        { key: 'entities', label: 'Entities', icon: '📦', sublabel: 'Classes, interfaces, responsibilities', color: 'text-purple-400', activeBg: 'bg-purple-400/10 border-purple-400/30' },
+        { key: 'classHierarchy', label: 'Hierarchy', icon: '🗂️', sublabel: 'Inheritance, composition, interfaces', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30' },
+        { key: 'implementation', label: 'Code', icon: '💻', sublabel: 'Class implementations', color: 'text-success', activeBg: 'bg-success/10 border-success/30' },
+        { key: 'designPattern', label: 'Patterns', icon: '🧩', sublabel: 'Which pattern and why', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30' },
+        { key: 'solidAnalysis', label: 'SOLID', icon: '🏛️', sublabel: 'Principles satisfied and violated', color: 'text-info', activeBg: 'bg-info/10 border-info/30' },
+        { key: 'extensibilityAnalysis', label: 'Extensibility', icon: '🔬', sublabel: 'Follow-up requirement analysis', color: 'text-danger', activeBg: 'bg-danger/10 border-danger/30' },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    const completedCount = sections.filter(s => {
+        if (s.key === 'implementation') return (code?.trim?.()?.length ?? 0) > 30
+        return (lldData[s.key]?.trim?.()?.length ?? 0) > 30
+    }).length
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>🔧</span> Low-Level Design Workspace
+                    </p>
+                    <span className="text-[10px] font-bold text-text-disabled">
+                        {completedCount}/{sections.length} sections filled
+                    </span>
+                </div>
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className="h-full bg-purple-400 rounded-full"
+                    />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const isDone = s.key === 'implementation'
+                            ? (code?.trim?.()?.length ?? 0) > 30
+                            : (lldData[s.key]?.trim?.()?.length ?? 0) > 30
+                        const isActive = activeSection === s.key
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => setActiveSection(s.key)}
+                                className={cn('flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]', isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong')}
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                </div>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+            <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
+            >
+                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig.activeBg)}>
+                    <span className="text-xl">{activeSectionConfig.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
+                        <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">{activeIndex + 1} / {sections.length}</span>
+                </div>
+                <div className="p-5">
+                    {activeSection === 'implementation' ? (
+                        <div className="space-y-3">
+                            <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                💡 Write your key class implementations. Focus on constructors, core methods, and relationships. You don't need every method — focus on the design-critical parts.
+                            </p>
+                            <CodeEditor
+                                code={code}
+                                onChange={onCodeChange}
+                                language={language}
+                                onLanguageChange={lang => { onLanguageChange(lang); localStorage.setItem('ps_last_language', lang) }}
+                                selectorStyle="dropdown"
+                                languages={SUBMIT_LANGUAGES}
+                                height="400px"
+                                showLanguageSelector
+                            />
+                        </div>
+                    ) : fieldConfigs[activeSection]?.isCode ? (
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea rows={fieldConfigs[activeSection]?.rows || 12} value={lldData[activeSection] || ''} onChange={e => update(activeSection, e.target.value)} placeholder={fieldConfigs[activeSection]?.placeholder || ''} className="w-full bg-surface-0 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled font-mono px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20" style={{ minHeight: '280px' }} />
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea rows={fieldConfigs[activeSection]?.rows || 10} value={lldData[activeSection] || ''} onChange={e => update(activeSection, e.target.value)} placeholder={fieldConfigs[activeSection]?.placeholder || ''} className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20" style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }} />
+                        </div>
+                    )}
+                </div>
+                <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
+                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }} disabled={activeIndex === 0} className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+                        Previous
+                    </button>
+                    <button type="button" onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }} disabled={activeIndex === sections.length - 1} className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                        Next
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                    </button>
+                </div>
+            </motion.div>
         </div>
     )
 }
@@ -825,12 +834,18 @@ export default function SubmitSolutionPage() {
     const category = problem?.category || 'CODING'
     const formConfig = getCategoryForm(category)
     const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
-    const hasExternalLink = !!problem?.categoryData?.sourceUrl
     const fields = formConfig.fields || {}
+
+    // Category flags
     const isSystemDesign = category === 'SYSTEM_DESIGN'
     const isLowLevelDesign = category === 'LOW_LEVEL_DESIGN'
+    const isHR = category === 'HR'
 
-    // ── Generic form state (CODING, SQL, BEHAVIORAL, CS_FUNDAMENTALS, HR, LLD) ──
+    // External links only for CODING and SQL
+    const hasExternalLink = !!problem?.categoryData?.sourceUrl &&
+        EXTERNAL_LINK_CATEGORIES.includes(category)
+
+    // ── Generic form state ──────────────────────────────
     const [code, setCode] = useState('')
     const [language, setLanguage] = useState(
         localStorage.getItem('ps_last_language') || 'PYTHON'
@@ -844,8 +859,6 @@ export default function SubmitSolutionPage() {
     const [followUpAnswers, setFollowUpAnswers] = useState({})
 
     // ── System Design workspace state ──────────────────
-    // Only populated when category === 'SYSTEM_DESIGN'.
-    // Stored in categorySpecificData JSON column on Solution.
     const [sdData, setSdData] = useState({
         functionalRequirements: '',
         nonFunctionalRequirements: '',
@@ -856,10 +869,9 @@ export default function SubmitSolutionPage() {
         tradeoffReasoning: '',
         failureModes: '',
     })
+    const [sdDiagram, setSdDiagram] = useState(null)
 
-    // ── Low-Level Design workspace state ───────────────────
-    // Only populated when category === 'LOW_LEVEL_DESIGN'.
-    // Stored in categorySpecificData JSON column on Solution.
+    // ── Low-Level Design workspace state ───────────────
     const [lldData, setLldData] = useState({
         entities: '',
         classHierarchy: '',
@@ -867,7 +879,16 @@ export default function SubmitSolutionPage() {
         solidAnalysis: '',
         extensibilityAnalysis: '',
     })
-    const [sdDiagram, setSdDiagram] = useState(null)
+
+    // ── HR workspace state ─────────────────────────────
+    // Stored in categorySpecificData JSON column on Solution.
+    const [hrData, setHrData] = useState({
+        underlyingConcern: '',
+        answer: '',
+        companyConnection: '',
+        selfAssessment: '',
+    })
+    const [hrQuestionCategory, setHrQuestionCategory] = useState('')
 
     function handleFollowUpAnswer(questionId, text) {
         setFollowUpAnswers(prev => ({ ...prev, [questionId]: text }))
@@ -883,7 +904,7 @@ export default function SubmitSolutionPage() {
             return
         }
 
-        // SD-specific validation: at least one meaningful section must be filled
+        // SD validation
         if (isSystemDesign) {
             const hasMinContent =
                 (sdData.functionalRequirements?.trim().length ?? 0) > 20 ||
@@ -894,13 +915,23 @@ export default function SubmitSolutionPage() {
             }
         }
 
-        // For LLD, validate that at minimum entities are identified
+        // LLD validation
         if (isLowLevelDesign) {
             const hasMinContent =
                 (lldData.entities?.trim().length ?? 0) > 20 ||
                 (code?.trim().length ?? 0) > 20
             if (!hasMinContent) {
                 toast.error('Fill in Entity Identification or write some implementation code before submitting.')
+                return
+            }
+        }
+
+        // HR validation: at least the analysis and answer must be filled
+        if (isHR) {
+            const hasAnalysis = (hrData.underlyingConcern?.trim().length ?? 0) > 20
+            const hasAnswer = (hrData.answer?.trim().length ?? 0) > 20
+            if (!hasAnalysis && !hasAnswer) {
+                toast.error('Fill in "What they\'re really checking" or "Your Answer" before submitting.')
                 return
             }
         }
@@ -912,32 +943,20 @@ export default function SubmitSolutionPage() {
                 answerText: text.trim(),
             }))
 
-        // For System Design, map SD fields into the existing Solution columns
-        // so they remain queryable for RAG and 6D report while also storing
-        // the full structured data in categorySpecificData.
-        //
-        // Mapping rationale:
-        //   approach           → functionalRequirements (primary design input)
-        //   bruteForce         → nonFunctionalRequirements
-        //   optimizedApproach  → schemaDesign
-        //   code               → apiDesign (text/code format)
-        //   keyInsight         → tradeoffReasoning (the "aha" of the design)
-        //   feynmanExplanation → architectureNotes (the explanation of the system)
-        //   realWorldConnection→ capacityEstimation
-        //   timeComplexity     → failureModes
+        // Field mapping into Solution columns for backward compat and RAG.
+        // HR field mapping:
+        //   approach           → underlyingConcern (primary analytical input)
+        //   keyInsight         → answer (the actual polished response — most important)
+        //   feynmanExplanation → companyConnection (company-specific evidence)
+        //   realWorldConnection→ selfAssessment (reflection on the answer)
         const data = {
-            // LLD field mapping:
-            //   approach           → entities (primary design input)
-            //   bruteForce         → classHierarchy
-            //   keyInsight         → designPattern justification
-            //   feynmanExplanation → solidAnalysis
-            //   realWorldConnection→ extensibilityAnalysis
-            //   code               → actual class implementation code (unchanged)
             approach: isSystemDesign
                 ? sdData.functionalRequirements
                 : isLowLevelDesign
                     ? lldData.entities
-                    : (approach || null),
+                    : isHR
+                        ? hrData.underlyingConcern
+                        : (approach || null),
             bruteForce: isSystemDesign
                 ? sdData.nonFunctionalRequirements
                 : isLowLevelDesign
@@ -946,24 +965,40 @@ export default function SubmitSolutionPage() {
             optimizedApproach: isSystemDesign
                 ? sdData.schemaDesign
                 : (approach || null),
-            code: isSystemDesign ? sdData.apiDesign : (code || null),
-            language: isSystemDesign ? 'plaintext' : (code ? language : null),
-            pattern: pattern || null,
+            code: isSystemDesign
+                ? sdData.apiDesign
+                : isHR
+                    ? null  // HR never has code
+                    : (code || null),
+            language: isSystemDesign
+                ? 'plaintext'
+                : isHR
+                    ? null
+                    : (code ? language : null),
+            pattern: isHR
+                ? (hrQuestionCategory || null)  // store HR question category in pattern field
+                : (pattern || null),
             keyInsight: isSystemDesign
                 ? sdData.tradeoffReasoning
                 : isLowLevelDesign
                     ? lldData.designPattern
-                    : (keyInsight || null),
+                    : isHR
+                        ? hrData.answer
+                        : (keyInsight || null),
             feynmanExplanation: isSystemDesign
                 ? sdData.architectureNotes
                 : isLowLevelDesign
                     ? lldData.solidAnalysis
-                    : (feynmanExplanation || null),
+                    : isHR
+                        ? hrData.companyConnection
+                        : (feynmanExplanation || null),
             realWorldConnection: isSystemDesign
                 ? sdData.capacityEstimation
                 : isLowLevelDesign
                     ? lldData.extensibilityAnalysis
-                    : (realWorldConnection || null),
+                    : isHR
+                        ? hrData.selfAssessment
+                        : (realWorldConnection || null),
             timeComplexity: isSystemDesign ? sdData.failureModes : null,
             spaceComplexity: null,
             confidence,
@@ -971,7 +1006,9 @@ export default function SubmitSolutionPage() {
                 ? { ...sdData, diagramData: sdDiagram }
                 : isLowLevelDesign
                     ? { ...lldData, implementationCode: code }
-                    : undefined,
+                    : isHR
+                        ? { ...hrData, questionCategory: hrQuestionCategory }
+                        : undefined,
             followUpAnswers: followUpAnswersArray,
         }
 
@@ -980,7 +1017,9 @@ export default function SubmitSolutionPage() {
             toast.success(
                 isSystemDesign
                     ? 'Design submitted! AI will analyze your architecture.'
-                    : 'Solution submitted! AI will analyze it.'
+                    : isHR
+                        ? 'Answer submitted! AI will review your authenticity and specificity.'
+                        : 'Solution submitted! AI will analyze it.'
             )
             navigate(`/problems/${problemId}`)
         } catch {
@@ -1022,19 +1061,31 @@ export default function SubmitSolutionPage() {
             {/* Problem header */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
-                        {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
-                    </Badge>
-                    {catInfo && (
+                    {/* HR: stakes badge instead of difficulty */}
+                    {isHR ? (
                         <span className={cn(
-                            'text-[10px] font-bold px-2 py-0.5 rounded-full border',
-                            catInfo.bg
+                            'text-xs font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1',
+                            HR_STAKES[problem.difficulty]?.bg
                         )}>
+                            <span>{HR_STAKES[problem.difficulty]?.icon}</span>
+                            <span className={HR_STAKES[problem.difficulty]?.color}>
+                                {HR_STAKES[problem.difficulty]?.label}
+                            </span>
+                        </span>
+                    ) : (
+                        <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
+                            {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
+                        </Badge>
+                    )}
+                    {catInfo && (
+                        <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', catInfo.bg)}>
                             {catInfo.icon} {catInfo.label}
                         </span>
                     )}
+                    {/* Platform — CODING/SQL only */}
                     {problem.categoryData?.platform &&
-                        problem.categoryData.platform !== 'OTHER' && (
+                        problem.categoryData.platform !== 'OTHER' &&
+                        EXTERNAL_LINK_CATEGORIES.includes(category) && (
                             <span className="text-[10px] font-bold text-text-disabled bg-surface-3
                                              border border-border-subtle rounded-full px-2 py-px">
                                 {problem.categoryData.platform}
@@ -1044,8 +1095,9 @@ export default function SubmitSolutionPage() {
                 <h2 className="text-base font-bold text-text-primary mb-2">
                     {problem.title}
                 </h2>
-                {/* External link — shown for CODING/SQL only, not SD */}
-                {hasExternalLink && !isSystemDesign && (
+
+                {/* External link — CODING/SQL only */}
+                {hasExternalLink && (
                     <a
                         href={problem.categoryData.sourceUrl}
                         target="_blank"
@@ -1067,44 +1119,34 @@ export default function SubmitSolutionPage() {
                             : 'External Site'} →
                     </a>
                 )}
-                {/* SD: show the problem description inline for quick reference */}
+
+                {/* SD: inline design brief */}
                 {isSystemDesign && problem.description && (
-                    <div className="mt-3 p-3 bg-surface-2 border border-border-default
-                                    rounded-xl text-xs text-text-tertiary leading-relaxed">
-                        <p className="text-[10px] font-bold text-text-disabled uppercase
-                                       tracking-widest mb-1.5">
-                            Design Brief
-                        </p>
+                    <div className="mt-3 p-3 bg-surface-2 border border-border-default rounded-xl text-xs text-text-tertiary leading-relaxed">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">Design Brief</p>
                         <p className="whitespace-pre-wrap">{problem.description}</p>
                     </div>
                 )}
 
-                {/* LLD: show the problem description inline */}
+                {/* LLD: inline design challenge */}
                 {isLowLevelDesign && problem.description && (
-                    <div className="mt-3 p-3 bg-surface-2 border border-border-default
-                    rounded-xl text-xs text-text-tertiary leading-relaxed">
-                        <p className="text-[10px] font-bold text-text-disabled uppercase
-                       tracking-widest mb-1.5">
-                            Design Challenge
-                        </p>
+                    <div className="mt-3 p-3 bg-surface-2 border border-border-default rounded-xl text-xs text-text-tertiary leading-relaxed">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">Design Challenge</p>
                         <p className="whitespace-pre-wrap">{problem.description}</p>
                     </div>
                 )}
             </div>
 
-            {/* Info banner — external link problems (CODING/SQL only) */}
-            {hasExternalLink && !isSystemDesign && (
+            {/* Banners — category-specific tips */}
+            {hasExternalLink && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-info/5 border border-info/20 rounded-xl p-4 mb-6
-                               flex items-start gap-3"
+                    className="bg-info/5 border border-info/20 rounded-xl p-4 mb-6 flex items-start gap-3"
                 >
                     <span className="text-lg flex-shrink-0">💡</span>
                     <div>
-                        <p className="text-sm font-semibold text-text-primary mb-0.5">
-                            Solve first, then reflect here
-                        </p>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">Solve first, then reflect here</p>
                         <p className="text-xs text-text-tertiary leading-relaxed">
                             Solve on {problem.categoryData?.platform && problem.categoryData.platform !== 'OTHER'
                                 ? problem.categoryData.platform
@@ -1114,46 +1156,33 @@ export default function SubmitSolutionPage() {
                     </div>
                 </motion.div>
             )}
-
-            {/* SD interview tip banner */}
             {isSystemDesign && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mb-6
-                               flex items-start gap-3"
-                >
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🎯</span>
                     <div>
-                        <p className="text-sm font-semibold text-text-primary mb-0.5">
-                            Work through it like a real interview
-                        </p>
-                        <p className="text-xs text-text-tertiary leading-relaxed">
-                            Start with requirements — never jump to architecture first.
-                            Fill each section in order. Interviewers score each dimension independently.
-                            You don't need to fill every section, but the more you fill, the richer your AI feedback.
-                        </p>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">Work through it like a real interview</p>
+                        <p className="text-xs text-text-tertiary leading-relaxed">Start with requirements — never jump to architecture first. Fill each section in order. Interviewers score each dimension independently.</p>
                     </div>
                 </motion.div>
             )}
-
-            {/* LLD interview tip banner */}
             {isLowLevelDesign && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-purple-400/5 border border-purple-400/20 rounded-xl p-4 mb-6
-                   flex items-start gap-3"
-                >
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-purple-400/5 border border-purple-400/20 rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🔧</span>
                     <div>
-                        <p className="text-sm font-semibold text-text-primary mb-0.5">
-                            Start with entities, not code
-                        </p>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">Start with entities, not code</p>
+                        <p className="text-xs text-text-tertiary leading-relaxed">The most common LLD mistake is jumping straight to implementation. Identify your classes and their single responsibilities first.</p>
+                    </div>
+                </motion.div>
+            )}
+            {isHR && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-danger/5 border border-danger/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                    <span className="text-lg flex-shrink-0">🤝</span>
+                    <div>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">Analyze before you answer</p>
                         <p className="text-xs text-text-tertiary leading-relaxed">
-                            The most common LLD mistake is jumping straight to implementation.
-                            Identify your classes and their single responsibilities first.
-                            Ask: "What is this class responsible for?" If the answer has "and" in it, split it.
+                            HR interviews are not tests of knowledge — they are risk assessments. Before writing your answer,
+                            identify what the interviewer is really checking. Generic answers fail because they answer
+                            the surface question, not the real concern.
                         </p>
                     </div>
                 </motion.div>
@@ -1161,7 +1190,6 @@ export default function SubmitSolutionPage() {
 
             {/* ── Form sections ──────────────────────────── */}
             <div className="space-y-5">
-
                 {isSystemDesign ? (
                     <SystemDesignWorkspace
                         sdData={sdData}
@@ -1178,10 +1206,17 @@ export default function SubmitSolutionPage() {
                         language={language}
                         onLanguageChange={setLanguage}
                     />
+                ) : isHR ? (
+                    <HRWorkspace
+                        hrData={hrData}
+                        onHrDataChange={setHrData}
+                        questionCategory={hrQuestionCategory}
+                        onQuestionCategoryChange={setHrQuestionCategory}
+                    />
                 ) : (
-                    // ── All other categories: generic form ────────────
+                    // ── All other categories: generic form ─────────────
                     <>
-                        {/* Code section — Monaco editor */}
+                        {/* Code section — Monaco editor (CODING, SQL only) */}
                         {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
                             <FormSection
                                 icon="💻"
@@ -1204,26 +1239,18 @@ export default function SubmitSolutionPage() {
                                     showLanguageSelector
                                 />
                                 <p className="text-[10px] text-text-disabled mt-2">
-                                    🤖 AI will check correctness, detect edge cases, analyze complexity,
-                                    and flag any issues
+                                    🤖 AI will check correctness, detect edge cases, analyze complexity, and flag any issues
                                 </p>
                             </FormSection>
                         )}
-
                         {/* Approach / Response */}
                         <FormSection
-                            icon={
-                                category === 'BEHAVIORAL' ? '🎯'
-                                    : category === 'HR' ? '💬'
-                                        : category === 'LOW_LEVEL_DESIGN' ? '📐'
-                                            : '📝'
-                            }
+                            icon={category === 'BEHAVIORAL' ? '🎯' : category === 'LOW_LEVEL_DESIGN' ? '📐' : '📝'}
                             title={
                                 category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response')
-                                    : category === 'HR' ? 'Your Answer'
-                                        : category === 'CS_FUNDAMENTALS' ? 'Your Explanation'
-                                            : category === 'LOW_LEVEL_DESIGN' ? 'Your Design Approach'
-                                                : 'Your Approach'
+                                    : category === 'CS_FUNDAMENTALS' ? 'Your Explanation'
+                                        : category === 'LOW_LEVEL_DESIGN' ? 'Your Design Approach'
+                                            : 'Your Approach'
                             }
                             hint={
                                 hasExternalLink
@@ -1246,7 +1273,6 @@ export default function SubmitSolutionPage() {
                                 minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'}
                             />
                         </FormSection>
-
                         {/* Pattern identification */}
                         {fields.patternIdentified?.show && (
                             <FormSection
@@ -1261,7 +1287,6 @@ export default function SubmitSolutionPage() {
                                 />
                             </FormSection>
                         )}
-
                         {/* Key Insight */}
                         {fields.keyInsight?.show && (
                             <FormSection
@@ -1282,7 +1307,6 @@ export default function SubmitSolutionPage() {
                                 />
                             </FormSection>
                         )}
-
                         {/* Feynman Explanation */}
                         {fields.simpleExplanation?.show && (
                             <FormSection
@@ -1298,7 +1322,6 @@ export default function SubmitSolutionPage() {
                                 />
                             </FormSection>
                         )}
-
                         {/* Challenges / Real-world */}
                         {fields.challenges?.show && (
                             <FormSection
@@ -1316,30 +1339,35 @@ export default function SubmitSolutionPage() {
                     </>
                 )}
 
-                {/* Confidence — shown for ALL categories */}
+                {/* Confidence — shown for ALL categories with category-appropriate hint */}
                 <FormSection
                     icon="📊"
                     title="Confidence Level"
                     hint={
                         isSystemDesign
-                            ? 'How confident are you in this design?'
+                            ? 'How confident are you in this design? Be honest — AI flags mismatches.'
                             : isLowLevelDesign
                                 ? 'How confident are you in your object design and SOLID application?'
-                                : "Be honest — AI will flag if your confidence doesn't match your solution quality"
+                                : isHR
+                                    ? 'How authentic and specific does this answer feel? Is it genuinely you, or still generic?'
+                                    : "Be honest — AI will flag if your confidence doesn't match your solution quality"
                     }
                 >
                     <ConfidencePicker value={confidence} onChange={setConfidence} />
                 </FormSection>
 
-                {/* Follow-up questions — shown for all categories that have them */}
+                {/* Follow-up questions */}
                 {problem.followUpQuestions?.length > 0 && (
                     <FormSection
-                        icon="🧠"
-                        title="Follow-up Questions"
+                        icon={isHR ? '💬' : '🧠'}
+                        title={isHR ? 'Probing Follow-up Questions' : 'Follow-up Questions'}
                         badge={answeredCount > 0
                             ? `${answeredCount}/${followUpCount} answered`
                             : 'Optional — earn bonus points'}
-                        hint="Each answer earns bonus points in your AI review. Skipped questions are noted."
+                        hint={isHR
+                            ? 'These are the follow-up questions a real HR interviewer would ask. Preparing specific responses is what separates good candidates from great ones.'
+                            : 'Each answer earns bonus points in your AI review. Skipped questions are noted.'
+                        }
                     >
                         <div className="space-y-3">
                             {problem.followUpQuestions.map((fq, i) => (
@@ -1349,13 +1377,14 @@ export default function SubmitSolutionPage() {
                                     index={i}
                                     answer={followUpAnswers[fq.id] || ''}
                                     onAnswerChange={handleFollowUpAnswer}
+                                    isHR={isHR}
                                 />
                             ))}
                         </div>
                         {followUpCount > 0 && (
                             <div className="mt-4 pt-4 border-t border-border-subtle">
                                 <div className="flex items-center justify-between text-xs mb-1.5">
-                                    <span className="text-text-disabled">Follow-up progress</span>
+                                    <span className="text-text-disabled">Progress</span>
                                     <span className={cn(
                                         'font-semibold',
                                         answeredCount === followUpCount ? 'text-success'
@@ -1363,7 +1392,7 @@ export default function SubmitSolutionPage() {
                                                 : 'text-text-disabled'
                                     )}>
                                         {answeredCount}/{followUpCount} answered
-                                        {answeredCount > 0 && ` (+${Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus)`}
+                                        {!isHR && answeredCount > 0 && ` (+${Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus)`}
                                     </span>
                                 </div>
                                 <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
@@ -1415,7 +1444,8 @@ export default function SubmitSolutionPage() {
                             </svg>
                             {isSystemDesign ? 'Submit Design'
                                 : isLowLevelDesign ? 'Submit Design'
-                                    : 'Submit Solution'}
+                                    : isHR ? 'Submit My Answer'
+                                        : 'Submit Solution'}
                         </Button>
                     </div>
                 </div>
