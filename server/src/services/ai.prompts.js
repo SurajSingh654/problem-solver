@@ -590,23 +590,31 @@ ${hrSpecific?.companyConnection || data.feynmanExplanation || "Not provided"}
 Self-Assessment:
 ${hrSpecific?.selfAssessment || data.realWorldConnection || "Not provided"}`;
   } else if (data.category === "BEHAVIORAL") {
-    submissionSection = `Question Type / Competency:
-${data.pattern || "Not specified"}
+    // Read from categorySpecificData (new format — BehavioralWorkspace) first.
+    // Fall back to old field mapping for any submissions made before this change.
+    // This preserves backward compatibility with zero breaking changes.
+    const behavioralSpecific =
+      data.categorySpecificData &&
+      (data.categorySpecificData.situation !== undefined ||
+        data.categorySpecificData.action !== undefined ||
+        data.categorySpecificData.competency !== undefined)
+        ? data.categorySpecificData
+        : null;
+
+    submissionSection = `Competency Being Tested:
+${behavioralSpecific?.competency || data.pattern || "Not specified"}
 
 STAR — Situation & Task:
-${data.approach || "Not provided"}
+${behavioralSpecific?.situation || data.approach || "Not provided"}
 
-STAR — Action (Step by Step):
-${data.optimizedApproach || data.code || "Not provided"}
+STAR — Action (What the candidate personally did, step by step):
+${behavioralSpecific?.action || data.optimizedApproach || data.code || "Not provided — THIS IS THE CRITICAL MISSING SECTION IF EMPTY"}
 
 STAR — Result & Impact:
-${data.feynmanExplanation || "Not provided"}
+${behavioralSpecific?.result || data.keyInsight || "Not provided"}
 
-Key Learning:
-${data.keyInsight || "Not provided"}
-
-What Would You Do Differently:
-${data.realWorldConnection || "Not provided"}`;
+Reflection (Learning & What They Would Do Differently):
+${behavioralSpecific?.reflection || data.feynmanExplanation || "Not provided"}`;
   } else if (data.category === "CS_FUNDAMENTALS") {
     submissionSection = `Core Topic:
 ${data.pattern || "Not specified"}

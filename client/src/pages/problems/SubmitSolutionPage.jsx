@@ -830,6 +830,367 @@ function LLDWorkspace({ lldData, onLldDataChange, code, onCodeChange, language, 
 }
 
 // ══════════════════════════════════════════════════════
+// BEHAVIORAL WORKSPACE
+//
+// Replaces the generic form for BEHAVIORAL category.
+// Five sections following the STAR framework — each section
+// is a named, purposeful step grounded in behavioral psychology.
+//
+// Key structural difference from the old generic form:
+//   The Action field (showActionSection / actionField) was defined
+//   in categoryForms.js but never rendered in the generic path.
+//   Every behavioral submission on this platform has been evaluated
+//   without the Action component of STAR. This workspace fixes that.
+//
+// Data stored in categorySpecificData JSON column:
+//   { competency, situation, action, result, reflection }
+//
+// The `pattern` Solution column stores the competency value —
+// consistent with HR using `pattern` for hrQuestionCategory.
+// This preserves leaderboard, RAG, and 6D dimension signals.
+// ══════════════════════════════════════════════════════
+function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
+    const [activeSection, setActiveSection] = useState('competency')
+
+    function update(field, value) {
+        onBehavioralDataChange({ ...behavioralData, [field]: value })
+    }
+
+    const behavioralConfig = getCategoryForm('BEHAVIORAL')
+    const fieldConfigs = behavioralConfig.behavioralFields || {}
+
+    // Section definitions — order matters.
+    // Competency is forced first: metacognitive framing before narrative.
+    // Reflection is last: synthesis only happens after the full story is told.
+    const sections = [
+        {
+            key: 'competency',
+            label: 'Competency',
+            icon: '🎯',
+            sublabel: 'What is this question really testing?',
+            color: 'text-success',
+            activeBg: 'bg-success/10 border-success/30',
+            required: true,
+        },
+        {
+            key: 'situation',
+            label: 'Situation',
+            icon: '📖',
+            sublabel: 'Set the scene — specific and scoped',
+            color: 'text-brand-300',
+            activeBg: 'bg-brand-400/10 border-brand-400/30',
+            required: true,
+        },
+        {
+            key: 'action',
+            label: 'Action',
+            icon: '⚡',
+            sublabel: 'What YOU did — use "I" not "we"',
+            color: 'text-warning',
+            activeBg: 'bg-warning/10 border-warning/30',
+            required: true,
+        },
+        {
+            key: 'result',
+            label: 'Result',
+            icon: '📊',
+            sublabel: 'Quantified outcome and impact',
+            color: 'text-info',
+            activeBg: 'bg-info/10 border-info/30',
+            required: false,
+        },
+        {
+            key: 'reflection',
+            label: 'Reflection',
+            icon: '🔬',
+            sublabel: 'Learning and what you\'d change',
+            color: 'text-purple-400',
+            activeBg: 'bg-purple-400/10 border-purple-400/30',
+            required: false,
+        },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    // A section is "done" when it has meaningful content.
+    // 30-char threshold matches HR and LLD workspace consistency.
+    const completedCount = sections.filter(s =>
+        (behavioralData[s.key]?.trim?.()?.length ?? 0) > 30
+    ).length
+
+    const requiredSections = sections.filter(s => s.required)
+    const requiredComplete = requiredSections.every(s =>
+        (behavioralData[s.key]?.trim?.()?.length ?? 0) > 30
+    )
+
+    // Character count for the active section — coaching signal
+    const activeCharCount = (behavioralData[activeSection]?.trim?.()?.length ?? 0)
+
+    // Minimum viable answer thresholds by section (characters)
+    // Grounded in average spoken word count for strong STAR answers:
+    //   Competency: 100–300 chars (2–5 sentences of analysis)
+    //   Situation:  300–600 chars (sets real context)
+    //   Action:     600–1200 chars (step-by-step, most substance)
+    //   Result:     150–400 chars (quantified, concise)
+    //   Reflection: 200–500 chars (genuine, not performative)
+    const minThresholds = {
+        competency: 100,
+        situation: 300,
+        action: 600,
+        result: 150,
+        reflection: 200,
+    }
+
+    const threshold = minThresholds[activeSection] || 100
+    const isShort = activeCharCount > 0 && activeCharCount < threshold
+    const progressPct = Math.min(100, (activeCharCount / threshold) * 100)
+
+    return (
+        <div className="space-y-4">
+            {/* Progress header */}
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>🗣️</span> STAR Workspace
+                    </p>
+                    <div className="flex items-center gap-2">
+                        {requiredComplete && (
+                            <span className="text-[10px] font-bold text-success flex items-center gap-1">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="3"
+                                    strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                Core complete
+                            </span>
+                        )}
+                        <span className="text-[10px] font-bold text-text-disabled">
+                            {completedCount}/{sections.length} sections
+                        </span>
+                    </div>
+                </div>
+
+                {/* Overall progress bar */}
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className="h-full bg-success rounded-full"
+                    />
+                </div>
+
+                {/* Section navigation tabs */}
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const isDone = (behavioralData[s.key]?.trim?.()?.length ?? 0) > 30
+                        const isActive = activeSection === s.key
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => setActiveSection(s.key)}
+                                className={cn(
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
+                                    'transition-all duration-150 min-w-[72px]',
+                                    isActive
+                                        ? s.activeBg
+                                        : isDone
+                                            ? 'bg-success/5 border-success/20'
+                                            : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {s.required && !isDone && !isActive && (
+                                        <span className="text-danger text-[9px] font-bold">*</span>
+                                    )}
+                                    {isDone && !isActive && (
+                                        <span className="text-success text-[9px] font-bold">✓</span>
+                                    )}
+                                </div>
+                                <span className={cn(
+                                    'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
+                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
+                                )}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* STAR framework reminder — collapses once all required sections are touched */}
+            {!requiredComplete && (
+                <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-success/3 border border-success/15 rounded-xl px-4 py-3
+                               flex items-start gap-3"
+                >
+                    <span className="text-base flex-shrink-0 mt-0.5">💡</span>
+                    <div>
+                        <p className="text-xs font-semibold text-text-primary mb-1">
+                            Fill sections in order for the strongest answer
+                        </p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">
+                            Naming the <strong>Competency</strong> first is the most important step — it prevents you
+                            from answering the surface question instead of the real one. Most candidates skip it and
+                            give generic answers as a result.
+                        </p>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Active section panel */}
+            <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
+            >
+                {/* Section header */}
+                <div className={cn(
+                    'flex items-center gap-3 px-5 py-4 border-b border-border-default',
+                    activeSectionConfig.activeBg
+                )}>
+                    <span className="text-xl">{activeSectionConfig.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
+                                {activeSectionConfig.label}
+                            </p>
+                            {activeSectionConfig.required && (
+                                <span className="text-[9px] font-bold text-danger
+                                                 bg-danger/10 border border-danger/20
+                                                 px-1.5 py-px rounded-full">
+                                    Required
+                                </span>
+                            )}
+                            {!activeSectionConfig.required && (
+                                <span className="text-[9px] font-bold text-text-disabled
+                                                 bg-surface-3 border border-border-default
+                                                 px-1.5 py-px rounded-full">
+                                    High signal
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-text-disabled">
+                            {activeSectionConfig.sublabel}
+                        </p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">
+                        {activeIndex + 1} / {sections.length}
+                    </span>
+                </div>
+
+                <div className="p-5 space-y-3">
+                    {/* Coaching hint */}
+                    {fieldConfigs[activeSection]?.hint && (
+                        <p className="text-[11px] text-text-tertiary leading-relaxed
+                                       bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                            💡 {fieldConfigs[activeSection].hint}
+                        </p>
+                    )}
+
+                    {/* Text area */}
+                    <textarea
+                        rows={fieldConfigs[activeSection]?.rows || 10}
+                        value={behavioralData[activeSection] || ''}
+                        onChange={e => update(activeSection, e.target.value)}
+                        placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                   text-sm text-text-primary placeholder:text-text-disabled
+                                   px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                        style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }}
+                    />
+
+                    {/* Per-section depth indicator */}
+                    {activeCharCount > 0 && (
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[10px]">
+                                <span className={cn(
+                                    'font-semibold',
+                                    activeCharCount >= threshold
+                                        ? 'text-success'
+                                        : isShort
+                                            ? 'text-warning'
+                                            : 'text-text-disabled'
+                                )}>
+                                    {activeCharCount >= threshold
+                                        ? '✓ Good depth'
+                                        : isShort
+                                            ? `Still shallow — aim for ${threshold - activeCharCount} more chars`
+                                            : 'Keep going...'}
+                                </span>
+                                <span className="text-text-disabled tabular-nums">
+                                    {activeCharCount} / ~{threshold}
+                                </span>
+                            </div>
+                            <div className="h-1 bg-surface-3 rounded-full overflow-hidden">
+                                <motion.div
+                                    animate={{ width: `${progressPct}%` }}
+                                    transition={{ duration: 0.3 }}
+                                    className={cn(
+                                        'h-full rounded-full',
+                                        activeCharCount >= threshold
+                                            ? 'bg-success'
+                                            : 'bg-warning'
+                                    )}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Prev / Next navigation footer */}
+                <div className="flex items-center justify-between px-5 py-3
+                                border-t border-border-default bg-surface-1/50">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key)
+                        }}
+                        disabled={activeIndex === 0}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12" />
+                            <polyline points="12 19 5 12 12 5" />
+                        </svg>
+                        Previous
+                    </button>
+
+                    {/* Jump to next incomplete required section shortcut */}
+                    {activeIndex < sections.length - 1 && (
+                        <button
+                            type="button"
+                            onClick={() => setActiveSection(sections[activeIndex + 1].key)}
+                            className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                       transition-colors flex items-center gap-1"
+                        >
+                            Next
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2.5"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                                <polyline points="12 5 19 12 12 19" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
 export default function SubmitSolutionPage() {
@@ -847,6 +1208,7 @@ export default function SubmitSolutionPage() {
     const isSystemDesign = category === 'SYSTEM_DESIGN'
     const isLowLevelDesign = category === 'LOW_LEVEL_DESIGN'
     const isHR = category === 'HR'
+    const isBehavioral = category === 'BEHAVIORAL'
 
     // External links only for CODING and SQL
     const hasExternalLink = !!problem?.categoryData?.sourceUrl &&
@@ -885,6 +1247,17 @@ export default function SubmitSolutionPage() {
         designPattern: '',
         solidAnalysis: '',
         extensibilityAnalysis: '',
+    })
+
+    // ── Behavioral workspace state ─────────────────────
+    // Stored in categorySpecificData JSON column — same pattern as HR/SD/LLD.
+    // `pattern` Solution column stores the competency value for RAG + 6D signals.
+    const [behavioralData, setBehavioralData] = useState({
+        competency: '',
+        situation: '',
+        action: '',
+        result: '',
+        reflection: '',
     })
 
     // ── HR workspace state ─────────────────────────────
@@ -949,6 +1322,22 @@ export default function SubmitSolutionPage() {
             }
         }
 
+        // Behavioral validation: require at minimum situation OR action.
+        // Competency is the ideal first step but we don't hard-block on it —
+        // the AI reviewer will flag its absence in the evaluation.
+        // We block only fully empty submissions.
+        if (isBehavioral) {
+            const hasSituation = (behavioralData.situation?.trim().length ?? 0) > 0
+            const hasAction = (behavioralData.action?.trim().length ?? 0) > 0
+            if (!hasSituation && !hasAction) {
+                toast.error(
+                    'Your STAR workspace is empty. Fill in at least Situation or Action before submitting.',
+                    { duration: 5000 }
+                )
+                return
+            }
+        }
+
         const followUpAnswersArray = Object.entries(followUpAnswers)
             .filter(([, text]) => text?.trim())
             .map(([questionId, text]) => ({
@@ -969,59 +1358,88 @@ export default function SubmitSolutionPage() {
                     ? lldData.entities
                     : isHR
                         ? hrData.underlyingConcern
-                        : (approach || null),
+                        : isBehavioral
+                            ? behavioralData.situation   // Situation → approach for backward compat + RAG embedding
+                            : (approach || null),
+
             bruteForce: isSystemDesign
                 ? sdData.nonFunctionalRequirements
                 : isLowLevelDesign
                     ? lldData.classHierarchy
                     : null,
+
             optimizedApproach: isSystemDesign
                 ? sdData.schemaDesign
-                : (approach || null),
+                : isBehavioral
+                    ? behavioralData.action   // Action → optimizedApproach — THIS is the field the old generic form never populated
+                    : (approach || null),
+
             code: isSystemDesign
                 ? sdData.apiDesign
                 : isHR
-                    ? null  // HR never has code
-                    : (code || null),
+                    ? null
+                    : isBehavioral
+                        ? null   // Behavioral never has code
+                        : (code || null),
+
             language: isSystemDesign
                 ? 'plaintext'
                 : isHR
                     ? null
-                    : (code ? language : null),
+                    : isBehavioral
+                        ? null
+                        : (code ? language : null),
+
             pattern: isHR
-                ? (hrQuestionCategory || null)  // store HR question category in pattern field
-                : (pattern || null),
+                ? (hrQuestionCategory || null)
+                : isBehavioral
+                    ? (behavioralData.competency?.trim() || null)  // competency stored in pattern for RAG + 6D
+                    : (pattern || null),
+
             keyInsight: isSystemDesign
                 ? sdData.tradeoffReasoning
                 : isLowLevelDesign
                     ? lldData.designPattern
                     : isHR
                         ? hrData.answer
-                        : (keyInsight || null),
+                        : isBehavioral
+                            ? behavioralData.result   // Result → keyInsight
+                            : (keyInsight || null),
+
             feynmanExplanation: isSystemDesign
                 ? sdData.architectureNotes
                 : isLowLevelDesign
                     ? lldData.solidAnalysis
                     : isHR
                         ? hrData.companyConnection
-                        : (feynmanExplanation || null),
+                        : isBehavioral
+                            ? behavioralData.reflection   // Reflection → feynmanExplanation
+                            : (feynmanExplanation || null),
+
             realWorldConnection: isSystemDesign
                 ? sdData.capacityEstimation
                 : isLowLevelDesign
                     ? lldData.extensibilityAnalysis
                     : isHR
                         ? hrData.selfAssessment
-                        : (realWorldConnection || null),
+                        : isBehavioral
+                            ? null
+                            : (realWorldConnection || null),
+
             timeComplexity: isSystemDesign ? sdData.failureModes : null,
             spaceComplexity: null,
             confidence,
+
             categorySpecificData: isSystemDesign
                 ? { ...sdData, diagramData: sdDiagram }
                 : isLowLevelDesign
                     ? { ...lldData, implementationCode: code }
                     : isHR
                         ? { ...hrData, questionCategory: hrQuestionCategory }
-                        : undefined,
+                        : isBehavioral
+                            ? { ...behavioralData }   // All 5 STAR fields stored with semantic keys
+                            : undefined,
+
             followUpAnswers: followUpAnswersArray,
         }
 
@@ -1201,6 +1619,27 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
 
+            {isBehavioral && (
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-success/5 border border-success/20 rounded-xl p-4 mb-6 flex items-start gap-3"
+                >
+                    <span className="text-lg flex-shrink-0">🗣️</span>
+                    <div>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">
+                            Name the competency before writing your story
+                        </p>
+                        <p className="text-xs text-text-tertiary leading-relaxed">
+                            Every behavioral question is testing a specific competency.
+                            Candidates who identify it first write targeted, specific answers.
+                            Candidates who skip it write good-sounding answers that miss
+                            what the interviewer was actually measuring.
+                        </p>
+                    </div>
+                </motion.div>
+            )}
+
             {/* ── Form sections ──────────────────────────── */}
             <div className="space-y-5">
                 {isSystemDesign ? (
@@ -1225,6 +1664,11 @@ export default function SubmitSolutionPage() {
                         onHrDataChange={setHrData}
                         questionCategory={hrQuestionCategory}
                         onQuestionCategoryChange={setHrQuestionCategory}
+                    />
+                ) : isBehavioral ? (
+                    <BehavioralWorkspace
+                        behavioralData={behavioralData}
+                        onBehavioralDataChange={setBehavioralData}
                     />
                 ) : (
                     // ── All other categories: generic form ─────────────
@@ -1362,8 +1806,10 @@ export default function SubmitSolutionPage() {
                             : isLowLevelDesign
                                 ? 'How confident are you in your object design and SOLID application?'
                                 : isHR
-                                    ? 'How authentic and specific does this answer feel? Is it genuinely you, or still generic?'
-                                    : "Be honest — AI will flag if your confidence doesn't match your solution quality"
+                                    ? 'How authentic and specific does this answer feel?'
+                                    : isBehavioral
+                                        ? 'How strong is your story? Does your Action section show clear ownership and decision-making?'
+                                        : "Be honest — AI will flag if your confidence doesn't match your solution quality"
                     }
                 >
                     <ConfidencePicker value={confidence} onChange={setConfidence} />
@@ -1475,7 +1921,8 @@ export default function SubmitSolutionPage() {
                             {isSystemDesign ? 'Submit Design'
                                 : isLowLevelDesign ? 'Submit Design'
                                     : isHR ? 'Submit My Answer'
-                                        : 'Submit Solution'}
+                                        : isBehavioral ? 'Submit My Story'
+                                            : 'Submit Solution'}
                         </Button>
                     </div>
                 </div>

@@ -170,6 +170,182 @@ function HRRealConcernPanel({ categoryId, description }) {
     )
 }
 
+
+// ── Behavioral Competency Panel ────────────────────────
+// Visible to members BEFORE submission — upfront coaching panel.
+//
+// Research basis: identical reasoning to HRRealConcernPanel.
+// You cannot structure a strong STAR answer without knowing which
+// competency is being probed. This is not a hint about the answer —
+// it is the prerequisite frame for the answer. Locking it would be
+// pedagogically wrong and would actively harm preparation quality.
+//
+// What this shows:
+//   1. The competency being tested (if admin tagged it in categoryData)
+//   2. The real interviewer concern behind the question
+//   3. What a strong vs weak STAR answer looks like for this competency
+//   4. The failure mode most candidates fall into for this question type
+//
+// What this does NOT show:
+//   - The answer itself
+//   - Admin teaching notes (those unlock after submission)
+//   - Model STAR stories (those are in admin notes, locked)
+function BehavioralCompetencyPanel({ competencyTag, description }) {
+    // Competency metadata — maps admin-tagged competencies to coaching context.
+    // Covers all major STAR competency categories used across FAANG/tier-1 interviews.
+    const COMPETENCY_COACHING = {
+        'Leadership': {
+            realConcern: 'Can this person influence direction, align people, and drive outcomes without formal authority? Do they lead or follow when things get hard?',
+            strongSignals: 'Specific decision they made, who they influenced and how, measurable team outcome, honest acknowledgment of what they traded away',
+            weakSignals: '"We worked together as a team", vague outcomes, no personal decision point named',
+            watchOut: 'Candidates confuse participation with leadership. The interviewer wants to see a moment where YOU decided something difficult.',
+        },
+        'Conflict Resolution': {
+            realConcern: 'Do they escalate, avoid, or genuinely resolve? Can they hold a professional relationship through disagreement? Do they take any accountability?',
+            strongSignals: 'Named the specific disagreement, described their own de-escalation steps, showed empathy and persistence, reached a real resolution',
+            weakSignals: 'Blamed the other person, vague "we talked it out", no resolution reached, or "I just agreed to end the conflict"',
+            watchOut: 'A conflict story where you were 100% right and the other person was 100% wrong is a red flag. Interviewers hear it as low self-awareness.',
+        },
+        'Failure & Learning': {
+            realConcern: 'Are they honest about real failures? Do they have genuine self-awareness? Is their growth real or performed? Will they repeat the same mistake?',
+            strongSignals: 'Named a real failure (not a disguised success), owned their specific contribution to it, articulated concrete behavioral change since',
+            weakSignals: '"My team failed but I tried hard", "I worked on a difficult project that had some challenges", changing the subject to a success story',
+            watchOut: 'The most common failure here is the non-failure failure. "I worked too hard" or "I cared too much" immediately signals low self-awareness to experienced interviewers.',
+        },
+        'Initiative & Ownership': {
+            realConcern: 'Do they wait to be told or do they act? When something falls through the cracks, does this person pick it up or step over it?',
+            strongSignals: 'Named the gap they identified without being asked, described the action they took before getting permission, showed the outcome',
+            weakSignals: '"My manager asked me to take on more responsibility", "I volunteered when asked", no indication they identified the problem themselves',
+            watchOut: 'True ownership stories have one key element: the candidate saw a problem that was not their assigned responsibility and acted anyway. If they were assigned the task, it\'s not an ownership story.',
+        },
+        'Teamwork': {
+            realConcern: 'Can they actually work in a team without drama? Do they make the people around them better, or do they just do their own work?',
+            strongSignals: 'Named what they specifically contributed (not "we"), described how they helped a teammate or unblocked someone, showed outcome for the whole team',
+            weakSignals: '"We all worked hard together", no individual contribution named, or the story is actually about their personal achievement',
+            watchOut: 'Teamwork answers frequently drift into "and I did great work" stories. The interviewer wants to see how you elevated others, not just yourself.',
+        },
+        'Handling Ambiguity': {
+            realConcern: 'Can this person make progress without a complete picture? Do they ask the right clarifying questions or do they wait for certainty that never comes?',
+            strongSignals: 'Named specific ambiguities, showed their process for deciding what to clarify vs what to assume, demonstrated they shipped something despite incomplete information',
+            weakSignals: 'Either "I just started working" (no process) or "I asked for all the requirements before starting" (no tolerance for ambiguity)',
+            watchOut: 'Strong answers show judgment: which ambiguities matter enough to resolve, and which can be assumed away. Candidates who resolved everything or assumed everything both fail this.',
+        },
+        'Technical Disagreement': {
+            realConcern: 'Can they push back on technical decisions they disagree with, maintain relationships while doing it, and know when to commit even if overruled?',
+            strongSignals: 'Named the specific technical disagreement, showed their reasoning process, described how they communicated it, showed the outcome (agreement or principled commit)',
+            weakSignals: '"I just went along with it", "I was right and convinced everyone", no description of how they handled being overruled',
+            watchOut: 'This question tests disagree-and-commit specifically. An answer where you always won or always gave in both score poorly. Interviewers want to see you push back firmly AND commit professionally.',
+        },
+        'Customer Focus': {
+            realConcern: 'Do they start from customer/user needs or from technical solutions? Can they hold user impact in mind while making technical trade-offs?',
+            strongSignals: 'Named a specific user or user segment, showed how user feedback or data influenced a technical decision, quantified user impact',
+            weakSignals: '"We built a great product", no specific user interaction named, outcome described only in technical terms',
+            watchOut: 'Engineers frequently describe this from a builder perspective ("we shipped this feature") rather than a user perspective ("here\'s how this changed what users could do"). Interviewers at product-centric companies weight the distinction heavily.',
+        },
+    }
+
+    const coaching = competencyTag ? COMPETENCY_COACHING[competencyTag] : null
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.03 }}
+            className="bg-success/5 border border-success/15 rounded-2xl p-5 mb-6"
+        >
+            <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
+                <span>🎯</span> Competency Being Tested
+            </h2>
+
+            {/* The tagged competency */}
+            {competencyTag && (
+                <div className="bg-surface-1 border border-border-default rounded-xl p-3.5 mb-3">
+                    <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                        Competency
+                    </p>
+                    <p className="text-base font-extrabold text-success">{competencyTag}</p>
+                </div>
+            )}
+
+            {/* Real concern */}
+            {coaching && (
+                <>
+                    <div className="bg-surface-1 border border-border-default rounded-xl p-3.5 mb-3">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                            What the interviewer is really asking
+                        </p>
+                        <p className="text-sm text-text-primary font-semibold leading-relaxed">
+                            "{coaching.realConcern}"
+                        </p>
+                    </div>
+
+                    {/* Strong vs weak signals — compact two-column */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <div className="bg-success/5 border border-success/15 rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1.5">
+                                ✓ Strong answer signals
+                            </p>
+                            <p className="text-[11px] text-text-tertiary leading-relaxed">
+                                {coaching.strongSignals}
+                            </p>
+                        </div>
+                        <div className="bg-danger/5 border border-danger/15 rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1.5">
+                                ✗ Weak answer signals
+                            </p>
+                            <p className="text-[11px] text-text-tertiary leading-relaxed">
+                                {coaching.weakSignals}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* The specific failure mode */}
+                    <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
+                        <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">
+                            ⚠️ Most common failure mode
+                        </p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">
+                            {coaching.watchOut}
+                        </p>
+                    </div>
+                </>
+            )}
+
+            {/* Description from admin — shown if present */}
+            {description && (
+                <div className="mt-3 pt-3 border-t border-border-subtle">
+                    <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+                        Context & Guidance
+                    </p>
+                    <MarkdownRenderer content={description} />
+                </div>
+            )}
+
+            {/* If no competency tagged — show generic STAR framework reminder */}
+            {!competencyTag && !coaching && (
+                <div className="space-y-2">
+                    {[
+                        { label: 'S — Situation', desc: 'Set specific context. Name the project, team size, stakes, and timeline.', color: 'text-brand-300' },
+                        { label: 'T — Task', desc: 'What were YOU specifically responsible for? Not the team — you.', color: 'text-info' },
+                        { label: 'A — Action', desc: 'What did YOU do, step by step? Use "I" not "we". This is the core.', color: 'text-warning' },
+                        { label: 'R — Result', desc: 'What was the quantified outcome? Even rough numbers beat no numbers.', color: 'text-success' },
+                    ].map(item => (
+                        <div key={item.label}
+                            className="flex items-start gap-3 bg-surface-1 border border-border-default
+                                       rounded-xl p-3">
+                            <span className={cn('text-xs font-extrabold w-24 flex-shrink-0 mt-0.5', item.color)}>
+                                {item.label}
+                            </span>
+                            <p className="text-[11px] text-text-tertiary leading-relaxed">{item.desc}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </motion.div>
+    )
+}
+
+
 export default function ProblemDetailPage() {
     const { problemId } = useParams()
     const navigate = useNavigate()
@@ -243,6 +419,10 @@ export default function ProblemDetailPage() {
     // For HR: show the real concern panel upfront (always visible to members)
     // For HR teaching notes: only after submission
     const showHRConcernPanel = isHR && !isAdmin
+
+    // For BEHAVIORAL: show the competency coaching panel upfront — same reasoning
+    // as HR's HRRealConcernPanel. Knowing the competency is prerequisite to answering.
+    const showBehavioralPanel = isBehavioral && !isAdmin
 
     return (
         <div className="p-6 max-w-[900px] mx-auto">
@@ -480,12 +660,19 @@ export default function ProblemDetailPage() {
                 />
             )}
 
+            {showBehavioralPanel && (
+                <BehavioralCompetencyPanel
+                    competencyTag={problem.categoryData?.competencyTag || null}
+                    description={description}
+                />
+            )}
+
             {/* ── Problem Description (non-HR categories) ──────
                 For SYSTEM_DESIGN and LOW_LEVEL_DESIGN: prominently styled as
                 the design brief. For CODING and others: supplementary context.
                 For HR: description is shown inside HRRealConcernPanel above.
             ─────────────────────────────────────────────────── */}
-            {description && !isHR && (
+            {description && !isHR && !isBehavioral && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}

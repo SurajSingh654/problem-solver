@@ -318,81 +318,179 @@ export const CATEGORY_FORMS = {
     showFollowUps: true,
   },
   BEHAVIORAL: {
+    // ── Behavioral Interview Form Configuration ─────────────────────────────
+    //
+    // STAR is not a writing format — it is a structured recall framework
+    // grounded in behavioral psychology. Each component maps to a distinct
+    // cognitive and evaluative dimension:
+    //
+    //   Competency  → Metacognition: do you know what's being tested?
+    //   Situation   → Context-setting: can you scope and frame clearly?
+    //   Task        → Role clarity: what were YOU responsible for?
+    //   Action      → Behavioral signal: what did YOU specifically do?
+    //   Result      → Impact awareness: do you understand causality?
+    //   Reflection  → Growth mindset: the highest-signal section for
+    //                 senior roles — predicts future performance
+    //
+    // The existing generic form path silently dropped the Action field
+    // because showActionSection was defined but never rendered.
+    // This is a structural fix, not a feature addition.
+    //
+    // isBehavioral flag tells SubmitSolutionPage to render BehavioralWorkspace
+    // instead of the generic form.
+    //
+    isBehavioral: true,
+    // Empty fields for API consistency — BEHAVIORAL uses behavioralFields
+    fields: {},
     steps: [
       {
         id: 1,
-        label: "Context",
-        icon: "📖",
-        desc: "Set the scene — Situation and Task",
+        label: "Competency",
+        icon: "🎯",
+        desc: "What is this question really testing?",
       },
       {
         id: 2,
-        label: "Response",
-        icon: "🎯",
-        desc: "What you did — Action steps",
+        label: "Situation",
+        icon: "📖",
+        desc: "Set the scene — specific, named, scoped",
       },
       {
         id: 3,
+        label: "Action",
+        icon: "⚡",
+        desc: "What YOU did — step by step",
+      },
+      {
+        id: 4,
+        label: "Result",
+        icon: "📊",
+        desc: "What happened — quantified impact",
+      },
+      {
+        id: 5,
         label: "Reflection",
         icon: "🔬",
-        desc: "Impact, metrics, and learnings",
+        desc: "Learning and what you'd change",
       },
     ],
-    fields: {
-      patternIdentified: {
-        label: "Question Type",
+    // Behavioral-specific structured fields stored in categorySpecificData JSON column.
+    // These map to named keys, not reused Solution columns with relabeled text.
+    // This preserves semantic meaning for RAG retrieval and AI evaluation.
+    behavioralFields: {
+      competency: {
+        label: "Competency Being Tested",
         placeholder:
-          "e.g. Leadership, Conflict Resolution, Failure, Initiative...",
-        show: true,
-        suggestions: [
-          "Leadership",
-          "Conflict Resolution",
-          "Failure & Learning",
-          "Initiative & Ownership",
-          "Teamwork",
-          "Time Management",
-          "Technical Challenge",
-          "Disagreement",
-          "Ambiguity",
-          "Customer Focus",
-        ],
+          "Before writing your story, name the competency this question is probing.\n\n" +
+          "Examples:\n" +
+          '• "Tell me about a time you led a team through ambiguity"\n' +
+          "  → Competency: Leadership under uncertainty. The interviewer is checking: Can they make decisions without complete information? Do they keep the team aligned?\n\n" +
+          '• "Tell me about a conflict with a teammate"\n' +
+          "  → Competency: Conflict resolution and interpersonal maturity. The interviewer is checking: Do they escalate, avoid, or resolve? Do they take accountability?\n\n" +
+          '• "Describe a time you failed"\n' +
+          "  → Competency: Self-awareness and growth mindset. The interviewer is checking: Are they honest? Do they blame others? Can they analyze their own failures objectively?\n\n" +
+          '• "Tell me about a time you had to push back on a decision"\n' +
+          "  → Competency: Courage and professional judgment. The interviewer is checking: Do they have a spine? Can they disagree constructively without damaging relationships?\n\n" +
+          "Write the competency being tested and the interviewer's real underlying concern:",
+        hint: "This is the most important step and the one most candidates skip. If you answer the question without knowing the competency, you are rolling dice. Name it first, answer second.",
+        rows: 8,
+        required: true,
       },
-      patternReasoning: {
-        label: "STAR — Situation & Task",
+      situation: {
+        label: "Situation & Task",
         placeholder:
-          "Set the context. What was the situation? What was your specific role and task?",
-        hint: "Be specific — name the project, team size, timeline, stakes.",
-        show: true,
+          "Set the scene. Be specific — vague context destroys credibility.\n\n" +
+          "What to include:\n" +
+          "• Company and team (you can anonymize if needed, but be specific about scale and context)\n" +
+          "• Timeline — when did this happen?\n" +
+          "• Stakes — what was at risk? Why did it matter?\n" +
+          "• YOUR specific role and responsibility — not the team's, yours\n\n" +
+          "Strong example:\n" +
+          '"In Q3 2023 at [Company], I was the tech lead on a team of 4 engineers responsible for migrating our monolithic auth service to a distributed microservice before a hard deadline tied to a compliance requirement. Two weeks before launch, our lead engineer went on emergency leave."\n\n' +
+          "Weak example:\n" +
+          '"My team was working on a project and we ran into some challenges."\n\n' +
+          "Write your Situation and Task:",
+        hint: "Interviewers calibrate every answer against your seniority. A junior engineer leading 2 people is impressive. A senior engineer leading 2 people is a red flag. Set the context so your actions land with the right weight.",
+        rows: 8,
+        required: true,
       },
-      keyInsight: {
-        label: "Key Learning",
+      action: {
+        label: "Action — What YOU Did",
         placeholder:
-          "What did you learn from this experience? How did it change your approach?",
-        hint: "Interviewers want growth mindset — show what you'd do differently.",
-        show: true,
+          'This is the core of your answer. Use "I" not "we".\n\n' +
+          "What interviewers are evaluating here:\n" +
+          "• Did they take initiative or wait to be told?\n" +
+          "• Did they think through trade-offs or just execute?\n" +
+          "• Did they communicate, delegate, unblock, or escalate at the right moments?\n" +
+          "• What does their decision-making process look like under pressure?\n\n" +
+          "How to structure it:\n" +
+          "Break your actions into numbered steps. Each step should name a specific decision or action you took.\n\n" +
+          "Strong example:\n" +
+          '"1. I immediately assessed what was blocked and what could still proceed — I found 60% of the work could continue without the missing engineer.\n' +
+          "2. I had a 30-minute call with the PM to reset expectations and negotiate a 5-day extension on the least critical module.\n" +
+          "3. I pair-programmed with our most junior engineer on the complex auth token rotation logic rather than doing it myself — I needed to build her confidence quickly.\n" +
+          '4. I wrote detailed daily status notes so leadership never had to ask for an update."\n\n' +
+          "Weak example:\n" +
+          '"We figured it out together and worked extra hours to get it done."\n\n' +
+          "Write your specific actions, step by step:",
+        hint: 'The Action section is where candidates either demonstrate leadership or reveal they were passengers. "We" answers consistently fail — interviewers interpret them as inability to separate personal contribution from team effort, or worse, taking credit for the team\'s work.',
+        rows: 12,
+        required: true,
       },
-      simpleExplanation: {
-        label: "STAR — Result & Impact",
+      result: {
+        label: "Result & Impact",
         placeholder:
-          "What was the outcome? Include metrics if possible (%, $, time saved).",
-        hint: 'Quantify whenever you can — "reduced deploy time by 40%".',
-        show: true,
+          "What happened? Quantify wherever possible.\n\n" +
+          "Strong result elements:\n" +
+          "• The immediate outcome — did you succeed? Partially succeed? Fail productively?\n" +
+          "• Quantified impact — numbers, percentages, time saved, revenue, error reduction\n" +
+          "• Business/team impact beyond the immediate task\n" +
+          "• Timeline — how long did it take to see the result?\n\n" +
+          "Strong example:\n" +
+          '"We shipped on the extended deadline with zero P0 incidents in the first 30 days. The migration reduced auth service latency by 40% (p99: 800ms → 480ms). My junior engineer went on to lead the next migration independently 3 months later."\n\n' +
+          "If the result was a failure or partial success:\n" +
+          '"We missed the deadline by 8 days. The business took a minor compliance penalty but avoided a larger one by having the core functionality live. The post-mortem I led resulted in a new on-call coverage policy that prevented the same situation 4 months later."\n\n' +
+          "(Honest failure results are often MORE impressive than clean successes — they signal maturity.)\n\n" +
+          "Write your result:",
+        hint: 'If you have no numbers, estimate. "Roughly 30% faster" or "maybe 2 hours saved per week across 10 engineers" is better than "improved performance." Interviewers know you don\'t have perfect data — they\'re evaluating whether you think in terms of impact.',
+        rows: 6,
+        required: false,
       },
-      challenges: {
-        label: "What Would You Do Differently?",
-        placeholder: "If you faced this again, what would you change?",
-        show: true,
+      reflection: {
+        label: "Reflection — Learning & What You'd Do Differently",
+        placeholder:
+          "This section separates good candidates from exceptional ones.\n\n" +
+          "What interviewers are measuring:\n" +
+          "• Self-awareness: can you see your own blind spots?\n" +
+          "• Growth mindset: do you treat every experience as a learning event?\n" +
+          "• Psychological safety: are you comfortable with honest self-critique in a high-stakes setting?\n" +
+          "• Trajectory: is this person still improving or have they plateaued?\n\n" +
+          "What to include:\n" +
+          "• What you learned about yourself, your skills, or your judgment\n" +
+          "• What you would do differently with the knowledge you have now\n" +
+          "• How this experience changed your approach to similar situations since\n\n" +
+          "Strong example:\n" +
+          "\"Looking back, I over-indexed on technical execution and under-invested in stakeholder communication in the first week. I assumed leadership trusted the process — I should have proactively set up a daily 5-minute sync. I now treat stakeholder communication as a deliverable, not an afterthought. I have not had a leadership surprise on any project I've led since.\n\n" +
+          "I also learned that I default to doing things myself when under pressure. Pair-programming with the junior engineer was the right move in retrospect, but it was uncomfortable in the moment. I have since made it a habit to ask 'who else grows from this?' before taking on a technical task solo.\"\n\n" +
+          "Write your honest reflection:",
+        hint: "Candidates who skip or shorten this section consistently score lower on self-awareness dimensions. Interviewers at senior levels weight reflection as heavily as Action. A shallow reflection after a strong STAR story is a yellow flag — it suggests the learning did not stick.",
+        rows: 8,
+        required: false,
       },
     },
-    showSolutionTabs: false,
-    showActionSection: true,
-    actionField: {
-      label: "STAR — Action (Step by Step)",
-      placeholder:
-        "What specific steps did you take? Be detailed — this is the core of your answer.",
-      hint: 'Use "I" not "we" — interviewers want YOUR actions.',
+    // For the solution display card — how to render submitted behavioral answers.
+    // Mirrors the HR displayConfig pattern for SolutionCard rendering.
+    displayConfig: {
+      sections: [
+        { key: "competency", label: "Competency Being Tested", icon: "🎯" },
+        { key: "situation", label: "Situation & Task", icon: "📖" },
+        { key: "action", label: "Action", icon: "⚡" },
+        { key: "result", label: "Result & Impact", icon: "📊" },
+        { key: "reflection", label: "Reflection", icon: "🔬" },
+      ],
     },
     showFollowUps: true,
+    showSolutionTabs: false,
   },
   CS_FUNDAMENTALS: {
     steps: [
