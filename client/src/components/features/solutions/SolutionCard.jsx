@@ -8,15 +8,11 @@ import { Badge } from '@components/ui/Badge'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
-import { LANGUAGE_LABELS, CONFIDENCE_LEVELS } from '@utils/constants'
+import { LANGUAGE_LABELS, CONFIDENCE_LEVELS, HR_STAKES, HR_QUESTION_CATEGORY_MAP } from '@utils/constants'
 
 // ── System Design structured display ──────────────────
-// Only renders for solutions with SD-specific categorySpecificData keys.
-// LLD and other categories that may eventually use categorySpecificData
-// are handled by the generic tabs below.
 function SDSolutionDisplay({ data }) {
     const [activeKey, setActiveKey] = useState(() => {
-        // Default to first section that has content
         const orderedKeys = [
             'functionalRequirements', 'nonFunctionalRequirements',
             'capacityEstimation', 'apiDesign', 'schemaDesign',
@@ -37,18 +33,13 @@ function SDSolutionDisplay({ data }) {
     ].filter(s => (data[s.key]?.trim?.()?.length ?? 0) > 0)
 
     if (sections.length === 0) {
-        return (
-            <p className="text-xs text-text-disabled italic">
-                No design content recorded.
-            </p>
-        )
+        return <p className="text-xs text-text-disabled italic">No design content recorded.</p>
     }
 
     const activeSection = sections.find(s => s.key === activeKey) || sections[0]
 
     return (
         <div>
-            {/* Section tabs */}
             <div className="flex flex-wrap gap-1 mb-4">
                 {sections.map(s => (
                     <button
@@ -66,7 +57,6 @@ function SDSolutionDisplay({ data }) {
                     </button>
                 ))}
             </div>
-            {/* Active section content */}
             {activeSection.isCode ? (
                 <pre className="bg-surface-0 border border-border-default rounded-xl p-4
                                 text-xs font-mono text-text-secondary whitespace-pre-wrap
@@ -110,7 +100,6 @@ function LLDSolutionDisplay({ data, code, language }) {
 
     return (
         <div>
-            {/* Section tabs + implementation toggle */}
             <div className="flex flex-wrap gap-1 mb-4">
                 {sections.map(s => (
                     <button
@@ -142,8 +131,6 @@ function LLDSolutionDisplay({ data, code, language }) {
                     </button>
                 )}
             </div>
-
-            {/* Content */}
             {showCode ? (
                 <pre className="bg-surface-0 border border-border-default rounded-xl p-4
                                 text-xs font-mono text-text-secondary whitespace-pre-wrap
@@ -163,6 +150,107 @@ function LLDSolutionDisplay({ data, code, language }) {
                     </div>
                 )
             ) : null}
+        </div>
+    )
+}
+
+// ── HR structured display ──────────────────────────────
+// Single-view, no tabs. HR answers are narrative — read linearly.
+// Shows the four structured fields from the HR workspace in logical order:
+//   Analysis → Answer → Company Evidence → Self-Assessment
+// Also shows the question category badge if stored.
+//
+// Field source mapping (from categorySpecificData and fallback fields):
+//   underlyingConcern → what they were really checking (analysis)
+//   answer            → the polished response (primary artifact)
+//   companyConnection → company-specific evidence
+//   selfAssessment    → honest reflection
+//   questionCategory  → HR question category for badge display
+function HRSolutionDisplay({ data, pattern }) {
+    // question category: stored in categorySpecificData.questionCategory
+    // or fallback in the pattern field
+    const questionCategory = data.questionCategory || pattern
+    const cat = questionCategory ? HR_QUESTION_CATEGORY_MAP[questionCategory] : null
+
+    const sections = [
+        {
+            key: 'underlyingConcern',
+            label: 'What They Were Really Checking',
+            icon: '🔍',
+            value: data.underlyingConcern,
+            color: 'text-danger',
+            borderColor: 'border-danger/15 bg-danger/3',
+        },
+        {
+            key: 'answer',
+            label: 'Answer',
+            icon: '💬',
+            value: data.answer,
+            color: 'text-brand-300',
+            borderColor: 'border-brand-400/15 bg-brand-400/3',
+            isHighlight: true,
+        },
+        {
+            key: 'companyConnection',
+            label: 'Company-Specific Evidence',
+            icon: '🎯',
+            value: data.companyConnection,
+            color: 'text-success',
+            borderColor: 'border-success/15 bg-success/3',
+        },
+        {
+            key: 'selfAssessment',
+            label: 'Self-Assessment',
+            icon: '🪞',
+            value: data.selfAssessment,
+            color: 'text-warning',
+            borderColor: 'border-warning/15 bg-warning/3',
+        },
+    ].filter(s => s.value?.trim?.()?.length > 0)
+
+    if (sections.length === 0) {
+        return <p className="text-xs text-text-disabled italic">No answer content recorded.</p>
+    }
+
+    return (
+        <div className="space-y-4">
+            {/* Question category badge */}
+            {cat && (
+                <div className="flex items-center gap-2">
+                    <span className={cn(
+                        'text-[10px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1.5',
+                        cat.bg
+                    )}>
+                        <span>{cat.icon}</span>
+                        <span className={cat.color}>{cat.label}</span>
+                    </span>
+                    <p className="text-[10px] text-text-disabled">{cat.desc}</p>
+                </div>
+            )}
+
+            {/* Sections in order — no tabs, linear narrative */}
+            {sections.map(s => (
+                <div key={s.key}
+                    className={cn(
+                        'rounded-xl border p-4',
+                        s.borderColor || 'border-border-default bg-surface-2'
+                    )}
+                >
+                    <p className={cn(
+                        'text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5',
+                        s.color
+                    )}>
+                        <span>{s.icon}</span>
+                        {s.label}
+                    </p>
+                    <div className={cn(
+                        'text-sm leading-relaxed whitespace-pre-wrap',
+                        s.isHighlight ? 'text-text-primary' : 'text-text-secondary'
+                    )}>
+                        {s.value}
+                    </div>
+                </div>
+            ))}
         </div>
     )
 }
@@ -189,9 +277,7 @@ function CodeBlock({ code, language }) {
                     className="text-xs text-text-tertiary hover:text-text-primary
                                flex items-center gap-1.5 transition-colors"
                 >
-                    {copied ? (
-                        <span className="text-success">✓ Copied!</span>
-                    ) : 'Copy'}
+                    {copied ? <span className="text-success">✓ Copied!</span> : 'Copy'}
                 </button>
             </div>
             <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto
@@ -228,14 +314,16 @@ function SectionRow({ label, value, mode = 'markdown' }) {
 }
 
 // ── Confidence display ─────────────────────────────────
-function ConfidenceDisplay({ level }) {
+function ConfidenceDisplay({ level, isHR = false }) {
     const conf = CONFIDENCE_LEVELS.find(c => c.value === level)
     if (!conf) return null
     return (
         <div className="flex items-center gap-2">
             <span className="text-lg">{conf.emoji}</span>
             <div>
-                <p className={cn('text-xs font-bold', conf.color)}>{conf.label}</p>
+                <p className={cn('text-xs font-bold', conf.color)}>
+                    {isHR ? 'Authentic' : conf.label}
+                </p>
                 <div className="flex gap-0.5 mt-0.5">
                     {[1, 2, 3, 4, 5].map(i => (
                         <div key={i} className={cn(
@@ -275,13 +363,14 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         totalRatings,
     } = solution
 
-    // Determine if this is a System Design submission with structured data.
-    // Detected by presence of SD-specific keys in categorySpecificData.
-    // This distinguishes SD from LLD or other future categories that may
-    // also use categorySpecificData with different field shapes.
+    // ── Submission type detection ──────────────────────
+    // Each structured category is detected by the presence of
+    // category-specific keys in categorySpecificData.
+    // This avoids relying on the problem category (not available here)
+    // and remains correct even if data shapes overlap.
+
     const isSDSubmission = !!(
         solution.categorySpecificData &&
-        Object.keys(solution.categorySpecificData).length > 0 &&
         (
             solution.categorySpecificData.functionalRequirements !== undefined ||
             solution.categorySpecificData.apiDesign !== undefined ||
@@ -291,13 +380,24 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
 
     const isLLDSubmission = !!(
         solution.categorySpecificData &&
-        Object.keys(solution.categorySpecificData).length > 0 &&
         (
             solution.categorySpecificData.entities !== undefined ||
             solution.categorySpecificData.solidAnalysis !== undefined ||
             solution.categorySpecificData.designPattern !== undefined
         )
     )
+
+    const isHRSubmission = !!(
+        solution.categorySpecificData &&
+        (
+            solution.categorySpecificData.underlyingConcern !== undefined ||
+            solution.categorySpecificData.answer !== undefined ||
+            solution.categorySpecificData.companyConnection !== undefined
+        )
+    )
+
+    // Structured submissions don't use the generic coding tabs
+    const isStructuredSubmission = isSDSubmission || isLLDSubmission || isHRSubmission
 
     const tabs = [
         { id: 'approach', label: 'Approach' },
@@ -337,23 +437,44 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 You
                             </span>
                         )}
-                        {language && !isSDSubmission && !isLLDSubmission && (
+                        {/* Language badge — only for coding submissions */}
+                        {language && !isStructuredSubmission && (
                             <Badge variant="gray" size="xs">
                                 {LANGUAGE_LABELS[language] || language}
                             </Badge>
                         )}
+                        {/* Category badges for structured submissions */}
                         {isSDSubmission && (
                             <span className="text-[10px] font-bold px-1.5 py-px rounded-full
-                     bg-info/10 text-info border border-info/20">
+                                             bg-info/10 text-info border border-info/20">
                                 System Design
                             </span>
                         )}
                         {isLLDSubmission && (
                             <span className="text-[10px] font-bold px-1.5 py-px rounded-full
-                     bg-purple-400/10 text-purple-400 border border-purple-400/20">
+                                             bg-purple-400/10 text-purple-400 border border-purple-400/20">
                                 LLD
                             </span>
                         )}
+                        {isHRSubmission && (() => {
+                            // Show HR question category badge if available
+                            const qCat = solution.categorySpecificData?.questionCategory || pattern
+                            const cat = qCat ? HR_QUESTION_CATEGORY_MAP[qCat] : null
+                            return cat ? (
+                                <span className={cn(
+                                    'text-[10px] font-bold px-1.5 py-px rounded-full border flex items-center gap-1',
+                                    cat.bg
+                                )}>
+                                    <span>{cat.icon}</span>
+                                    <span className={cat.color}>{cat.label}</span>
+                                </span>
+                            ) : (
+                                <span className="text-[10px] font-bold px-1.5 py-px rounded-full
+                                                 bg-danger/10 text-danger border border-danger/20">
+                                    HR Round
+                                </span>
+                            )
+                        })()}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         <span className="text-xs text-text-tertiary">
@@ -367,7 +488,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                     </div>
                 </div>
                 <div className="hidden sm:block flex-shrink-0">
-                    <ConfidenceDisplay level={confidence} />
+                    <ConfidenceDisplay level={confidence} isHR={isHRSubmission} />
                 </div>
                 <motion.div
                     animate={{ rotate: expanded ? 180 : 0 }}
@@ -393,17 +514,20 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                         className="overflow-hidden"
                     >
                         <div className="border-t border-border-default">
-                            {/* Tabs — only for standard coding solutions */}
-                            {!isSDSubmission && !isLLDSubmission && (
+                            {/* Tabs — only for generic coding solutions */}
+                            {!isStructuredSubmission && (
                                 <div className="flex gap-1 p-3 border-b border-border-default bg-surface-1/50">
                                     {tabs.map(t => (
-                                        <button key={t.id} onClick={() => setTab(t.id)}
+                                        <button
+                                            key={t.id}
+                                            onClick={() => setTab(t.id)}
                                             className={cn(
                                                 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                                                 tab === t.id
                                                     ? 'bg-brand-400/15 text-brand-300 border border-brand-400/25'
                                                     : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
-                                            )}>
+                                            )}
+                                        >
                                             {t.label}
                                         </button>
                                     ))}
@@ -420,8 +544,13 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                         code={code}
                                         language={language}
                                     />
+                                ) : isHRSubmission ? (
+                                    <HRSolutionDisplay
+                                        data={solution.categorySpecificData}
+                                        pattern={pattern}
+                                    />
                                 ) : (
-                                    // All other categories: tab-based display
+                                    // Generic coding / behavioral / sql / cs_fundamentals
                                     <>
                                         {tab === 'approach' && (
                                             <>

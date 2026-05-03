@@ -13,7 +13,7 @@ import { Spinner } from '@components/ui/Spinner'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import api from '@services/api'
-import { PROBLEM_CATEGORIES, CATEGORY_GENERATION_CONFIG } from '@utils/constants'
+import { PROBLEM_CATEGORIES, CATEGORY_GENERATION_CONFIG, HR_STAKES } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const PLATFORM_SOURCES = ['LEETCODE', 'GFG', 'HACKERRANK', 'CODECHEF', 'INTERVIEWBIT', 'CODEFORCES']
@@ -409,9 +409,21 @@ function AIGenerateScreen({ onBack }) {
                         <div className="flex flex-wrap gap-2 mb-3">
                             {[
                                 { id: 'auto', label: 'Auto', color: 'brand' },
-                                { id: 'EASY', label: 'All Easy', color: 'success' },
-                                { id: 'MEDIUM', label: 'All Medium', color: 'warning' },
-                                { id: 'HARD', label: 'All Hard', color: 'danger' },
+                                {
+                                    id: 'EASY',
+                                    label: category === 'HR' ? `${HR_STAKES.EASY.icon} ${HR_STAKES.EASY.label}` : 'All Easy',
+                                    color: 'success'
+                                },
+                                {
+                                    id: 'MEDIUM',
+                                    label: category === 'HR' ? `${HR_STAKES.MEDIUM.icon} ${HR_STAKES.MEDIUM.label}` : 'All Medium',
+                                    color: 'warning'
+                                },
+                                {
+                                    id: 'HARD',
+                                    label: category === 'HR' ? `${HR_STAKES.HARD.icon} ${HR_STAKES.HARD.label}` : 'All Hard',
+                                    color: 'danger'
+                                },
                                 { id: 'custom', label: 'Custom Mix', color: 'info' },
                             ].map(d => (
                                 <button
@@ -430,7 +442,10 @@ function AIGenerateScreen({ onBack }) {
                         </div>
                         {difficulty === 'auto' && (
                             <p className="text-[10px] text-text-disabled">
-                                AI will analyze your team's performance and pick appropriate difficulty levels
+                                {category === 'HR'
+                                    ? 'AI will generate a mix of Common, Tricky, and Sensitive HR questions'
+                                    : 'AI will analyze your team\'s performance and pick appropriate difficulty levels'
+                                }
                             </p>
                         )}
                         {difficulty === 'custom' && (
