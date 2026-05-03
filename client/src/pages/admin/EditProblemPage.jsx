@@ -763,7 +763,6 @@ export default function EditProblemPage() {
                         icon={isHR ? '⚠️' : '📊'}
                     >
                         {isHR ? (
-                            // HR: Stakes selector (Common/Tricky/Sensitive)
                             <div className="space-y-2">
                                 {Object.values(HR_STAKES).map(s => (
                                     <button
@@ -794,7 +793,6 @@ export default function EditProblemPage() {
                                 ))}
                             </div>
                         ) : (
-                            // Standard: Easy/Medium/Hard
                             <div className="flex flex-col gap-2">
                                 {DIFFICULTY_OPTIONS.map(d => (
                                     <button
@@ -859,8 +857,8 @@ export default function EditProblemPage() {
                         </Section>
                     )}
 
-                    {/* Tags */}
-                    {category !== 'HR' && (
+                    {/* Tags — hide for HR */}
+                    {!isHR && (
                         <Section title="Tags" icon="🏷️">
                             <ChipInput
                                 label={
@@ -879,8 +877,8 @@ export default function EditProblemPage() {
                         </Section>
                     )}
 
-                    {/* Company Tags — not for HR */}
-                    {category !== 'HR' && (
+                    {/* Company Tags — hide for HR */}
+                    {!isHR && (
                         <Section title="Company Tags" icon="🏢">
                             <ChipInput
                                 label="Companies"
@@ -948,6 +946,7 @@ export default function EditProblemPage() {
                             )}
                         </div>
                     </Section>
+
                 </div>
             </div>
 
