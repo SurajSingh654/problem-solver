@@ -13,11 +13,14 @@ const ROADMAP = [
         dotColor: 'bg-success',
         badge: { text: 'LIVE', color: 'bg-success/12 text-success border-success/25' },
         items: [
-            '6-category problem system with category-specific submission forms',
-            'AI Mock Interviewer — GPT-4o, 8 culture styles, WebSocket streaming, debrief',
-            'RAG-enhanced AI Solution Review with pgvector teammate comparison',
+            // UPDATED: 6-category → 7-category, correct names
+            '7-category problem system — Coding, System Design, Low-Level Design, Behavioral, Technical Knowledge, Databases, HR',
+            // UPDATED: reflects the dedicated workspace work done this session
+            'Purpose-built submission workspaces: STAR workspace (Behavioral), Mechanism-First workspace (Technical Knowledge), SQL Editor + Schema Design workspace (Databases)',
+            'AI Mock Interviewer — GPT-4o, 8 culture styles, WebSocket streaming, hire/no-hire debrief',
+            'RAG-enhanced AI Solution Review with pgvector teammate comparison — category-aware for all 7 rounds',
             'AI Quiz Generation on any subject with post-quiz analysis',
-            'Spaced repetition review queue with adaptive scheduling',
+            'Spaced repetition review queue with SM-2 adaptive scheduling',
             '6D Intelligence Report with AI weekly coaching plans',
             'Multi-tenant team system with join codes, roles, and admin tools',
             'Platform Admin dashboard with AI-powered health analytics',
@@ -36,6 +39,8 @@ const ROADMAP = [
             'Email notifications — review reminders, weekly digest',
             'Google + GitHub OAuth for frictionless onboarding',
             'Competition system with timed events and live leaderboard',
+            // NEW: in-house SQL execution (Level 2 — roadmap item)
+            'In-house SQL execution engine — run queries against real schemas, see live results',
         ],
     },
     {

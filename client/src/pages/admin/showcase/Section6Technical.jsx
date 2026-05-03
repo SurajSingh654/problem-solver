@@ -63,7 +63,7 @@ export default function Section6Technical({ stats }) {
                     Click any section below to dive deeper.
                 </SectionDesc>
 
-                {/* Architecture Overview — always visible */}
+                {/* Architecture Overview */}
                 <DiagramBlock border="border-border-default">
                     {`┌──────────────────────┐     ┌─────────────────────────┐     ┌─────────────────┐
 │      FRONTEND        │REST │        BACKEND          │     │    DATABASE      │
@@ -82,7 +82,6 @@ export default function Section6Technical({ stats }) {
          └──── Deployed on Railway ───┴── Docker + Auto-deploy ──────┘`}
                 </DiagramBlock>
 
-                {/* Collapsible deep-dive sections */}
                 <CollapsibleSection title="Tech Stack" icon="⚛️" defaultOpen>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>
@@ -93,7 +92,7 @@ export default function Section6Technical({ stats }) {
                                 <TechItem name="TailwindCSS" desc="Dark/light with CSS vars" badge="Style" badgeColor="brand" direction="left" delay={0.06} />
                                 <TechItem name="TanStack Query v5" desc="Server state + caching" badge="Data" badgeColor="info" direction="left" delay={0.09} />
                                 <TechItem name="Zustand" desc="Lightweight UI state" badge="State" badgeColor="info" direction="left" delay={0.12} />
-                                <TechItem name="Monaco Editor" desc="VS Code engine" badge="Editor" badgeColor="warning" direction="left" delay={0.15} />
+                                <TechItem name="Monaco Editor" desc="VS Code engine + SQL mode" badge="Editor" badgeColor="warning" direction="left" delay={0.15} />
                                 <TechItem name="Framer Motion" desc="Spring animations" badge="Motion" badgeColor="brand" direction="left" delay={0.18} />
                                 <TechItem name="Excalidraw" desc="Whiteboard canvas" badge="Drawing" badgeColor="info" direction="left" delay={0.21} />
                             </div>
@@ -135,13 +134,15 @@ export default function Section6Technical({ stats }) {
                     </div>
                 </CollapsibleSection>
 
+                {/* UPDATED: Problem model description 6 → 7 categories */}
                 <CollapsibleSection title="Database Schema — 11 Models" icon="🗄️">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {[
                             { model: 'User', desc: 'Auth, profile, streak, goals, roles (SuperAdmin / TeamAdmin / Member)' },
                             { model: 'Team', desc: 'Multi-tenant boundary, join codes, approval workflow' },
-                            { model: 'Problem', desc: '6 categories, tags, vector embeddings (1536-dim)' },
-                            { model: 'Solution', desc: 'Multi-step, code, AI feedback, vector embeddings' },
+                            // UPDATED: 6 → 7 categories
+                            { model: 'Problem', desc: '7 categories, tags, categoryData, vector embeddings (1536-dim)' },
+                            { model: 'Solution', desc: 'Multi-step, code, categorySpecificData, AI feedback, vector embeddings' },
                             { model: 'FollowUpQuestion', desc: 'Progressive difficulty with hints' },
                             { model: 'ClarityRating', desc: 'Peer 1-5 ratings on explanations' },
                             { model: 'SimSession', desc: 'Timer-based practice with scoring' },
@@ -167,12 +168,14 @@ export default function Section6Technical({ stats }) {
                     </div>
                 </CollapsibleSection>
 
+                {/* UPDATED: /api/v1/problems route description */}
                 <CollapsibleSection title="API Surface — Versioned REST + WebSocket" icon="🔌">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {[
                             { route: '/api/v1/auth', desc: 'Register, login, verify, reset, onboarding' },
-                            { route: '/api/v1/problems', desc: '6-category CRUD with filtering' },
-                            { route: '/api/v1/solutions', desc: 'Submit, review, rate, spaced repetition' },
+                            // UPDATED: 6-category → 7-category
+                            { route: '/api/v1/problems', desc: '7-category CRUD with filtering, categoryData support' },
+                            { route: '/api/v1/solutions', desc: 'Submit, review, rate, spaced repetition, categorySpecificData' },
                             { route: '/api/v1/quizzes', desc: 'AI generation, grading, analysis' },
                             { route: '/api/v1/interview-v2', desc: 'Mock interview: start, end, history' },
                             { route: '/api/v1/ai', desc: 'Review (RAG), content gen, hints, coaching' },

@@ -184,12 +184,14 @@ export default function Section5Teams() {
                                     'Team analytics and health',
                                 ],
                             },
+                            // In the roles array, update the Member items array:
                             {
                                 role: 'Member',
                                 badge: '👤 Member',
                                 badgeColor: 'bg-brand-400/10 text-brand-300 border-brand-400/20',
                                 items: [
-                                    'Solve problems across 6 categories',
+                                    // UPDATED: 6 → 7
+                                    'Solve problems across 7 categories',
                                     'AI mock interviews and quizzes',
                                     'Spaced repetition reviews',
                                     '6D report + recommendations',

@@ -3,7 +3,8 @@ import { cn } from '@utils/cn'
 import { Section, SectionBadge, SectionTitle, SectionDesc, Check, Cross } from './components'
 
 const COMPARISON_ROWS = [
-    ['Covers all 6 interview rounds (Coding + SD + Behavioral + HR + SQL + CS)', true, false, false, false, false],
+    // UPDATED: 6 → 7, correct category names including Technical Knowledge and Databases
+    ['Covers all 7 interview rounds (Coding + SD + LLD + Behavioral + Technical Knowledge + Databases + HR)', true, false, false, false, false],
     ['AI Mock Interviewer with real-time conversation', true, false, false, false, 'Basic'],
     ['8 interview culture styles (Google, Amazon, Startup, Trading...)', true, false, false, false, false],
     ['AI that compares your work with teammates (RAG)', true, false, false, false, false],
@@ -13,6 +14,8 @@ const COMPARISON_ROWS = [
     ['Team collaboration + peer ratings', true, false, false, false, false],
     ['AI weekly coaching plan personalized to your gaps', true, false, false, false, false],
     ['Behavioral + HR round preparation', true, false, false, 'Partial', false],
+    // NEW ROW: dedicated workspaces — unique to ProbSolver
+    ['Purpose-built workspaces per category (STAR, SQL editor, schema design...)', true, false, false, false, false],
     ['Self-hosted — your data stays private', true, false, false, false, false],
 ]
 
@@ -20,7 +23,8 @@ const DIFFERENTIATORS = [
     {
         icon: '🎯',
         title: 'Complete Interview Preparation',
-        desc: 'Coding, System Design, Behavioral, HR, SQL, CS Fundamentals — each with tailored submission forms, category-specific AI coaching, and progressive follow-ups. One platform for every round you\'ll face.',
+        // UPDATED: 7 categories, correct names
+        desc: 'Coding, System Design, Low-Level Design, Behavioral, Technical Knowledge, Databases, HR — each with a purpose-built submission workspace, category-specific AI coaching, and progressive follow-ups. One platform for every round you\'ll face.',
     },
     {
         icon: '💬',
@@ -51,8 +55,8 @@ export default function Section4Compare() {
                 />
                 <SectionDesc>
                     Most tools focus on one piece — coding problems OR mock interviews OR
-                    study materials. ProbSolver is the only platform that covers every
-                    interview round, measures readiness across 6 dimensions, and uses AI
+                    study materials. ProbSolver is the only platform that covers all 7
+                    interview rounds, measures readiness across 6 dimensions, and uses AI
                     that actually knows your strengths and gaps.
                 </SectionDesc>
 
@@ -77,7 +81,7 @@ export default function Section4Compare() {
                     ))}
                 </div>
 
-                {/* Comparison table — compact */}
+                {/* Comparison table */}
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     whileInView={{ opacity: 1, y: 0 }}

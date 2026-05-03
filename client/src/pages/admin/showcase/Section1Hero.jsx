@@ -57,8 +57,9 @@ export default function Section1Hero({ stats }) {
                         className="text-lg sm:text-xl text-white/55 max-w-2xl mb-10 leading-relaxed"
                     >
                         The complete interview preparation platform — from coding to system design
-                        to behavioral to HR. AI that coaches you personally, teams that learn together,
-                        and a 6-dimension intelligence engine that tells you exactly when you're ready.
+                        to behavioral to databases to HR. AI that coaches you personally, teams
+                        that learn together, and a 6-dimension intelligence engine that tells you
+                        exactly when you're ready.
                     </motion.p>
 
                     {/* CTA buttons */}
@@ -107,7 +108,8 @@ export default function Section1Hero({ stats }) {
                         className="flex flex-wrap gap-8 sm:gap-12"
                     >
                         {[
-                            { value: '6', label: 'Interview Categories', icon: '📋' },
+                            // UPDATED: 6 → 7 categories
+                            { value: '7', label: 'Interview Categories', icon: '📋' },
                             { value: '8', label: 'AI Interview Styles', icon: '🤖' },
                             { value: '6', label: 'Readiness Dimensions', icon: '📊' },
                             { value: stats?.totalProblems || '∞', label: 'AI-Generated Content', icon: '🧠' },

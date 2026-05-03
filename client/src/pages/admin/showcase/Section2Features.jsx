@@ -7,12 +7,13 @@ const CAPABILITIES = [
     {
         icon: '📋',
         title: 'Practice Every Round',
-        subtitle: '6 Interview Categories',
-        desc: 'Coding, System Design, Behavioral, CS Fundamentals, HR, SQL — each with tailored submission forms, category-specific AI review, and progressive follow-up questions.',
+        // UPDATED: 6 → 7, correct category names
+        subtitle: '7 Interview Categories',
+        desc: 'Coding, System Design, Low-Level Design, Behavioral, Technical Knowledge, Databases, HR — each with a dedicated workspace, category-specific AI review, and progressive follow-up questions.',
         color: 'from-brand-400/20 to-brand-400/5',
         border: 'border-brand-400/20 hover:border-brand-400/40',
         to: '/problems',
-        highlights: ['Category-specific forms', 'AI-generated content', 'Follow-up questions'],
+        highlights: ['Dedicated workspaces', 'AI-generated content', 'Follow-up questions'],
     },
     {
         icon: '💬',
@@ -66,6 +67,35 @@ const CAPABILITIES = [
     },
 ]
 
+// NEW: Dedicated workspace callout — highlights the purpose-built workspaces
+// added across this session for Behavioral, Technical Knowledge, and Databases.
+const WORKSPACE_HIGHLIGHTS = [
+    {
+        icon: '🗣️',
+        category: 'Behavioral',
+        headline: 'STAR Workspace',
+        desc: 'Forces the metacognitive step first — name the competency being tested before writing your story. Five structured STAR sections with per-section depth indicators.',
+        color: 'text-success',
+        bg: 'bg-success/5 border-success/20',
+    },
+    {
+        icon: '🧠',
+        category: 'Technical Knowledge',
+        headline: 'Mechanism-First Workspace',
+        desc: '7 subject domains (OS, Networking, DB Internals, DSA Theory, Distributed Systems, AI/ML, Data Engineering). Forces mechanism-level explanation, not textbook definitions.',
+        color: 'text-warning',
+        bg: 'bg-warning/5 border-warning/20',
+    },
+    {
+        icon: '🗄️',
+        category: 'Databases',
+        headline: 'In-House SQL Editor',
+        desc: 'Write and submit SQL queries directly in ProbSolver — no external redirects. Two modes: Query Problems (schema reference + Monaco SQL editor) and Schema Design (structured table modeling).',
+        color: 'text-brand-300',
+        bg: 'bg-brand-400/5 border-brand-400/20',
+    },
+]
+
 export default function Section2Features() {
     const navigate = useNavigate()
 
@@ -83,7 +113,7 @@ export default function Section2Features() {
                     spaced repetition, and data-driven readiness tracking — all in one platform.
                 </SectionDesc>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
                     {CAPABILITIES.map((cap, i) => (
                         <motion.div
                             key={cap.title}
@@ -101,23 +131,16 @@ export default function Section2Features() {
                                 cap.border,
                             )}
                         >
-                            {/* Icon */}
                             <div className="text-3xl mb-4">{cap.icon}</div>
-
-                            {/* Title + subtitle */}
                             <h3 className="text-base font-extrabold text-text-primary mb-0.5">
                                 {cap.title}
                             </h3>
                             <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-3">
                                 {cap.subtitle}
                             </p>
-
-                            {/* Description */}
                             <p className="text-xs text-text-tertiary leading-relaxed mb-4">
                                 {cap.desc}
                             </p>
-
-                            {/* Highlights */}
                             <div className="flex flex-wrap gap-1.5">
                                 {cap.highlights.map(h => (
                                     <span key={h}
@@ -127,8 +150,6 @@ export default function Section2Features() {
                                     </span>
                                 ))}
                             </div>
-
-                            {/* Arrow */}
                             <div className="absolute top-6 right-6 text-text-disabled
                               group-hover:text-brand-300 transition-colors">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -141,6 +162,46 @@ export default function Section2Features() {
                         </motion.div>
                     ))}
                 </div>
+
+                {/* NEW: Dedicated workspace callout */}
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    className="bg-surface-1 border border-border-default rounded-2xl p-6"
+                >
+                    <h3 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-1">
+                        <span>🏗️</span> Purpose-Built Workspaces — Not Generic Forms
+                    </h3>
+                    <p className="text-xs text-text-tertiary mb-5 leading-relaxed">
+                        Every non-coding category has a dedicated workspace engineered around how that
+                        interview type is actually evaluated. Not a text box with a different label —
+                        a structured, coached submission experience built around the psychology of each round.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {WORKSPACE_HIGHLIGHTS.map((w, i) => (
+                            <motion.div
+                                key={w.category}
+                                initial={{ opacity: 0, y: 8 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: i * 0.08 }}
+                                className={cn('rounded-xl border p-4', w.bg)}
+                            >
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">{w.icon}</span>
+                                    <div>
+                                        <p className={cn('text-[10px] font-bold uppercase tracking-widest', w.color)}>
+                                            {w.category}
+                                        </p>
+                                        <p className="text-xs font-bold text-text-primary">{w.headline}</p>
+                                    </div>
+                                </div>
+                                <p className="text-[11px] text-text-tertiary leading-relaxed">{w.desc}</p>
+                            </motion.div>
+                        ))}
+                    </div>
+                </motion.div>
             </div>
         </Section>
     )
