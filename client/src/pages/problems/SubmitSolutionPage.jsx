@@ -364,6 +364,13 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
                     })}
                 </div>
             </div>
+            {/* Warning when required sections empty but user has scrolled past them */}
+            {completedCount === 0 && (
+                <p className="text-[10px] text-warning flex items-center gap-1.5 mt-2">
+                    <span>⚠️</span>
+                    Fill in <strong>Analyze</strong> or <strong>Answer</strong> sections above before submitting
+                </p>
+            )}
 
             {/* Active section panel */}
             <motion.div
@@ -928,10 +935,16 @@ export default function SubmitSolutionPage() {
 
         // HR validation: at least the analysis and answer must be filled
         if (isHR) {
-            const hasAnalysis = (hrData.underlyingConcern?.trim().length ?? 0) > 20
-            const hasAnswer = (hrData.answer?.trim().length ?? 0) > 20
+            // Require at least one character in either the analysis or the answer.
+            // We do not enforce a length threshold here — the AI reviewer will assess quality.
+            // Validation only blocks completely empty submissions to prevent accidental submits.
+            const hasAnalysis = (hrData.underlyingConcern?.trim().length ?? 0) > 0
+            const hasAnswer = (hrData.answer?.trim().length ?? 0) > 0
             if (!hasAnalysis && !hasAnswer) {
-                toast.error('Fill in "What they\'re really checking" or "Your Answer" before submitting.')
+                toast.error(
+                    'Your answer workspace is empty. Fill in at least one section before submitting.',
+                    { duration: 5000 }
+                )
                 return
             }
         }
@@ -1424,11 +1437,28 @@ export default function SubmitSolutionPage() {
                         Cancel
                     </Button>
                     <div className="flex items-center gap-3">
-                        {confidence === 0 && (
-                            <span className="text-xs text-text-disabled hidden sm:block">
-                                Set confidence to submit
-                            </span>
-                        )}
+                        {(() => {
+                            // HR: show workspace empty warning when follow-ups are filled but workspace is not
+                            if (isHR) {
+                                const workspaceEmpty = (hrData.underlyingConcern?.trim().length ?? 0) === 0 &&
+                                    (hrData.answer?.trim().length ?? 0) === 0
+                                if (workspaceEmpty) {
+                                    return (
+                                        <span className="text-xs text-warning hidden sm:block font-semibold">
+                                            Fill in the Answer workspace above first
+                                        </span>
+                                    )
+                                }
+                            }
+                            if (confidence === 0) {
+                                return (
+                                    <span className="text-xs text-text-disabled hidden sm:block">
+                                        Set confidence to submit
+                                    </span>
+                                )
+                            }
+                            return null
+                        })()}
                         <Button
                             type="button"
                             variant="primary"
