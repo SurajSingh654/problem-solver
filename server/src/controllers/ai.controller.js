@@ -37,25 +37,7 @@ export async function reviewSolution(req, res) {
 
     const solution = await prisma.solution.findFirst({
       where: { id: solutionId, userId, teamId },
-      select: {
-        id: true,
-        approach: true,
-        code: true,
-        language: true,
-        bruteForce: true,
-        optimizedApproach: true,
-        timeComplexity: true,
-        spaceComplexity: true,
-        keyInsight: true,
-        feynmanExplanation: true,
-        realWorldConnection: true,
-        confidence: true,
-        pattern: true,
-        reviewCount: true,
-        aiFeedback: true,
-        timeTaken: true,
-        solveMethod: true,
-        categorySpecificData: true, // ← ADD THIS
+      include: {
         problem: {
           select: {
             id: true,
