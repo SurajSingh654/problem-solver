@@ -459,72 +459,135 @@ export const CATEGORY_FORMS = {
     showFollowUps: true,
   },
   HR: {
+    // ── HR Round Form Configuration ────────────────────────────────
+    //
+    // HR interviews test six underlying concerns — not algorithms, not code.
+    // The form reflects the actual structure of strong HR answers:
+    //   1. Understand what's really being asked (metacognition before answering)
+    //   2. Craft the answer (the primary artifact)
+    //   3. Make it company-specific (the #1 failure mode is generic answers)
+    //   4. Self-assess honestly (what's strong, what needs work)
+    //   5. Categorize the question (for tracking and coaching)
+    //
+    // No code editor. No algorithm pattern selector. No brute force/optimized.
+    // No Feynman explanation (irrelevant for personal narrative answers).
+    // No external link. No difficulty badge (replaced by stakes on the view).
+    //
+    // isHRRound flag tells the submit page to render the HR workspace
+    // instead of the generic form.
+    isHRRound: true,
+
+    // Empty fields for API consistency — HR uses hrFields
+    fields: {},
+
     steps: [
       {
         id: 1,
-        label: "Analysis",
+        label: "Analyze",
         icon: "🔍",
-        desc: "What is the interviewer really asking?",
+        desc: "What is the interviewer really checking?",
       },
       {
         id: 2,
-        label: "Response",
+        label: "Answer",
         icon: "💬",
-        desc: "Your authentic, specific answer",
+        desc: "Your complete, polished response",
       },
       {
         id: 3,
-        label: "Research",
-        icon: "🏢",
-        desc: "Company connection and preparation",
+        label: "Tailor",
+        icon: "🎯",
+        desc: "Make it specific to this company",
+      },
+      {
+        id: 4,
+        label: "Reflect",
+        icon: "🪞",
+        desc: "Honest self-assessment",
       },
     ],
-    fields: {
-      patternIdentified: {
-        label: "Question Category",
-        placeholder: "e.g. Motivation, Career Goals, Strengths, Culture Fit...",
-        show: true,
-        suggestions: [
-          "Motivation & Why",
-          "Career Goals",
-          "Strengths & Weaknesses",
-          "Culture Fit",
-          "Salary Expectations",
-          "Work Style",
-          "Why Leaving",
-          "Why This Role",
-        ],
-      },
-      patternReasoning: {
-        label: "What Are They Really Asking?",
+
+    // HR-specific structured fields stored in categorySpecificData
+    hrFields: {
+      underlyingConcern: {
+        label: "What is the interviewer really checking?",
         placeholder:
-          "Behind every HR question is a real concern. What is the interviewer trying to assess?",
-        hint: '"Why should we hire you?" = "Can you articulate your unique value?"',
-        show: true,
+          'Before answering, identify the real concern behind this question.\n\nExamples:\n• "Why do you want to work here?" = They\'re checking: Did you research us? Do you specifically want THIS job, or just any job? Are you likely to stay?\n\n• "What is your greatest weakness?" = They\'re checking: Are you self-aware? Can you take feedback? Are you honest under pressure, or do you give a fake answer?\n\n• "Why did you leave your last job?" = They\'re checking: Was there a problem? Is there a pattern? Are you a flight risk?\n\n• "Tell me about yourself" = They\'re checking: Does your career story make sense? Is this job a logical next step? Do you communicate clearly?\n\nWrite your analysis of what THIS specific question is really testing:',
+        hint: "This is the most important step. You cannot write a strong HR answer without knowing the real question behind the question. Every generic answer fails because the candidate answered the surface question, not the real one.",
+        rows: 8,
+        required: true,
       },
-      keyInsight: {
-        label: "Your Core Message",
-        placeholder: "One sentence that captures the essence of your answer.",
-        hint: "Every great HR answer has a clear, memorable takeaway.",
-        show: true,
-      },
-      simpleExplanation: {
+
+      answer: {
         label: "Your Answer",
         placeholder:
-          "Write your complete, polished response. Be authentic and specific.",
-        hint: "Avoid generic answers — mention specific projects, numbers, or experiences.",
-        show: true,
+          'Write your complete, polished response.\n\nGuidelines:\n• Speak in first person — use "I" not "we"\n• Be specific — name real projects, real companies, real numbers\n• Avoid generic phrases: "I am passionate about technology", "I love innovation", "great culture" — these are red flags\n• Appropriate length: 60-120 seconds spoken (about 150-250 words written)\n• End with a clear, memorable point — not a trailing thought\n\nFor weakness/failure questions:\n• Name a REAL weakness — not a disguised strength ("I work too hard")\n• Show genuine evidence of improvement — specific steps you took\n• Keep it relevant: avoid weaknesses that are core to the job\n\nFor "tell me about yourself":\n• Present → Past → Why here: current role → relevant background → why this specific opportunity\n• Keep it to 90 seconds — this is an opener, not your life story',
+        hint: "This is your primary artifact. Everything else supports this. Write it out fully — even if you plan to speak it, writing it forces precision.",
+        rows: 14,
+        required: true,
       },
-      challenges: {
-        label: "Company Research Connection",
+
+      companyConnection: {
+        label: "Company-Specific Evidence",
         placeholder:
-          "How does your answer connect specifically to THIS company?",
-        hint: "Mention their mission, recent news, product, or values.",
-        show: true,
+          'What makes your answer specific to THIS company — not any company?\n\nStrong signals interviewers look for:\n• You named a specific product, feature, or engineering decision\n• You referenced something from their engineering blog, public talks, or recent news\n• You mentioned a specific company value and connected it to a real experience\n• You named a specific person at the company whose work influenced your interest\n• You referenced a challenge this company is facing and connected your experience to it\n\nExamples of weak company connection:\n✗ "I love your innovative culture and great products"\n✗ "I\'ve heard great things about your work-life balance"\n✗ "You\'re a leader in the industry"\n\nExamples of strong company connection:\n✓ "I read your engineering blog post about the migration to microservices — that\'s exactly the kind of architectural challenge I worked on at [Company]"\n✓ "Your recent product launch into [market] caught my attention because I have 3 years of experience building for that exact customer segment"\n✓ "[Company value] resonates with me because in my last role I [specific example]"\n\nWrite what makes YOUR answer specific to this company:',
+        hint: "Generic answers are the #1 reason candidates fail HR rounds. If your answer could be said in any interview at any company, it needs this section.",
+        rows: 8,
+        required: false,
+      },
+
+      selfAssessment: {
+        label: "Honest Self-Assessment",
+        placeholder:
+          "After writing your answer, critically evaluate it:\n\nWhat is strong about this answer?\n• Is it specific? (names real projects, real companies, real numbers)\n• Does it answer the REAL question, not just the surface question?\n• Is it authentic — does it sound like you, or like a rehearsed script?\n• Is there a clear, memorable ending?\n\nWhat still needs work?\n• Where is it still generic? What specific details are missing?\n• Is there anything that sounds like a red flag when read aloud?\n• For weakness questions: is the weakness real and honest?\n• For achievement questions: does the impact feel quantified and credible?\n\nWhat would you change if you could answer this again?\n\nWrite your honest assessment:",
+        hint: "The candidate who can accurately assess their own answer is the one who improves fastest. Be honest — this is your private preparation space, not the actual interview.",
+        rows: 8,
+        required: false,
+      },
+
+      questionCategory: {
+        label: "Question Category",
+        placeholder: "Select the category that best describes this question",
+        hint: "Used for tracking which types of HR questions you have prepared for. Helps identify gaps in your preparation.",
+        rows: 1,
+        required: false,
       },
     },
+
+    // For the solution display card — how to render submitted HR answers
+    displayConfig: {
+      sections: [
+        {
+          key: "underlyingConcern",
+          label: "What They Were Really Checking",
+          icon: "🔍",
+        },
+        {
+          key: "answer",
+          label: "Answer",
+          icon: "💬",
+        },
+        {
+          key: "companyConnection",
+          label: "Company-Specific Evidence",
+          icon: "🎯",
+        },
+        {
+          key: "selfAssessment",
+          label: "Self-Assessment",
+          icon: "🪞",
+        },
+      ],
+    },
+
+    // HR questions benefit from follow-up probing questions.
+    // "Why did you leave?" follow-up: "What specifically wasn't working?"
+    // "What is your weakness?" follow-up: "How did you realize this was a weakness?"
+    // These are valuable for deep preparation.
+    showFollowUps: true,
+
+    // HR answers do not use solution tabs (no brute force / optimized)
     showSolutionTabs: false,
-    showFollowUps: false,
   },
   SQL: {
     steps: [

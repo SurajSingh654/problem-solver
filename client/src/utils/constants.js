@@ -359,7 +359,7 @@ export const PROBLEM_CATEGORIES = [
     icon: "🤝",
     color: "text-danger",
     bg: "bg-danger/12 border-danger/25",
-    desc: "Motivation, culture fit",
+    desc: "Motivation, culture fit, career narrative",
     sources: ["OTHER"],
   },
   {
@@ -377,6 +377,168 @@ export const PROBLEM_CATEGORY_LABELS = Object.fromEntries(
   PROBLEM_CATEGORIES.map((c) => [c.id, c.label]),
 );
 
+// ── HR Question Stakes ─────────────────────────────────
+//
+// HR questions do not have difficulty in the algorithmic sense.
+// The relevant dimension is STAKES — how much damage a poor answer can do
+// and how much preparation the question requires.
+//
+// Stored in the existing `difficulty` DB field for backward compatibility:
+//   EASY   → Common   (standard questions every candidate gets)
+//   MEDIUM → Tricky   (no obvious right answer, requires careful framing)
+//   HARD   → Sensitive (difficult topics, high emotional/professional risk)
+//
+// Displayed with completely different labels, colors, and icons on HR views.
+export const HR_STAKES = {
+  EASY: {
+    id: "EASY",
+    label: "Common",
+    icon: "🟢",
+    color: "text-success",
+    bg: "bg-success/10 border-success/25",
+    desc: "Standard questions asked in almost every HR interview",
+  },
+  MEDIUM: {
+    id: "MEDIUM",
+    label: "Tricky",
+    icon: "🟡",
+    color: "text-warning",
+    bg: "bg-warning/10 border-warning/25",
+    desc: "No obvious right answer — requires careful framing and self-awareness",
+  },
+  HARD: {
+    id: "HARD",
+    label: "Sensitive",
+    icon: "🔴",
+    color: "text-danger",
+    bg: "bg-danger/10 border-danger/25",
+    desc: "Difficult topics — gaps, terminations, salary, failure — highest stakes",
+  },
+};
+
+// ── HR Question Categories ─────────────────────────────
+//
+// Six categories covering every HR question type in SWE interviews.
+// Research basis: HR questions map to six underlying interviewer concerns:
+//   1. Career Narrative   → flight risk, self-direction, trajectory coherence
+//   2. Motivation & Fit   → retention probability, research depth, culture alignment
+//   3. Self-Assessment    → self-awareness, coachability, honest self-knowledge
+//   4. Work Style         → team compatibility, communication, conflict response
+//   5. Logistics          → compensation alignment, timeline, competing offers
+//   6. Questions for Them → engagement level, research depth, critical thinking
+//
+export const HR_QUESTION_CATEGORIES = [
+  {
+    id: "CAREER_NARRATIVE",
+    label: "Career Narrative",
+    icon: "📖",
+    color: "text-brand-300",
+    bg: "bg-brand-400/10 border-brand-400/25",
+    desc: "Tell your story — resume walkthrough, career changes, gaps, departures",
+    realConcern: "Is this person's career trajectory coherent? Will they stay?",
+    examples: [
+      "Tell me about yourself",
+      "Walk me through your resume",
+      "Why did you change careers?",
+      "Can you explain this employment gap?",
+      "Why did you leave your last job?",
+      "Why were you fired/laid off?",
+    ],
+  },
+  {
+    id: "MOTIVATION_AND_FIT",
+    label: "Motivation & Company Fit",
+    icon: "🎯",
+    color: "text-info",
+    bg: "bg-info/10 border-info/25",
+    desc: "Why this company, why this role, what you know about them",
+    realConcern:
+      "Did they research us? Do they actually want THIS job or just any job?",
+    examples: [
+      "Why do you want to work here?",
+      "Why this role specifically?",
+      "What do you know about our company?",
+      "Where do you see yourself in 5 years?",
+      "What excites you about this opportunity?",
+    ],
+  },
+  {
+    id: "SELF_ASSESSMENT",
+    label: "Self-Assessment",
+    icon: "🪞",
+    color: "text-warning",
+    bg: "bg-warning/10 border-warning/25",
+    desc: "Strengths, weaknesses, achievements, failures — honest self-knowledge",
+    realConcern:
+      "Are they self-aware? Can they take feedback? Are they honest under pressure?",
+    examples: [
+      "What are your greatest strengths?",
+      "What is your biggest weakness?",
+      "What is your greatest professional achievement?",
+      "Tell me about a time you failed",
+      "How would your colleagues describe you?",
+      "What would your manager say you need to work on?",
+    ],
+  },
+  {
+    id: "WORK_STYLE",
+    label: "Work Style & Culture",
+    icon: "🤝",
+    color: "text-success",
+    bg: "bg-success/10 border-success/25",
+    desc: "How you work, handle pressure, collaborate, and fit the team culture",
+    realConcern:
+      "Will they mesh with the team? How do they handle conflict and stress?",
+    examples: [
+      "How do you prefer to work — independently or collaboratively?",
+      "How do you handle disagreement with your manager?",
+      "Describe your ideal work environment",
+      "How do you manage stress and pressure?",
+      "Are you comfortable with remote/hybrid work?",
+      "How do you prioritize when you have competing deadlines?",
+    ],
+  },
+  {
+    id: "LOGISTICS",
+    label: "Logistics & Practical",
+    icon: "📋",
+    color: "text-purple-400",
+    bg: "bg-purple-400/10 border-purple-400/25",
+    desc: "Salary, notice period, start date, relocation, other offers",
+    realConcern:
+      "Can we close this candidate? Is there a practical blocker to making an offer?",
+    examples: [
+      "What are your salary expectations?",
+      "What is your notice period?",
+      "Are you open to relocation?",
+      "Do you have other offers you're considering?",
+      "When can you start?",
+      "Are you comfortable with the travel requirements?",
+    ],
+  },
+  {
+    id: "QUESTIONS_FOR_THEM",
+    label: "Questions for the Interviewer",
+    icon: "💬",
+    color: "text-danger",
+    bg: "bg-danger/10 border-danger/25",
+    desc: "The questions YOU ask at the end — interviewers actively evaluate these",
+    realConcern:
+      "Is this person genuinely engaged? Did they research us? Do they think critically?",
+    examples: [
+      "What does success look like in the first 90 days?",
+      "What is the biggest challenge the team is facing right now?",
+      "How does the team handle performance feedback?",
+      "What does the engineering culture value most?",
+      "How has this role evolved over the past year?",
+      "What do you enjoy most about working here?",
+    ],
+  },
+];
+
+export const HR_QUESTION_CATEGORY_MAP = Object.fromEntries(
+  HR_QUESTION_CATEGORIES.map((c) => [c.id, c]),
+);
 // ── Category visibility config for AI generation UI ───
 //
 // Research basis:
