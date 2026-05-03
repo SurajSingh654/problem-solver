@@ -37,6 +37,7 @@ CODING correctness analysis:
 - Detect language mismatch: if selected language is X but code is clearly language Y, flag it
 - Detect incomplete solutions: pseudocode, TODO comments, missing critical sections`,
     },
+
     SYSTEM_DESIGN: {
       focus:
         "requirements clarity, capacity reasoning, API design quality, architectural decisions, trade-off depth, failure mode awareness",
@@ -71,6 +72,7 @@ FAILURE MODES:
 - Are there mitigations proposed?
 - Is the failure analysis realistic?`,
     },
+
     LOW_LEVEL_DESIGN: {
       focus:
         "OOP correctness, SOLID principles, design pattern appropriateness, extensibility, implementation quality",
@@ -86,69 +88,158 @@ CLASS HIERARCHY & RELATIONSHIPS:
 - Is composition preferred over inheritance where appropriate?
 - Are abstract classes used only where shared state exists?
 - Are interfaces used for behavioral contracts with no shared state?
-- Does the hierarchy make Liskov Substitution sense — can subtypes substitute base types?
+- Does the hierarchy make Liskov Substitution sense?
 DESIGN PATTERN APPLICATION:
 - Is the identified pattern structurally correct — not just named correctly?
 - Does the pattern actually solve the stated problem?
-- Is the pattern overkill or appropriate for the scope?
-- Are multiple patterns combined sensibly, or does the design over-engineer?
+- Is the pattern appropriate for the scope or is it overkill?
 SOLID PRINCIPLES:
 - Single Responsibility: Does each class change for exactly one reason?
 - Open/Closed: Can new behavior be added without modifying existing classes?
 - Liskov Substitution: Can subtypes be used wherever the base type is expected?
-- Interface Segregation: Are interfaces small and focused, not bloated?
-- Dependency Inversion: Do high-level modules depend on abstractions, not concretions?
+- Interface Segregation: Are interfaces small and focused?
+- Dependency Inversion: Do high-level modules depend on abstractions?
 IMPLEMENTATION QUALITY:
 - Are method signatures clean and intention-revealing?
-- Are constructors appropriate — not doing too much work?
 - Is encapsulation respected — no unnecessary public fields?
 - Is the code idiomatic for the chosen language?
 EXTENSIBILITY:
 - Can new requirements be added with minimal modification to existing classes?
-- Does the candidate identify where their design would break under follow-up requirements?
-- Are the identified gaps honest and realistic?`,
+- Does the candidate honestly identify where their design would break?`,
     },
+
     BEHAVIORAL: {
-      focus: "STAR structure, specificity, impact quantification, authenticity",
+      focus:
+        "STAR structure completeness, specificity and detail, impact quantification, ownership language, growth mindset",
       codeCorrectnessGuide: `
-BEHAVIORAL correctness analysis:
-- Does the response follow STAR format?
-- Is the answer specific (names real project, team size, timeframe)?
-- Does it quantify impact where possible?
-- Does it answer what was actually asked?`,
+BEHAVIORAL evaluation framework — evaluate each area independently:
+STAR STRUCTURE:
+- Does the response have a clear Situation? Is it specific (project name, team size, timeline)?
+- Is the Task clearly stated — what was the candidate specifically responsible for?
+- Are the Actions detailed? Does the candidate explain what THEY personally did, step by step?
+- Is there a clear Result? Is the outcome stated explicitly?
+- Are all four STAR components present, or are any missing/underdeveloped?
+SPECIFICITY & AUTHENTICITY:
+- Does the answer use specific details (real project names, real numbers, real people)?
+- Or is it generic and could apply to anyone? ("I worked with my team to solve a problem")
+- Does it feel authentic — like a real memory — or rehearsed and vague?
+OWNERSHIP LANGUAGE:
+- Does the candidate use "I" consistently for their own actions?
+- Or do they hide behind "we" when describing what they personally did?
+- This is critical: interviewers want to know what YOU did, not what the team did.
+IMPACT QUANTIFICATION:
+- Is the Result quantified? (%, $, time saved, users impacted, error rate reduced)
+- If not quantified, is there a qualitative outcome clearly stated?
+- Does the candidate understand why their action mattered?
+GROWTH MINDSET:
+- Does the candidate show self-awareness about what they learned?
+- Do they articulate what they would do differently?
+- Do they demonstrate that this experience changed their approach?
+COMPETENCY ALIGNMENT:
+- Does the story actually demonstrate the competency being asked about?
+- Is the competency demonstrated through actions, not just stated? ("I am a leader" vs showing leadership)`,
     },
+
     CS_FUNDAMENTALS: {
       focus:
-        "conceptual accuracy, depth of explanation, real-world connections",
+        "conceptual accuracy, explanation depth, real-world application, misconception awareness, interview readiness",
       codeCorrectnessGuide: `
-CS FUNDAMENTALS correctness analysis:
-- Is the core concept explained accurately with no factual errors?
-- Does it cover the key sub-concepts at appropriate depth?
-- Are common misconceptions avoided?`,
+CS FUNDAMENTALS evaluation framework — evaluate each area independently:
+CONCEPTUAL ACCURACY:
+- Is the core concept explained correctly with no factual errors?
+- Are technical terms used accurately and appropriately?
+- Would a domain expert agree with what was said?
+- Are there any subtle but critical inaccuracies that would fail an interview?
+EXPLANATION DEPTH:
+- Does the explanation go beyond surface-level? ("TCP is reliable" vs explaining the handshake, ACKs, retransmission)
+- Does the candidate explain the mechanism — HOW it works, not just WHAT it does?
+- Do they explain WHY it was designed this way — the engineering trade-off behind the concept?
+REAL-WORLD APPLICATION:
+- Does the candidate connect the concept to real systems they would actually work with?
+- Can they give concrete examples? ("Virtual memory is used by every OS — here's what happens when you fork a process")
+- Do they understand where this concept appears in production engineering?
+MISCONCEPTION AWARENESS:
+- Does the candidate identify and address common misconceptions about this topic?
+- Do they know the "gotcha" details that interviewers probe for?
+- Example: "Most people think TCP guarantees delivery — it guarantees ordering and retransmission but not delivery if the connection drops"
+INTERVIEW DEPTH CALIBRATION:
+- Did they go deep enough for the level being interviewed (junior vs senior)?
+- Did they cover the sub-topics an interviewer would probe?
+- Did they leave obvious follow-up questions unanswered that they should have addressed proactively?`,
     },
+
     HR: {
-      focus: "authenticity, specificity, company alignment, structure",
+      focus:
+        "authenticity and specificity, company research depth, career narrative coherence, self-awareness, answer structure",
       codeCorrectnessGuide: `
-HR correctness analysis:
-- Is the answer authentic and specific?
-- Does it address what the question is actually asking?
-- Is it appropriate length?`,
+HR evaluation framework — evaluate each area independently:
+AUTHENTICITY & SPECIFICITY:
+- Does the answer feel genuine and personal, or rehearsed and generic?
+- Are there specific details that could only come from this candidate's real experience?
+- Generic red flags: "I am passionate about technology", "I love working in teams", "I want to grow"
+- Authentic signals: specific projects mentioned, specific aspects of the company named, real career moments referenced
+COMPANY RESEARCH DEPTH:
+- Does the candidate demonstrate knowledge of THIS specific company?
+- Do they reference specific products, engineering culture, recent news, or company values?
+- Or is the answer generic and could apply to any company?
+- Strong signal: "I read about your migration to microservices on the engineering blog"
+- Weak signal: "I love your innovative culture and great products"
+CAREER NARRATIVE COHERENCE:
+- Does the candidate's story make logical sense? Does each role lead naturally to the next?
+- Can they explain why they made each career decision?
+- Is there a clear thread connecting their past experience to why they want THIS role?
+- Interviewers are evaluating flight risk and motivation alignment
+SELF-AWARENESS:
+- Can the candidate honestly assess their own strengths with specific evidence?
+- Can they discuss a real weakness with genuine improvement evidence?
+- Do they show awareness of how others perceive them?
+- Lack of self-awareness is a major red flag for culture fit
+ANSWER STRUCTURE:
+- Is the answer appropriately concise — not rambling, not too brief?
+- Does it answer what was actually asked, not a similar but easier question?
+- Does it end with a clear, memorable point?`,
     },
+
     SQL: {
       focus:
-        "query correctness, optimization, edge cases, schema understanding",
+        "query correctness, schema understanding, optimization awareness, edge case handling, query clarity",
       codeCorrectnessGuide: `
-SQL correctness analysis:
-- Is the query syntactically valid?
-- Does it return the correct result?
-- Does it handle NULLs, duplicates, and edge cases?
-- Detect language mismatch: SQL selected but Python/Java code pasted`,
+SQL evaluation framework — evaluate each area independently:
+SCHEMA ANALYSIS:
+- Did the candidate analyze the schema before writing the query?
+- Do they understand the relationships between tables (1:1, 1:N, N:M)?
+- Did they identify which columns are indexed and how that affects their approach?
+- Did they ask clarifying questions about the schema when needed?
+QUERY CORRECTNESS:
+- Does the query return the correct result for the stated requirements?
+- Is the JOIN type correct for the data relationship? (INNER vs LEFT vs RIGHT)
+- Are GROUP BY and HAVING used correctly vs WHERE?
+- Is the query syntactically valid for standard SQL?
+- Detect language mismatch: Python/Java code pasted instead of SQL
+NULL HANDLING:
+- Does the query handle NULL values correctly?
+- Is there a difference between COUNT(*) and COUNT(column) that matters here?
+- Does OUTER JOIN introduce NULLs that need to be handled?
+- Is IS NULL / IS NOT NULL used correctly vs = NULL?
+OPTIMIZATION AWARENESS:
+- Does the candidate identify which indexes would help this query?
+- Do they understand the difference between index scan and table scan?
+- Is there an N+1 query pattern that should be addressed?
+- Could a CTE or subquery be rewritten as a more efficient JOIN?
+- Do they understand that SELECT * is expensive in production?
+EDGE CASES:
+- Empty tables — does the query still return sensible results?
+- Duplicate rows — are they handled intentionally with DISTINCT or GROUP BY?
+- Large datasets — would this query be acceptable at 100M rows?
+QUERY CLARITY:
+- Is the query readable? Proper indentation, meaningful aliases?
+- Is CTE vs subquery choice appropriate for readability?
+- Would a junior engineer understand what this query does?`,
     },
   };
 
   const ctx = categoryContext[data.category] || categoryContext.CODING;
 
-  // Solve method context for confidence calibration
   const solveMethodContext =
     data.solveMethod === "SAW_APPROACH"
       ? "IMPORTANT: Candidate saw the approach before implementing. Confidence rating must be heavily discounted."
@@ -165,7 +256,6 @@ SQL correctness analysis:
       OVER_2_HOURS: "Over 2 hours",
     }[data.timeTaken] || null;
 
-  // Build follow-up context
   let followUpContext = "";
   if (data.followUpAnswers?.length > 0) {
     followUpContext = "\n\n--- FOLLOW-UP QUESTIONS ---\n";
@@ -183,7 +273,6 @@ SQL correctness analysis:
       "\n\n--- FOLLOW-UP QUESTIONS: All skipped (no answers provided) ---\n";
   }
 
-  // ── Pattern baseline context ───────────────────────
   const patternBaselineContext = data.patternBaseline
     ? `
 CANDIDATE'S PATTERN HISTORY — ${data.patternBaseline.pattern}:
@@ -206,39 +295,151 @@ BASELINE COMPARISON REQUIREMENT:
 - This makes feedback personal and actionable, not generic`
     : "";
 
-  // ── Category-specific scoring dimension guidance ───
-  // SD and LLD use different mental models than coding.
-  // The standard 5-dimension rubric is reinterpreted per category
-  // so scores are meaningful in context.
-  const categoryDimensionGuidance =
-    data.category === "SYSTEM_DESIGN"
-      ? `
+  // ── Category-specific dimension reinterpretation ───────────────
+  // The 5 standard scoring dimensions were designed for coding problems.
+  // For non-coding categories, we reinterpret each dimension in context
+  // so scores are meaningful. The JSON field names stay identical —
+  // only what the AI is evaluating changes.
+  //
+  // Scientific basis: using the wrong evaluation frame produces
+  // unreliable scores. An AI scoring "code correctness" on a STAR story
+  // will either hallucinate criteria or default to generic feedback.
+  // Explicit reinterpretation anchors each dimension to real signals.
+  const categoryDimensionGuidance = (() => {
+    switch (data.category) {
+      case "SYSTEM_DESIGN":
+        return `
 SCORING REINTERPRETATION FOR SYSTEM DESIGN:
 1. CODE CORRECTNESS → DESIGN CORRECTNESS (35%)
-   Does the design actually solve the stated system? Does it handle the scale and requirements?
-2. PATTERN ACCURACY → ARCHITECTURAL PATTERN (20%)
-   Is the architectural style (microservices, event-driven, etc.) appropriate?
+   Does the design actually solve the stated system at the stated scale?
+   Are the right components present? Does the data flow make sense end-to-end?
+2. PATTERN ACCURACY → ARCHITECTURAL PATTERN ACCURACY (20%)
+   Is the architectural style (microservices, event-driven, CQRS, etc.) appropriate?
+   Is the database choice (SQL vs NoSQL) justified for the access patterns?
 3. UNDERSTANDING DEPTH → SYSTEMS THINKING DEPTH (20%)
-   Does the candidate understand WHY each component exists and what it trades off?
-4. EXPLANATION QUALITY → COMMUNICATION CLARITY (15%)
-   Can they explain the system clearly? Would a junior engineer understand this design?
-5. CONFIDENCE CALIBRATION → unchanged`
-      : data.category === "LOW_LEVEL_DESIGN"
-        ? `
+   Does the candidate understand WHY each component exists?
+   Do they reason about trade-offs, not just describe components?
+4. EXPLANATION QUALITY → DESIGN COMMUNICATION CLARITY (15%)
+   Could another engineer implement this from the description?
+   Is the data flow clear? Are component boundaries defined?
+5. CONFIDENCE CALIBRATION → unchanged`;
+
+      case "LOW_LEVEL_DESIGN":
+        return `
 SCORING REINTERPRETATION FOR LOW-LEVEL DESIGN:
-1. CODE CORRECTNESS → OOP CORRECTNESS (35%)
-   Is the class structure semantically correct? Do the relationships make sense?
-   Is the implementation (if provided) structurally sound?
+1. CODE CORRECTNESS → OOP DESIGN CORRECTNESS (35%)
+   Is the class structure semantically correct? No god objects, clear SRP?
+   Are relationships (IS-A vs HAS-A) correct? Is implementation structurally sound?
 2. PATTERN ACCURACY → DESIGN PATTERN ACCURACY (20%)
-   Is the identified pattern applied correctly — structurally, not just named?
-   Does it solve the stated problem?
+   Is the identified pattern structurally applied correctly — not just named?
+   Does it solve the stated problem? Is it the right pattern for the scope?
 3. UNDERSTANDING DEPTH → OOP UNDERSTANDING DEPTH (20%)
    Does the candidate understand WHY the chosen hierarchy/pattern is correct?
-   Can they articulate SOLID violations in their own design?
+   Can they articulate SOLID violations honestly? Do they understand trade-offs?
 4. EXPLANATION QUALITY → DESIGN EXPLANATION CLARITY (15%)
-   Is the class hierarchy clear? Would another engineer implement it correctly from this?
-5. CONFIDENCE CALIBRATION → unchanged`
-        : "";
+   Could another engineer implement the class structure from this description?
+   Are method signatures clear? Is the hierarchy unambiguous?
+5. CONFIDENCE CALIBRATION → unchanged`;
+
+      case "BEHAVIORAL":
+        return `
+SCORING REINTERPRETATION FOR BEHAVIORAL:
+1. CODE CORRECTNESS → STAR STRUCTURE COMPLETENESS (35%)
+   Are all four STAR components present and developed? (Situation, Task, Action, Result)
+   Is the Situation specific — real project, real team, real stakes?
+   Are the Actions detailed — what did THEY personally do, step by step?
+   Is the Result stated with measurable impact?
+2. PATTERN ACCURACY → COMPETENCY ALIGNMENT (20%)
+   Does the story actually demonstrate the competency being asked about?
+   Is the competency shown through actions, not just claimed? ("I led X" vs showing leadership)
+   Does the story answer the actual question or a similar but easier one?
+3. UNDERSTANDING DEPTH → SELF-AWARENESS & GROWTH MINDSET (20%)
+   Does the candidate show genuine reflection on what they learned?
+   Do they identify what they would do differently and why?
+   Do they understand the broader impact of their actions on the team/company?
+4. EXPLANATION QUALITY → COMMUNICATION CLARITY & OWNERSHIP (15%)
+   Is "I" used consistently for personal actions (not "we")?
+   Is the story told clearly without rambling?
+   Would the interviewer know exactly what this person contributed?
+5. CONFIDENCE CALIBRATION → unchanged
+   Note: Confidence here means how well the candidate knows their own story.
+   A rehearsed, polished answer with weak specifics should score lower than
+   a less polished answer with strong authentic detail.`;
+
+      case "CS_FUNDAMENTALS":
+        return `
+SCORING REINTERPRETATION FOR CS FUNDAMENTALS:
+1. CODE CORRECTNESS → CONCEPTUAL ACCURACY (35%)
+   Is the concept explained correctly with no factual errors?
+   Are technical terms used accurately?
+   Would a domain expert agree with everything stated?
+2. PATTERN ACCURACY → TOPIC COVERAGE ACCURACY (20%)
+   Did the candidate cover the right sub-topics for this concept?
+   Did they identify the correct mechanism — HOW it works, not just WHAT it is?
+   Did they address the "gotcha" details interviewers probe for?
+3. UNDERSTANDING DEPTH → CONCEPTUAL DEPTH & REAL-WORLD CONNECTION (20%)
+   Do they explain WHY the concept was designed this way?
+   Can they connect it to real production systems with specific examples?
+   Do they understand the engineering trade-offs behind the concept?
+4. EXPLANATION QUALITY → TEACHING CLARITY (15%)
+   Could a junior engineer understand this explanation?
+   Is the explanation structured (what → why → how → where it's used)?
+   Are analogies or examples used to make abstract concepts concrete?
+5. CONFIDENCE CALIBRATION → unchanged
+   Note: Overconfidence is especially dangerous in CS fundamentals.
+   A candidate who confidently states something incorrect should score
+   lower on calibration than one who correctly flags their uncertainty.`;
+
+      case "HR":
+        return `
+SCORING REINTERPRETATION FOR HR:
+1. CODE CORRECTNESS → ANSWER AUTHENTICITY & SPECIFICITY (35%)
+   Does the answer feel genuine and personal, not rehearsed and generic?
+   Are there specific details only this candidate could provide?
+   Generic red flags: "passionate about technology", "love innovation", "great culture"
+   Authentic signals: specific products mentioned, specific career moments named
+2. PATTERN ACCURACY → COMPANY & ROLE ALIGNMENT (20%)
+   Does the candidate demonstrate research about THIS specific company?
+   Is the answer tailored to this role or generic for any tech company?
+   Does their stated motivation make logical sense given their background?
+3. UNDERSTANDING DEPTH → CAREER NARRATIVE COHERENCE & SELF-AWARENESS (20%)
+   Does their career story make logical sense? Each role leading to the next?
+   Can they honestly assess their own strengths with specific evidence?
+   Can they discuss a real weakness with genuine improvement evidence?
+4. EXPLANATION QUALITY → ANSWER STRUCTURE & CONCISENESS (15%)
+   Does the answer address what was actually asked?
+   Is it appropriately concise — not rambling, not too brief?
+   Does it end with a clear, memorable point?
+5. CONFIDENCE CALIBRATION → unchanged
+   Note: In HR, overconfidence often appears as inability to discuss weaknesses
+   or failures honestly. Appropriate humility is a positive signal.`;
+
+      case "SQL":
+        return `
+SCORING REINTERPRETATION FOR SQL:
+1. CODE CORRECTNESS → QUERY CORRECTNESS (35%)
+   Does the query return the correct result for ALL cases?
+   Is the JOIN type correct for the data relationship?
+   Are GROUP BY, HAVING, WHERE used correctly?
+   Does it handle NULLs, duplicates, and empty tables correctly?
+2. PATTERN ACCURACY → QUERY PATTERN SELECTION (20%)
+   Is the right query pattern used? (JOIN vs subquery vs CTE vs window function)
+   Is the pattern appropriate for the access pattern and data volume?
+   Could a simpler pattern achieve the same result more efficiently?
+3. UNDERSTANDING DEPTH → SCHEMA & OPTIMIZATION UNDERSTANDING (20%)
+   Does the candidate understand the access patterns implied by the schema?
+   Do they identify which indexes would help and why?
+   Do they reason about query performance at scale (not just correctness)?
+4. EXPLANATION QUALITY → QUERY EXPLANATION CLARITY (15%)
+   Can the candidate walk through what their query does step by step?
+   Is the query readable — proper aliases, formatting, CTE naming?
+   Would another engineer understand the intent from reading it?
+5. CONFIDENCE CALIBRATION → unchanged`;
+
+      default:
+        return ""; // CODING uses standard dimensions — no reinterpretation needed
+    }
+  })();
 
   const system = `You are a senior engineering interview coach doing a comprehensive solution review.
 Evaluate this ${data.category} submission across 5 dimensions with independent, honest scores.
@@ -331,13 +532,13 @@ RESPOND WITH EXACT JSON — no extra fields, no missing fields:
 
   // ── Submission section — category-specific field presentation ──
   //
-  // SYSTEM_DESIGN: structured fields from categorySpecificData with proper labels
-  // LOW_LEVEL_DESIGN: structured fields from categorySpecificData with proper labels
-  // All others: standard generic coding-oriented field presentation
-  //
-  // Falls back to the generic field mapping if categorySpecificData is absent,
-  // ensuring backward compatibility with solutions submitted before the
-  // structured workspace existed.
+  // SYSTEM_DESIGN: structured fields from categorySpecificData
+  // LOW_LEVEL_DESIGN: structured OOP fields from categorySpecificData
+  // BEHAVIORAL: STAR-oriented field presentation
+  // CS_FUNDAMENTALS: concept-oriented field presentation
+  // HR: narrative-oriented field presentation
+  // SQL: query + schema-oriented presentation
+  // CODING + fallback: standard generic presentation
   const categorySpecific = data.categorySpecificData;
 
   let submissionSection;
@@ -367,8 +568,6 @@ ${categorySpecific.tradeoffReasoning || data.keyInsight || "Not provided"}
 Failure Modes:
 ${categorySpecific.failureModes || data.timeComplexity || "Not provided"}`;
   } else if (data.category === "LOW_LEVEL_DESIGN" && categorySpecific) {
-    // LLD: structured OOP-focused presentation
-    // Each section maps to a specific dimension in the LLD evaluation rubric
     const implementationCode =
       categorySpecific.implementationCode || data.code || null;
 
@@ -391,8 +590,106 @@ Implementation Code:
 \`\`\`${(data.language || "java").toLowerCase()}
 ${implementationCode ? implementationCode.substring(0, 2500) : "No implementation provided"}
 \`\`\``;
+  } else if (data.category === "BEHAVIORAL") {
+    // BEHAVIORAL: present fields with STAR-aligned labels
+    // The generic field mapping for behavioral:
+    //   approach        → STAR Situation & Task (patternReasoning field)
+    //   feynmanExplanation → STAR Result & Impact (simpleExplanation field)
+    //   keyInsight      → Key Learning
+    //   realWorldConnection → What Would You Do Differently (challenges field)
+    //   code            → STAR Actions (actionField, stored in optimizedApproach)
+    submissionSection = `Question Type / Competency:
+${data.pattern || "Not specified"}
+
+STAR — Situation & Task:
+${data.approach || "Not provided"}
+
+STAR — Action (Step by Step):
+${data.optimizedApproach || data.code || "Not provided"}
+
+STAR — Result & Impact:
+${data.feynmanExplanation || "Not provided"}
+
+Key Learning:
+${data.keyInsight || "Not provided"}
+
+What Would You Do Differently:
+${data.realWorldConnection || "Not provided"}`;
+  } else if (data.category === "CS_FUNDAMENTALS") {
+    // CS_FUNDAMENTALS: present fields with concept-learning labels
+    //   pattern         → Core Topic
+    //   approach        → Concept Explanation (patternReasoning field)
+    //   keyInsight      → Key Distinction
+    //   feynmanExplanation → Real-World Examples (simpleExplanation field)
+    //   realWorldConnection → Common Misconceptions (challenges field)
+    //   code/optimizedApproach → Detailed Breakdown (detailField)
+    submissionSection = `Core Topic:
+${data.pattern || "Not specified"}
+
+Concept Explanation (in candidate's own words):
+${data.approach || "Not provided"}
+
+Key Distinction (what separates deep understanding from surface knowledge):
+${data.keyInsight || "Not provided"}
+
+Real-World Examples:
+${data.feynmanExplanation || "Not provided"}
+
+Common Misconceptions Addressed:
+${data.realWorldConnection || "Not provided"}
+
+Detailed Breakdown:
+${data.optimizedApproach || data.code || "Not provided"}`;
+  } else if (data.category === "HR") {
+    // HR: present fields with motivation/fit labels
+    //   pattern         → Question Category
+    //   approach        → What the interviewer is really asking
+    //   keyInsight      → Core Message
+    //   feynmanExplanation → Full Answer
+    //   realWorldConnection → Company Research Connection
+    submissionSection = `Question Category:
+${data.pattern || "Not specified"}
+
+What the Interviewer Is Really Asking (candidate's analysis):
+${data.approach || "Not provided"}
+
+Core Message (one sentence essence):
+${data.keyInsight || "Not provided"}
+
+Full Answer:
+${data.feynmanExplanation || "Not provided"}
+
+Company Research Connection:
+${data.realWorldConnection || "Not provided"}`;
+  } else if (data.category === "SQL") {
+    // SQL: lead with schema analysis, then query
+    //   approach        → Schema Analysis (patternReasoning field)
+    //   pattern         → Query Pattern identified
+    //   keyInsight      → Key Optimization insight
+    //   feynmanExplanation → Query Explanation (walk-through)
+    //   realWorldConnection → Edge Cases handled
+    //   code            → The actual SQL query
+    submissionSection = `Schema Analysis:
+${data.approach || "Not provided"}
+
+Query Pattern Used:
+${data.pattern || "Not identified"}
+
+SQL Query:
+\`\`\`sql
+${data.code ? data.code.substring(0, 2000) : "No query provided"}
+\`\`\`
+
+Query Explanation (step by step):
+${data.feynmanExplanation || "Not provided"}
+
+Key Optimization:
+${data.keyInsight || "Not provided"}
+
+Edge Cases Handled:
+${data.realWorldConnection || "Not provided"}`;
   } else {
-    // Standard coding / behavioral / SQL / CS_FUNDAMENTALS / HR
+    // CODING and any unrecognized category — standard presentation
     submissionSection = `Approach:
 ${data.approach || "Not provided"}
 Code:
