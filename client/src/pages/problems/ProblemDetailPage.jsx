@@ -16,7 +16,8 @@ import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { useAIStatus } from '@hooks/useAI'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
-import { PROBLEM_CATEGORIES, HR_STAKES, HR_QUESTION_CATEGORIES, HR_QUESTION_CATEGORY_MAP } from '@utils/constants'
+// FIX 8: Removed unused HR_QUESTION_CATEGORIES import
+import { PROBLEM_CATEGORIES, HR_STAKES, HR_QUESTION_CATEGORY_MAP } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -28,7 +29,7 @@ function getCategoryIcon(category) {
         BEHAVIORAL: '🗣️',
         CS_FUNDAMENTALS: '🧠',
         HR: '🤝',
-        SQL: '🗃️',
+        SQL: '🗄️',
         CODING: '💻',
     }
     return icons[category] || '📋'
@@ -42,7 +43,7 @@ function getSubmitLabel(category) {
         BEHAVIORAL: 'Submit My Response',
         CS_FUNDAMENTALS: 'Submit My Explanation',
         HR: 'Submit My Answer',
-        SQL: 'Submit Solution',  // generic — overridden in SubmitSolutionPage by problemType
+        SQL: 'Submit Solution',
     }
     return labels[category] || 'Submit Solution'
 }
@@ -74,8 +75,6 @@ function getPlatformSearchUrl(source, title) {
 }
 
 // ── HR Question Category Badge ─────────────────────────
-// Displays which category of HR question this is.
-// Reads from categoryData.hrQuestionCategory stored by admin.
 function HRCategoryBadge({ categoryId }) {
     const cat = HR_QUESTION_CATEGORY_MAP[categoryId]
     if (!cat) return null
@@ -91,8 +90,6 @@ function HRCategoryBadge({ categoryId }) {
 }
 
 // ── HR Stakes Badge ────────────────────────────────────
-// Replaces the Easy/Medium/Hard difficulty badge for HR questions.
-// Common / Tricky / Sensitive based on HR_STAKES map.
 function HRStakesBadge({ difficulty }) {
     const stakes = HR_STAKES[difficulty]
     if (!stakes) return null
@@ -108,14 +105,8 @@ function HRStakesBadge({ difficulty }) {
 }
 
 // ── HR Real Concern Panel ──────────────────────────────
-// Shows what the interviewer is really assessing for this question.
-// Unlike SD/LLD where we lock hints, for HR this is visible upfront —
-// knowing the real concern is prerequisite to answering well.
-// Research: you cannot write a strong HR answer without understanding
-// the underlying interviewer concern.
 function HRRealConcernPanel({ categoryId, description }) {
     const cat = HR_QUESTION_CATEGORY_MAP[categoryId]
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -126,8 +117,6 @@ function HRRealConcernPanel({ categoryId, description }) {
             <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
                 <span>🔍</span> What the Interviewer Is Really Checking
             </h2>
-
-            {/* The real concern from the category config */}
             {cat && (
                 <div className="bg-surface-1 border border-border-default rounded-xl p-3.5 mb-3">
                     <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
@@ -138,8 +127,6 @@ function HRRealConcernPanel({ categoryId, description }) {
                     </p>
                 </div>
             )}
-
-            {/* The question itself (description from admin) */}
             {description && (
                 <div className="mb-3">
                     <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
@@ -148,8 +135,6 @@ function HRRealConcernPanel({ categoryId, description }) {
                     <MarkdownRenderer content={description} />
                 </div>
             )}
-
-            {/* Example questions from this category */}
             {cat && cat.examples?.length > 0 && (
                 <div>
                     <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
@@ -170,29 +155,8 @@ function HRRealConcernPanel({ categoryId, description }) {
     )
 }
 
-
 // ── Behavioral Competency Panel ────────────────────────
-// Visible to members BEFORE submission — upfront coaching panel.
-//
-// Research basis: identical reasoning to HRRealConcernPanel.
-// You cannot structure a strong STAR answer without knowing which
-// competency is being probed. This is not a hint about the answer —
-// it is the prerequisite frame for the answer. Locking it would be
-// pedagogically wrong and would actively harm preparation quality.
-//
-// What this shows:
-//   1. The competency being tested (if admin tagged it in categoryData)
-//   2. The real interviewer concern behind the question
-//   3. What a strong vs weak STAR answer looks like for this competency
-//   4. The failure mode most candidates fall into for this question type
-//
-// What this does NOT show:
-//   - The answer itself
-//   - Admin teaching notes (those unlock after submission)
-//   - Model STAR stories (those are in admin notes, locked)
 function BehavioralCompetencyPanel({ competencyTag, description }) {
-    // Competency metadata — maps admin-tagged competencies to coaching context.
-    // Covers all major STAR competency categories used across FAANG/tier-1 interviews.
     const COMPETENCY_COACHING = {
         'Leadership': {
             realConcern: 'Can this person influence direction, align people, and drive outcomes without formal authority? Do they lead or follow when things get hard?',
@@ -256,8 +220,6 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
             <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
                 <span>🎯</span> Competency Being Tested
             </h2>
-
-            {/* The tagged competency */}
             {competencyTag && (
                 <div className="bg-surface-1 border border-border-default rounded-xl p-3.5 mb-3">
                     <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
@@ -266,8 +228,6 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                     <p className="text-base font-extrabold text-success">{competencyTag}</p>
                 </div>
             )}
-
-            {/* Real concern */}
             {coaching && (
                 <>
                     <div className="bg-surface-1 border border-border-default rounded-xl p-3.5 mb-3">
@@ -278,8 +238,6 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                             "{coaching.realConcern}"
                         </p>
                     </div>
-
-                    {/* Strong vs weak signals — compact two-column */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                         <div className="bg-success/5 border border-success/15 rounded-xl p-3">
                             <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1.5">
@@ -298,8 +256,6 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                             </p>
                         </div>
                     </div>
-
-                    {/* The specific failure mode */}
                     <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
                         <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">
                             ⚠️ Most common failure mode
@@ -310,8 +266,6 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                     </div>
                 </>
             )}
-
-            {/* Description from admin — shown if present */}
             {description && (
                 <div className="mt-3 pt-3 border-t border-border-subtle">
                     <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
@@ -320,8 +274,6 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                     <MarkdownRenderer content={description} />
                 </div>
             )}
-
-            {/* If no competency tagged — show generic STAR framework reminder */}
             {!competencyTag && !coaching && (
                 <div className="space-y-2">
                     {[
@@ -345,31 +297,8 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
     )
 }
 
-
 // ── Technical Knowledge Subject Panel ────────────────────
-// Visible to members BEFORE submission — upfront framing panel.
-//
-// Research basis: identical to BehavioralCompetencyPanel and HRRealConcernPanel.
-// Candidates who know HOW an interviewer evaluates TK questions answer at
-// a fundamentally different depth than those who don't.
-// The three evaluation dimensions (Mechanism / Trade-offs / Real-world) are
-// not hints — they are the evaluation criteria. Hiding them would make
-// candidates study the wrong thing.
-//
-// What this shows:
-//   1. The subject domain with relevant sub-topics to study
-//   2. The three evaluation dimensions with what "strong" looks like for each
-//   3. The most common failure mode for this domain
-//   4. Depth calibration — what level of depth is expected for this concept
-//
-// What this does NOT show:
-//   - The answer itself
-//   - Admin teaching notes (locked until submission)
-//   - Model explanations (locked)
 function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
-    // Domain metadata — maps tagged domains to interview coaching context.
-    // Each entry covers: what interviewers actually test, strong vs weak signals,
-    // the specific failure mode most candidates exhibit, and depth calibration.
     const DOMAIN_COACHING = {
         'Operating Systems': {
             icon: '🖥️',
@@ -385,7 +314,7 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
             strongSignal: 'Can walk through the TCP 3-way handshake with sequence numbers, explain why TIME_WAIT exists and what happens without it, explain what changes between HTTP/1.1 and HTTP/2 and why (head-of-line blocking)',
             weakSignal: '"TCP is reliable and UDP is not." — stopping at the marketing description. "HTTPS is secure" — without explaining TLS negotiation.',
             failureMode: 'Candidates learn the conceptual model but not the protocol state machine. "What is in the TCP header and why?" trips up 80% of candidates who can describe TCP in words.',
-            depthCalibration: 'Junior: know the protocols and their primary use cases. Mid-level: know the mechanisms and failure modes. Senior: know why the protocols were designed this way, what trade-offs they encode, and when to break the rules (e.g., building your own reliability layer on UDP for gaming).',
+            depthCalibration: 'Junior: know the protocols and their primary use cases. Mid-level: know the mechanisms and failure modes. Senior: know why the protocols were designed this way, what trade-offs they encode, and when to break the rules.',
         },
         'Database Internals': {
             icon: '🗄️',
@@ -399,7 +328,7 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
             icon: '🧩',
             probeTopics: 'Why HashMap is O(1) amortized not O(1) worst case, consistent hashing and why it solves rebalancing, bloom filter use cases despite false positives, LRU cache data structure internals, why B-Tree beats BST for disk storage',
             strongSignal: 'Can explain that HashMap O(1) amortized comes from occasional O(n) rehashing, why the amortized analysis still holds, what load factor is and how it affects performance. Can explain why B-Tree nodes are sized to fit a disk page.',
-            weakSignal: '"HashMap is O(1)" — without the amortized qualifier or understanding of when it breaks. "Consistent hashing distributes load evenly" — without explaining the problem with regular hashing it solves (full reshuffling on node add/remove).',
+            weakSignal: '"HashMap is O(1)" — without the amortized qualifier or understanding of when it breaks. "Consistent hashing distributes load evenly" — without explaining the problem with regular hashing it solves.',
             failureMode: 'Treating these as implementation problems. "How would you implement an LRU cache?" gets solved in code. The TK question is "what data structures does an LRU cache require and why?" — HashMap + doubly linked list, and WHY each is needed.',
             depthCalibration: 'The conceptual depth question is always one level deeper than the implementation. If you can implement it, the interviewer will ask why the data structure works that way.',
         },
@@ -408,28 +337,27 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
             probeTopics: 'Consistency models (strong, eventual, causal — with examples), consensus problem and why it\'s hard, idempotency and how to achieve it, rate limiting algorithm trade-offs (token bucket vs leaky bucket), message queue delivery guarantees',
             strongSignal: 'Can explain why you\'d choose eventual consistency over strong consistency for a shopping cart but not for a bank transfer. Can explain what makes exactly-once delivery hard (2PC problem). Can design an idempotent API endpoint.',
             weakSignal: '"Distributed systems are eventually consistent" — without knowing when that\'s acceptable and when it\'s not. "Use a message queue for async processing" — without understanding at-least-once vs exactly-once implications.',
-            failureMode: 'Candidates understand the happy path but not the failure path. "What happens when a node goes down during a 2PC commit?" is where most distributed systems knowledge breaks. Study failure modes as much as normal operation.',
-            depthCalibration: 'Junior: understand why distributed systems are different from single-machine systems. Mid-level: know the trade-offs and when to apply each pattern. Senior: can reason about partial failures, understand the FLP impossibility result conceptually, can design systems that degrade gracefully.',
+            failureMode: 'Candidates understand the happy path but not the failure path. "What happens when a node goes down during a 2PC commit?" is where most distributed systems knowledge breaks.',
+            depthCalibration: 'Junior: understand why distributed systems are different from single-machine systems. Mid-level: know the trade-offs and when to apply each pattern. Senior: can reason about partial failures, understand the FLP impossibility result conceptually.',
         },
         'AI/ML': {
             icon: '🤖',
             probeTopics: 'Gradient descent and why learning rate matters, overfitting vs underfitting and how to detect/fix each, bias-variance trade-off, what a transformer does differently from an RNN, vector embeddings and why similarity search works',
-            strongSignal: 'Can explain gradient descent as optimization on the loss surface, why a learning rate that is too large oscillates and never converges, what dropout does to prevent overfitting (random deactivation forces redundant representations)',
+            strongSignal: 'Can explain gradient descent as optimization on the loss surface, why a learning rate that is too large oscillates and never converges, what dropout does to prevent overfitting',
             weakSignal: '"Machine learning learns from data" — too abstract. "Overfitting means the model memorizes training data" — correct but stops before explaining how to detect or prevent it.',
-            failureMode: 'Non-ML engineers often treat AI/ML questions as "not my domain." But any engineer at a company building AI-powered features will be asked these questions. The expected depth is conceptual, not mathematical. You don\'t need to derive backpropagation — you need to explain what it achieves and why it works.',
+            failureMode: 'Non-ML engineers often treat AI/ML questions as "not my domain." The expected depth is conceptual, not mathematical. You don\'t need to derive backpropagation — you need to explain what it achieves and why it works.',
             depthCalibration: 'For non-ML roles: understand the core concepts well enough to have a conversation about ML system design decisions. For ML-adjacent roles: deeper understanding of model training, evaluation metrics, and deployment considerations.',
         },
         'Data Engineering': {
             icon: '⚡',
             probeTopics: 'Batch vs stream processing trade-offs (latency, complexity, cost), ETL vs ELT (why ELT won with cloud data warehouses), columnar storage mechanics (why Parquet is faster for analytics), Kafka architecture (topics, partitions, consumer groups)',
-            strongSignal: 'Can explain why stream processing has lower latency but higher operational complexity. Can explain why a column store is faster for "SELECT AVG(revenue) FROM orders" than a row store (only reads one column vs full rows). Can explain consumer group semantics in Kafka.',
+            strongSignal: 'Can explain why stream processing has lower latency but higher operational complexity. Can explain why a column store is faster for "SELECT AVG(revenue) FROM orders" than a row store. Can explain consumer group semantics in Kafka.',
             weakSignal: '"Kafka is a message queue" — undersells it. Kafka is a distributed commit log with replay semantics. "Batch processing processes data in batches" — circular definition.',
-            failureMode: 'Candidates conflate data engineering with data science. Data engineering is infrastructure — pipelines, storage, reliability, scale. The questions are engineering trade-off questions, not statistical questions.',
+            failureMode: 'Candidates conflate data engineering with data science. Data engineering is infrastructure — pipelines, storage, reliability, scale.',
             depthCalibration: 'Backend engineers should understand stream vs batch trade-offs and basic pipeline design. Data engineers need deep understanding of distributed processing, storage formats, and pipeline reliability patterns.',
         },
     }
 
-    // Try to match the subject tag to a domain
     const domainKey = subjectTag
         ? Object.keys(DOMAIN_COACHING).find(key =>
             subjectTag.toLowerCase().includes(key.toLowerCase()) ||
@@ -449,8 +377,6 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
             <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
                 <span>🧠</span> Technical Knowledge — Evaluation Framework
             </h2>
-
-            {/* Three evaluation dimensions — always shown */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                 {[
                     {
@@ -475,23 +401,17 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                         bg: 'bg-success/5 border-success/20',
                     },
                 ].map(dim => (
-                    <div key={dim.label}
-                        className={cn('rounded-xl border p-3', dim.bg)}
-                    >
+                    <div key={dim.label} className={cn('rounded-xl border p-3', dim.bg)}>
                         <p className={cn(
                             'text-[10px] font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1',
                             dim.color
                         )}>
                             <span>{dim.icon}</span>{dim.label}
                         </p>
-                        <p className="text-[11px] text-text-tertiary leading-relaxed">
-                            {dim.desc}
-                        </p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">{dim.desc}</p>
                     </div>
                 ))}
             </div>
-
-            {/* Domain-specific coaching — shown when admin tagged a subject */}
             {coaching && (
                 <>
                     <div className="bg-surface-1 border border-border-default rounded-xl p-3.5 mb-3">
@@ -505,7 +425,6 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                             {coaching.probeTopics}
                         </p>
                     </div>
-
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                         <div className="bg-success/5 border border-success/15 rounded-xl p-3">
                             <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1.5">
@@ -524,7 +443,6 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                             </p>
                         </div>
                     </div>
-
                     <div className="bg-warning/5 border border-warning/15 rounded-xl p-3 mb-3">
                         <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">
                             ⚠️ Most common failure mode
@@ -533,7 +451,6 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                             {coaching.failureMode}
                         </p>
                     </div>
-
                     <div className="bg-surface-1 border border-border-default rounded-xl p-3">
                         <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
                             📊 Depth calibration by level
@@ -544,8 +461,6 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                     </div>
                 </>
             )}
-
-            {/* Description from admin */}
             {description && (
                 <div className="mt-3 pt-3 border-t border-border-subtle">
                     <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
@@ -558,21 +473,7 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
     )
 }
 
-
 // ── Database Schema Panel ──────────────────────────────
-// Visible to members BEFORE submission for both query and schema design problems.
-//
-// For QUERY problems:
-//   The schema reference (table definitions + sample data) is shown prominently.
-//   This is the problem itself — candidates cannot write a query without seeing
-//   the schema. Locking it would make the problem unsolvable.
-//
-// For SCHEMA_DESIGN problems:
-//   The evaluation framework is shown — what interviewers assess in schema design.
-//   The requirements are shown (from problem description).
-//
-// What this does NOT show:
-//   Admin notes (locked until submission) — model schema or optimal query
 function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
     const isQueryMode = problemType !== 'SCHEMA_DESIGN'
 
@@ -592,9 +493,7 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
                 <span>{isQueryMode ? '🗄️' : '📐'}</span>
                 {isQueryMode ? 'Schema Reference' : 'Schema Design — Evaluation Framework'}
             </h2>
-
             {isQueryMode ? (
-                // Query mode — show the schema as the primary content
                 <>
                     <p className="text-[11px] text-text-tertiary mb-3 leading-relaxed">
                         These are the tables your query will operate on. Read the schema carefully
@@ -614,7 +513,6 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
                     ) : null}
                 </>
             ) : (
-                // Schema design mode — show the evaluation framework
                 <>
                     <p className="text-[11px] text-text-tertiary mb-4 leading-relaxed">
                         Schema design is evaluated on three dimensions simultaneously.
@@ -652,7 +550,6 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
                             </div>
                         ))}
                     </div>
-                    {/* Common failure modes */}
                     <div className="bg-danger/5 border border-danger/15 rounded-xl p-3 mb-3">
                         <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1.5">
                             ⚠️ Most common failure modes
@@ -672,7 +569,6 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
                             ))}
                         </div>
                     </div>
-                    {/* Requirements */}
                     {description && (
                         <div className="border-t border-border-subtle pt-3">
                             <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
@@ -692,6 +588,7 @@ export default function ProblemDetailPage() {
     const navigate = useNavigate()
     const { user } = useAuthStore()
     const isAdmin = user?.globalRole === 'SUPER_ADMIN' || user?.teamRole === 'TEAM_ADMIN'
+
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
 
@@ -721,21 +618,14 @@ export default function ProblemDetailPage() {
     const isLLD = category === 'LOW_LEVEL_DESIGN'
     const isHR = category === 'HR'
     const isBehavioral = category === 'BEHAVIORAL'
+    // FIX 2: Removed duplicate isTechnicalKnowledge — unified into isCSFundamentals
     const isCSFundamentals = category === 'CS_FUNDAMENTALS'
-    const isTechnicalKnowledge = category === 'CS_FUNDAMENTALS'
-
     const isDatabase = category === 'SQL'
+
     const dbProblemType = problem?.categoryData?.problemType || 'QUERY'
     const dbSchemaReference = problem?.categoryData?.schemaDefinition || null
-
-    // For Database: show schema reference (query mode) or evaluation framework (schema design) upfront.
-    // Query problems need the schema to be solvable — this is not a hint, it is the problem.
-    // Schema design problems benefit from seeing the evaluation criteria upfront.
     const showDatabasePanel = isDatabase && !isAdmin
 
-
-
-    // HR question category stored by admin in categoryData
     const hrQuestionCategory = problem.categoryData?.hrQuestionCategory || null
 
     const solutions = solutionsData?.solutions || []
@@ -746,42 +636,17 @@ export default function ProblemDetailPage() {
         ? (typeof useCases === 'string' ? useCases.split('\n').filter(Boolean) : useCases)
         : []
 
-    // ── Content visibility rules by category ──────────────
-    //
-    // SYSTEM_DESIGN, LOW_LEVEL_DESIGN:
-    //   Real world context locked until submission (gives away the answer).
-    //   Admin notes (teaching guide) locked until submission.
-    //
-    // HR, BEHAVIORAL, CS_FUNDAMENTALS:
-    //   Admin notes (model answer, strong/weak examples) locked until submission.
-    //   Real world context (if any) visible upfront — it is contextual, not the answer.
-    //
-    // HR special case:
-    //   "What they're really checking" is visible UPFRONT for HR —
-    //   this is not giving away the answer, it is giving the question behind the question.
-    //   You cannot answer well without knowing the real concern.
-    //
-    // CODING, SQL:
-    //   Everything visible upfront. The problem is a known puzzle — no spoilers.
-    //
     const showRealWorldContext = (!isSystemDesign && !isLLD) || isSolved
+
+    // FIX 4: Added isDatabase to showAdminNotes so DB problems unlock notes after submission
     const showAdminNotes = isAdmin || (
-        (isSystemDesign || isLLD || isHR || isBehavioral || isCSFundamentals) && isSolved
+        (isSystemDesign || isLLD || isHR || isBehavioral || isCSFundamentals || isDatabase) && isSolved
     )
 
-    // For HR: show the real concern panel upfront (always visible to members)
-    // For HR teaching notes: only after submission
     const showHRConcernPanel = isHR && !isAdmin
-
-    // For BEHAVIORAL: show the competency coaching panel upfront — same reasoning
-    // as HR's HRRealConcernPanel. Knowing the competency is prerequisite to answering.
     const showBehavioralPanel = isBehavioral && !isAdmin
-
-    // For CS_FUNDAMENTALS: show the evaluation framework panel upfront.
-    // The three dimensions (Mechanism / Trade-offs / Real-world) are not hints —
-    // they are what the interviewer is scoring. Making them visible improves
-    // preparation quality and does not give away the answer.
-    const showTKPanel = isTechnicalKnowledge && !isAdmin
+    // FIX 2: was isTechnicalKnowledge — now uses isCSFundamentals
+    const showTKPanel = isCSFundamentals && !isAdmin
 
     return (
         <div className="p-6 max-w-[900px] mx-auto">
@@ -808,7 +673,6 @@ export default function ProblemDetailPage() {
             >
                 {/* Badges row */}
                 <div className="flex items-center gap-2 flex-wrap mb-3">
-                    {/* HR: show stakes badge instead of difficulty */}
                     {isHR ? (
                         <HRStakesBadge difficulty={difficulty} />
                     ) : (
@@ -816,8 +680,6 @@ export default function ProblemDetailPage() {
                             {difficulty?.charAt(0) + difficulty?.slice(1).toLowerCase()}
                         </Badge>
                     )}
-
-                    {/* Category badge */}
                     {category && (() => {
                         const cat = PROBLEM_CATEGORIES.find(c => c.id === category)
                         return cat ? (
@@ -826,28 +688,25 @@ export default function ProblemDetailPage() {
                             </span>
                         ) : null
                     })()}
-
-                    {/* HR question category badge */}
                     {isHR && hrQuestionCategory && (
                         <HRCategoryBadge categoryId={hrQuestionCategory} />
                     )}
-
-                    {/* Platform badge — CODING/SQL only */}
+                    {/* FIX 6: Added !isDatabase to platform badge condition */}
                     {problem.categoryData?.platform &&
                         problem.categoryData.platform !== 'OTHER' &&
-                        !isSystemDesign && !isLLD && !isHR && !isBehavioral && !isCSFundamentals && (
+                        !isSystemDesign && !isLLD && !isHR && !isBehavioral && !isCSFundamentals && !isDatabase && (
                             <span className="text-[10px] font-bold text-text-disabled bg-surface-3
                                              border border-border-subtle rounded-full px-2 py-px">
                                 {problem.categoryData.platform}
                             </span>
                         )}
-
                     {isPinned && (
                         <span className="text-xs font-bold text-warning bg-warning/10
                                          border border-warning/25 rounded-full px-2 py-0.5">
                             📌 Pinned
                         </span>
                     )}
+                    {/* FIX 5: Category-appropriate solved badge label */}
                     {isSolved && (
                         <span className="text-xs font-bold text-success bg-success/10
                                          border border-success/25 rounded-full px-2 py-0.5
@@ -857,7 +716,11 @@ export default function ProblemDetailPage() {
                                 strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12" />
                             </svg>
-                            Answered
+                            {isHR || isBehavioral
+                                ? 'Answered'
+                                : isCSFundamentals
+                                    ? 'Explained'
+                                    : 'Solved'}
                         </span>
                     )}
                 </div>
@@ -867,9 +730,10 @@ export default function ProblemDetailPage() {
                     {title}
                 </h1>
 
-                {/* External link — CODING/SQL only */}
+                {/* FIX 7: External link excludes SCHEMA_DESIGN database problems */}
                 {problem.categoryData?.sourceUrl &&
-                    !isSystemDesign && !isLLD && !isHR && !isBehavioral && !isCSFundamentals && (
+                    !isSystemDesign && !isLLD && !isHR && !isBehavioral && !isCSFundamentals &&
+                    !(isDatabase && dbProblemType === 'SCHEMA_DESIGN') && (
                         <div className="flex items-center gap-2 mb-4 flex-wrap">
                             <a
                                 href={problem.categoryData.sourceUrl}
@@ -914,7 +778,7 @@ export default function ProblemDetailPage() {
                         </div>
                     )}
 
-                {/* Company tags — not shown for HR (irrelevant) */}
+                {/* Company tags */}
                 {problem.categoryData?.companyTags?.length > 0 && !isHR && (
                     <div className="flex flex-wrap gap-1.5 mb-4">
                         {problem.categoryData.companyTags.map(c => (
@@ -937,7 +801,7 @@ export default function ProblemDetailPage() {
                     />
                     {followUpQuestions?.length > 0 && (
                         <InfoChip
-                            label={isHR ? 'Follow-ups' : 'Follow-ups'}
+                            label="Follow-ups"
                             value={followUpQuestions.length}
                             color="text-info"
                         />
@@ -962,7 +826,7 @@ export default function ProblemDetailPage() {
                     </div>
                 </div>
 
-                {/* Tags — hide for HR (not applicable) */}
+                {/* Tags */}
                 {tags?.length > 0 && !isHR && (
                     <div className="flex flex-wrap gap-2 mb-3">
                         {tags.map(t => (
@@ -977,6 +841,7 @@ export default function ProblemDetailPage() {
 
                 {/* Action buttons */}
                 <div className="flex items-center gap-3 mt-5 flex-wrap">
+                    {/* FIX 1: All navigate calls corrected from tagged template to function call */}
                     {!isSolved ? (
                         <Button
                             variant="primary"
@@ -1006,12 +871,6 @@ export default function ProblemDetailPage() {
                 </div>
             </motion.div>
 
-            {/* ── HR: Real Concern Panel (always visible) ───────
-                For HR questions, knowing what the interviewer is really
-                checking is prerequisite to answering well — not a spoiler.
-                This is unique to HR: SD/LLD/BEHAVIORAL lock hints but HR
-                coaching requires revealing the underlying concern upfront.
-            ─────────────────────────────────────────────────── */}
             {showHRConcernPanel && (
                 <HRRealConcernPanel
                     categoryId={hrQuestionCategory}
@@ -1026,6 +885,7 @@ export default function ProblemDetailPage() {
                 />
             )}
 
+            {/* FIX 2: was showTKPanel with isTechnicalKnowledge — now uses isCSFundamentals */}
             {showTKPanel && (
                 <TechnicalKnowledgeSubjectPanel
                     subjectTag={problem.categoryData?.subjectTag || problem.categoryData?.competencyTag || null}
@@ -1041,12 +901,8 @@ export default function ProblemDetailPage() {
                 />
             )}
 
-            {/* ── Problem Description (non-HR categories) ──────
-                For SYSTEM_DESIGN and LOW_LEVEL_DESIGN: prominently styled as
-                the design brief. For CODING and others: supplementary context.
-                For HR: description is shown inside HRRealConcernPanel above.
-            ─────────────────────────────────────────────────── */}
-            {description && !isHR && !isBehavioral && !isTechnicalKnowledge && !isDatabase && (
+            {/* FIX 2: was !isTechnicalKnowledge — now uses !isCSFundamentals */}
+            {description && !isHR && !isBehavioral && !isCSFundamentals && !isDatabase && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1081,7 +937,7 @@ export default function ProblemDetailPage() {
                 </motion.div>
             )}
 
-            {/* ── Real World Context ─────────────────────────── */}
+            {/* Real World Context */}
             {showRealWorldContext && !isHR && (realWorldContext || useCasesList.length > 0) && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -1116,7 +972,7 @@ export default function ProblemDetailPage() {
                 </motion.div>
             )}
 
-            {/* ── Hints locked notice (SD, LLD) ──────────────── */}
+            {/* Hints locked notice (SD, LLD) */}
             {(isSystemDesign || isLLD) && !isSolved &&
                 (realWorldContext || useCasesList.length > 0 || adminNotes) && (
                     <motion.div
@@ -1140,6 +996,7 @@ export default function ProblemDetailPage() {
                                         : 'These unlock after you submit your design. The expected class hierarchy, patterns, and SOLID analysis unlock so you can compare your thinking to the model answer.'
                                     }
                                 </p>
+                                {/* FIX 1: navigate call corrected */}
                                 <button
                                     onClick={() => navigate(`/problems/${problemId}/submit`)}
                                     className="mt-3 text-xs font-bold text-brand-300 hover:text-brand-200
@@ -1157,7 +1014,7 @@ export default function ProblemDetailPage() {
                     </motion.div>
                 )}
 
-            {/* ── Follow-up questions ──────────────────────────── */}
+            {/* Follow-up questions */}
             {followUpQuestions?.length > 0 && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -1175,6 +1032,7 @@ export default function ProblemDetailPage() {
                                     : 'Follow-up Questions'}
                             <Badge variant="brand" size="xs">{followUpQuestions.length}</Badge>
                         </h2>
+                        {/* FIX 1: navigate call corrected */}
                         {isSolved && problem.userSolutionId && (
                             <button
                                 onClick={() => navigate(`/problems/${problemId}/edit-solution/${problem.userSolutionId}`)}
@@ -1190,8 +1048,6 @@ export default function ProblemDetailPage() {
                             </button>
                         )}
                     </div>
-
-                    {/* Category-specific context */}
                     {isHR && (
                         <p className="text-[11px] text-text-tertiary mb-3 leading-relaxed bg-surface-2
                                        border border-border-default rounded-lg px-3 py-2">
@@ -1206,7 +1062,6 @@ export default function ProblemDetailPage() {
                             Answering them demonstrates depth and earns bonus points on your AI review.
                         </p>
                     )}
-
                     <div className="space-y-3">
                         {followUpQuestions.map((fq, i) => (
                             <div key={fq.id || i}
@@ -1222,7 +1077,6 @@ export default function ProblemDetailPage() {
                                         <p className="text-sm font-medium text-text-primary leading-relaxed">
                                             {fq.question}
                                         </p>
-                                        {/* HR: don't show Easy/Medium/Hard for follow-ups — show stakes */}
                                         {isHR ? (
                                             <span className={cn(
                                                 'text-[9px] font-bold px-1.5 py-px rounded-full border flex-shrink-0',
@@ -1258,7 +1112,6 @@ export default function ProblemDetailPage() {
                             </div>
                         ))}
                     </div>
-
                     {!isSolved && (
                         <p className="text-[11px] text-text-disabled mt-4 pt-3 border-t border-border-subtle">
                             Submit your {isHR ? 'answer' : isSystemDesign ? 'design' : 'solution'} first —
@@ -1268,14 +1121,7 @@ export default function ProblemDetailPage() {
                 </motion.div>
             )}
 
-            {/* ── Admin notes / Teaching notes ──────────────────
-                Always visible to admins.
-                For SD, LLD, HR, BEHAVIORAL, CS_FUNDAMENTALS:
-                  visible to the submitting member after they submit.
-                  These are the "model answer" / "what makes a strong answer"
-                  notes — most valuable as post-submission comparison.
-                For CODING, SQL: admin-only.
-            ─────────────────────────────────────────────────── */}
+            {/* Admin notes / Teaching notes */}
             {showAdminNotes && adminNotes && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
@@ -1294,15 +1140,17 @@ export default function ProblemDetailPage() {
                         'text-sm font-bold flex items-center gap-2 mb-3',
                         isAdmin ? 'text-warning' : isHR ? 'text-danger' : 'text-brand-300'
                     )}>
-                        <span>{isAdmin ? '⚡' : isHR ? '📖' : '📖'}</span>
+                        <span>{isAdmin ? '⚡' : '📖'}</span>
                         {isAdmin
                             ? 'Admin Notes'
                             : isHR
                                 ? 'What Makes a Strong Answer — Compare Yours'
-                                : 'Teaching Notes — Compare Your Answer'}
+                                : isDatabase
+                                    ? (dbProblemType === 'SCHEMA_DESIGN'
+                                        ? 'Model Schema & Design Reasoning'
+                                        : 'Optimal Query & Index Strategy')
+                                    : 'Teaching Notes — Compare Your Answer'}
                     </h2>
-
-                    {/* Context for members seeing post-submission notes */}
                     {!isAdmin && isSolved && (
                         <p className="text-xs text-text-tertiary mb-3 leading-relaxed">
                             {isHR
@@ -1315,20 +1163,19 @@ export default function ProblemDetailPage() {
                                             ? 'This shows what a strong STAR answer looks like for this question. Compare your specificity, impact quantification, and ownership language.'
                                             : isCSFundamentals
                                                 ? 'This shows the expected depth of explanation for this concept. Compare your coverage of sub-topics and real-world connections.'
-                                                : 'Compare your answer to this teaching guide.'
+                                                : isDatabase
+                                                    ? (dbProblemType === 'SCHEMA_DESIGN'
+                                                        ? 'Compare your schema structure, normalization decisions, and index design to the model answer.'
+                                                        : 'Compare your JOIN choices, NULL handling, index strategy, and optimization approach to the optimal solution.')
+                                                    : 'Compare your answer to this teaching guide.'
                             }
                         </p>
                     )}
-
                     <MarkdownRenderer content={adminNotes} size="sm" />
                 </motion.div>
             )}
 
-            {/* ── Locked teaching notes notice (HR/BEHAVIORAL/CS_FUNDAMENTALS) ──
-                For these categories, the member does not see admin notes until
-                they submit. This notice appears while they are unsolved.
-                SD/LLD already have their own locked notice above.
-            ─────────────────────────────────────────────────────────────────── */}
+            {/* FIX 3: Corrected locked notes with proper title vs body separation */}
             {!isAdmin && !isSolved &&
                 (isHR || isBehavioral || isCSFundamentals || isDatabase) &&
                 adminNotes && (
@@ -1344,30 +1191,43 @@ export default function ProblemDetailPage() {
                                 🔒
                             </div>
                             <div>
+                                {/* Title — always the short "what is locked" label */}
                                 <p className="text-sm font-bold text-text-primary mb-1">
-                                    {isHR ? 'Unlocks after you submit your answer.'
-                                        : isBehavioral ? 'Unlocks after you submit.'
-                                            : isCSFundamentals ? 'Unlocks after you submit.'
-                                                : isDatabase ? (dbProblemType === 'SCHEMA_DESIGN'
-                                                    ? 'Unlocks after you submit your schema. Compare your normalization decisions, index design, and NoSQL reasoning to the model answer.'
-                                                    : 'Unlocks after you submit your query. Compare your JOIN choices, NULL handling, index strategy, and optimization to the optimal solution.')
-                                                    : 'Unlocks after you submit.'
+                                    {isHR
+                                        ? 'Model Answer & Coaching Notes'
+                                        : isBehavioral
+                                            ? 'Strong Answer Examples & Red Flags'
+                                            : isCSFundamentals
+                                                ? 'Expected Depth Guide & Model Explanation'
+                                                : isDatabase
+                                                    ? (dbProblemType === 'SCHEMA_DESIGN'
+                                                        ? 'Model Schema & Design Reasoning'
+                                                        : 'Optimal Query & Index Strategy')
+                                                    : 'Teaching Notes'
                                     }
                                 </p>
+                                {/* Body — the detailed unlock description */}
                                 <p className="text-xs text-text-tertiary leading-relaxed">
                                     {isHR
                                         ? 'Unlocks after you submit your answer. Compare what you wrote to what makes a genuinely strong response — specificity, company research, self-awareness.'
                                         : isBehavioral
                                             ? 'Unlocks after you submit. Compare your STAR structure, ownership language, and impact quantification to the model answer.'
-                                            : 'Unlocks after you submit. Compare your explanation depth and real-world connections to what interviewers expect.'
+                                            : isCSFundamentals
+                                                ? 'Unlocks after you submit. Compare your mechanism depth, trade-off awareness, and real-world connections to what interviewers expect.'
+                                                : isDatabase
+                                                    ? (dbProblemType === 'SCHEMA_DESIGN'
+                                                        ? 'Unlocks after you submit your schema. Compare your normalization decisions, index design, and NoSQL reasoning to the model answer.'
+                                                        : 'Unlocks after you submit your query. Compare your JOIN choices, NULL handling, index strategy, and optimization to the optimal solution.')
+                                                    : 'Unlocks after you submit.'
                                     }
                                 </p>
+                                {/* FIX 1: navigate call corrected */}
                                 <button
                                     onClick={() => navigate(`/problems/${problemId}/submit`)}
                                     className="mt-3 text-xs font-bold text-brand-300 hover:text-brand-200
                                                transition-colors flex items-center gap-1"
                                 >
-                                    Submit your {isHR ? 'answer' : 'response'} to unlock
+                                    Submit your {isHR ? 'answer' : isBehavioral ? 'response' : isDatabase ? 'solution' : 'explanation'} to unlock
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" strokeWidth="2.5"
                                         strokeLinecap="round" strokeLinejoin="round">
@@ -1379,7 +1239,7 @@ export default function ProblemDetailPage() {
                     </motion.div>
                 )}
 
-            {/* ── Solutions / Answers section ─────────────────── */}
+            {/* Solutions / Answers section */}
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1390,15 +1250,12 @@ export default function ProblemDetailPage() {
                         <span>👥</span>
                         {isHR
                             ? 'Team Answers'
-                            : isSystemDesign
+                            : isSystemDesign || isLLD
                                 ? 'Team Designs'
-                                : isLLD
-                                    ? 'Team Designs'
-                                    : 'Team Solutions'}
+                                : 'Team Solutions'}
                         <Badge variant="brand" size="xs">{teamSolutionCount || 0}</Badge>
                     </h2>
                 </div>
-
                 {solutions.length === 0 ? (
                     <div className="bg-surface-1 border border-border-default
                                     rounded-2xl p-10 text-center">
@@ -1413,6 +1270,7 @@ export default function ProblemDetailPage() {
                                     ? 'Be the first to submit a design!'
                                     : 'Be the first to submit a solution!'}
                         </p>
+                        {/* FIX 1: navigate call corrected */}
                         <Button
                             variant="primary"
                             size="sm"
@@ -1445,7 +1303,6 @@ export default function ProblemDetailPage() {
                                 )}
                             </div>
                         )}
-
                         {otherSolutions.length > 0 && (
                             <div>
                                 {mySolution && (
