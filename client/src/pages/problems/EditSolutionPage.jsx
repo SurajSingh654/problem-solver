@@ -327,6 +327,223 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
     )
 }
 
+
+// ── Technical Knowledge Edit Workspace ────────────────
+// Mirrors TechnicalKnowledgeWorkspace from SubmitSolutionPage
+// but defaults to coreExplanation section (the most likely edit target)
+// and pre-fills from existing categorySpecificData.
+function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
+    const [activeSection, setActiveSection] = useState('coreExplanation')
+
+    function update(field, value) {
+        onTkDataChange({ ...tkData, [field]: value })
+    }
+
+    const tkConfig = getCategoryForm('CS_FUNDAMENTALS')
+    const fieldConfigs = tkConfig.technicalKnowledgeFields || {}
+
+    const sections = [
+        {
+            key: 'subject',
+            label: 'Subject',
+            icon: '📚',
+            sublabel: 'Topic area and concept',
+            color: 'text-warning',
+            activeBg: 'bg-warning/10 border-warning/30',
+            required: true,
+        },
+        {
+            key: 'coreExplanation',
+            label: 'Mechanism',
+            icon: '⚙️',
+            sublabel: 'How it works — not the definition',
+            color: 'text-brand-300',
+            activeBg: 'bg-brand-400/10 border-brand-400/30',
+            required: true,
+        },
+        {
+            key: 'whyItExists',
+            label: 'Design',
+            icon: '🎯',
+            sublabel: 'Why it was designed this way',
+            color: 'text-info',
+            activeBg: 'bg-info/10 border-info/30',
+            required: false,
+        },
+        {
+            key: 'tradeoffs',
+            label: 'Trade-offs',
+            icon: '⚖️',
+            sublabel: 'What it sacrifices',
+            color: 'text-danger',
+            activeBg: 'bg-danger/10 border-danger/30',
+            required: false,
+        },
+        {
+            key: 'realWorldUsage',
+            label: 'Production',
+            icon: '🌍',
+            sublabel: 'Real systems + misconceptions',
+            color: 'text-success',
+            activeBg: 'bg-success/10 border-success/30',
+            required: false,
+        },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    const minThresholds = {
+        subject: 20,
+        coreExplanation: 400,
+        whyItExists: 200,
+        tradeoffs: 200,
+        realWorldUsage: 200,
+    }
+
+    const completedCount = sections.filter(s =>
+        (tkData[s.key]?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
+    ).length
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>🧠</span> Technical Knowledge
+                    </p>
+                    <span className="text-[10px] font-bold text-text-disabled">
+                        {completedCount}/{sections.length} sections filled
+                    </span>
+                </div>
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className="h-full bg-warning rounded-full"
+                    />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const isDone = (tkData[s.key]?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
+                        const isActive = activeSection === s.key
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => setActiveSection(s.key)}
+                                className={cn(
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
+                                    'transition-all duration-150 min-w-[72px]',
+                                    isActive ? s.activeBg
+                                        : isDone ? 'bg-success/5 border-success/20'
+                                            : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {s.required && !isDone && !isActive && (
+                                        <span className="text-danger text-[9px] font-bold">*</span>
+                                    )}
+                                    {isDone && !isActive && (
+                                        <span className="text-success text-[9px] font-bold">✓</span>
+                                    )}
+                                </div>
+                                <span className={cn(
+                                    'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
+                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
+                                )}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
+            >
+                <div className={cn(
+                    'flex items-center gap-3 px-5 py-4 border-b border-border-default',
+                    activeSectionConfig.activeBg
+                )}>
+                    <span className="text-xl">{activeSectionConfig.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
+                                {activeSectionConfig.label}
+                            </p>
+                            {activeSectionConfig.required && (
+                                <span className="text-[9px] font-bold text-danger
+                                                 bg-danger/10 border border-danger/20
+                                                 px-1.5 py-px rounded-full">
+                                    Required
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">
+                        {activeIndex + 1} / {sections.length}
+                    </span>
+                </div>
+                <div className="p-5 space-y-3">
+                    {fieldConfigs[activeSection]?.hint && (
+                        <p className="text-[11px] text-text-tertiary leading-relaxed
+                                       bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                            💡 {fieldConfigs[activeSection].hint}
+                        </p>
+                    )}
+                    <textarea
+                        rows={fieldConfigs[activeSection]?.rows || 10}
+                        value={tkData[activeSection] || ''}
+                        onChange={e => update(activeSection, e.target.value)}
+                        placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                   text-sm text-text-primary placeholder:text-text-disabled
+                                   px-3.5 py-2.5 outline-none resize-y leading-relaxed
+                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                        style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }}
+                    />
+                </div>
+                <div className="flex items-center justify-between px-5 py-3
+                                border-t border-border-default bg-surface-1/50">
+                    <button type="button"
+                        onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }}
+                        disabled={activeIndex === 0}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12" />
+                            <polyline points="12 19 5 12 12 5" />
+                        </svg>
+                        Previous
+                    </button>
+                    <button type="button"
+                        onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }}
+                        disabled={activeIndex === sections.length - 1}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1">
+                        Next
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
 // ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
@@ -348,6 +565,18 @@ export default function EditSolutionPage() {
     const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
     const isHR = category === 'HR'
     const isHRRound = formConfig.isHRRound === true
+    const isTechnicalKnowledge = category === 'CS_FUNDAMENTALS'
+    const isTKRound = formConfig.isTechnicalKnowledge === true
+
+    // ── Technical Knowledge workspace state ───────────────
+    const [tkData, setTkData] = useState({
+        subject: '',
+        coreExplanation: '',
+        whyItExists: '',
+        tradeoffs: '',
+        realWorldUsage: '',
+    })
+    const [tkConfidence, setTkConfidence] = useState(3)
 
     // ── Generic form state (non-HR) ────────────────────
     const [formData, setFormData] = useState({
@@ -410,6 +639,39 @@ export default function EditSolutionPage() {
             setHrConfidence(mySolution.confidence || 3)
 
             // Pre-fill follow-up answers
+            if (mySolution.followUpAnswers?.length > 0) {
+                const prefilled = {}
+                mySolution.followUpAnswers.forEach(a => {
+                    prefilled[a.followUpQuestionId] = a.answerText
+                })
+                setFollowUpAnswers(prefilled)
+            }
+        } else if (isTKRound) {
+            // TK: pre-fill from categorySpecificData first (new format)
+            // Fall back to mapped generic fields for old solutions
+            const csd = mySolution.categorySpecificData
+            if (csd && (csd.subject !== undefined || csd.coreExplanation !== undefined)) {
+                setTkData({
+                    subject: csd.subject || '',
+                    coreExplanation: csd.coreExplanation || '',
+                    whyItExists: csd.whyItExists || '',
+                    tradeoffs: csd.tradeoffs || '',
+                    realWorldUsage: csd.realWorldUsage || '',
+                })
+            } else {
+                // Old format — map generic fields back to TK fields
+                // approach → coreExplanation, optimizedApproach → whyItExists,
+                // keyInsight → tradeoffs, feynmanExplanation → realWorldUsage,
+                // pattern → subject
+                setTkData({
+                    subject: mySolution.pattern || '',
+                    coreExplanation: mySolution.approach || '',
+                    whyItExists: mySolution.optimizedApproach || '',
+                    tradeoffs: mySolution.keyInsight || '',
+                    realWorldUsage: mySolution.feynmanExplanation || '',
+                })
+            }
+            setTkConfidence(mySolution.confidence || 3)
             if (mySolution.followUpAnswers?.length > 0) {
                 const prefilled = {}
                 mySolution.followUpAnswers.forEach(a => {
@@ -510,6 +772,20 @@ export default function EditSolutionPage() {
                     ...hrData,
                     questionCategory: hrQuestionCategory,
                 },
+                followUpAnswers: followUpAnswersArray,
+            }
+        } else if (isTKRound) {
+            data = {
+                approach: tkData.coreExplanation || null,
+                optimizedApproach: tkData.whyItExists || null,
+                keyInsight: tkData.tradeoffs || null,
+                feynmanExplanation: tkData.realWorldUsage || null,
+                realWorldConnection: null,
+                pattern: tkData.subject?.trim() || null,
+                code: null,
+                language: null,
+                confidence: tkConfidence,
+                categorySpecificData: { ...tkData },
                 followUpAnswers: followUpAnswersArray,
             }
         } else {
@@ -655,6 +931,46 @@ export default function EditSolutionPage() {
                                         <span className={cn(
                                             'text-[10px] font-bold text-center leading-tight',
                                             hrConfidence === c.value ? c.color : 'text-text-tertiary'
+                                        )}>
+                                            {c.label}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                ) : isTKRound ? (
+                    <>
+                        <TechnicalKnowledgeEditWorkspace
+                            tkData={tkData}
+                            onTkDataChange={setTkData}
+                        />
+                        {/* Confidence for TK */}
+                        <div>
+                            <label className="block text-sm font-semibold text-text-primary mb-1">
+                                Confidence Level
+                            </label>
+                            <p className="text-xs text-text-tertiary mb-3">
+                                How deep is your understanding? Could you answer a follow-up on the mechanism without notes?
+                            </p>
+                            <div className="flex gap-3 flex-wrap">
+                                {CONFIDENCE_LEVELS.map(c => (
+                                    <button
+                                        key={c.value}
+                                        type="button"
+                                        onClick={() => setTkConfidence(c.value)}
+                                        className={cn(
+                                            'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
+                                            'transition-all duration-150 min-w-[80px]',
+                                            tkConfidence === c.value
+                                                ? 'bg-brand-400/15 border-brand-400/40 scale-105'
+                                                : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                        )}
+                                    >
+                                        <span className="text-2xl">{c.emoji}</span>
+                                        <span className={cn(
+                                            'text-[10px] font-bold text-center leading-tight',
+                                            tkConfidence === c.value ? c.color : 'text-text-tertiary'
                                         )}>
                                             {c.label}
                                         </span>
@@ -885,7 +1201,7 @@ export default function EditSolutionPage() {
                             strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12" />
                         </svg>
-                        {isHR ? 'Save Answer' : 'Save Changes'}
+                        {isHR ? 'Save Answer' : isTechnicalKnowledge ? 'Save Explanation' : 'Save Changes'}
                     </Button>
                 </div>
             </div>

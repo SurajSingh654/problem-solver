@@ -346,6 +346,218 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
 }
 
 
+// ── Technical Knowledge Subject Panel ────────────────────
+// Visible to members BEFORE submission — upfront framing panel.
+//
+// Research basis: identical to BehavioralCompetencyPanel and HRRealConcernPanel.
+// Candidates who know HOW an interviewer evaluates TK questions answer at
+// a fundamentally different depth than those who don't.
+// The three evaluation dimensions (Mechanism / Trade-offs / Real-world) are
+// not hints — they are the evaluation criteria. Hiding them would make
+// candidates study the wrong thing.
+//
+// What this shows:
+//   1. The subject domain with relevant sub-topics to study
+//   2. The three evaluation dimensions with what "strong" looks like for each
+//   3. The most common failure mode for this domain
+//   4. Depth calibration — what level of depth is expected for this concept
+//
+// What this does NOT show:
+//   - The answer itself
+//   - Admin teaching notes (locked until submission)
+//   - Model explanations (locked)
+function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
+    // Domain metadata — maps tagged domains to interview coaching context.
+    // Each entry covers: what interviewers actually test, strong vs weak signals,
+    // the specific failure mode most candidates exhibit, and depth calibration.
+    const DOMAIN_COACHING = {
+        'Operating Systems': {
+            icon: '🖥️',
+            probeTopics: 'Process vs thread lifecycle, virtual memory + page table mechanics, deadlock conditions (Coffman), CPU scheduling trade-offs, concurrency primitives and when each is correct',
+            strongSignal: 'Explains the mechanism (how the OS actually implements it), connects to production impact (e.g., page fault latency killing Redis p99), knows when to use which primitive and why',
+            weakSignal: '"A process is a program in execution" — definition without mechanism. "Mutex is used for mutual exclusion" — definition without trade-off or comparison to semaphore.',
+            failureMode: 'Most candidates know OS concepts as definitions. The interviewer probes for mechanism: "How does the OS actually perform a context switch?" If you can\'t answer that, the definition was memorization, not understanding.',
+            depthCalibration: 'Junior: know what it is and basic use case. Mid-level: know the mechanism and one key trade-off. Senior: know the mechanism, all relevant trade-offs, production failure modes, and when the abstraction breaks.',
+        },
+        'Computer Networking': {
+            icon: '🌐',
+            probeTopics: 'TCP handshake + connection lifecycle, HTTP version differences and why each change was made, DNS full resolution chain, TLS handshake mechanism, load balancing algorithms and their trade-offs',
+            strongSignal: 'Can walk through the TCP 3-way handshake with sequence numbers, explain why TIME_WAIT exists and what happens without it, explain what changes between HTTP/1.1 and HTTP/2 and why (head-of-line blocking)',
+            weakSignal: '"TCP is reliable and UDP is not." — stopping at the marketing description. "HTTPS is secure" — without explaining TLS negotiation.',
+            failureMode: 'Candidates learn the conceptual model but not the protocol state machine. "What is in the TCP header and why?" trips up 80% of candidates who can describe TCP in words.',
+            depthCalibration: 'Junior: know the protocols and their primary use cases. Mid-level: know the mechanisms and failure modes. Senior: know why the protocols were designed this way, what trade-offs they encode, and when to break the rules (e.g., building your own reliability layer on UDP for gaming).',
+        },
+        'Database Internals': {
+            icon: '🗄️',
+            probeTopics: 'ACID properties (what each means in practice, not just the acronym), transaction isolation levels and what anomalies each prevents, B-Tree index mechanics and write overhead, CAP theorem (with correct definition of C), sharding challenges',
+            strongSignal: 'Can explain the difference between ACID Consistency and CAP Consistency (different things, commonly confused), explain what a B-Tree split is and why it causes write amplification, explain phantom reads and which isolation level prevents them',
+            weakSignal: '"ACID means the database is reliable" — the acronym without the mechanism. "CAP says you can only have two of three" — without being able to define what C, A, and P actually mean precisely.',
+            failureMode: 'The ACID/CAP Consistency confusion. In CAP, Consistency means linearizability (all nodes see the same data simultaneously). In ACID, Consistency means the database satisfies defined constraints. These are completely different. Conflating them produces wrong architecture decisions.',
+            depthCalibration: 'Junior: know ACID and when to use SQL vs NoSQL. Mid-level: know isolation levels, indexing trade-offs, basic sharding concepts. Senior: know when CAP applies, understand MVCC, can design a schema for a given access pattern and justify index choices.',
+        },
+        'DSA Concepts': {
+            icon: '🧩',
+            probeTopics: 'Why HashMap is O(1) amortized not O(1) worst case, consistent hashing and why it solves rebalancing, bloom filter use cases despite false positives, LRU cache data structure internals, why B-Tree beats BST for disk storage',
+            strongSignal: 'Can explain that HashMap O(1) amortized comes from occasional O(n) rehashing, why the amortized analysis still holds, what load factor is and how it affects performance. Can explain why B-Tree nodes are sized to fit a disk page.',
+            weakSignal: '"HashMap is O(1)" — without the amortized qualifier or understanding of when it breaks. "Consistent hashing distributes load evenly" — without explaining the problem with regular hashing it solves (full reshuffling on node add/remove).',
+            failureMode: 'Treating these as implementation problems. "How would you implement an LRU cache?" gets solved in code. The TK question is "what data structures does an LRU cache require and why?" — HashMap + doubly linked list, and WHY each is needed.',
+            depthCalibration: 'The conceptual depth question is always one level deeper than the implementation. If you can implement it, the interviewer will ask why the data structure works that way.',
+        },
+        'Distributed Systems': {
+            icon: '🔄',
+            probeTopics: 'Consistency models (strong, eventual, causal — with examples), consensus problem and why it\'s hard, idempotency and how to achieve it, rate limiting algorithm trade-offs (token bucket vs leaky bucket), message queue delivery guarantees',
+            strongSignal: 'Can explain why you\'d choose eventual consistency over strong consistency for a shopping cart but not for a bank transfer. Can explain what makes exactly-once delivery hard (2PC problem). Can design an idempotent API endpoint.',
+            weakSignal: '"Distributed systems are eventually consistent" — without knowing when that\'s acceptable and when it\'s not. "Use a message queue for async processing" — without understanding at-least-once vs exactly-once implications.',
+            failureMode: 'Candidates understand the happy path but not the failure path. "What happens when a node goes down during a 2PC commit?" is where most distributed systems knowledge breaks. Study failure modes as much as normal operation.',
+            depthCalibration: 'Junior: understand why distributed systems are different from single-machine systems. Mid-level: know the trade-offs and when to apply each pattern. Senior: can reason about partial failures, understand the FLP impossibility result conceptually, can design systems that degrade gracefully.',
+        },
+        'AI/ML': {
+            icon: '🤖',
+            probeTopics: 'Gradient descent and why learning rate matters, overfitting vs underfitting and how to detect/fix each, bias-variance trade-off, what a transformer does differently from an RNN, vector embeddings and why similarity search works',
+            strongSignal: 'Can explain gradient descent as optimization on the loss surface, why a learning rate that is too large oscillates and never converges, what dropout does to prevent overfitting (random deactivation forces redundant representations)',
+            weakSignal: '"Machine learning learns from data" — too abstract. "Overfitting means the model memorizes training data" — correct but stops before explaining how to detect or prevent it.',
+            failureMode: 'Non-ML engineers often treat AI/ML questions as "not my domain." But any engineer at a company building AI-powered features will be asked these questions. The expected depth is conceptual, not mathematical. You don\'t need to derive backpropagation — you need to explain what it achieves and why it works.',
+            depthCalibration: 'For non-ML roles: understand the core concepts well enough to have a conversation about ML system design decisions. For ML-adjacent roles: deeper understanding of model training, evaluation metrics, and deployment considerations.',
+        },
+        'Data Engineering': {
+            icon: '⚡',
+            probeTopics: 'Batch vs stream processing trade-offs (latency, complexity, cost), ETL vs ELT (why ELT won with cloud data warehouses), columnar storage mechanics (why Parquet is faster for analytics), Kafka architecture (topics, partitions, consumer groups)',
+            strongSignal: 'Can explain why stream processing has lower latency but higher operational complexity. Can explain why a column store is faster for "SELECT AVG(revenue) FROM orders" than a row store (only reads one column vs full rows). Can explain consumer group semantics in Kafka.',
+            weakSignal: '"Kafka is a message queue" — undersells it. Kafka is a distributed commit log with replay semantics. "Batch processing processes data in batches" — circular definition.',
+            failureMode: 'Candidates conflate data engineering with data science. Data engineering is infrastructure — pipelines, storage, reliability, scale. The questions are engineering trade-off questions, not statistical questions.',
+            depthCalibration: 'Backend engineers should understand stream vs batch trade-offs and basic pipeline design. Data engineers need deep understanding of distributed processing, storage formats, and pipeline reliability patterns.',
+        },
+    }
+
+    // Try to match the subject tag to a domain
+    const domainKey = subjectTag
+        ? Object.keys(DOMAIN_COACHING).find(key =>
+            subjectTag.toLowerCase().includes(key.toLowerCase()) ||
+            key.toLowerCase().includes(subjectTag.toLowerCase())
+        )
+        : null
+
+    const coaching = domainKey ? DOMAIN_COACHING[domainKey] : null
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.03 }}
+            className="bg-warning/5 border border-warning/15 rounded-2xl p-5 mb-6"
+        >
+            <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
+                <span>🧠</span> Technical Knowledge — Evaluation Framework
+            </h2>
+
+            {/* Three evaluation dimensions — always shown */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                {[
+                    {
+                        icon: '⚙️',
+                        label: 'Mechanism Depth',
+                        desc: 'Do you know HOW it works, not just WHAT it is? Interviewers probe until you hit your ceiling.',
+                        color: 'text-brand-300',
+                        bg: 'bg-brand-400/5 border-brand-400/20',
+                    },
+                    {
+                        icon: '⚖️',
+                        label: 'Trade-off Awareness',
+                        desc: 'Do you know what was sacrificed to get the benefit? Senior candidates explain what they gave up.',
+                        color: 'text-danger',
+                        bg: 'bg-danger/5 border-danger/20',
+                    },
+                    {
+                        icon: '🌍',
+                        label: 'Real-world Anchoring',
+                        desc: 'Can you connect it to a specific production system? Generic examples fail, named systems pass.',
+                        color: 'text-success',
+                        bg: 'bg-success/5 border-success/20',
+                    },
+                ].map(dim => (
+                    <div key={dim.label}
+                        className={cn('rounded-xl border p-3', dim.bg)}
+                    >
+                        <p className={cn(
+                            'text-[10px] font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1',
+                            dim.color
+                        )}>
+                            <span>{dim.icon}</span>{dim.label}
+                        </p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">
+                            {dim.desc}
+                        </p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Domain-specific coaching — shown when admin tagged a subject */}
+            {coaching && (
+                <>
+                    <div className="bg-surface-1 border border-border-default rounded-xl p-3.5 mb-3">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                            {coaching.icon} Domain: {domainKey}
+                        </p>
+                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1 mt-2">
+                            Key topics interviewers probe
+                        </p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">
+                            {coaching.probeTopics}
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <div className="bg-success/5 border border-success/15 rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1.5">
+                                ✓ Strong answer signals
+                            </p>
+                            <p className="text-[11px] text-text-tertiary leading-relaxed">
+                                {coaching.strongSignal}
+                            </p>
+                        </div>
+                        <div className="bg-danger/5 border border-danger/15 rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1.5">
+                                ✗ Weak answer signals
+                            </p>
+                            <p className="text-[11px] text-text-tertiary leading-relaxed">
+                                {coaching.weakSignal}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="bg-warning/5 border border-warning/15 rounded-xl p-3 mb-3">
+                        <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">
+                            ⚠️ Most common failure mode
+                        </p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">
+                            {coaching.failureMode}
+                        </p>
+                    </div>
+
+                    <div className="bg-surface-1 border border-border-default rounded-xl p-3">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                            📊 Depth calibration by level
+                        </p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">
+                            {coaching.depthCalibration}
+                        </p>
+                    </div>
+                </>
+            )}
+
+            {/* Description from admin */}
+            {description && (
+                <div className="mt-3 pt-3 border-t border-border-subtle">
+                    <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+                        Context & Guidance
+                    </p>
+                    <MarkdownRenderer content={description} />
+                </div>
+            )}
+        </motion.div>
+    )
+}
+
 export default function ProblemDetailPage() {
     const { problemId } = useParams()
     const navigate = useNavigate()
@@ -381,6 +593,9 @@ export default function ProblemDetailPage() {
     const isHR = category === 'HR'
     const isBehavioral = category === 'BEHAVIORAL'
     const isCSFundamentals = category === 'CS_FUNDAMENTALS'
+    const isTechnicalKnowledge = category === 'CS_FUNDAMENTALS'
+
+
 
     // HR question category stored by admin in categoryData
     const hrQuestionCategory = problem.categoryData?.hrQuestionCategory || null
@@ -423,6 +638,12 @@ export default function ProblemDetailPage() {
     // For BEHAVIORAL: show the competency coaching panel upfront — same reasoning
     // as HR's HRRealConcernPanel. Knowing the competency is prerequisite to answering.
     const showBehavioralPanel = isBehavioral && !isAdmin
+
+    // For CS_FUNDAMENTALS: show the evaluation framework panel upfront.
+    // The three dimensions (Mechanism / Trade-offs / Real-world) are not hints —
+    // they are what the interviewer is scoring. Making them visible improves
+    // preparation quality and does not give away the answer.
+    const showTKPanel = isTechnicalKnowledge && !isAdmin
 
     return (
         <div className="p-6 max-w-[900px] mx-auto">
@@ -667,12 +888,19 @@ export default function ProblemDetailPage() {
                 />
             )}
 
+            {showTKPanel && (
+                <TechnicalKnowledgeSubjectPanel
+                    subjectTag={problem.categoryData?.subjectTag || problem.categoryData?.competencyTag || null}
+                    description={description}
+                />
+            )}
+
             {/* ── Problem Description (non-HR categories) ──────
                 For SYSTEM_DESIGN and LOW_LEVEL_DESIGN: prominently styled as
                 the design brief. For CODING and others: supplementary context.
                 For HR: description is shown inside HRRealConcernPanel above.
             ─────────────────────────────────────────────────── */}
-            {description && !isHR && !isBehavioral && (
+            {description && !isHR && !isBehavioral && !isTechnicalKnowledge && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -972,10 +1200,12 @@ export default function ProblemDetailPage() {
                             <div>
                                 <p className="text-sm font-bold text-text-primary mb-1">
                                     {isHR
-                                        ? 'Model Answer & Coaching Notes'
+                                        ? 'Unlocks after you submit your answer.'
                                         : isBehavioral
-                                            ? 'Strong Answer Examples & Red Flags'
-                                            : 'Expected Explanation & Depth Guide'
+                                            ? 'Unlocks after you submit.'
+                                            : isCSFundamentals
+                                                ? 'Unlocks after you submit. Compare your mechanism depth, trade-off awareness, and real-world connections to what interviewers expect at each level.'
+                                                : 'Unlocks after you submit.'
                                     }
                                 </p>
                                 <p className="text-xs text-text-tertiary leading-relaxed">

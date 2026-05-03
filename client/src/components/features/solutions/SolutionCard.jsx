@@ -335,6 +335,90 @@ function OldHRSolutionDisplay({ approach, keyInsight, feynmanExplanation, realWo
     )
 }
 
+// ── Technical Knowledge structured display ─────────────
+// Renders solutions with categorySpecificData containing TK fields.
+// Linear narrative display — mechanism → design → trade-offs → production.
+// No tabs. TK answers are read in sequence, not jumped between.
+function TKSolutionDisplay({ data }) {
+    const sections = [
+        {
+            key: 'subject',
+            label: 'Subject & Concept',
+            icon: '📚',
+            value: data.subject,
+            color: 'text-warning',
+            borderColor: 'border-warning/15 bg-warning/3',
+            isHeader: true,
+        },
+        {
+            key: 'coreExplanation',
+            label: 'How It Works',
+            icon: '⚙️',
+            value: data.coreExplanation,
+            color: 'text-brand-300',
+            borderColor: 'border-brand-400/15 bg-brand-400/3',
+            isHighlight: true,
+        },
+        {
+            key: 'whyItExists',
+            label: 'Why It Was Designed This Way',
+            icon: '🎯',
+            value: data.whyItExists,
+            color: 'text-info',
+            borderColor: 'border-info/15 bg-info/3',
+        },
+        {
+            key: 'tradeoffs',
+            label: 'Trade-offs',
+            icon: '⚖️',
+            value: data.tradeoffs,
+            color: 'text-danger',
+            borderColor: 'border-danger/15 bg-danger/3',
+        },
+        {
+            key: 'realWorldUsage',
+            label: 'Real-World Usage & Misconceptions',
+            icon: '🌍',
+            value: data.realWorldUsage,
+            color: 'text-success',
+            borderColor: 'border-success/15 bg-success/3',
+        },
+    ].filter(s => s.value?.trim?.()?.length > 0)
+
+    if (sections.length === 0) {
+        return <p className="text-xs text-text-disabled italic">No explanation content recorded.</p>
+    }
+
+    return (
+        <div className="space-y-3">
+            {sections.map(s => (
+                <div key={s.key}
+                    className={cn(
+                        'rounded-xl border p-4',
+                        s.borderColor || 'border-border-default bg-surface-2'
+                    )}
+                >
+                    <p className={cn(
+                        'text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5',
+                        s.color
+                    )}>
+                        <span>{s.icon}</span>
+                        {s.label}
+                    </p>
+                    <div className={cn(
+                        'leading-relaxed whitespace-pre-wrap',
+                        s.isHighlight ? 'text-sm text-text-primary' : 'text-sm text-text-secondary',
+                        s.isHeader ? 'text-base font-bold' : ''
+                    )}>
+                        {s.value}
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+
 // ── Code block ─────────────────────────────────────────
 function CodeBlock({ code, language }) {
     const [copied, setCopied] = useState(false)
@@ -485,8 +569,18 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         !code &&
         !!(pattern && HR_CATEGORY_IDS.has(pattern))
 
+    // New-format TK: has coreExplanation, whyItExists, or tradeoffs
+    const isTKSubmission = !!(
+        solution.categorySpecificData &&
+        (
+            solution.categorySpecificData.coreExplanation !== undefined ||
+            solution.categorySpecificData.whyItExists !== undefined ||
+            solution.categorySpecificData.tradeoffs !== undefined
+        )
+    )
+
     // Any structured submission hides the generic coding tabs
-    const isStructuredSubmission = isSDSubmission || isLLDSubmission || isHRSubmission || isOldHRSubmission
+    const isStructuredSubmission = isSDSubmission || isLLDSubmission || isHRSubmission || isOldHRSubmission || isTKSubmission
 
     const tabs = [
         { id: 'approach', label: 'Approach' },
@@ -549,6 +643,17 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 LLD
                             </span>
                         )}
+
+                        {/* TK badge */}
+                        {isTKSubmission && (() => {
+                            const subject = solution.categorySpecificData?.subject
+                            return (
+                                <span className="text-[10px] font-bold px-1.5 py-px rounded-full
+                         bg-warning/10 text-warning border border-warning/20">
+                                    {subject ? subject.split(' — ')[0] : 'Tech Knowledge'}
+                                </span>
+                            )
+                        })()}
 
                         {/* HR badge — new or old format */}
                         {(isHRSubmission || isOldHRSubmission) && (() => {
@@ -658,6 +763,8 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                         realWorldConnection={realWorldConnection}
                                         pattern={pattern}
                                     />
+                                ) : isTKSubmission ? (
+                                    <TKSolutionDisplay data={solution.categorySpecificData} />
                                 ) : (
                                     // Generic coding / behavioral / sql / cs_fundamentals
                                     <>

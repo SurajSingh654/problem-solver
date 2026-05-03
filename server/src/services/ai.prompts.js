@@ -616,23 +616,31 @@ ${behavioralSpecific?.result || data.keyInsight || "Not provided"}
 Reflection (Learning & What They Would Do Differently):
 ${behavioralSpecific?.reflection || data.feynmanExplanation || "Not provided"}`;
   } else if (data.category === "CS_FUNDAMENTALS") {
-    submissionSection = `Core Topic:
-${data.pattern || "Not specified"}
+    // Read from categorySpecificData (new TechnicalKnowledgeWorkspace format) first.
+    // Fall back to old generic field mapping for any pre-existing submissions.
+    // Backward compatible — zero breaking changes on existing data.
+    const tkSpecific =
+      data.categorySpecificData &&
+      (data.categorySpecificData.coreExplanation !== undefined ||
+        data.categorySpecificData.subject !== undefined ||
+        data.categorySpecificData.whyItExists !== undefined)
+        ? data.categorySpecificData
+        : null;
 
-Concept Explanation (in candidate's own words):
-${data.approach || "Not provided"}
+    submissionSection = `Subject & Concept:
+${tkSpecific?.subject || data.pattern || "Not specified"}
 
-Key Distinction (what separates deep understanding from surface knowledge):
-${data.keyInsight || "Not provided"}
+Core Explanation — How It Works (Mechanism Level):
+${tkSpecific?.coreExplanation || data.approach || "Not provided — THIS IS THE PRIMARY EVALUATION FIELD. If empty, flag as critical gap."}
 
-Real-World Examples:
-${data.feynmanExplanation || "Not provided"}
+Why It Was Designed This Way (Design Rationale):
+${tkSpecific?.whyItExists || data.optimizedApproach || "Not provided"}
 
-Common Misconceptions Addressed:
-${data.realWorldConnection || "Not provided"}
+Trade-offs — What It Sacrifices:
+${tkSpecific?.tradeoffs || data.keyInsight || "Not provided"}
 
-Detailed Breakdown:
-${data.optimizedApproach || data.code || "Not provided"}`;
+Real-World Usage & Common Misconceptions:
+${tkSpecific?.realWorldUsage || data.feynmanExplanation || "Not provided"}`;
   } else if (data.category === "SQL") {
     submissionSection = `Schema Analysis:
 ${data.approach || "Not provided"}
@@ -945,7 +953,80 @@ SOLID principles tested in every LLD problem:
 - Interface Segregation: Are interfaces small and focused?
 - Dependency Inversion: Do high-level modules depend on abstractions?`,
     BEHAVIORAL: `Competencies: Leadership, Conflict Resolution, Failure & Learning, Initiative & Ownership, Teamwork, Handling Ambiguity, Customer Focus, Time Management, Technical Disagreement with Manager, Cross-team Collaboration`,
-    CS_FUNDAMENTALS: `Topics: OS (Process vs Thread, Deadlocks, Virtual Memory, Page Faults), Networking (TCP vs UDP, HTTP vs HTTPS, DNS, Load Balancing, CDN), DBMS (ACID, Indexing, B-Trees, Normalization, CAP Theorem), OOP (SOLID Principles, Design Patterns: Singleton, Factory, Observer, Strategy)`,
+    CS_FUNDAMENTALS: `CRITICAL CONSTRAINT: CS_FUNDAMENTALS is PURELY THEORETICAL.
+Every question MUST be a concept explanation question — NEVER "write code", NEVER "implement this", NEVER a LeetCode-style problem.
+
+Valid question types (use these exact formats):
+  "Explain how [X] works"
+  "What is the difference between [X] and [Y]"
+  "Why does [X] exist — what problem does it solve?"
+  "What are the trade-offs between [X] and [Y]?"
+  "What happens when [X] fails?"
+  "When would you choose [X] over [Y]?"
+
+Seven subject domains to draw from:
+
+OPERATING SYSTEMS:
+  Process vs Thread (lifecycle, context switching cost, when to use each)
+  Virtual Memory and Page Faults (mechanism, TLB, thrashing, production impact)
+  Deadlocks (Coffman conditions, detection vs prevention vs avoidance)
+  CPU Scheduling (Round Robin, Priority, MLFQ — trade-offs, not implementation)
+  Concurrency Primitives (mutex vs semaphore vs monitor — when each is correct)
+  Memory Management (stack vs heap, garbage collection strategies)
+  IPC mechanisms (pipes, shared memory, message queues)
+
+COMPUTER NETWORKING:
+  TCP vs UDP (mechanism difference, when to deliberately choose UDP)
+  TCP 3-Way Handshake and Connection Lifecycle (TIME_WAIT and why it exists)
+  HTTP/HTTPS/HTTP2/HTTP3 (what changes between versions and why)
+  DNS Resolution (full walk from browser to authoritative nameserver)
+  Load Balancing (L4 vs L7, round robin vs consistent hashing, session affinity)
+  CDN Architecture (origin vs edge, cache invalidation problem)
+  TLS Handshake (certificate validation, key exchange mechanism)
+  REST vs GraphQL vs gRPC (when each is architecturally correct)
+
+DATABASE INTERNALS (conceptual — not SQL query writing):
+  ACID Properties (what each means in practice, not the acronym definition)
+  Transaction Isolation Levels (READ UNCOMMITTED → SERIALIZABLE, anomalies prevented)
+  B-Tree Index Mechanics (how it works internally, write overhead, when not to index)
+  CAP Theorem (with precise definition: C = linearizability, not ACID consistency)
+  Sharding vs Replication (read replicas, async vs sync replication, sharding challenges)
+  NoSQL Trade-offs (when Cassandra vs MongoDB vs Redis and why)
+  Connection Pooling (why it exists, what happens without it at scale)
+
+DATA STRUCTURES & ALGORITHMS — THEORY ONLY:
+  Why HashMap is O(1) amortized, not O(1) worst case
+  Consistent Hashing and why it solves the rebalancing problem
+  Bloom Filters (use cases despite false positives — never asks to implement)
+  LRU Cache data structure internals (HashMap + doubly linked list and WHY)
+  Why B-Tree beats BST for disk-based storage (node size = disk page)
+  Skip List vs balanced BST trade-offs
+
+DISTRIBUTED SYSTEMS:
+  Consistency Models (strong vs eventual vs causal — with production examples)
+  Consensus Algorithms (Raft/Paxos — what problem they solve conceptually)
+  Idempotency (why it matters in distributed systems, how to achieve it in API design)
+  Rate Limiting Algorithms (token bucket vs leaky bucket vs sliding window — trade-offs)
+  Message Queue Delivery (at-least-once vs exactly-once — why exactly-once is hard)
+  Caching Strategies (cache-aside vs write-through vs write-behind)
+
+AI / MACHINE LEARNING FUNDAMENTALS:
+  Gradient Descent and why learning rate matters (convergence, oscillation)
+  Overfitting vs Underfitting (what causes each, how to detect and fix)
+  Bias-Variance Trade-off (in plain language, not mathematical derivation)
+  What a Transformer does differently from an RNN (attention mechanism conceptually)
+  Vector Embeddings and why similarity search works on them
+  Supervised vs Unsupervised vs Reinforcement Learning — when to use each
+  What cross-entropy loss measures and why it is used for classification
+
+DATA ENGINEERING:
+  Batch vs Stream Processing (latency vs complexity trade-offs)
+  ETL vs ELT (why ELT became dominant with cloud data warehouses)
+  Columnar Storage (why Parquet is faster for analytical queries than row storage)
+  Apache Kafka Architecture (topics, partitions, consumer groups, offset semantics)
+  Data Lake vs Data Warehouse vs Data Lakehouse (architectural differences)
+  Pipeline Idempotency (why it matters, how to achieve it)
+  Schema Evolution (backward and forward compatibility)`,
     HR: `HR interview question categories to draw from:
 
 Career Narrative: Tell me about yourself, Walk me through your resume, Why did you change careers, Explain this employment gap, Why did you leave your last job, Why were you fired

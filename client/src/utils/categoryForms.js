@@ -268,7 +268,6 @@ export const CATEGORY_FORMS = {
         rows: 16,
       },
     },
-
     // For solution display card
     displayConfig: {
       sections: [
@@ -492,70 +491,178 @@ export const CATEGORY_FORMS = {
     showFollowUps: true,
     showSolutionTabs: false,
   },
-  CS_FUNDAMENTALS: {
+CS_FUNDAMENTALS: {
+    // ── Technical Knowledge Form Configuration ──────────────────────────────
+    //
+    // "Technical Knowledge" is the display label. The enum key CS_FUNDAMENTALS
+    // stays unchanged in the DB — no migration needed.
+    //
+    // This category is PURELY THEORETICAL — no code, no implementation.
+    // Every question is a concept explanation question:
+    //   "Explain how X works"
+    //   "What is the difference between X and Y"
+    //   "Why does X exist — what problem does it solve"
+    //   "What happens when X fails"
+    //   "What are the trade-offs between X and Y"
+    //
+    // Seven subject domains (research basis: what tier-1 companies actually test):
+    //   1. Operating Systems
+    //   2. Computer Networking
+    //   3. Database Internals (conceptual — not SQL query writing)
+    //   4. Data Structures & Algorithms (WHY they work — not implementation)
+    //   5. Distributed Systems & System Concepts
+    //   6. AI / Machine Learning Fundamentals
+    //   7. Data Engineering Concepts
+    //
+    // Evaluation framework — three independent dimensions:
+    //   Mechanism Depth   → Do they know HOW it works, not just WHAT it is?
+    //   Trade-off Awareness → Do they know what was sacrificed to get the benefit?
+    //   Real-world Anchoring → Can they connect it to a production system?
+    //
+    // isTechnicalKnowledge flag tells SubmitSolutionPage to render
+    // TechnicalKnowledgeWorkspace instead of the generic form.
+    //
+    isTechnicalKnowledge: true,
+    // Empty fields for API consistency — TK uses technicalKnowledgeFields
+    fields: {},
     steps: [
-      {
-        id: 1,
-        label: "Concept",
-        icon: "📚",
-        desc: "Explain the concept in your own words",
-      },
-      {
-        id: 2,
-        label: "Details",
-        icon: "🔍",
-        desc: "Examples, edge cases, and misconceptions",
-      },
-      {
-        id: 3,
-        label: "Application",
-        icon: "🌍",
-        desc: "Real-world usage and interview talking points",
-      },
+        { id: 1, label: 'Subject', icon: '📚', desc: 'Topic area and concept being explained' },
+        { id: 2, label: 'Mechanism', icon: '⚙️', desc: 'How it works — the actual mechanism' },
+        { id: 3, label: 'Design', icon: '🎯', desc: 'Why it was designed this way' },
+        { id: 4, label: 'Trade-offs', icon: '⚖️', desc: 'What it sacrifices, when alternatives are better' },
+        { id: 5, label: 'Production', icon: '🌍', desc: 'Real-world usage and misconceptions' },
     ],
-    fields: {
-      patternIdentified: {
-        label: "Core Topic",
-        placeholder: "e.g. Virtual Memory, TCP Handshake, B-Tree Indexing...",
-        show: true,
-      },
-      patternReasoning: {
-        label: "Concept Explanation",
-        placeholder:
-          "Explain this concept clearly in your own words. Imagine teaching it to a junior developer.",
-        hint: 'Start with the "what", then the "why", then the "how".',
-        show: true,
-      },
-      keyInsight: {
-        label: "Key Distinction",
-        placeholder:
-          "What's the one thing that separates deep understanding from surface knowledge?",
-        hint: "The subtle detail that interviewers test for.",
-        show: true,
-      },
-      simpleExplanation: {
-        label: "Real-World Examples",
-        placeholder:
-          "Where is this concept used in real systems? Give 2-3 concrete examples.",
-        show: true,
-      },
-      challenges: {
-        label: "Common Misconceptions",
-        placeholder:
-          "What do most people get wrong about this? What tripped you up?",
-        show: true,
-      },
+    // Technical Knowledge structured fields stored in categorySpecificData JSON column.
+    technicalKnowledgeFields: {
+        subject: {
+            label: 'Subject Area & Concept',
+            placeholder:
+                'Name the subject area and the specific concept being explained.\n\n' +
+                'Format: [Subject Area] — [Specific Concept]\n\n' +
+                'Examples:\n' +
+                '• Operating Systems — Virtual Memory and Page Faults\n' +
+                '• Computer Networking — TCP 3-Way Handshake and Connection Lifecycle\n' +
+                '• Database Internals — B-Tree Index Mechanics and Query Optimization\n' +
+                '• Distributed Systems — CAP Theorem and Consistency Trade-offs\n' +
+                '• AI/ML Fundamentals — Gradient Descent and Learning Rate\n' +
+                '• Data Structures — Why HashMap is O(1) Amortized, Not O(1) Worst Case\n' +
+                '• Data Engineering — Batch vs Stream Processing Trade-offs\n\n' +
+                'Write the subject area and concept:',
+            hint: 'Being precise about the concept before explaining it forces the metacognitive step that separates deep understanding from surface familiarity. Vague subject → vague explanation.',
+            rows: 4,
+            required: true,
+        },
+        coreExplanation: {
+            label: 'Core Explanation — How It Works',
+            placeholder:
+                'Explain the MECHANISM. Not the definition — the mechanism.\n\n' +
+                'The difference:\n' +
+                '✗ "TCP is a reliable, connection-oriented protocol."\n' +
+                '   (Definition. Any textbook. Fails interviews.)\n\n' +
+                '✓ "TCP achieves reliability through three mechanisms working together:\n' +
+                '   1. Sequence numbers on every segment so the receiver can detect gaps\n' +
+                '      and request retransmission of missing segments.\n' +
+                '   2. Cumulative acknowledgments — the receiver ACKs the highest\n' +
+                '      in-order byte received, not individual segments.\n' +
+                '   3. Retransmission timers — if the sender doesn\'t receive an ACK\n' +
+                '      within the RTO window, it retransmits from the last unACKed segment.\n' +
+                '   The connection state (SYN → ESTABLISHED → FIN_WAIT → TIME_WAIT) is\n' +
+                '   what enables ordered teardown and protects against delayed packets\n' +
+                '   from a previous connection being mistaken for new data."\n' +
+                '   (Mechanism. Tells the interviewer you actually understand it.)\n\n' +
+                'Write your mechanism-level explanation:',
+            hint: 'Interviewers probe until you hit your ceiling. Explaining the mechanism first means you\'re not guessing when the follow-up questions come. "How does X actually work inside?" should be answered before they ask.',
+            rows: 14,
+            required: true,
+        },
+        whyItExists: {
+            label: 'Why It Was Designed This Way',
+            placeholder:
+                'What problem does this solve? What would break without it?\n' +
+                'Why was this approach chosen over alternatives that existed at the time?\n\n' +
+                'This is the question most candidates cannot answer. They know WHAT it is\n' +
+                'but not WHY the engineers made this specific design decision.\n\n' +
+                'Strong example (Virtual Memory):\n' +
+                '"Before virtual memory, programs had to fit in physical RAM and manage\n' +
+                ' their own memory layout. This caused two problems:\n' +
+                ' 1. Programs were limited to available physical RAM — impossible to run\n' +
+                '    large programs on small machines.\n' +
+                ' 2. Multiple programs sharing memory had no isolation — one program could\n' +
+                '    corrupt another\'s memory.\n' +
+                ' Virtual memory solves both by giving each process its own address space\n' +
+                ' (isolation) and backing it with both physical RAM and disk (larger than\n' +
+                ' physical RAM). The OS page table maps virtual → physical transparently.\n' +
+                ' The trade-off is latency: a page fault (accessing a page not in RAM)\n' +
+                ' costs ~10ms disk I/O vs ~100ns RAM access — a 100,000x difference.\n' +
+                ' This is why thrashing (constant page faulting) kills performance."\n\n' +
+                'Write your design rationale:',
+            hint: 'This section signals seniority more than any other. A junior engineer knows what something is. A senior engineer knows why it was built this way and what alternatives were rejected.',
+            rows: 10,
+            required: false,
+        },
+        tradeoffs: {
+            label: 'Trade-offs — What It Sacrifices',
+            placeholder:
+                'Every design decision sacrifices something to gain something else.\n' +
+                'Name what this approach gives up and when a different approach is better.\n\n' +
+                'Format: Benefit → Cost → When to choose differently\n\n' +
+                'Strong example (B-Tree Index):\n' +
+                '"B-Tree index:\n' +
+                ' + Benefit: O(log n) lookups, range queries work, sorted access.\n' +
+                ' - Cost: Write overhead — every INSERT/UPDATE/DELETE must update\n' +
+                '   the index. For write-heavy tables, indexes slow down writes.\n' +
+                '   Storage overhead — index takes additional disk space.\n' +
+                '   Rebalancing cost — B-Tree splits and merges on heavy writes\n' +
+                '   can cause lock contention.\n' +
+                ' → Choose differently: Hash index for equality-only lookups (faster\n' +
+                '   than B-Tree for exact matches, but NO range queries). No index for\n' +
+                '   write-heavy columns that are rarely queried. Partial index when\n' +
+                '   only a subset of rows are queried (e.g., WHERE status = \'active\')."\n\n' +
+                'Write the trade-offs for this concept:',
+            hint: 'Candidates who can only articulate benefits fail senior-level interviews. The interviewer is specifically looking for evidence that you understand the design space, not just the happy path.',
+            rows: 10,
+            required: false,
+        },
+        realWorldUsage: {
+            label: 'Real-World Usage & Common Misconceptions',
+            placeholder:
+                'Two things in one section:\n\n' +
+                '1. WHERE DOES THIS APPEAR IN REAL SYSTEMS?\n' +
+                'Name specific systems, products, or scenarios where this concept\n' +
+                'is actively in use. Not generic — specific.\n\n' +
+                'Strong: "Consistent hashing is used by Cassandra and DynamoDB for\n' +
+                'distributing data across nodes without full reshuffling on node\n' +
+                'add/remove. Akamai uses it for CDN edge routing. Redis Cluster uses\n' +
+                'a simplified version with 16384 hash slots."\n\n' +
+                'Weak: "Consistent hashing is used in distributed systems."\n\n' +
+                '2. COMMON MISCONCEPTIONS — what do most people get wrong?\n' +
+                'What does the interviewer probe for specifically?\n' +
+                'What did YOU get wrong before deeply learning this?\n\n' +
+                'Strong: "Common mistake: confusing CAP \'consistency\' with ACID\n' +
+                '\'consistency\'. In CAP, C means all nodes see the same data at the\n' +
+                'same time (linearizability). In ACID, C means the database remains\n' +
+                'in a valid state per defined constraints. Completely different.\n' +
+                'This confusion causes wrong architecture decisions constantly."\n\n' +
+                'Write your real-world usage and misconceptions:',
+            hint: 'The misconceptions sub-section is the highest-signal part of this entire workspace. The interviewer knows the gotchas. Demonstrating you know them — and have internalized them — shows production-level understanding.',
+            rows: 10,
+            required: false,
+        },
     },
-    showSolutionTabs: false,
-    showDetailSection: true,
-    detailField: {
-      label: "Detailed Breakdown",
-      placeholder:
-        "Walk through the concept step by step. Include diagrams in text form if helpful.",
-      hint: "Use examples, edge cases, and comparisons with related concepts.",
+    // For solution display card — how to render submitted TK answers.
+    // Mirrors the HR and Behavioral displayConfig patterns.
+    displayConfig: {
+        sections: [
+            { key: 'subject', label: 'Subject & Concept', icon: '📚' },
+            { key: 'coreExplanation', label: 'How It Works', icon: '⚙️' },
+            { key: 'whyItExists', label: 'Why It Was Designed This Way', icon: '🎯' },
+            { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️' },
+            { key: 'realWorldUsage', label: 'Real-World Usage & Misconceptions', icon: '🌍' },
+        ],
     },
     showFollowUps: true,
-  },
+    showSolutionTabs: false,
+},
   HR: {
     // ── HR Round Form Configuration ────────────────────────────────
     //
