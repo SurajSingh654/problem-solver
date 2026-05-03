@@ -491,7 +491,7 @@ export const CATEGORY_FORMS = {
     showFollowUps: true,
     showSolutionTabs: false,
   },
-CS_FUNDAMENTALS: {
+  CS_FUNDAMENTALS: {
     // ── Technical Knowledge Form Configuration ──────────────────────────────
     //
     // "Technical Knowledge" is the display label. The enum key CS_FUNDAMENTALS
@@ -526,143 +526,176 @@ CS_FUNDAMENTALS: {
     // Empty fields for API consistency — TK uses technicalKnowledgeFields
     fields: {},
     steps: [
-        { id: 1, label: 'Subject', icon: '📚', desc: 'Topic area and concept being explained' },
-        { id: 2, label: 'Mechanism', icon: '⚙️', desc: 'How it works — the actual mechanism' },
-        { id: 3, label: 'Design', icon: '🎯', desc: 'Why it was designed this way' },
-        { id: 4, label: 'Trade-offs', icon: '⚖️', desc: 'What it sacrifices, when alternatives are better' },
-        { id: 5, label: 'Production', icon: '🌍', desc: 'Real-world usage and misconceptions' },
+      {
+        id: 1,
+        label: "Subject",
+        icon: "📚",
+        desc: "Topic area and concept being explained",
+      },
+      {
+        id: 2,
+        label: "Mechanism",
+        icon: "⚙️",
+        desc: "How it works — the actual mechanism",
+      },
+      {
+        id: 3,
+        label: "Design",
+        icon: "🎯",
+        desc: "Why it was designed this way",
+      },
+      {
+        id: 4,
+        label: "Trade-offs",
+        icon: "⚖️",
+        desc: "What it sacrifices, when alternatives are better",
+      },
+      {
+        id: 5,
+        label: "Production",
+        icon: "🌍",
+        desc: "Real-world usage and misconceptions",
+      },
     ],
     // Technical Knowledge structured fields stored in categorySpecificData JSON column.
     technicalKnowledgeFields: {
-        subject: {
-            label: 'Subject Area & Concept',
-            placeholder:
-                'Name the subject area and the specific concept being explained.\n\n' +
-                'Format: [Subject Area] — [Specific Concept]\n\n' +
-                'Examples:\n' +
-                '• Operating Systems — Virtual Memory and Page Faults\n' +
-                '• Computer Networking — TCP 3-Way Handshake and Connection Lifecycle\n' +
-                '• Database Internals — B-Tree Index Mechanics and Query Optimization\n' +
-                '• Distributed Systems — CAP Theorem and Consistency Trade-offs\n' +
-                '• AI/ML Fundamentals — Gradient Descent and Learning Rate\n' +
-                '• Data Structures — Why HashMap is O(1) Amortized, Not O(1) Worst Case\n' +
-                '• Data Engineering — Batch vs Stream Processing Trade-offs\n\n' +
-                'Write the subject area and concept:',
-            hint: 'Being precise about the concept before explaining it forces the metacognitive step that separates deep understanding from surface familiarity. Vague subject → vague explanation.',
-            rows: 4,
-            required: true,
-        },
-        coreExplanation: {
-            label: 'Core Explanation — How It Works',
-            placeholder:
-                'Explain the MECHANISM. Not the definition — the mechanism.\n\n' +
-                'The difference:\n' +
-                '✗ "TCP is a reliable, connection-oriented protocol."\n' +
-                '   (Definition. Any textbook. Fails interviews.)\n\n' +
-                '✓ "TCP achieves reliability through three mechanisms working together:\n' +
-                '   1. Sequence numbers on every segment so the receiver can detect gaps\n' +
-                '      and request retransmission of missing segments.\n' +
-                '   2. Cumulative acknowledgments — the receiver ACKs the highest\n' +
-                '      in-order byte received, not individual segments.\n' +
-                '   3. Retransmission timers — if the sender doesn\'t receive an ACK\n' +
-                '      within the RTO window, it retransmits from the last unACKed segment.\n' +
-                '   The connection state (SYN → ESTABLISHED → FIN_WAIT → TIME_WAIT) is\n' +
-                '   what enables ordered teardown and protects against delayed packets\n' +
-                '   from a previous connection being mistaken for new data."\n' +
-                '   (Mechanism. Tells the interviewer you actually understand it.)\n\n' +
-                'Write your mechanism-level explanation:',
-            hint: 'Interviewers probe until you hit your ceiling. Explaining the mechanism first means you\'re not guessing when the follow-up questions come. "How does X actually work inside?" should be answered before they ask.',
-            rows: 14,
-            required: true,
-        },
-        whyItExists: {
-            label: 'Why It Was Designed This Way',
-            placeholder:
-                'What problem does this solve? What would break without it?\n' +
-                'Why was this approach chosen over alternatives that existed at the time?\n\n' +
-                'This is the question most candidates cannot answer. They know WHAT it is\n' +
-                'but not WHY the engineers made this specific design decision.\n\n' +
-                'Strong example (Virtual Memory):\n' +
-                '"Before virtual memory, programs had to fit in physical RAM and manage\n' +
-                ' their own memory layout. This caused two problems:\n' +
-                ' 1. Programs were limited to available physical RAM — impossible to run\n' +
-                '    large programs on small machines.\n' +
-                ' 2. Multiple programs sharing memory had no isolation — one program could\n' +
-                '    corrupt another\'s memory.\n' +
-                ' Virtual memory solves both by giving each process its own address space\n' +
-                ' (isolation) and backing it with both physical RAM and disk (larger than\n' +
-                ' physical RAM). The OS page table maps virtual → physical transparently.\n' +
-                ' The trade-off is latency: a page fault (accessing a page not in RAM)\n' +
-                ' costs ~10ms disk I/O vs ~100ns RAM access — a 100,000x difference.\n' +
-                ' This is why thrashing (constant page faulting) kills performance."\n\n' +
-                'Write your design rationale:',
-            hint: 'This section signals seniority more than any other. A junior engineer knows what something is. A senior engineer knows why it was built this way and what alternatives were rejected.',
-            rows: 10,
-            required: false,
-        },
-        tradeoffs: {
-            label: 'Trade-offs — What It Sacrifices',
-            placeholder:
-                'Every design decision sacrifices something to gain something else.\n' +
-                'Name what this approach gives up and when a different approach is better.\n\n' +
-                'Format: Benefit → Cost → When to choose differently\n\n' +
-                'Strong example (B-Tree Index):\n' +
-                '"B-Tree index:\n' +
-                ' + Benefit: O(log n) lookups, range queries work, sorted access.\n' +
-                ' - Cost: Write overhead — every INSERT/UPDATE/DELETE must update\n' +
-                '   the index. For write-heavy tables, indexes slow down writes.\n' +
-                '   Storage overhead — index takes additional disk space.\n' +
-                '   Rebalancing cost — B-Tree splits and merges on heavy writes\n' +
-                '   can cause lock contention.\n' +
-                ' → Choose differently: Hash index for equality-only lookups (faster\n' +
-                '   than B-Tree for exact matches, but NO range queries). No index for\n' +
-                '   write-heavy columns that are rarely queried. Partial index when\n' +
-                '   only a subset of rows are queried (e.g., WHERE status = \'active\')."\n\n' +
-                'Write the trade-offs for this concept:',
-            hint: 'Candidates who can only articulate benefits fail senior-level interviews. The interviewer is specifically looking for evidence that you understand the design space, not just the happy path.',
-            rows: 10,
-            required: false,
-        },
-        realWorldUsage: {
-            label: 'Real-World Usage & Common Misconceptions',
-            placeholder:
-                'Two things in one section:\n\n' +
-                '1. WHERE DOES THIS APPEAR IN REAL SYSTEMS?\n' +
-                'Name specific systems, products, or scenarios where this concept\n' +
-                'is actively in use. Not generic — specific.\n\n' +
-                'Strong: "Consistent hashing is used by Cassandra and DynamoDB for\n' +
-                'distributing data across nodes without full reshuffling on node\n' +
-                'add/remove. Akamai uses it for CDN edge routing. Redis Cluster uses\n' +
-                'a simplified version with 16384 hash slots."\n\n' +
-                'Weak: "Consistent hashing is used in distributed systems."\n\n' +
-                '2. COMMON MISCONCEPTIONS — what do most people get wrong?\n' +
-                'What does the interviewer probe for specifically?\n' +
-                'What did YOU get wrong before deeply learning this?\n\n' +
-                'Strong: "Common mistake: confusing CAP \'consistency\' with ACID\n' +
-                '\'consistency\'. In CAP, C means all nodes see the same data at the\n' +
-                'same time (linearizability). In ACID, C means the database remains\n' +
-                'in a valid state per defined constraints. Completely different.\n' +
-                'This confusion causes wrong architecture decisions constantly."\n\n' +
-                'Write your real-world usage and misconceptions:',
-            hint: 'The misconceptions sub-section is the highest-signal part of this entire workspace. The interviewer knows the gotchas. Demonstrating you know them — and have internalized them — shows production-level understanding.',
-            rows: 10,
-            required: false,
-        },
+      subject: {
+        label: "Subject Area & Concept",
+        placeholder:
+          "Name the subject area and the specific concept being explained.\n\n" +
+          "Format: [Subject Area] — [Specific Concept]\n\n" +
+          "Examples:\n" +
+          "• Operating Systems — Virtual Memory and Page Faults\n" +
+          "• Computer Networking — TCP 3-Way Handshake and Connection Lifecycle\n" +
+          "• Database Internals — B-Tree Index Mechanics and Query Optimization\n" +
+          "• Distributed Systems — CAP Theorem and Consistency Trade-offs\n" +
+          "• AI/ML Fundamentals — Gradient Descent and Learning Rate\n" +
+          "• Data Structures — Why HashMap is O(1) Amortized, Not O(1) Worst Case\n" +
+          "• Data Engineering — Batch vs Stream Processing Trade-offs\n\n" +
+          "Write the subject area and concept:",
+        hint: "Being precise about the concept before explaining it forces the metacognitive step that separates deep understanding from surface familiarity. Vague subject → vague explanation.",
+        rows: 4,
+        required: true,
+      },
+      coreExplanation: {
+        label: "Core Explanation — How It Works",
+        placeholder:
+          "Explain the MECHANISM. Not the definition — the mechanism.\n\n" +
+          "The difference:\n" +
+          '✗ "TCP is a reliable, connection-oriented protocol."\n' +
+          "   (Definition. Any textbook. Fails interviews.)\n\n" +
+          '✓ "TCP achieves reliability through three mechanisms working together:\n' +
+          "   1. Sequence numbers on every segment so the receiver can detect gaps\n" +
+          "      and request retransmission of missing segments.\n" +
+          "   2. Cumulative acknowledgments — the receiver ACKs the highest\n" +
+          "      in-order byte received, not individual segments.\n" +
+          "   3. Retransmission timers — if the sender doesn't receive an ACK\n" +
+          "      within the RTO window, it retransmits from the last unACKed segment.\n" +
+          "   The connection state (SYN → ESTABLISHED → FIN_WAIT → TIME_WAIT) is\n" +
+          "   what enables ordered teardown and protects against delayed packets\n" +
+          '   from a previous connection being mistaken for new data."\n' +
+          "   (Mechanism. Tells the interviewer you actually understand it.)\n\n" +
+          "Write your mechanism-level explanation:",
+        hint: 'Interviewers probe until you hit your ceiling. Explaining the mechanism first means you\'re not guessing when the follow-up questions come. "How does X actually work inside?" should be answered before they ask.',
+        rows: 14,
+        required: true,
+      },
+      whyItExists: {
+        label: "Why It Was Designed This Way",
+        placeholder:
+          "What problem does this solve? What would break without it?\n" +
+          "Why was this approach chosen over alternatives that existed at the time?\n\n" +
+          "This is the question most candidates cannot answer. They know WHAT it is\n" +
+          "but not WHY the engineers made this specific design decision.\n\n" +
+          "Strong example (Virtual Memory):\n" +
+          '"Before virtual memory, programs had to fit in physical RAM and manage\n' +
+          " their own memory layout. This caused two problems:\n" +
+          " 1. Programs were limited to available physical RAM — impossible to run\n" +
+          "    large programs on small machines.\n" +
+          " 2. Multiple programs sharing memory had no isolation — one program could\n" +
+          "    corrupt another's memory.\n" +
+          " Virtual memory solves both by giving each process its own address space\n" +
+          " (isolation) and backing it with both physical RAM and disk (larger than\n" +
+          " physical RAM). The OS page table maps virtual → physical transparently.\n" +
+          " The trade-off is latency: a page fault (accessing a page not in RAM)\n" +
+          " costs ~10ms disk I/O vs ~100ns RAM access — a 100,000x difference.\n" +
+          ' This is why thrashing (constant page faulting) kills performance."\n\n' +
+          "Write your design rationale:",
+        hint: "This section signals seniority more than any other. A junior engineer knows what something is. A senior engineer knows why it was built this way and what alternatives were rejected.",
+        rows: 10,
+        required: false,
+      },
+      tradeoffs: {
+        label: "Trade-offs — What It Sacrifices",
+        placeholder:
+          "Every design decision sacrifices something to gain something else.\n" +
+          "Name what this approach gives up and when a different approach is better.\n\n" +
+          "Format: Benefit → Cost → When to choose differently\n\n" +
+          "Strong example (B-Tree Index):\n" +
+          '"B-Tree index:\n' +
+          " + Benefit: O(log n) lookups, range queries work, sorted access.\n" +
+          " - Cost: Write overhead — every INSERT/UPDATE/DELETE must update\n" +
+          "   the index. For write-heavy tables, indexes slow down writes.\n" +
+          "   Storage overhead — index takes additional disk space.\n" +
+          "   Rebalancing cost — B-Tree splits and merges on heavy writes\n" +
+          "   can cause lock contention.\n" +
+          " → Choose differently: Hash index for equality-only lookups (faster\n" +
+          "   than B-Tree for exact matches, but NO range queries). No index for\n" +
+          "   write-heavy columns that are rarely queried. Partial index when\n" +
+          "   only a subset of rows are queried (e.g., WHERE status = 'active').\"\n\n" +
+          "Write the trade-offs for this concept:",
+        hint: "Candidates who can only articulate benefits fail senior-level interviews. The interviewer is specifically looking for evidence that you understand the design space, not just the happy path.",
+        rows: 10,
+        required: false,
+      },
+      realWorldUsage: {
+        label: "Real-World Usage & Common Misconceptions",
+        placeholder:
+          "Two things in one section:\n\n" +
+          "1. WHERE DOES THIS APPEAR IN REAL SYSTEMS?\n" +
+          "Name specific systems, products, or scenarios where this concept\n" +
+          "is actively in use. Not generic — specific.\n\n" +
+          'Strong: "Consistent hashing is used by Cassandra and DynamoDB for\n' +
+          "distributing data across nodes without full reshuffling on node\n" +
+          "add/remove. Akamai uses it for CDN edge routing. Redis Cluster uses\n" +
+          'a simplified version with 16384 hash slots."\n\n' +
+          'Weak: "Consistent hashing is used in distributed systems."\n\n' +
+          "2. COMMON MISCONCEPTIONS — what do most people get wrong?\n" +
+          "What does the interviewer probe for specifically?\n" +
+          "What did YOU get wrong before deeply learning this?\n\n" +
+          "Strong: \"Common mistake: confusing CAP 'consistency' with ACID\n" +
+          "'consistency'. In CAP, C means all nodes see the same data at the\n" +
+          "same time (linearizability). In ACID, C means the database remains\n" +
+          "in a valid state per defined constraints. Completely different.\n" +
+          'This confusion causes wrong architecture decisions constantly."\n\n' +
+          "Write your real-world usage and misconceptions:",
+        hint: "The misconceptions sub-section is the highest-signal part of this entire workspace. The interviewer knows the gotchas. Demonstrating you know them — and have internalized them — shows production-level understanding.",
+        rows: 10,
+        required: false,
+      },
     },
     // For solution display card — how to render submitted TK answers.
     // Mirrors the HR and Behavioral displayConfig patterns.
     displayConfig: {
-        sections: [
-            { key: 'subject', label: 'Subject & Concept', icon: '📚' },
-            { key: 'coreExplanation', label: 'How It Works', icon: '⚙️' },
-            { key: 'whyItExists', label: 'Why It Was Designed This Way', icon: '🎯' },
-            { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️' },
-            { key: 'realWorldUsage', label: 'Real-World Usage & Misconceptions', icon: '🌍' },
-        ],
+      sections: [
+        { key: "subject", label: "Subject & Concept", icon: "📚" },
+        { key: "coreExplanation", label: "How It Works", icon: "⚙️" },
+        {
+          key: "whyItExists",
+          label: "Why It Was Designed This Way",
+          icon: "🎯",
+        },
+        { key: "tradeoffs", label: "Trade-offs", icon: "⚖️" },
+        {
+          key: "realWorldUsage",
+          label: "Real-World Usage & Misconceptions",
+          icon: "🌍",
+        },
+      ],
     },
     showFollowUps: true,
     showSolutionTabs: false,
-},
+  },
   HR: {
     // ── HR Round Form Configuration ────────────────────────────────
     //
@@ -795,92 +828,254 @@ CS_FUNDAMENTALS: {
     showSolutionTabs: false,
   },
   SQL: {
+    // ── Database Category Form Configuration ────────────────────────────────
+    //
+    // "Databases" is the display label. The enum key SQL stays unchanged
+    // in the DB and Prisma schema — no migration needed.
+    //
+    // This category covers the full scope of what database interviews test:
+    //   1. SQL Query Writing — JOINs, CTEs, window functions, aggregations
+    //   2. Schema Design — table modeling, normalization, relationships
+    //   3. Indexing Strategy — what to index, when, why, and at what cost
+    //   4. Query Optimization — execution plans, N+1, rewrite strategies
+    //   5. Database Internals — B-Tree mechanics, MVCC, isolation levels
+    //   6. NoSQL Trade-offs — when and why to choose non-relational storage
+    //
+    // Two distinct submission modes determined by problem.categoryData.problemType:
+    //   'QUERY'         → candidate writes SQL against a provided schema
+    //   'SCHEMA_DESIGN' → candidate designs the schema from requirements
+    //
+    // isDatabase flag tells SubmitSolutionPage to render DatabaseWorkspace.
+    //
+    isDatabase: true,
+    // Empty fields for API consistency — Database uses databaseFields
+    fields: {},
     steps: [
       {
         id: 1,
-        label: "Understanding",
-        icon: "📋",
-        desc: "Analyze the schema and requirements",
+        label: "Approach",
+        icon: "🧠",
+        desc: "Analyze schema and plan query or design",
       },
       {
         id: 2,
         label: "Solution",
         icon: "🗄️",
-        desc: "Write and explain your query",
+        desc: "Write query or design schema",
       },
       {
         id: 3,
-        label: "Optimization",
+        label: "Indexing",
         icon: "⚡",
-        desc: "Index strategy, performance, edge cases",
+        desc: "Index strategy and performance",
+      },
+      {
+        id: 4,
+        label: "Trade-offs",
+        icon: "⚖️",
+        desc: "Optimization and alternatives",
       },
     ],
-    fields: {
-      patternIdentified: {
-        label: "Query Pattern",
+    // Database-specific structured fields stored in categorySpecificData JSON column.
+    // These have named semantic keys unlike the generic Solution columns.
+    databaseFields: {
+      // ── Query problem fields ──────────────────────────────────────
+      queryApproach: {
+        label: "Query Approach — Before You Write",
         placeholder:
-          "e.g. JOIN, Subquery, Window Function, CTE, Aggregation...",
-        show: true,
-        suggestions: [
-          "JOIN",
-          "Subquery",
-          "Window Function",
-          "CTE",
-          "Aggregation",
-          "GROUP BY",
-          "HAVING",
-          "UNION",
-          "EXISTS",
-          "Recursive CTE",
-        ],
+          "Before writing the query, analyze the schema and plan your approach.\n\n" +
+          "What to include:\n" +
+          "• Which tables are involved and what are their relationships?\n" +
+          "• What JOIN type is appropriate and why? (INNER vs LEFT vs RIGHT)\n" +
+          "• Are there NULLs you need to handle explicitly?\n" +
+          "• What is the access pattern — equality filter, range, aggregation?\n" +
+          "• Is there an N+1 risk if this query were called from application code?\n\n" +
+          "Strong example:\n" +
+          '"Tables: users (1) → orders (N) → order_items (N).\n' +
+          " Need total revenue per user. LEFT JOIN users → orders because we want\n" +
+          " users with zero orders too (they should show $0 not be excluded).\n" +
+          " Then INNER JOIN orders → order_items since we only want items that\n" +
+          " exist. GROUP BY user.id. COALESCE(SUM, 0) for NULL revenue on users\n" +
+          ' with no orders."\n\n' +
+          "Write your query analysis:",
+        hint: "This is what interviewers probe first. Writing code without analyzing the schema first is the #1 signal of a weak database candidate.",
+        rows: 8,
+        required: true,
       },
-      patternReasoning: {
-        label: "Schema Analysis",
+      indexStrategy: {
+        label: "Index Strategy",
         placeholder:
-          "What tables are involved? What are the relationships? What does the query need to return?",
-        hint: "Understanding the schema is 50% of writing the correct query.",
-        show: true,
+          "What indexes would you add for this query and why?\n\n" +
+          "Format: index type + column(s) → what query operation it serves\n\n" +
+          "Strong example:\n" +
+          '"CREATE INDEX idx_orders_user_id ON orders(user_id);\n' +
+          " → Serves the JOIN condition users.id = orders.user_id\n" +
+          " → Without this, the JOIN is a full table scan on orders\n" +
+          " → At 10M orders, this is the difference between 5ms and 8000ms\n\n" +
+          " CREATE INDEX idx_order_items_order_id ON order_items(order_id);\n" +
+          " → Serves the second JOIN condition\n\n" +
+          " Would NOT add index on users.id — it already has a PRIMARY KEY index\n\n" +
+          " Trade-off: These indexes speed up reads but add ~30% write overhead\n" +
+          " to INSERT/UPDATE/DELETE on orders and order_items. Acceptable for\n" +
+          ' read-heavy analytics queries."\n\n' +
+          "Write your index strategy:",
+        hint: "Interviewers always ask about indexes. Answering proactively before they ask is a strong senior-level signal.",
+        rows: 8,
+        required: false,
       },
-      keyInsight: {
-        label: "Key Optimization",
+      optimizationNotes: {
+        label: "Optimization & Edge Cases",
         placeholder:
-          "What index would you add? What makes this query efficient or inefficient?",
-        hint: "Think about: index strategy, query plan, N+1 problems.",
-        show: true,
+          "What makes this query efficient or inefficient at scale?\n" +
+          "What edge cases must be handled?\n\n" +
+          "Common edge cases for database queries:\n" +
+          "• NULL values — does COUNT(*) vs COUNT(column) matter here?\n" +
+          "• Duplicate rows — does DISTINCT or GROUP BY affect correctness?\n" +
+          "• Empty tables — does the query return sensible results on empty input?\n" +
+          "• Large result sets — is pagination needed? (LIMIT/OFFSET or cursor?)\n" +
+          "• Timezone handling — are DATETIME comparisons timezone-aware?\n\n" +
+          "Scale considerations:\n" +
+          "• At 1M rows this query runs in ~50ms. At 100M rows without the index it is ~8s.\n" +
+          "• Could this be rewritten as a CTE to improve readability with same performance?\n" +
+          "• Is there a window function version that avoids a self-join?\n\n" +
+          "Write your optimization analysis:",
+        hint: "The difference between a query that works and a query that works in production is exactly what this section captures.",
+        rows: 8,
+        required: false,
       },
-      simpleExplanation: {
-        label: "Query Explanation",
+      // ── Schema design problem fields ──────────────────────────────
+      schemaDesign: {
+        label: "Schema Design",
         placeholder:
-          "Walk through your query step by step. Why each JOIN, WHERE, GROUP BY?",
-        show: true,
+          "Design the database schema for the stated requirements.\n\n" +
+          "Format — define each table with columns, types, and constraints:\n\n" +
+          "users\n" +
+          "  id          BIGINT PRIMARY KEY AUTO_INCREMENT\n" +
+          "  email       VARCHAR(255) UNIQUE NOT NULL\n" +
+          "  name        VARCHAR(100) NOT NULL\n" +
+          "  created_at  TIMESTAMP DEFAULT NOW()\n\n" +
+          "orders\n" +
+          "  id          BIGINT PRIMARY KEY AUTO_INCREMENT\n" +
+          "  user_id     BIGINT NOT NULL REFERENCES users(id)\n" +
+          "  status      ENUM('pending', 'paid', 'shipped', 'delivered') NOT NULL\n" +
+          "  total_cents INT NOT NULL  -- store money as cents, never FLOAT\n" +
+          "  created_at  TIMESTAMP DEFAULT NOW()\n" +
+          "  INDEX(user_id)  -- explicit index for FK join\n\n" +
+          "KEY DECISIONS TO EXPLAIN:\n" +
+          "• Why VARCHAR(255) for email vs TEXT?\n" +
+          "• Why store money as INT cents instead of DECIMAL or FLOAT?\n" +
+          "• Why ENUM for status vs a lookup table?\n" +
+          "• What normalization form is this and why is it appropriate?\n\n" +
+          "Write your schema:",
+        hint: "Schema design is tested at every company that does a database round. The interviewers are not just checking if it works — they are checking if you can explain WHY each type, constraint, and index decision was made.",
+        rows: 16,
+        required: true,
       },
-      challenges: {
-        label: "Edge Cases",
+      normalizationReasoning: {
+        label: "Normalization & Design Decisions",
         placeholder:
-          "NULL values, empty tables, duplicate rows, large datasets...",
-        show: true,
+          "Explain the key design decisions in your schema.\n\n" +
+          "For each significant decision, follow this format:\n" +
+          "Decision → What you chose → Why → Trade-off\n\n" +
+          "Strong example:\n" +
+          '"1. Normalization level: 3NF\n' +
+          "   → Separated user data from order data into distinct tables\n" +
+          "   → A user's name appears once in users, not duplicated in every order row\n" +
+          "   → Trade-off: queries require JOINs vs denormalized single-table scan\n" +
+          "   → Justified because user updates should not require updating order rows\n\n" +
+          "2. Order status: ENUM vs lookup table\n" +
+          "   → Chose ENUM for simplicity at this scale\n" +
+          "   → Trade-off: adding a new status requires ALTER TABLE (DDL change)\n" +
+          "   → Would choose a lookup table at scale where status values are dynamic\n\n" +
+          "3. No soft deletes on orders\n" +
+          "   → Orders should be immutable once paid (compliance, audit trail)\n" +
+          "   → If cancellation is needed, add a 'cancelled' status, not a deleted_at\n" +
+          '   → Soft deletes on financial records create regulatory complexity"\n\n' +
+          "Write your design reasoning:",
+        hint: "This section is the difference between a schema that was written and a schema that was designed. Interviewers at senior levels weight this heavily.",
+        rows: 10,
+        required: false,
+      },
+      indexDesign: {
+        label: "Index Design for This Schema",
+        placeholder:
+          "What indexes do you create on this schema and why?\n\n" +
+          "Match your indexes to your access patterns:\n\n" +
+          'Access pattern: "Get all orders for a user"\n' +
+          "→ CREATE INDEX idx_orders_user_id ON orders(user_id);\n" +
+          "→ Without this: full table scan on orders per user lookup\n\n" +
+          'Access pattern: "Get orders by status for fulfillment queue"\n' +
+          "→ CREATE INDEX idx_orders_status ON orders(status) WHERE status = 'paid';\n" +
+          "   (partial index — only indexes the rows that matter for this query)\n\n" +
+          'Access pattern: "Get recent orders"\n' +
+          "→ orders(created_at DESC) — B-Tree supports range and sort efficiently\n\n" +
+          "What NOT to index:\n" +
+          "→ Do not index low-cardinality columns (boolean, small ENUM)\n" +
+          "   The query planner will often prefer a full scan over an index\n" +
+          "   on a column with only 2-5 distinct values\n\n" +
+          "Write your index design:",
+        hint: "Index design without access patterns is guessing. Always name the query pattern that justifies each index.",
+        rows: 10,
+        required: false,
+      },
+      noSQLConsideration: {
+        label: "NoSQL Consideration (Optional)",
+        placeholder:
+          "Would any part of this schema benefit from a non-relational store?\n\n" +
+          "Strong example:\n" +
+          '"The orders table is a good candidate for relational storage — structured,\n' +
+          " transactional, and requires ACID compliance for financial data.\n\n" +
+          " However, order_events (audit log of status changes) could live in a\n" +
+          " document store like MongoDB or an append-only log like Kafka:\n" +
+          " • Event data is semi-structured and schema-less\n" +
+          " • It is append-only — no updates or deletes\n" +
+          ' • Query patterns are time-series: "all events for order X" not JOINs\n' +
+          " • At scale, the event log grows faster than the relational data\n\n" +
+          " I would keep core order data in PostgreSQL and pipe events to\n" +
+          ' Kafka → ClickHouse for analytics."\n\n' +
+          "If the schema is purely relational with no NoSQL benefit, say so and why.",
+        hint: "This section differentiates candidates who understand the full data architecture landscape. Not every schema needs NoSQL — but knowing when it would help is a strong signal.",
+        rows: 8,
+        required: false,
       },
     },
-    showSolutionTabs: true,
-    solutionTabConfig: {
-      types: [
-        { id: "BRUTE_FORCE", label: "Basic Query", icon: "🐌" },
-        { id: "OPTIMIZED", label: "Optimized Query", icon: "⚡" },
-        { id: "ALTERNATIVE", label: "Alternative", icon: "🔄" },
+    // For solution display card — how to render submitted Database answers.
+    // Two display configs — one per problem type.
+    displayConfig: {
+      query: [
+        { key: "queryApproach", label: "Query Approach", icon: "🧠" },
+        {
+          key: "sqlQuery",
+          label: "SQL Query",
+          icon: "🗄️",
+          isCode: true,
+          language: "sql",
+        },
+        { key: "indexStrategy", label: "Index Strategy", icon: "⚡" },
+        {
+          key: "optimizationNotes",
+          label: "Optimization & Edge Cases",
+          icon: "⚖️",
+        },
       ],
-      approachLabel: "Query Approach",
-      approachPlaceholder: "Describe what your query does at a high level...",
-      complexityLabels: {
-        time: "Time Complexity",
-        space: "Space / Index Cost",
-      },
-      codeLabel: "SQL Query",
-      codePlaceholder:
-        "-- Write your SQL query here\n\nSELECT\n  u.name,\n  COUNT(o.id) AS order_count\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nGROUP BY u.id\nHAVING COUNT(o.id) > 5\nORDER BY order_count DESC;",
-      defaultLanguage: "SQL",
-      notesLabel: "Query Notes",
+      schemaDesign: [
+        {
+          key: "schemaDesign",
+          label: "Schema Design",
+          icon: "🗄️",
+          isCode: true,
+        },
+        {
+          key: "normalizationReasoning",
+          label: "Design Decisions",
+          icon: "🧠",
+        },
+        { key: "indexDesign", label: "Index Design", icon: "⚡" },
+        { key: "noSQLConsideration", label: "NoSQL Consideration", icon: "⚖️" },
+      ],
     },
     showFollowUps: true,
+    showSolutionTabs: false,
   },
 };
 

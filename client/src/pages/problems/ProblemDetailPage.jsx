@@ -42,7 +42,7 @@ function getSubmitLabel(category) {
         BEHAVIORAL: 'Submit My Response',
         CS_FUNDAMENTALS: 'Submit My Explanation',
         HR: 'Submit My Answer',
-        SQL: 'Submit My Query',
+        SQL: 'Submit Solution',  // generic — overridden in SubmitSolutionPage by problemType
     }
     return labels[category] || 'Submit Solution'
 }
@@ -558,6 +558,135 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
     )
 }
 
+
+// ── Database Schema Panel ──────────────────────────────
+// Visible to members BEFORE submission for both query and schema design problems.
+//
+// For QUERY problems:
+//   The schema reference (table definitions + sample data) is shown prominently.
+//   This is the problem itself — candidates cannot write a query without seeing
+//   the schema. Locking it would make the problem unsolvable.
+//
+// For SCHEMA_DESIGN problems:
+//   The evaluation framework is shown — what interviewers assess in schema design.
+//   The requirements are shown (from problem description).
+//
+// What this does NOT show:
+//   Admin notes (locked until submission) — model schema or optimal query
+function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
+    const isQueryMode = problemType !== 'SCHEMA_DESIGN'
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.03 }}
+            className={cn(
+                'border rounded-2xl p-5 mb-6',
+                isQueryMode
+                    ? 'bg-brand-400/5 border-brand-400/20'
+                    : 'bg-info/5 border-info/20'
+            )}
+        >
+            <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
+                <span>{isQueryMode ? '🗄️' : '📐'}</span>
+                {isQueryMode ? 'Schema Reference' : 'Schema Design — Evaluation Framework'}
+            </h2>
+
+            {isQueryMode ? (
+                // Query mode — show the schema as the primary content
+                <>
+                    <p className="text-[11px] text-text-tertiary mb-3 leading-relaxed">
+                        These are the tables your query will operate on. Read the schema carefully
+                        before writing — understanding the relationships and data types is 50% of
+                        writing a correct query.
+                    </p>
+                    {schemaReference ? (
+                        <pre className="bg-surface-0 border border-border-default rounded-xl p-4
+                                        text-xs font-mono text-text-secondary whitespace-pre-wrap
+                                        overflow-x-auto leading-relaxed max-h-[400px]">
+                            {schemaReference}
+                        </pre>
+                    ) : description ? (
+                        <div className="bg-surface-0 border border-border-default rounded-xl p-4">
+                            <MarkdownRenderer content={description} />
+                        </div>
+                    ) : null}
+                </>
+            ) : (
+                // Schema design mode — show the evaluation framework
+                <>
+                    <p className="text-[11px] text-text-tertiary mb-4 leading-relaxed">
+                        Schema design is evaluated on three dimensions simultaneously.
+                        Understanding these before designing prevents the most common failure modes.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                        {[
+                            {
+                                icon: '🏗️',
+                                label: 'Structural Correctness',
+                                desc: 'Do the tables support the stated access patterns? Are relationships modeled correctly (1:1, 1:N, N:M)?',
+                                color: 'text-brand-300',
+                                bg: 'bg-brand-400/5 border-brand-400/20',
+                            },
+                            {
+                                icon: '💡',
+                                label: 'Design Reasoning',
+                                desc: 'Can you explain WHY each type, constraint, and normalization decision was made? This is what separates junior from senior candidates.',
+                                color: 'text-success',
+                                bg: 'bg-success/5 border-success/20',
+                            },
+                            {
+                                icon: '⚡',
+                                label: 'Index Design',
+                                desc: 'Do your indexes match your access patterns? Each index should be justified by a named query.',
+                                color: 'text-warning',
+                                bg: 'bg-warning/5 border-warning/20',
+                            },
+                        ].map(dim => (
+                            <div key={dim.label} className={cn('rounded-xl border p-3', dim.bg)}>
+                                <p className={cn('text-[10px] font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1', dim.color)}>
+                                    <span>{dim.icon}</span>{dim.label}
+                                </p>
+                                <p className="text-[11px] text-text-tertiary leading-relaxed">{dim.desc}</p>
+                            </div>
+                        ))}
+                    </div>
+                    {/* Common failure modes */}
+                    <div className="bg-danger/5 border border-danger/15 rounded-xl p-3 mb-3">
+                        <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1.5">
+                            ⚠️ Most common failure modes
+                        </p>
+                        <div className="space-y-1">
+                            {[
+                                'Storing money as FLOAT or DECIMAL(10,2) instead of INT (cents)',
+                                'No explicit indexes on foreign keys used in JOINs',
+                                'Over-normalizing (splitting tables no query will ever join back)',
+                                'ENUM for status fields that will evolve (use lookup table at scale)',
+                                'Missing NOT NULL constraints on required columns',
+                            ].map((item, i) => (
+                                <p key={i} className="text-[11px] text-text-tertiary flex items-start gap-2">
+                                    <span className="text-danger flex-shrink-0 mt-0.5">✗</span>
+                                    {item}
+                                </p>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Requirements */}
+                    {description && (
+                        <div className="border-t border-border-subtle pt-3">
+                            <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+                                Requirements to Design For
+                            </p>
+                            <MarkdownRenderer content={description} />
+                        </div>
+                    )}
+                </>
+            )}
+        </motion.div>
+    )
+}
+
 export default function ProblemDetailPage() {
     const { problemId } = useParams()
     const navigate = useNavigate()
@@ -594,6 +723,15 @@ export default function ProblemDetailPage() {
     const isBehavioral = category === 'BEHAVIORAL'
     const isCSFundamentals = category === 'CS_FUNDAMENTALS'
     const isTechnicalKnowledge = category === 'CS_FUNDAMENTALS'
+
+    const isDatabase = category === 'SQL'
+    const dbProblemType = problem?.categoryData?.problemType || 'QUERY'
+    const dbSchemaReference = problem?.categoryData?.schemaDefinition || null
+
+    // For Database: show schema reference (query mode) or evaluation framework (schema design) upfront.
+    // Query problems need the schema to be solvable — this is not a hint, it is the problem.
+    // Schema design problems benefit from seeing the evaluation criteria upfront.
+    const showDatabasePanel = isDatabase && !isAdmin
 
 
 
@@ -895,12 +1033,20 @@ export default function ProblemDetailPage() {
                 />
             )}
 
+            {showDatabasePanel && (
+                <DatabaseSchemaPanel
+                    problemType={dbProblemType}
+                    schemaReference={dbSchemaReference}
+                    description={description}
+                />
+            )}
+
             {/* ── Problem Description (non-HR categories) ──────
                 For SYSTEM_DESIGN and LOW_LEVEL_DESIGN: prominently styled as
                 the design brief. For CODING and others: supplementary context.
                 For HR: description is shown inside HRRealConcernPanel above.
             ─────────────────────────────────────────────────── */}
-            {description && !isHR && !isBehavioral && !isTechnicalKnowledge && (
+            {description && !isHR && !isBehavioral && !isTechnicalKnowledge && !isDatabase && (
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1184,7 +1330,7 @@ export default function ProblemDetailPage() {
                 SD/LLD already have their own locked notice above.
             ─────────────────────────────────────────────────────────────────── */}
             {!isAdmin && !isSolved &&
-                (isHR || isBehavioral || isCSFundamentals) &&
+                (isHR || isBehavioral || isCSFundamentals || isDatabase) &&
                 adminNotes && (
                     <motion.div
                         initial={{ opacity: 0, y: 8 }}
@@ -1199,13 +1345,13 @@ export default function ProblemDetailPage() {
                             </div>
                             <div>
                                 <p className="text-sm font-bold text-text-primary mb-1">
-                                    {isHR
-                                        ? 'Unlocks after you submit your answer.'
-                                        : isBehavioral
-                                            ? 'Unlocks after you submit.'
-                                            : isCSFundamentals
-                                                ? 'Unlocks after you submit. Compare your mechanism depth, trade-off awareness, and real-world connections to what interviewers expect at each level.'
-                                                : 'Unlocks after you submit.'
+                                    {isHR ? 'Unlocks after you submit your answer.'
+                                        : isBehavioral ? 'Unlocks after you submit.'
+                                            : isCSFundamentals ? 'Unlocks after you submit.'
+                                                : isDatabase ? (dbProblemType === 'SCHEMA_DESIGN'
+                                                    ? 'Unlocks after you submit your schema. Compare your normalization decisions, index design, and NoSQL reasoning to the model answer.'
+                                                    : 'Unlocks after you submit your query. Compare your JOIN choices, NULL handling, index strategy, and optimization to the optimal solution.')
+                                                    : 'Unlocks after you submit.'
                                     }
                                 </p>
                                 <p className="text-xs text-text-tertiary leading-relaxed">

@@ -36,7 +36,19 @@ const CATEGORY_FIELD_CONFIG = {
     BEHAVIORAL: { showUrl: false, showDifficulty: false, showCompanyTags: true, showUseCases: false, showAlgoTags: false, showFollowUps: true, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
     CS_FUNDAMENTALS: { showUrl: false, showDifficulty: true, showCompanyTags: false, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Topic Tags', tagPlaceholder: 'e.g. Virtual Memory, TCP, Indexing…' },
     HR: { showUrl: false, showDifficulty: false, showCompanyTags: false, showUseCases: false, showAlgoTags: false, showFollowUps: false, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
-    SQL: { showUrl: true, showDifficulty: true, showCompanyTags: true, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Query Patterns', tagPlaceholder: 'e.g. JOIN, Window Function, CTE…' },
+    // Replace the existing SQL entry
+    SQL: {
+        showUrl: true,
+        showDifficulty: true,
+        showCompanyTags: true,
+        showUseCases: true,
+        showAlgoTags: true,
+        showFollowUps: true,
+        showRealWorld: true,
+        isDatabase: true,  // ← new flag
+        tagLabel: 'Query / Design Patterns',
+        tagPlaceholder: 'e.g. JOIN, Window Function, CTE, Schema Design, Indexing…',
+    },
 }
 
 const CATEGORY_DESCRIPTION_CONFIG = {
@@ -46,7 +58,26 @@ const CATEGORY_DESCRIPTION_CONFIG = {
     BEHAVIORAL: { label: 'Question & Context', placeholder: 'Write the behavioral question and add context:\n• What is the interviewer really assessing?\n• What makes a strong answer?', hint: 'Help members understand what a great answer looks like.', required: true, rows: 6 },
     CS_FUNDAMENTALS: { label: 'Topic Description', placeholder: 'Describe the topic and expected depth:\n• Core concept to explain\n• Sub-topics to cover\n• Common misconceptions to address', hint: 'Guide members on how deep they should go.', required: true, rows: 6 },
     HR: { label: 'Question & Guidance', placeholder: 'Write the HR question and add guidance:\n• What is the interviewer really asking?\n• Tips for an authentic answer', hint: 'Help members prepare thoughtful, specific responses.', required: true, rows: 6 },
-    SQL: { label: 'Problem Statement & Schema', placeholder: 'Describe the SQL problem:\n• Table schemas\n• What the query should return\n• Sample data if helpful', hint: 'Describe the schema and requirements. External link is optional.', required: false, rows: 8 },
+    // Replace the existing SQL entry
+    SQL: {
+        label: 'Problem Statement & Schema',
+        placeholder:
+            'For QUERY problems — provide the schema and state what the query must return:\n\n' +
+            'Tables:\n' +
+            'users: id, name, email, created_at\n' +
+            'orders: id, user_id, amount, status, created_at\n\n' +
+            'Task: Write a query that returns the top 5 users by total order amount\n' +
+            'in the last 30 days, including users with zero orders.\n\n' +
+            'For SCHEMA DESIGN problems — state the requirements:\n\n' +
+            'Design a database schema for an e-commerce platform that needs to:\n' +
+            '• Store users, products, orders, and order items\n' +
+            '• Track order status changes over time\n' +
+            '• Support product inventory management\n' +
+            '• Handle multiple shipping addresses per user',
+        hint: 'This is what candidates will read. For query problems: provide exact schema. For schema design: provide requirements.',
+        required: true,
+        rows: 10,
+    },
 }
 
 const DIFF_COLORS = {
@@ -158,6 +189,10 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const [isPinned, setIsPinned] = useState(initialData?.isPinned || false)
     const [isBlindChallenge, setIsBlindChallenge] = useState(initialData?.isBlindChallenge || false)
 
+    const [dbProblemType, setDbProblemType] = useState(
+        initialData?.categoryData?.problemType || 'QUERY'
+    )
+
     const aiGenerate = useGenerateContent()
     const { data: aiStatus } = useAIStatus()
     const aiEnabled = aiStatus?.enabled
@@ -181,6 +216,8 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                 sourceUrl: sourceUrl || '',
                 companyTags: fieldConfig.showCompanyTags ? companyTags : [],
                 platform: source || 'OTHER',
+                // Database: store problem type so workspace knows what to render
+                ...(data.category === 'SQL' ? { problemType: dbProblemType } : {}),
             },
             tags,
             companyTags: fieldConfig.showCompanyTags ? companyTags : [],
@@ -233,6 +270,52 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         ))}
                     </div>
                 </div>
+
+                {/* Database Problem Type — only for SQL/Database category */}
+                {selectedCategory === 'SQL' && (
+                    <div>
+                        <label className="block text-sm font-semibold text-text-primary mb-1.5">
+                            Problem Type
+                        </label>
+                        <p className="text-xs text-text-tertiary mb-2">
+                            Determines the submission workspace the candidate sees
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                            {[
+                                {
+                                    id: 'QUERY',
+                                    label: 'Query Problem',
+                                    icon: '🗄️',
+                                    desc: 'Candidate writes SQL against a provided schema',
+                                },
+                                {
+                                    id: 'SCHEMA_DESIGN',
+                                    label: 'Schema Design',
+                                    icon: '📐',
+                                    desc: 'Candidate designs tables from requirements',
+                                },
+                            ].map(type => (
+                                <button
+                                    key={type.id}
+                                    type="button"
+                                    onClick={() => setDbProblemType(type.id)}
+                                    className={cn(
+                                        'flex items-start gap-2.5 px-3 py-3 rounded-xl border text-left transition-all',
+                                        dbProblemType === type.id
+                                            ? 'bg-brand-400/12 border-brand-400/30 text-brand-300'
+                                            : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
+                                    )}
+                                >
+                                    <span className="text-lg flex-shrink-0">{type.icon}</span>
+                                    <div>
+                                        <span className="text-xs font-semibold block">{type.label}</span>
+                                        <span className="text-[10px] opacity-60 block leading-tight">{type.desc}</span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Title */}
                 <Input

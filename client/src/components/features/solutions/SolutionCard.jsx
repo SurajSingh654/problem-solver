@@ -419,6 +419,87 @@ function TKSolutionDisplay({ data }) {
 }
 
 
+// ── Database structured display ────────────────────────
+// Renders Database solutions with categorySpecificData.
+// Two display modes based on stored problemType:
+//   QUERY → shows query approach, SQL, indexing, optimization
+//   SCHEMA_DESIGN → shows schema, decisions, indexes, NoSQL consideration
+function DatabaseSolutionDisplay({ data }) {
+    const isQueryMode = data.problemType !== 'SCHEMA_DESIGN'
+    const [activeTab, setActiveTab] = useState(isQueryMode ? 'queryApproach' : 'schemaDesign')
+
+    const querySections = [
+        { key: 'queryApproach', label: 'Approach', icon: '🧠', value: data.queryApproach },
+        { key: 'sqlQuery', label: 'Query', icon: '🗄️', value: data.sqlQuery, isCode: true },
+        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', value: data.indexStrategy },
+        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', value: data.optimizationNotes },
+    ].filter(s => s.value?.trim?.()?.length > 0)
+
+    const schemaSections = [
+        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', value: data.schemaDesign, isCode: true },
+        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', value: data.normalizationReasoning },
+        { key: 'indexDesign', label: 'Indexes', icon: '⚡', value: data.indexDesign, isCode: true },
+        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', value: data.noSQLConsideration },
+    ].filter(s => s.value?.trim?.()?.length > 0)
+
+    const sections = isQueryMode ? querySections : schemaSections
+
+    if (sections.length === 0) {
+        return <p className="text-xs text-text-disabled italic">No solution content recorded.</p>
+    }
+
+    const activeSection = sections.find(s => s.key === activeTab) || sections[0]
+
+    return (
+        <div>
+            {/* Mode badge */}
+            <div className="flex items-center gap-2 mb-3">
+                <span className={cn(
+                    'text-[10px] font-bold px-2.5 py-1 rounded-full border',
+                    isQueryMode
+                        ? 'bg-brand-400/10 text-brand-300 border-brand-400/20'
+                        : 'bg-info/10 text-info border-info/20'
+                )}>
+                    {isQueryMode ? '🗄️ Query Problem' : '📐 Schema Design'}
+                </span>
+            </div>
+
+            {/* Section tabs */}
+            <div className="flex flex-wrap gap-1 mb-4">
+                {sections.map(s => (
+                    <button
+                        key={s.key}
+                        onClick={() => setActiveTab(s.key)}
+                        className={cn(
+                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
+                            'text-[10px] font-semibold transition-all border',
+                            activeTab === s.key
+                                ? 'bg-brand-400/15 text-brand-300 border-brand-400/25'
+                                : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3 border-transparent'
+                        )}
+                    >
+                        <span>{s.icon}</span>{s.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Active section content */}
+            {activeSection?.isCode ? (
+                <pre className="bg-surface-0 border border-border-default rounded-xl p-4
+                                text-xs font-mono text-text-secondary whitespace-pre-wrap
+                                overflow-x-auto max-h-[400px] leading-relaxed">
+                    {activeSection.value}
+                </pre>
+            ) : (
+                <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                    {activeSection?.value}
+                </div>
+            )}
+        </div>
+    )
+}
+
+
 // ── Code block ─────────────────────────────────────────
 function CodeBlock({ code, language }) {
     const [copied, setCopied] = useState(false)
@@ -579,8 +660,20 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         )
     )
 
+
+    // New-format Database: has queryApproach, sqlQuery, schemaDesign, or problemType
+    const isDatabaseSubmission = !!(
+        solution.categorySpecificData &&
+        (
+            solution.categorySpecificData.queryApproach !== undefined ||
+            solution.categorySpecificData.sqlQuery !== undefined ||
+            solution.categorySpecificData.schemaDesign !== undefined ||
+            solution.categorySpecificData.problemType !== undefined
+        )
+    )
+
     // Any structured submission hides the generic coding tabs
-    const isStructuredSubmission = isSDSubmission || isLLDSubmission || isHRSubmission || isOldHRSubmission || isTKSubmission
+    const isStructuredSubmission = isSDSubmission || isLLDSubmission || isHRSubmission || isOldHRSubmission || isTKSubmission || isDatabaseSubmission
 
     const tabs = [
         { id: 'approach', label: 'Approach' },
@@ -651,6 +744,16 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 <span className="text-[10px] font-bold px-1.5 py-px rounded-full
                          bg-warning/10 text-warning border border-warning/20">
                                     {subject ? subject.split(' — ')[0] : 'Tech Knowledge'}
+                                </span>
+                            )
+                        })()}
+
+                        {isDatabaseSubmission && (() => {
+                            const pType = solution.categorySpecificData?.problemType
+                            return (
+                                <span className="text-[10px] font-bold px-1.5 py-px rounded-full
+                         bg-brand-400/10 text-brand-300 border border-brand-400/20">
+                                    {pType === 'SCHEMA_DESIGN' ? '📐 Schema Design' : '🗄️ Query'}
                                 </span>
                             )
                         })()}
@@ -765,6 +868,8 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                     />
                                 ) : isTKSubmission ? (
                                     <TKSolutionDisplay data={solution.categorySpecificData} />
+                                ) : isDatabaseSubmission ? (
+                                    <DatabaseSolutionDisplay data={solution.categorySpecificData} />
                                 ) : (
                                     // Generic coding / behavioral / sql / cs_fundamentals
                                     <>

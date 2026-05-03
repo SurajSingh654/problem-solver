@@ -3,7 +3,7 @@
 // ============================================================================
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
 import { useSubmitSolution } from '@hooks/useSolutions'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
@@ -1627,6 +1627,445 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
 }
 
 // ══════════════════════════════════════════════════════
+// DATABASE WORKSPACE
+//
+// Replaces the generic form for SQL/Database category.
+// Two modes determined by problem.categoryData.problemType:
+//   'QUERY'         → SQL editor + approach + indexing + optimization
+//   'SCHEMA_DESIGN' → schema definition + design reasoning + index design
+//
+// Data stored in categorySpecificData JSON column:
+//   Query mode:   { problemType, queryApproach, sqlQuery, indexStrategy, optimizationNotes }
+//   Schema mode:  { problemType, schemaDesign, normalizationReasoning, indexDesign, noSQLConsideration }
+//
+// The `pattern` Solution column stores the query pattern or design pattern
+// for RAG retrieval and 6D dimension signals — consistent with other categories.
+//
+// Schema reference (table definitions + sample data) lives in
+// problem.categoryData.schemaDefinition — read-only, set by admin.
+// ══════════════════════════════════════════════════════
+function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReference }) {
+    const [activeSection, setActiveSection] = useState(
+        problemType === 'SCHEMA_DESIGN' ? 'schemaDesign' : 'queryApproach'
+    )
+    const [code, setCode] = useState(dbData.sqlQuery || '')
+    const [language, setLanguage] = useState('SQL')
+    const [showSchema, setShowSchema] = useState(true)
+
+    function update(field, value) {
+        onDbDataChange({ ...dbData, [field]: value })
+    }
+
+    function updateCode(val) {
+        setCode(val)
+        onDbDataChange({ ...dbData, sqlQuery: val })
+    }
+
+    const dbConfig = getCategoryForm('SQL')
+    const fieldConfigs = dbConfig.databaseFields || {}
+
+    const isQueryMode = problemType !== 'SCHEMA_DESIGN'
+
+    // Sections adapt based on problem type
+    const sections = isQueryMode ? [
+        {
+            key: 'queryApproach',
+            label: 'Approach',
+            icon: '🧠',
+            sublabel: 'Schema analysis and query plan',
+            color: 'text-brand-300',
+            activeBg: 'bg-brand-400/10 border-brand-400/30',
+            required: true,
+        },
+        {
+            key: 'sqlEditor',
+            label: 'Query',
+            icon: '🗄️',
+            sublabel: 'Write your SQL',
+            color: 'text-success',
+            activeBg: 'bg-success/10 border-success/30',
+            required: true,
+        },
+        {
+            key: 'indexStrategy',
+            label: 'Indexing',
+            icon: '⚡',
+            sublabel: 'What indexes you would add and why',
+            color: 'text-warning',
+            activeBg: 'bg-warning/10 border-warning/30',
+            required: false,
+        },
+        {
+            key: 'optimizationNotes',
+            label: 'Optimization',
+            icon: '⚖️',
+            sublabel: 'Performance and edge cases',
+            color: 'text-info',
+            activeBg: 'bg-info/10 border-info/30',
+            required: false,
+        },
+    ] : [
+        {
+            key: 'schemaDesign',
+            label: 'Schema',
+            icon: '🗄️',
+            sublabel: 'Table definitions and constraints',
+            color: 'text-brand-300',
+            activeBg: 'bg-brand-400/10 border-brand-400/30',
+            required: true,
+        },
+        {
+            key: 'normalizationReasoning',
+            label: 'Decisions',
+            icon: '🧠',
+            sublabel: 'Normalization and design choices',
+            color: 'text-success',
+            activeBg: 'bg-success/10 border-success/30',
+            required: false,
+        },
+        {
+            key: 'indexDesign',
+            label: 'Indexes',
+            icon: '⚡',
+            sublabel: 'Index design per access pattern',
+            color: 'text-warning',
+            activeBg: 'bg-warning/10 border-warning/30',
+            required: false,
+        },
+        {
+            key: 'noSQLConsideration',
+            label: 'NoSQL?',
+            icon: '⚖️',
+            sublabel: 'Would any part benefit from NoSQL?',
+            color: 'text-info',
+            activeBg: 'bg-info/10 border-info/30',
+            required: false,
+        },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    const minThresholds = {
+        queryApproach: 200,
+        sqlEditor: 20,
+        indexStrategy: 150,
+        optimizationNotes: 150,
+        schemaDesign: 300,
+        normalizationReasoning: 200,
+        indexDesign: 150,
+        noSQLConsideration: 100,
+    }
+
+    function getSectionValue(key) {
+        if (key === 'sqlEditor') return code
+        return dbData[key] || ''
+    }
+
+    const completedCount = sections.filter(s => {
+        const val = getSectionValue(s.key)
+        return (val?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
+    }).length
+
+    const activeValue = getSectionValue(activeSection)
+    const threshold = minThresholds[activeSection] || 150
+    const activeCharCount = activeValue?.trim?.()?.length ?? 0
+    const isShort = activeCharCount > 0 && activeCharCount < threshold
+    const progressPct = Math.min(100, (activeCharCount / threshold) * 100)
+
+    return (
+        <div className="space-y-4">
+            {/* Schema reference panel — read-only, visible while solving */}
+            {schemaReference && (
+                <div className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => setShowSchema(v => !v)}
+                        className="w-full flex items-center justify-between px-5 py-3.5
+                                   hover:bg-surface-2/50 transition-colors"
+                    >
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm">📋</span>
+                            <span className="text-xs font-bold text-text-primary">
+                                Schema Reference
+                            </span>
+                            <span className="text-[10px] text-text-disabled bg-surface-3
+                                             border border-border-default rounded-full px-2 py-px">
+                                Read-only
+                            </span>
+                        </div>
+                        <motion.div
+                            animate={{ rotate: showSchema ? 180 : 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="text-text-disabled"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </motion.div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                        {showSchema && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="px-5 pb-5 border-t border-border-default pt-4">
+                                    <pre className="bg-surface-0 border border-border-default
+                                                    rounded-xl p-4 text-xs font-mono text-text-secondary
+                                                    whitespace-pre-wrap overflow-x-auto leading-relaxed
+                                                    max-h-[300px]">
+                                        {schemaReference}
+                                    </pre>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            )}
+
+            {/* Progress header */}
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>{isQueryMode ? '🗄️' : '📐'}</span>
+                        {isQueryMode ? 'Query Workspace' : 'Schema Design Workspace'}
+                    </p>
+                    <span className="text-[10px] font-bold text-text-disabled">
+                        {completedCount}/{sections.length} sections
+                    </span>
+                </div>
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className="h-full bg-brand-300 rounded-full"
+                    />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const val = getSectionValue(s.key)
+                        const isDone = (val?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
+                        const isActive = activeSection === s.key
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => setActiveSection(s.key)}
+                                className={cn(
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
+                                    'transition-all duration-150 min-w-[72px]',
+                                    isActive
+                                        ? s.activeBg
+                                        : isDone
+                                            ? 'bg-success/5 border-success/20'
+                                            : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {s.required && !isDone && !isActive && (
+                                        <span className="text-danger text-[9px] font-bold">*</span>
+                                    )}
+                                    {isDone && !isActive && (
+                                        <span className="text-success text-[9px] font-bold">✓</span>
+                                    )}
+                                </div>
+                                <span className={cn(
+                                    'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
+                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
+                                )}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* Active section panel */}
+            <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
+            >
+                {/* Section header */}
+                <div className={cn(
+                    'flex items-center gap-3 px-5 py-4 border-b border-border-default',
+                    activeSectionConfig?.activeBg
+                )}>
+                    <span className="text-xl">{activeSectionConfig?.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className={cn('text-sm font-bold', activeSectionConfig?.color)}>
+                                {activeSectionConfig?.label}
+                            </p>
+                            {activeSectionConfig?.required && (
+                                <span className="text-[9px] font-bold text-danger
+                                                 bg-danger/10 border border-danger/20
+                                                 px-1.5 py-px rounded-full">
+                                    Required
+                                </span>
+                            )}
+                            {!activeSectionConfig?.required && (
+                                <span className="text-[9px] font-bold text-text-disabled
+                                                 bg-surface-3 border border-border-default
+                                                 px-1.5 py-px rounded-full">
+                                    High signal
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-text-disabled">
+                            {activeSectionConfig?.sublabel}
+                        </p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">
+                        {activeIndex + 1} / {sections.length}
+                    </span>
+                </div>
+
+                <div className="p-5 space-y-3">
+                    {/* SQL Editor section */}
+                    {activeSection === 'sqlEditor' ? (
+                        <div className="space-y-2">
+                            <p className="text-[11px] text-text-tertiary leading-relaxed
+                                           bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                💡 Write your SQL query. The schema reference above is available while you work.
+                                AI will evaluate correctness, JOIN logic, NULL handling, index alignment, and optimization.
+                            </p>
+                            <CodeEditor
+                                code={code}
+                                onChange={updateCode}
+                                language="SQL"
+                                onLanguageChange={() => { }}
+                                selectorStyle="none"
+                                languages={[{ id: 'SQL', label: 'SQL' }]}
+                                height="300px"
+                                showLanguageSelector={false}
+                            />
+                            {code.trim().length > 0 && (
+                                <p className="text-[10px] text-success flex items-center gap-1">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="3"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                    Query written — AI will review for correctness, optimization, and edge cases
+                                </p>
+                            )}
+                        </div>
+                    ) : (
+                        <>
+                            {/* Coaching hint */}
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed
+                                               bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            {/* Text area */}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 8}
+                                value={dbData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className={cn(
+                                    'w-full border border-border-strong rounded-xl',
+                                    'text-sm text-text-primary placeholder:text-text-disabled',
+                                    'px-3.5 py-2.5 outline-none resize-y leading-relaxed',
+                                    'focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20',
+                                    // Schema fields use monospace font — they contain code-like content
+                                    (activeSection === 'schemaDesign' || activeSection === 'indexDesign' || activeSection === 'indexStrategy')
+                                        ? 'bg-surface-0 font-mono text-xs'
+                                        : 'bg-surface-3'
+                                )}
+                                style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 8) * 24}px` }}
+                            />
+                            {/* Depth indicator */}
+                            {activeCharCount > 0 && (
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-[10px]">
+                                        <span className={cn(
+                                            'font-semibold',
+                                            activeCharCount >= threshold ? 'text-success'
+                                                : isShort ? 'text-warning' : 'text-text-disabled'
+                                        )}>
+                                            {activeCharCount >= threshold
+                                                ? '✓ Good depth'
+                                                : isShort
+                                                    ? `Shallow — aim for ${threshold - activeCharCount} more chars`
+                                                    : 'Keep going...'}
+                                        </span>
+                                        <span className="text-text-disabled tabular-nums">
+                                            {activeCharCount} / ~{threshold}
+                                        </span>
+                                    </div>
+                                    <div className="h-1 bg-surface-3 rounded-full overflow-hidden">
+                                        <motion.div
+                                            animate={{ width: `${progressPct}%` }}
+                                            transition={{ duration: 0.3 }}
+                                            className={cn(
+                                                'h-full rounded-full',
+                                                activeCharCount >= threshold ? 'bg-success' : 'bg-warning'
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                {/* Prev / Next navigation */}
+                <div className="flex items-center justify-between px-5 py-3
+                                border-t border-border-default bg-surface-1/50">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key)
+                        }}
+                        disabled={activeIndex === 0}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
+                                   flex items-center gap-1"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2.5"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12" />
+                            <polyline points="12 19 5 12 12 5" />
+                        </svg>
+                        Previous
+                    </button>
+                    {activeIndex < sections.length - 1 && (
+                        <button
+                            type="button"
+                            onClick={() => setActiveSection(sections[activeIndex + 1].key)}
+                            className="text-xs font-semibold text-text-tertiary hover:text-text-primary
+                                       transition-colors flex items-center gap-1"
+                        >
+                            Next
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2.5"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                                <polyline points="12 5 19 12 12 19" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
 export default function SubmitSolutionPage() {
@@ -1646,6 +2085,9 @@ export default function SubmitSolutionPage() {
     const isHR = category === 'HR'
     const isBehavioral = category === 'BEHAVIORAL'
     const isTechnicalKnowledge = category === 'CS_FUNDAMENTALS'
+    const isDatabase = category === 'SQL'
+    const dbProblemType = problem?.categoryData?.problemType || 'QUERY'
+    const dbSchemaReference = problem?.categoryData?.schemaDefinition || problem?.description || null
 
     // External links only for CODING and SQL
     const hasExternalLink = !!problem?.categoryData?.sourceUrl &&
@@ -1716,6 +2158,19 @@ export default function SubmitSolutionPage() {
         whyItExists: '',
         tradeoffs: '',
         realWorldUsage: '',
+    })
+
+
+    // ── Database workspace state ───────────────────────
+    const [dbData, setDbData] = useState({
+        queryApproach: '',
+        sqlQuery: '',
+        indexStrategy: '',
+        optimizationNotes: '',
+        schemaDesign: '',
+        normalizationReasoning: '',
+        indexDesign: '',
+        noSQLConsideration: '',
     })
     const [hrQuestionCategory, setHrQuestionCategory] = useState('')
 
@@ -1801,6 +2256,22 @@ export default function SubmitSolutionPage() {
             }
         }
 
+        if (isDatabase) {
+            const isQueryMode = dbProblemType !== 'SCHEMA_DESIGN'
+            const hasQuery = isQueryMode
+                ? (dbData.sqlQuery?.trim().length ?? 0) > 0 || (dbData.queryApproach?.trim().length ?? 0) > 0
+                : (dbData.schemaDesign?.trim().length ?? 0) > 0
+            if (!hasQuery) {
+                toast.error(
+                    isQueryMode
+                        ? 'Write your SQL query or at least the query approach before submitting.'
+                        : 'Design your schema before submitting.',
+                    { duration: 5000 }
+                )
+                return
+            }
+        }
+
         const followUpAnswersArray = Object.entries(followUpAnswers)
             .filter(([, text]) => text?.trim())
             .map(([questionId, text]) => ({
@@ -1817,108 +2288,83 @@ export default function SubmitSolutionPage() {
         const data = {
             approach: isSystemDesign
                 ? sdData.functionalRequirements
-                : isLowLevelDesign
-                    ? lldData.entities
-                    : isHR
-                        ? hrData.underlyingConcern
-                        : isBehavioral
-                            ? behavioralData.situation
-                            : isTechnicalKnowledge
-                                ? tkData.coreExplanation  // Core explanation → approach for RAG embedding
-                                : (approach || null),
-
-            bruteForce: isSystemDesign
-                ? sdData.nonFunctionalRequirements
-                : isLowLevelDesign
-                    ? lldData.classHierarchy
-                    : null,
-
-            optimizedApproach: isSystemDesign
-                ? sdData.schemaDesign
-                : isBehavioral
-                    ? behavioralData.action
-                    : isTechnicalKnowledge
-                        ? tkData.whyItExists   // Design rationale → optimizedApproach
-                        : (approach || null),
+                : isLowLevelDesign ? lldData.entities
+                    : isHR ? hrData.underlyingConcern
+                        : isBehavioral ? behavioralData.situation
+                            : isTechnicalKnowledge ? tkData.coreExplanation
+                                : isDatabase
+                                    ? (dbProblemType === 'SCHEMA_DESIGN'
+                                        ? dbData.schemaDesign       // Schema → approach for RAG embedding
+                                        : dbData.queryApproach)     // Query analysis → approach
+                                    : (approach || null),
 
             code: isSystemDesign
                 ? sdData.apiDesign
-                : isHR
-                    ? null
-                    : isBehavioral
-                        ? null
-                        : isTechnicalKnowledge
-                            ? null   // TK never has code
-                            : (code || null),
+                : isHR ? null
+                    : isBehavioral ? null
+                        : isTechnicalKnowledge ? null
+                            : isDatabase
+                                ? (dbData.sqlQuery || null)    // SQL query → code field
+                                : (code || null),
 
             language: isSystemDesign
                 ? 'plaintext'
-                : isHR
-                    ? null
-                    : isBehavioral
-                        ? null
-                        : isTechnicalKnowledge
-                            ? null
-                            : (code ? language : null),
+                : isHR ? null
+                    : isBehavioral ? null
+                        : isTechnicalKnowledge ? null
+                            : isDatabase
+                                ? (dbData.sqlQuery ? 'SQL' : null)
+                                : (code ? language : null),
 
             pattern: isHR
                 ? (hrQuestionCategory || null)
-                : isBehavioral
-                    ? (behavioralData.competency?.trim() || null)
-                    : isTechnicalKnowledge
-                        ? (tkData.subject?.trim() || null)  // subject stored in pattern for RAG + 6D
-                        : (pattern || null),
+                : isBehavioral ? (behavioralData.competency?.trim() || null)
+                    : isTechnicalKnowledge ? (tkData.subject?.trim() || null)
+                        : isDatabase
+                            ? (dbProblemType || null)      // problem type stored in pattern for RAG signals
+                            : (pattern || null),
 
             keyInsight: isSystemDesign
                 ? sdData.tradeoffReasoning
-                : isLowLevelDesign
-                    ? lldData.designPattern
-                    : isHR
-                        ? hrData.answer
-                        : isBehavioral
-                            ? behavioralData.result
-                            : isTechnicalKnowledge
-                                ? tkData.tradeoffs   // Trade-offs → keyInsight
-                                : (keyInsight || null),
+                : isLowLevelDesign ? lldData.designPattern
+                    : isHR ? hrData.answer
+                        : isBehavioral ? behavioralData.result
+                            : isTechnicalKnowledge ? tkData.tradeoffs
+                                : isDatabase
+                                    ? (dbProblemType === 'SCHEMA_DESIGN'
+                                        ? dbData.normalizationReasoning
+                                        : dbData.indexStrategy)
+                                    : (keyInsight || null),
 
             feynmanExplanation: isSystemDesign
                 ? sdData.architectureNotes
-                : isLowLevelDesign
-                    ? lldData.solidAnalysis
-                    : isHR
-                        ? hrData.companyConnection
-                        : isBehavioral
-                            ? behavioralData.reflection
-                            : isTechnicalKnowledge
-                                ? tkData.realWorldUsage   // Real-world usage → feynmanExplanation
-                                : (feynmanExplanation || null),
+                : isLowLevelDesign ? lldData.solidAnalysis
+                    : isHR ? hrData.companyConnection
+                        : isBehavioral ? behavioralData.reflection
+                            : isTechnicalKnowledge ? tkData.realWorldUsage
+                                : isDatabase
+                                    ? (dbProblemType === 'SCHEMA_DESIGN'
+                                        ? dbData.indexDesign
+                                        : dbData.optimizationNotes)
+                                    : (feynmanExplanation || null),
 
             realWorldConnection: isSystemDesign
                 ? sdData.capacityEstimation
-                : isLowLevelDesign
-                    ? lldData.extensibilityAnalysis
-                    : isHR
-                        ? hrData.selfAssessment
-                        : (isBehavioral || isTechnicalKnowledge)
+                : isLowLevelDesign ? lldData.extensibilityAnalysis
+                    : isHR ? hrData.selfAssessment
+                        : (isBehavioral || isTechnicalKnowledge || isDatabase)
                             ? null
                             : (realWorldConnection || null),
 
-            timeComplexity: isSystemDesign ? sdData.failureModes : null,
-            spaceComplexity: null,
-            confidence,
-
             categorySpecificData: isSystemDesign
                 ? { ...sdData, diagramData: sdDiagram }
-                : isLowLevelDesign
-                    ? { ...lldData, implementationCode: code }
-                    : isHR
-                        ? { ...hrData, questionCategory: hrQuestionCategory }
-                        : isBehavioral
-                            ? { ...behavioralData }
-                            : isTechnicalKnowledge
-                                ? { ...tkData }   // All 5 TK fields stored with semantic keys
-                                : undefined,
-
+                : isLowLevelDesign ? { ...lldData, implementationCode: code }
+                    : isHR ? { ...hrData, questionCategory: hrQuestionCategory }
+                        : isBehavioral ? { ...behavioralData }
+                            : isTechnicalKnowledge ? { ...tkData }
+                                : isDatabase
+                                    ? { ...dbData, problemType: dbProblemType }
+                                    : undefined,
             followUpAnswers: followUpAnswersArray,
         }
 
@@ -2140,6 +2586,28 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
 
+            {isDatabase && (
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mb-6 flex items-start gap-3"
+                >
+                    <span className="text-lg flex-shrink-0">🗄️</span>
+                    <div>
+                        <p className="text-sm font-semibold text-text-primary mb-0.5">
+                            {dbProblemType === 'SCHEMA_DESIGN'
+                                ? 'Design the schema before writing any SQL'
+                                : 'Analyze the schema before writing the query'}
+                        </p>
+                        <p className="text-xs text-text-tertiary leading-relaxed">
+                            {dbProblemType === 'SCHEMA_DESIGN'
+                                ? 'Strong schema design explains WHY each type, constraint, and index decision was made. Interviewers evaluate the reasoning, not just whether the tables exist.'
+                                : 'Understanding which tables, which JOIN type, and which columns to filter is 50% of writing a correct query. Write the analysis first.'}
+                        </p>
+                    </div>
+                </motion.div>
+            )}
+
             {/* ── Form sections ──────────────────────────── */}
             <div className="space-y-5">
                 {isSystemDesign ? (
@@ -2174,6 +2642,13 @@ export default function SubmitSolutionPage() {
                     <TechnicalKnowledgeWorkspace
                         tkData={tkData}
                         onTkDataChange={setTkData}
+                    />
+                ) : isDatabase ? (
+                    <DatabaseWorkspace
+                        dbData={dbData}
+                        onDbDataChange={setDbData}
+                        problemType={dbProblemType}
+                        schemaReference={dbSchemaReference}
                     />
                 ) : (
                     // ── All other categories: generic form ─────────────
@@ -2316,7 +2791,9 @@ export default function SubmitSolutionPage() {
                                         ? 'How strong is your story? Does your Action section show clear ownership?'
                                         : isTechnicalKnowledge
                                             ? 'How deep is your understanding? Could you answer a follow-up on the mechanism without notes?'
-                                            : "Be honest — AI will flag if your confidence doesn't match your solution quality"
+                                            : isDatabase
+                                                ? 'How confident are you in this solution? Would it handle NULL values, empty tables, and large datasets correctly?'
+                                                : "Be honest — AI will flag if your confidence doesn't match your solution quality"
                     }
                 >
                     <ConfidencePicker value={confidence} onChange={setConfidence} />
@@ -2430,7 +2907,9 @@ export default function SubmitSolutionPage() {
                                     : isHR ? 'Submit My Answer'
                                         : isBehavioral ? 'Submit My Story'
                                             : isTechnicalKnowledge ? 'Submit Explanation'
-                                                : 'Submit Solution'}
+                                                : isDatabase
+                                                    ? (dbProblemType === 'SCHEMA_DESIGN' ? 'Submit Schema Design' : 'Submit Query')
+                                                    : 'Submit Solution'}
                         </Button>
                     </div>
                 </div>

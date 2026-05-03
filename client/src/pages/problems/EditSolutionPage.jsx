@@ -544,6 +544,193 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
     )
 }
 
+// ── Database Edit Workspace ────────────────────────────
+// Mirrors DatabaseWorkspace from SubmitSolutionPage.
+// Defaults to the most-likely-edited section based on problem type.
+// Pre-fills from categorySpecificData with old-field fallback.
+function DatabaseEditWorkspace({ dbData, onDbDataChange, problemType, schemaReference }) {
+    const isQueryMode = problemType !== 'SCHEMA_DESIGN'
+    const [activeSection, setActiveSection] = useState(
+        isQueryMode ? 'sqlEditor' : 'schemaDesign'
+    )
+    const [code, setCode] = useState(dbData.sqlQuery || '')
+    const [showSchema, setShowSchema] = useState(true)
+
+    function update(field, value) {
+        onDbDataChange({ ...dbData, [field]: value })
+    }
+
+    function updateCode(val) {
+        setCode(val)
+        onDbDataChange({ ...dbData, sqlQuery: val })
+    }
+
+    const dbConfig = getCategoryForm('SQL')
+    const fieldConfigs = dbConfig.databaseFields || {}
+
+    const sections = isQueryMode ? [
+        { key: 'queryApproach', label: 'Approach', icon: '🧠', sublabel: 'Schema analysis', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
+        { key: 'sqlEditor', label: 'Query', icon: '🗄️', sublabel: 'Your SQL', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: true },
+        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', sublabel: 'Index strategy', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: false },
+        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', sublabel: 'Performance notes', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+    ] : [
+        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', sublabel: 'Table definitions', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
+        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', sublabel: 'Design choices', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: false },
+        { key: 'indexDesign', label: 'Indexes', icon: '⚡', sublabel: 'Index design', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: false },
+        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', sublabel: 'NoSQL trade-offs', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+    ]
+
+    const activeSectionConfig = sections.find(s => s.key === activeSection)
+    const activeIndex = sections.findIndex(s => s.key === activeSection)
+
+    const minThresholds = {
+        queryApproach: 200, sqlEditor: 20, indexStrategy: 150, optimizationNotes: 150,
+        schemaDesign: 300, normalizationReasoning: 200, indexDesign: 150, noSQLConsideration: 100,
+    }
+
+    function getSectionValue(key) {
+        if (key === 'sqlEditor') return code
+        return dbData[key] || ''
+    }
+
+    const completedCount = sections.filter(s => {
+        const val = getSectionValue(s.key)
+        return (val?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
+    }).length
+
+    return (
+        <div className="space-y-4">
+            {/* Schema reference */}
+            {schemaReference && (
+                <div className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
+                    <button type="button"
+                        onClick={() => setShowSchema(v => !v)}
+                        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-surface-2/50 transition-colors">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm">📋</span>
+                            <span className="text-xs font-bold text-text-primary">Schema Reference</span>
+                            <span className="text-[10px] text-text-disabled bg-surface-3 border border-border-default rounded-full px-2 py-px">Read-only</span>
+                        </div>
+                        <motion.div animate={{ rotate: showSchema ? 180 : 0 }} transition={{ duration: 0.2 }} className="text-text-disabled">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                        </motion.div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                        {showSchema && (
+                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                                <div className="px-5 pb-5 border-t border-border-default pt-4">
+                                    <pre className="bg-surface-0 border border-border-default rounded-xl p-4 text-xs font-mono text-text-secondary whitespace-pre-wrap overflow-x-auto leading-relaxed max-h-[250px]">
+                                        {schemaReference}
+                                    </pre>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            )}
+
+            {/* Progress */}
+            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
+                        <span>{isQueryMode ? '🗄️' : '📐'}</span>
+                        {isQueryMode ? 'Query' : 'Schema Design'}
+                    </p>
+                    <span className="text-[10px] font-bold text-text-disabled">{completedCount}/{sections.length} sections</span>
+                </div>
+                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
+                    <motion.div animate={{ width: `${(completedCount / sections.length) * 100}%` }} transition={{ duration: 0.4 }} className="h-full bg-brand-300 rounded-full" />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                    {sections.map(s => {
+                        const val = getSectionValue(s.key)
+                        const isDone = (val?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
+                        const isActive = activeSection === s.key
+                        return (
+                            <button key={s.key} onClick={() => setActiveSection(s.key)}
+                                className={cn(
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
+                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}>
+                                <div className="flex items-center gap-0.5">
+                                    <span className="text-sm">{s.icon}</span>
+                                    {s.required && !isDone && !isActive && <span className="text-danger text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                </div>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>
+                                    {s.label}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* Active section */}
+            <motion.div key={activeSection} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
+                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig?.activeBg)}>
+                    <span className="text-xl">{activeSectionConfig?.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <p className={cn('text-sm font-bold', activeSectionConfig?.color)}>{activeSectionConfig?.label}</p>
+                        <p className="text-[11px] text-text-disabled">{activeSectionConfig?.sublabel}</p>
+                    </div>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">{activeIndex + 1} / {sections.length}</span>
+                </div>
+                <div className="p-5 space-y-3">
+                    {activeSection === 'sqlEditor' ? (
+                        <CodeEditor
+                            code={code}
+                            onChange={updateCode}
+                            language="SQL"
+                            onLanguageChange={() => { }}
+                            selectorStyle="none"
+                            languages={[{ id: 'SQL', label: 'SQL' }]}
+                            height="280px"
+                            showLanguageSelector={false}
+                        />
+                    ) : (
+                        <>
+                            {fieldConfigs[activeSection]?.hint && (
+                                <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                                    💡 {fieldConfigs[activeSection].hint}
+                                </p>
+                            )}
+                            <textarea
+                                rows={fieldConfigs[activeSection]?.rows || 8}
+                                value={dbData[activeSection] || ''}
+                                onChange={e => update(activeSection, e.target.value)}
+                                placeholder={fieldConfigs[activeSection]?.placeholder || ''}
+                                className={cn(
+                                    'w-full border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20',
+                                    (activeSection === 'schemaDesign' || activeSection === 'indexDesign' || activeSection === 'indexStrategy')
+                                        ? 'bg-surface-0 font-mono text-xs'
+                                        : 'bg-surface-3'
+                                )}
+                                style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 8) * 24}px` }}
+                            />
+                        </>
+                    )}
+                </div>
+                <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
+                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }}
+                        disabled={activeIndex === 0}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+                        Previous
+                    </button>
+                    <button type="button" onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }}
+                        disabled={activeIndex === sections.length - 1}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                        Next
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
 // ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
@@ -567,6 +754,17 @@ export default function EditSolutionPage() {
     const isHRRound = formConfig.isHRRound === true
     const isTechnicalKnowledge = category === 'CS_FUNDAMENTALS'
     const isTKRound = formConfig.isTechnicalKnowledge === true
+
+    const isDatabase = category === 'SQL'
+    const isDBRound = formConfig.isDatabase === true
+    const dbProblemType = problem?.categoryData?.problemType || 'QUERY'
+    const dbSchemaReference = problem?.categoryData?.schemaDefinition || problem?.description || null
+
+    const [dbData, setDbData] = useState({
+        queryApproach: '', sqlQuery: '', indexStrategy: '', optimizationNotes: '',
+        schemaDesign: '', normalizationReasoning: '', indexDesign: '', noSQLConsideration: '',
+    })
+    const [dbConfidence, setDbConfidence] = useState(3)
 
     // ── Technical Knowledge workspace state ───────────────
     const [tkData, setTkData] = useState({
@@ -679,7 +877,44 @@ export default function EditSolutionPage() {
                 })
                 setFollowUpAnswers(prefilled)
             }
+        } else if (isDBRound) {
+            const csd = mySolution.categorySpecificData
+            if (csd && (csd.queryApproach !== undefined || csd.schemaDesign !== undefined || csd.sqlQuery !== undefined)) {
+                setDbData({
+                    queryApproach: csd.queryApproach || '',
+                    sqlQuery: csd.sqlQuery || '',
+                    indexStrategy: csd.indexStrategy || '',
+                    optimizationNotes: csd.optimizationNotes || '',
+                    schemaDesign: csd.schemaDesign || '',
+                    normalizationReasoning: csd.normalizationReasoning || '',
+                    indexDesign: csd.indexDesign || '',
+                    noSQLConsideration: csd.noSQLConsideration || '',
+                })
+            } else {
+                // Old format fallback
+                // code → sqlQuery, approach → queryApproach,
+                // keyInsight → indexStrategy, feynmanExplanation → optimizationNotes
+                setDbData({
+                    queryApproach: mySolution.approach || '',
+                    sqlQuery: mySolution.code || '',
+                    indexStrategy: mySolution.keyInsight || '',
+                    optimizationNotes: mySolution.feynmanExplanation || '',
+                    schemaDesign: mySolution.optimizedApproach || '',
+                    normalizationReasoning: '',
+                    indexDesign: '',
+                    noSQLConsideration: '',
+                })
+            }
+            setDbConfidence(mySolution.confidence || 3)
+            if (mySolution.followUpAnswers?.length > 0) {
+                const prefilled = {}
+                mySolution.followUpAnswers.forEach(a => {
+                    prefilled[a.followUpQuestionId] = a.answerText
+                })
+                setFollowUpAnswers(prefilled)
+            }
         } else {
+            // existing non-HR generic form
             // Non-HR: existing logic unchanged
             const existingTabs = []
             if (mySolution.bruteForce) {
@@ -786,6 +1021,21 @@ export default function EditSolutionPage() {
                 language: null,
                 confidence: tkConfidence,
                 categorySpecificData: { ...tkData },
+                followUpAnswers: followUpAnswersArray,
+            }
+        } else if (isDBRound) {
+            const isQueryMode = dbProblemType !== 'SCHEMA_DESIGN'
+            data = {
+                approach: isQueryMode ? dbData.queryApproach || null : dbData.schemaDesign || null,
+                code: dbData.sqlQuery || null,
+                language: dbData.sqlQuery ? 'SQL' : null,
+                optimizedApproach: isQueryMode ? null : dbData.normalizationReasoning || null,
+                keyInsight: isQueryMode ? dbData.indexStrategy || null : dbData.indexDesign || null,
+                feynmanExplanation: isQueryMode ? dbData.optimizationNotes || null : dbData.noSQLConsideration || null,
+                realWorldConnection: null,
+                pattern: dbProblemType || null,
+                confidence: dbConfidence,
+                categorySpecificData: { ...dbData, problemType: dbProblemType },
                 followUpAnswers: followUpAnswersArray,
             }
         } else {
@@ -972,6 +1222,38 @@ export default function EditSolutionPage() {
                                             'text-[10px] font-bold text-center leading-tight',
                                             tkConfidence === c.value ? c.color : 'text-text-tertiary'
                                         )}>
+                                            {c.label}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                ) : isDBRound ? (
+                    <>
+                        <DatabaseEditWorkspace
+                            dbData={dbData}
+                            onDbDataChange={setDbData}
+                            problemType={dbProblemType}
+                            schemaReference={dbSchemaReference}
+                        />
+                        {/* Confidence for DB */}
+                        <div>
+                            <label className="block text-sm font-semibold text-text-primary mb-1">
+                                Confidence Level
+                            </label>
+                            <p className="text-xs text-text-tertiary mb-3">
+                                How confident are you? Would your solution handle NULLs, empty tables, and scale correctly?
+                            </p>
+                            <div className="flex gap-3 flex-wrap">
+                                {CONFIDENCE_LEVELS.map(c => (
+                                    <button key={c.value} type="button" onClick={() => setDbConfidence(c.value)}
+                                        className={cn(
+                                            'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
+                                            dbConfidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                        )}>
+                                        <span className="text-2xl">{c.emoji}</span>
+                                        <span className={cn('text-[10px] font-bold text-center leading-tight', dbConfidence === c.value ? c.color : 'text-text-tertiary')}>
                                             {c.label}
                                         </span>
                                     </button>
@@ -1201,7 +1483,7 @@ export default function EditSolutionPage() {
                             strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12" />
                         </svg>
-                        {isHR ? 'Save Answer' : isTechnicalKnowledge ? 'Save Explanation' : 'Save Changes'}
+                        {isHR ? 'Save Answer' : isTechnicalKnowledge ? 'Save Explanation' : isDatabase ? 'Save Solution' : 'Save Changes'}
                     </Button>
                 </div>
             </div>

@@ -642,25 +642,52 @@ ${tkSpecific?.tradeoffs || data.keyInsight || "Not provided"}
 Real-World Usage & Common Misconceptions:
 ${tkSpecific?.realWorldUsage || data.feynmanExplanation || "Not provided"}`;
   } else if (data.category === "SQL") {
-    submissionSection = `Schema Analysis:
-${data.approach || "Not provided"}
+    // Read from categorySpecificData (new DatabaseWorkspace format) first.
+    // Fall back to old generic field mapping for pre-existing submissions.
+    // Backward compatible — zero breaking changes on existing data.
+    const dbSpecific =
+      data.categorySpecificData &&
+      (data.categorySpecificData.queryApproach !== undefined ||
+        data.categorySpecificData.sqlQuery !== undefined ||
+        data.categorySpecificData.schemaDesign !== undefined ||
+        data.categorySpecificData.problemType !== undefined)
+        ? data.categorySpecificData
+        : null;
 
-Query Pattern Used:
-${data.pattern || "Not identified"}
+    const isQueryMode =
+      (dbSpecific?.problemType || data.pattern || "QUERY") !== "SCHEMA_DESIGN";
+
+    if (isQueryMode) {
+      submissionSection = `Problem Type: QUERY
+
+Schema Analysis (Before Writing):
+${dbSpecific?.queryApproach || data.approach || "Not provided — THIS IS THE PRIMARY EVALUATION FIELD FOR QUERY PROBLEMS. If empty, flag as critical gap."}
 
 SQL Query:
 \`\`\`sql
-${data.code ? data.code.substring(0, 2000) : "No query provided"}
+${dbSpecific?.sqlQuery || data.code || "No query provided"}
 \`\`\`
 
-Query Explanation (step by step):
-${data.feynmanExplanation || "Not provided"}
+Index Strategy:
+${dbSpecific?.indexStrategy || data.keyInsight || "Not provided"}
 
-Key Optimization:
-${data.keyInsight || "Not provided"}
+Optimization & Edge Cases:
+${dbSpecific?.optimizationNotes || data.feynmanExplanation || "Not provided"}`;
+    } else {
+      submissionSection = `Problem Type: SCHEMA_DESIGN
 
-Edge Cases Handled:
-${data.realWorldConnection || "Not provided"}`;
+Schema Design:
+${dbSpecific?.schemaDesign || data.approach || data.optimizedApproach || "Not provided — THIS IS THE PRIMARY EVALUATION FIELD FOR SCHEMA DESIGN. If empty, flag as critical gap."}
+
+Normalization & Design Decisions:
+${dbSpecific?.normalizationReasoning || data.keyInsight || "Not provided"}
+
+Index Design:
+${dbSpecific?.indexDesign || data.feynmanExplanation || "Not provided"}
+
+NoSQL Consideration:
+${dbSpecific?.noSQLConsideration || "Not provided"}`;
+    }
   } else {
     // CODING and any unrecognized category — standard presentation
     submissionSection = `Approach:
@@ -1053,7 +1080,51 @@ SELECTION RULES FOR HR:
 3. For Sensitive questions (HARD difficulty), include coaching context in the title
 4. The hrQuestionCategory field MUST be set to one of:
    CAREER_NARRATIVE | MOTIVATION_AND_FIT | SELF_ASSESSMENT | WORK_STYLE | LOGISTICS | QUESTIONS_FOR_THEM`,
-    SQL: `Patterns: INNER/LEFT/RIGHT JOINs, Subqueries vs CTEs, Window Functions (ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, SUM OVER), GROUP BY with HAVING, EXISTS vs IN, Self JOINs, Recursive CTEs, Query optimization and indexing strategy`,
+    SQL: `DATABASE CATEGORY — covers the full scope of what database interviews test.
+Two distinct problem types — specify which type each problem is:
+
+PROBLEM TYPE: QUERY
+The problem provides a schema and asks the candidate to write SQL.
+Valid problem types:
+  "Write a query that returns X from tables Y and Z"
+  "Find the top N users by [metric] in the last [time period]"
+  "Write a query to detect [anomaly/pattern] in the data"
+  "Rewrite this N+1 query pattern as a single efficient query"
+
+Query patterns to draw from:
+  Basic: INNER JOIN, LEFT JOIN, GROUP BY, HAVING, ORDER BY, LIMIT
+  Intermediate: Subqueries (correlated and non-correlated), CTEs, UNION
+  Advanced: Window Functions (ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, NTILE, SUM OVER)
+  Advanced: Recursive CTEs, Self JOINs, EXISTS vs IN, CASE expressions
+  Optimization: Index-aware queries, avoiding full table scans, N+1 elimination
+  Edge cases: NULL handling (COALESCE, NULLIF, IS NULL), duplicate detection
+
+PROBLEM TYPE: SCHEMA_DESIGN
+The problem gives requirements and asks the candidate to design the tables.
+Valid problem types:
+  "Design a schema for [system/product] that supports [requirements]"
+  "Design a schema that optimizes for [specific access pattern]"
+  "Redesign this denormalized schema for [use case]"
+
+Schema design topics:
+  Normalization: 1NF, 2NF, 3NF — when to normalize and when to denormalize
+  Data types: Correct type choices (INT for money, not FLOAT; VARCHAR vs TEXT)
+  Constraints: PRIMARY KEY, FOREIGN KEY, UNIQUE, NOT NULL, DEFAULT, CHECK
+  Relationships: 1:1, 1:N, N:M (junction tables), self-referential
+  Index design: Primary, composite, partial indexes — matched to access patterns
+  Temporal modeling: Audit logs, effective dates, history tables
+  Soft deletes: deleted_at patterns and their implications
+  NoSQL considerations: When to reach for a document store, key-value, or columnar
+
+SELECTION RULES:
+1. Mix both problem types — teams need practice with both
+2. For QUERY problems: always include the schema in the problem description
+3. For SCHEMA_DESIGN problems: include clear requirements and scale context
+4. Tag each problem with its type in the selection output: type: "QUERY" | "SCHEMA_DESIGN"
+5. Difficulty calibration:
+   EASY: Basic JOINs or simple normalized schema design
+   MEDIUM: Window functions, CTEs, or multi-table schema with indexing decisions
+   HARD: Recursive CTEs, complex optimization, or large-scale schema with trade-offs`,
   };
 
   const system = `You are a curriculum designer selecting interview problems for a preparation platform.

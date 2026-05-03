@@ -364,11 +364,11 @@ export const PROBLEM_CATEGORIES = [
   },
   {
     id: "SQL",
-    label: "SQL",
-    icon: "🗃️",
+    label: "Databases",
+    icon: "🗄️",
     color: "text-brand-300",
     bg: "bg-brand-400/12 border-brand-400/25",
-    desc: "Queries, optimization, schema",
+    desc: "SQL queries, schema design, indexing, database internals",
     sources: ["LEETCODE", "GFG", "HACKERRANK", "OTHER"],
   },
 ];
