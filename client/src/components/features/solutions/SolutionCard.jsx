@@ -10,6 +10,18 @@ import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import { LANGUAGE_LABELS, CONFIDENCE_LEVELS, HR_STAKES, HR_QUESTION_CATEGORY_MAP } from '@utils/constants'
 
+// ── HR question category IDs for old-format detection ──
+// HR solutions submitted before categorySpecificData was added stored
+// the question category in the pattern field using these IDs.
+const HR_CATEGORY_IDS = new Set([
+    'CAREER_NARRATIVE',
+    'MOTIVATION_AND_FIT',
+    'SELF_ASSESSMENT',
+    'WORK_STYLE',
+    'LOGISTICS',
+    'QUESTIONS_FOR_THEM',
+])
+
 // ── System Design structured display ──────────────────
 function SDSolutionDisplay({ data }) {
     const [activeKey, setActiveKey] = useState(() => {
@@ -154,21 +166,10 @@ function LLDSolutionDisplay({ data, code, language }) {
     )
 }
 
-// ── HR structured display ──────────────────────────────
-// Single-view, no tabs. HR answers are narrative — read linearly.
-// Shows the four structured fields from the HR workspace in logical order:
-//   Analysis → Answer → Company Evidence → Self-Assessment
-// Also shows the question category badge if stored.
-//
-// Field source mapping (from categorySpecificData and fallback fields):
-//   underlyingConcern → what they were really checking (analysis)
-//   answer            → the polished response (primary artifact)
-//   companyConnection → company-specific evidence
-//   selfAssessment    → honest reflection
-//   questionCategory  → HR question category for badge display
+// ── HR structured display (new format) ────────────────
+// Renders solutions with categorySpecificData containing HR fields.
+// Single-view narrative — no tabs. HR answers are read linearly.
 function HRSolutionDisplay({ data, pattern }) {
-    // question category: stored in categorySpecificData.questionCategory
-    // or fallback in the pattern field
     const questionCategory = data.questionCategory || pattern
     const cat = questionCategory ? HR_QUESTION_CATEGORY_MAP[questionCategory] : null
 
@@ -214,7 +215,6 @@ function HRSolutionDisplay({ data, pattern }) {
 
     return (
         <div className="space-y-4">
-            {/* Question category badge */}
             {cat && (
                 <div className="flex items-center gap-2">
                     <span className={cn(
@@ -227,8 +227,6 @@ function HRSolutionDisplay({ data, pattern }) {
                     <p className="text-[10px] text-text-disabled">{cat.desc}</p>
                 </div>
             )}
-
-            {/* Sections in order — no tabs, linear narrative */}
             {sections.map(s => (
                 <div key={s.key}
                     className={cn(
@@ -242,6 +240,88 @@ function HRSolutionDisplay({ data, pattern }) {
                     )}>
                         <span>{s.icon}</span>
                         {s.label}
+                    </p>
+                    <div className={cn(
+                        'text-sm leading-relaxed whitespace-pre-wrap',
+                        s.isHighlight ? 'text-text-primary' : 'text-text-secondary'
+                    )}>
+                        {s.value}
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+// ── HR fallback display (old format) ──────────────────
+// For HR solutions submitted before categorySpecificData was introduced.
+// These solutions have the HR content mapped to generic fields:
+//   approach → underlyingConcern
+//   keyInsight → answer (the actual response — most important)
+//   feynmanExplanation → companyConnection
+//   realWorldConnection → selfAssessment
+//   pattern → HR question category ID
+function OldHRSolutionDisplay({ approach, keyInsight, feynmanExplanation, realWorldConnection, pattern }) {
+    const cat = pattern ? HR_QUESTION_CATEGORY_MAP[pattern] : null
+
+    const sections = [
+        {
+            label: 'What They Were Really Checking',
+            icon: '🔍',
+            value: approach,
+            color: 'text-danger',
+            bg: 'border-danger/15 bg-danger/3',
+        },
+        {
+            label: 'Answer',
+            icon: '💬',
+            value: keyInsight,
+            color: 'text-brand-300',
+            bg: 'border-brand-400/15 bg-brand-400/3',
+            isHighlight: true,
+        },
+        {
+            label: 'Company-Specific Evidence',
+            icon: '🎯',
+            value: feynmanExplanation,
+            color: 'text-success',
+            bg: 'border-success/15 bg-success/3',
+        },
+        {
+            label: 'Self-Assessment',
+            icon: '🪞',
+            value: realWorldConnection,
+            color: 'text-warning',
+            bg: 'border-warning/15 bg-warning/3',
+        },
+    ].filter(s => s.value?.trim?.()?.length > 0)
+
+    if (sections.length === 0) {
+        return <p className="text-xs text-text-disabled italic">No answer content recorded.</p>
+    }
+
+    return (
+        <div className="space-y-4">
+            {cat && (
+                <div className="flex items-center gap-2">
+                    <span className={cn(
+                        'text-[10px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1.5',
+                        cat.bg
+                    )}>
+                        <span>{cat.icon}</span>
+                        <span className={cat.color}>{cat.label}</span>
+                    </span>
+                </div>
+            )}
+            {sections.map(s => (
+                <div key={s.label}
+                    className={cn('rounded-xl border p-4', s.bg)}
+                >
+                    <p className={cn(
+                        'text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5',
+                        s.color
+                    )}>
+                        <span>{s.icon}</span>{s.label}
                     </p>
                     <div className={cn(
                         'text-sm leading-relaxed whitespace-pre-wrap',
@@ -364,11 +444,12 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
     } = solution
 
     // ── Submission type detection ──────────────────────
-    // Each structured category is detected by the presence of
-    // category-specific keys in categorySpecificData.
-    // This avoids relying on the problem category (not available here)
-    // and remains correct even if data shapes overlap.
+    //
+    // Detection order matters — check specific first, then fallback.
+    // All checks use categorySpecificData key presence, not problem.category
+    // (category is not passed to this component).
 
+    // New-format SD: has functionalRequirements, apiDesign, or tradeoffReasoning
     const isSDSubmission = !!(
         solution.categorySpecificData &&
         (
@@ -378,6 +459,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         )
     )
 
+    // New-format LLD: has entities, solidAnalysis, or designPattern
     const isLLDSubmission = !!(
         solution.categorySpecificData &&
         (
@@ -387,6 +469,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         )
     )
 
+    // New-format HR: has underlyingConcern, answer, or companyConnection
     const isHRSubmission = !!(
         solution.categorySpecificData &&
         (
@@ -396,8 +479,14 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         )
     )
 
-    // Structured submissions don't use the generic coding tabs
-    const isStructuredSubmission = isSDSubmission || isLLDSubmission || isHRSubmission
+    // Old-format HR: no categorySpecificData, no code, pattern is an HR category ID
+    // These were submitted before categorySpecificData was introduced.
+    const isOldHRSubmission = !isSDSubmission && !isLLDSubmission && !isHRSubmission &&
+        !code &&
+        !!(pattern && HR_CATEGORY_IDS.has(pattern))
+
+    // Any structured submission hides the generic coding tabs
+    const isStructuredSubmission = isSDSubmission || isLLDSubmission || isHRSubmission || isOldHRSubmission
 
     const tabs = [
         { id: 'approach', label: 'Approach' },
@@ -437,27 +526,32 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 You
                             </span>
                         )}
-                        {/* Language badge — only for coding submissions */}
+
+                        {/* Language badge — only for generic coding submissions */}
                         {language && !isStructuredSubmission && (
                             <Badge variant="gray" size="xs">
                                 {LANGUAGE_LABELS[language] || language}
                             </Badge>
                         )}
-                        {/* Category badges for structured submissions */}
+
+                        {/* SD badge */}
                         {isSDSubmission && (
                             <span className="text-[10px] font-bold px-1.5 py-px rounded-full
                                              bg-info/10 text-info border border-info/20">
                                 System Design
                             </span>
                         )}
+
+                        {/* LLD badge */}
                         {isLLDSubmission && (
                             <span className="text-[10px] font-bold px-1.5 py-px rounded-full
                                              bg-purple-400/10 text-purple-400 border border-purple-400/20">
                                 LLD
                             </span>
                         )}
-                        {isHRSubmission && (() => {
-                            // Show HR question category badge if available
+
+                        {/* HR badge — new or old format */}
+                        {(isHRSubmission || isOldHRSubmission) && (() => {
                             const qCat = solution.categorySpecificData?.questionCategory || pattern
                             const cat = qCat ? HR_QUESTION_CATEGORY_MAP[qCat] : null
                             return cat ? (
@@ -476,6 +570,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                             )
                         })()}
                     </div>
+
                     <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         <span className="text-xs text-text-tertiary">
                             {formatRelativeDate(createdAt)}
@@ -487,9 +582,14 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                         )}
                     </div>
                 </div>
+
                 <div className="hidden sm:block flex-shrink-0">
-                    <ConfidenceDisplay level={confidence} isHR={isHRSubmission} />
+                    <ConfidenceDisplay
+                        level={confidence}
+                        isHR={isHRSubmission || isOldHRSubmission}
+                    />
                 </div>
+
                 <motion.div
                     animate={{ rotate: expanded ? 180 : 0 }}
                     transition={{ duration: 0.2 }}
@@ -547,6 +647,15 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 ) : isHRSubmission ? (
                                     <HRSolutionDisplay
                                         data={solution.categorySpecificData}
+                                        pattern={pattern}
+                                    />
+                                ) : isOldHRSubmission ? (
+                                    // Old format HR: generic fields mapped to HR display
+                                    <OldHRSolutionDisplay
+                                        approach={approach}
+                                        keyInsight={keyInsight}
+                                        feynmanExplanation={feynmanExplanation}
+                                        realWorldConnection={realWorldConnection}
                                         pattern={pattern}
                                     />
                                 ) : (

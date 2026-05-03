@@ -37,7 +37,6 @@ CODING correctness analysis:
 - Detect language mismatch: if selected language is X but code is clearly language Y, flag it
 - Detect incomplete solutions: pseudocode, TODO comments, missing critical sections`,
     },
-
     SYSTEM_DESIGN: {
       focus:
         "requirements clarity, capacity reasoning, API design quality, architectural decisions, trade-off depth, failure mode awareness",
@@ -72,7 +71,6 @@ FAILURE MODES:
 - Are there mitigations proposed?
 - Is the failure analysis realistic?`,
     },
-
     LOW_LEVEL_DESIGN: {
       focus:
         "OOP correctness, SOLID principles, design pattern appropriateness, extensibility, implementation quality",
@@ -107,7 +105,6 @@ EXTENSIBILITY:
 - Can new requirements be added with minimal modification to existing classes?
 - Does the candidate honestly identify where their design would break?`,
     },
-
     BEHAVIORAL: {
       focus:
         "STAR structure completeness, specificity and detail, impact quantification, ownership language, growth mindset",
@@ -139,7 +136,6 @@ COMPETENCY ALIGNMENT:
 - Does the story actually demonstrate the competency being asked about?
 - Is the competency demonstrated through actions, not just stated? ("I am a leader" vs showing leadership)`,
     },
-
     CS_FUNDAMENTALS: {
       focus:
         "conceptual accuracy, explanation depth, real-world application, misconception awareness, interview readiness",
@@ -161,13 +157,11 @@ REAL-WORLD APPLICATION:
 MISCONCEPTION AWARENESS:
 - Does the candidate identify and address common misconceptions about this topic?
 - Do they know the "gotcha" details that interviewers probe for?
-- Example: "Most people think TCP guarantees delivery — it guarantees ordering and retransmission but not delivery if the connection drops"
 INTERVIEW DEPTH CALIBRATION:
 - Did they go deep enough for the level being interviewed (junior vs senior)?
 - Did they cover the sub-topics an interviewer would probe?
 - Did they leave obvious follow-up questions unanswered that they should have addressed proactively?`,
     },
-
     HR: {
       focus:
         "authenticity and specificity, company research depth, career narrative coherence, self-awareness, answer structure",
@@ -199,7 +193,6 @@ ANSWER STRUCTURE:
 - Does it answer what was actually asked, not a similar but easier question?
 - Does it end with a clear, memorable point?`,
     },
-
     SQL: {
       focus:
         "query correctness, schema understanding, optimization awareness, edge case handling, query clarity",
@@ -209,7 +202,6 @@ SCHEMA ANALYSIS:
 - Did the candidate analyze the schema before writing the query?
 - Do they understand the relationships between tables (1:1, 1:N, N:M)?
 - Did they identify which columns are indexed and how that affects their approach?
-- Did they ask clarifying questions about the schema when needed?
 QUERY CORRECTNESS:
 - Does the query return the correct result for the stated requirements?
 - Is the JOIN type correct for the data relationship? (INNER vs LEFT vs RIGHT)
@@ -220,13 +212,10 @@ NULL HANDLING:
 - Does the query handle NULL values correctly?
 - Is there a difference between COUNT(*) and COUNT(column) that matters here?
 - Does OUTER JOIN introduce NULLs that need to be handled?
-- Is IS NULL / IS NOT NULL used correctly vs = NULL?
 OPTIMIZATION AWARENESS:
 - Does the candidate identify which indexes would help this query?
-- Do they understand the difference between index scan and table scan?
 - Is there an N+1 query pattern that should be addressed?
 - Could a CTE or subquery be rewritten as a more efficient JOIN?
-- Do they understand that SELECT * is expensive in production?
 EDGE CASES:
 - Empty tables — does the query still return sensible results?
 - Duplicate rows — are they handled intentionally with DISTINCT or GROUP BY?
@@ -300,11 +289,6 @@ BASELINE COMPARISON REQUIREMENT:
   // For non-coding categories, we reinterpret each dimension in context
   // so scores are meaningful. The JSON field names stay identical —
   // only what the AI is evaluating changes.
-  //
-  // Scientific basis: using the wrong evaluation frame produces
-  // unreliable scores. An AI scoring "code correctness" on a STAR story
-  // will either hallucinate criteria or default to generic feedback.
-  // Explicit reinterpretation anchors each dimension to real signals.
   const categoryDimensionGuidance = (() => {
     switch (data.category) {
       case "SYSTEM_DESIGN":
@@ -351,19 +335,16 @@ SCORING REINTERPRETATION FOR BEHAVIORAL:
    Is the Result stated with measurable impact?
 2. PATTERN ACCURACY → COMPETENCY ALIGNMENT (20%)
    Does the story actually demonstrate the competency being asked about?
-   Is the competency shown through actions, not just claimed? ("I led X" vs showing leadership)
+   Is the competency shown through actions, not just claimed?
    Does the story answer the actual question or a similar but easier one?
 3. UNDERSTANDING DEPTH → SELF-AWARENESS & GROWTH MINDSET (20%)
    Does the candidate show genuine reflection on what they learned?
    Do they identify what they would do differently and why?
-   Do they understand the broader impact of their actions on the team/company?
 4. EXPLANATION QUALITY → COMMUNICATION CLARITY & OWNERSHIP (15%)
    Is "I" used consistently for personal actions (not "we")?
    Is the story told clearly without rambling?
-   Would the interviewer know exactly what this person contributed?
 5. CONFIDENCE CALIBRATION → unchanged
-   Note: Confidence here means how well the candidate knows their own story.
-   A rehearsed, polished answer with weak specifics should score lower than
+   Note: A rehearsed, polished answer with weak specifics should score lower than
    a less polished answer with strong authentic detail.`;
 
       case "CS_FUNDAMENTALS":
@@ -372,19 +353,15 @@ SCORING REINTERPRETATION FOR CS FUNDAMENTALS:
 1. CODE CORRECTNESS → CONCEPTUAL ACCURACY (35%)
    Is the concept explained correctly with no factual errors?
    Are technical terms used accurately?
-   Would a domain expert agree with everything stated?
 2. PATTERN ACCURACY → TOPIC COVERAGE ACCURACY (20%)
    Did the candidate cover the right sub-topics for this concept?
    Did they identify the correct mechanism — HOW it works, not just WHAT it is?
-   Did they address the "gotcha" details interviewers probe for?
 3. UNDERSTANDING DEPTH → CONCEPTUAL DEPTH & REAL-WORLD CONNECTION (20%)
    Do they explain WHY the concept was designed this way?
    Can they connect it to real production systems with specific examples?
-   Do they understand the engineering trade-offs behind the concept?
 4. EXPLANATION QUALITY → TEACHING CLARITY (15%)
    Could a junior engineer understand this explanation?
    Is the explanation structured (what → why → how → where it's used)?
-   Are analogies or examples used to make abstract concepts concrete?
 5. CONFIDENCE CALIBRATION → unchanged
    Note: Overconfidence is especially dangerous in CS fundamentals.
    A candidate who confidently states something incorrect should score
@@ -425,15 +402,12 @@ SCORING REINTERPRETATION FOR SQL:
 2. PATTERN ACCURACY → QUERY PATTERN SELECTION (20%)
    Is the right query pattern used? (JOIN vs subquery vs CTE vs window function)
    Is the pattern appropriate for the access pattern and data volume?
-   Could a simpler pattern achieve the same result more efficiently?
 3. UNDERSTANDING DEPTH → SCHEMA & OPTIMIZATION UNDERSTANDING (20%)
    Does the candidate understand the access patterns implied by the schema?
    Do they identify which indexes would help and why?
-   Do they reason about query performance at scale (not just correctness)?
 4. EXPLANATION QUALITY → QUERY EXPLANATION CLARITY (15%)
    Can the candidate walk through what their query does step by step?
    Is the query readable — proper aliases, formatting, CTE naming?
-   Would another engineer understand the intent from reading it?
 5. CONFIDENCE CALIBRATION → unchanged`;
 
       default:
@@ -534,9 +508,9 @@ RESPOND WITH EXACT JSON — no extra fields, no missing fields:
   //
   // SYSTEM_DESIGN: structured fields from categorySpecificData
   // LOW_LEVEL_DESIGN: structured OOP fields from categorySpecificData
+  // HR: structured fields from categorySpecificData (new) or generic mapping (old)
   // BEHAVIORAL: STAR-oriented field presentation
   // CS_FUNDAMENTALS: concept-oriented field presentation
-  // HR: narrative-oriented field presentation
   // SQL: query + schema-oriented presentation
   // CODING + fallback: standard generic presentation
   const categorySpecific = data.categorySpecificData;
@@ -570,7 +544,6 @@ ${categorySpecific.failureModes || data.timeComplexity || "Not provided"}`;
   } else if (data.category === "LOW_LEVEL_DESIGN" && categorySpecific) {
     const implementationCode =
       categorySpecific.implementationCode || data.code || null;
-
     submissionSection = `Entity Identification:
 ${categorySpecific.entities || data.approach || "Not provided"}
 
@@ -590,14 +563,33 @@ Implementation Code:
 \`\`\`${(data.language || "java").toLowerCase()}
 ${implementationCode ? implementationCode.substring(0, 2500) : "No implementation provided"}
 \`\`\``;
+  } else if (data.category === "HR") {
+    // HR: use categorySpecificData (new format) if available,
+    // fall back to generic field mapping (old format) for backward compat.
+    // New format has underlyingConcern, answer, companyConnection, selfAssessment.
+    // Old format mapped: approach→analysis, keyInsight→answer, feynmanExplanation→company, realWorldConnection→self-assessment
+    const hrSpecific =
+      categorySpecific &&
+      (categorySpecific.underlyingConcern !== undefined ||
+        categorySpecific.answer !== undefined)
+        ? categorySpecific
+        : null;
+
+    submissionSection = `Question Category:
+${categorySpecific?.questionCategory || data.pattern || "Not specified"}
+
+What the Interviewer Is Really Checking:
+${hrSpecific?.underlyingConcern || data.approach || "Not provided"}
+
+The Candidate's Answer:
+${hrSpecific?.answer || data.keyInsight || "Not provided"}
+
+Company-Specific Evidence:
+${hrSpecific?.companyConnection || data.feynmanExplanation || "Not provided"}
+
+Self-Assessment:
+${hrSpecific?.selfAssessment || data.realWorldConnection || "Not provided"}`;
   } else if (data.category === "BEHAVIORAL") {
-    // BEHAVIORAL: present fields with STAR-aligned labels
-    // The generic field mapping for behavioral:
-    //   approach        → STAR Situation & Task (patternReasoning field)
-    //   feynmanExplanation → STAR Result & Impact (simpleExplanation field)
-    //   keyInsight      → Key Learning
-    //   realWorldConnection → What Would You Do Differently (challenges field)
-    //   code            → STAR Actions (actionField, stored in optimizedApproach)
     submissionSection = `Question Type / Competency:
 ${data.pattern || "Not specified"}
 
@@ -616,13 +608,6 @@ ${data.keyInsight || "Not provided"}
 What Would You Do Differently:
 ${data.realWorldConnection || "Not provided"}`;
   } else if (data.category === "CS_FUNDAMENTALS") {
-    // CS_FUNDAMENTALS: present fields with concept-learning labels
-    //   pattern         → Core Topic
-    //   approach        → Concept Explanation (patternReasoning field)
-    //   keyInsight      → Key Distinction
-    //   feynmanExplanation → Real-World Examples (simpleExplanation field)
-    //   realWorldConnection → Common Misconceptions (challenges field)
-    //   code/optimizedApproach → Detailed Breakdown (detailField)
     submissionSection = `Core Topic:
 ${data.pattern || "Not specified"}
 
@@ -640,35 +625,7 @@ ${data.realWorldConnection || "Not provided"}
 
 Detailed Breakdown:
 ${data.optimizedApproach || data.code || "Not provided"}`;
-  } else if (data.category === "HR") {
-    // HR: present fields with motivation/fit labels
-    //   pattern         → Question Category
-    //   approach        → What the interviewer is really asking
-    //   keyInsight      → Core Message
-    //   feynmanExplanation → Full Answer
-    //   realWorldConnection → Company Research Connection
-    submissionSection = `Question Category:
-${data.pattern || "Not specified"}
-
-What the Interviewer Is Really Asking (candidate's analysis):
-${data.approach || "Not provided"}
-
-Core Message (one sentence essence):
-${data.keyInsight || "Not provided"}
-
-Full Answer:
-${data.feynmanExplanation || "Not provided"}
-
-Company Research Connection:
-${data.realWorldConnection || "Not provided"}`;
   } else if (data.category === "SQL") {
-    // SQL: lead with schema analysis, then query
-    //   approach        → Schema Analysis (patternReasoning field)
-    //   pattern         → Query Pattern identified
-    //   keyInsight      → Key Optimization insight
-    //   feynmanExplanation → Query Explanation (walk-through)
-    //   realWorldConnection → Edge Cases handled
-    //   code            → The actual SQL query
     submissionSection = `Schema Analysis:
 ${data.approach || "Not provided"}
 
@@ -738,7 +695,6 @@ export function problemContentPrompt(data) {
     HR: "Generate content focused on authenticity, company research, and structured responses.",
     SQL: "Generate content focused on query optimization, indexing strategies, and database design.",
   };
-
   const system = `You are a senior engineering interview coach who creates learning content for a team preparation platform.
 Given a coding problem, generate educational content that helps engineers understand the real-world significance and deepen their learning.
 ALWAYS respond in this exact JSON format:
@@ -754,7 +710,6 @@ ALWAYS respond in this exact JSON format:
     }
   ] — exactly 3 follow-ups progressing EASY → MEDIUM → HARD
 }`;
-
   const user = `Generate content for this problem:
 **Title:** ${data.title}
 **Source:** ${data.source}
@@ -764,7 +719,6 @@ ALWAYS respond in this exact JSON format:
 **Tags:** ${data.tags?.join(", ") || "None"}
 ${categoryContext[data.category] || categoryContext.CODING}
 Generate real-world context, use cases, admin teaching notes, and 3 follow-up questions (EASY, MEDIUM, HARD) with hints.`;
-
   return { system, user };
 }
 
@@ -779,7 +733,6 @@ ALWAYS respond in this exact JSON format:
   "level": <number 1-3 — how direct the hint is>,
   "encouragement": <string — one short encouraging sentence>
 }`;
-
   const user = `Problem: ${data.problemTitle}
 Difficulty: ${data.difficulty}
 Pattern: ${data.pattern || "Unknown"}
@@ -792,7 +745,6 @@ ${
       ? "Hint at the general approach or data structure category. Do NOT give the full algorithm."
       : "Name the specific technique but do NOT provide pseudocode or the full solution."
 }`;
-
   return { system, user };
 }
 
@@ -815,7 +767,6 @@ ALWAYS respond in this exact JSON format:
   ],
   "weeklyGoal": <string — one measurable goal for the week>
 }`;
-
   const user = `Generate a 7-day action plan for this candidate:
 **Stats:**
 - Total solved: ${data.totalSolved}
@@ -835,7 +786,6 @@ ALWAYS respond in this exact JSON format:
 **Target company:** ${data.targetCompanies?.join(", ") || "Not set"}
 **Target date:** ${data.targetDate || "Not set"}
 Create a specific, actionable 7-day plan that addresses their weakest areas while maintaining strengths.`;
-
   return { system, user };
 }
 
@@ -870,7 +820,6 @@ ALWAYS respond in this exact JSON format:
     }
   ]
 }`;
-
   const user = `Generate exactly ${data.count} multiple-choice questions.
 **Subject:** ${data.subject}
 **Difficulty:** ${data.difficulty}
@@ -891,7 +840,6 @@ Requirements:
 - Format code examples properly with markdown code blocks
 - Format math expressions clearly (O(n²), 2^n, log₂n, etc.)
 Generate questions that genuinely test understanding, not memorization.`;
-
   return { system, user };
 }
 
@@ -905,7 +853,6 @@ ALWAYS respond in this exact JSON format:
   "studyAdvice": [<string>, ...] — 2-3 specific actionable study recommendations,
   "encouragement": <string — one motivating sentence>
 }`;
-
   const user = `Analyze these quiz results:
 **Category:** ${data.category}
 **Score:** ${data.score}/${data.total} (${data.percentage}%)
@@ -917,22 +864,14 @@ ${data.wrongAnswers
   )
   .join("\n\n")}
 Identify patterns in what they got wrong and give specific study advice.`;
-
   return { system, user };
 }
 
 // ── AI Problem Generation — Stage 1: Problem Selection ─────────
-// Fast call to decide WHAT problems to generate.
-// Platform assignments come from the controller — AI just finds
-// the right problem on the assigned platform.
-//
-// Currently: LeetCode-only for reliable URLs.
-// TODO: Multi-platform via Search API. See Super Admin → Product Roadmap.
 export function problemSelectionPrompt(data) {
   const leetcodeGuidance = `
 PLATFORM: LeetCode only.
 URL format: https://leetcode.com/problems/[slug]/
-
 SLUG RULES — read carefully:
 - Always lowercase with hyphens
 - No special characters or spaces
@@ -962,12 +901,10 @@ SLUG RULES — read carefully:
   https://leetcode.com/problems/validate-binary-search-tree/
   https://leetcode.com/problems/kth-smallest-element-in-a-bst/
   https://leetcode.com/problems/serialize-and-deserialize-binary-tree/
-
 CONFIDENCE RULES:
 - If you are 100% sure the slug is correct → urlConfidence: "high"
 - If you think it is correct but not certain → urlConfidence: "medium"
 - If you are guessing → urlConfidence: "low"
-
 NEVER guess. If you are not confident, set urlConfidence: "low" and we will handle it.`;
 
   const slotInstructions = data.platformAssignments
@@ -989,12 +926,10 @@ Hard: Advanced Graphs (Dijkstra, Topological Sort), 2D DP, Backtracking, Trie, S
 Easy: Parking Lot, Elevator System, Vending Machine, Library Management, ATM
 Medium: Chess Game, Deck of Cards, Hotel Booking, Food Delivery Order Tracking, Notification Service
 Hard: Ride Sharing System (Uber-style class design), Cache with eviction policies (LRU/LFU), Rate Limiter (class level), Online Shopping Cart with discount strategies, Workflow Engine
-
 Design patterns most commonly tested:
 Creational: Factory, Abstract Factory, Singleton, Builder
 Structural: Adapter, Decorator, Facade, Proxy, Composite
 Behavioral: Observer, Strategy, Command, State, Iterator, Template Method
-
 SOLID principles tested in every LLD problem:
 - Single Responsibility: Is each class doing ONE thing?
 - Open/Closed: Can you add new behavior without changing existing classes?
@@ -1003,51 +938,68 @@ SOLID principles tested in every LLD problem:
 - Dependency Inversion: Do high-level modules depend on abstractions?`,
     BEHAVIORAL: `Competencies: Leadership, Conflict Resolution, Failure & Learning, Initiative & Ownership, Teamwork, Handling Ambiguity, Customer Focus, Time Management, Technical Disagreement with Manager, Cross-team Collaboration`,
     CS_FUNDAMENTALS: `Topics: OS (Process vs Thread, Deadlocks, Virtual Memory, Page Faults), Networking (TCP vs UDP, HTTP vs HTTPS, DNS, Load Balancing, CDN), DBMS (ACID, Indexing, B-Trees, Normalization, CAP Theorem), OOP (SOLID Principles, Design Patterns: Singleton, Factory, Observer, Strategy)`,
-    HR: `Scenarios: Why this company specifically, 5-year career goals, Greatest strength with example, Weakness and improvement, Work style preferences, Handling failure, Salary expectations, Why leaving current role, What makes you unique`,
+    HR: `HR interview question categories to draw from:
+
+Career Narrative: Tell me about yourself, Walk me through your resume, Why did you change careers, Explain this employment gap, Why did you leave your last job, Why were you fired
+  → Stakes: Common (standard career story questions), Tricky (gap explanations), Sensitive (termination)
+
+Motivation & Company Fit: Why do you want to work here, Why this role, What do you know about our company, Where do you see yourself in 5 years
+  → Stakes: Common (standard motivation), Tricky (requires company research depth)
+
+Self-Assessment: What are your greatest strengths, What is your biggest weakness, Greatest professional achievement, Tell me about a time you failed
+  → Stakes: Common (strengths), Tricky (weakness — requires authentic framing), Sensitive (failure)
+
+Work Style & Culture: How do you prefer to work, How do you handle disagreement with your manager, Ideal work environment, How do you manage stress
+  → Stakes: Common (work style), Tricky (conflict/disagreement)
+
+Logistics & Practical: What are your salary expectations, What is your notice period, Are you open to relocation, Do you have other offers
+  → Stakes: Sensitive (salary/competing offers), Common (notice period)
+
+Questions for the Interviewer: What questions would you ask at the end of this interview
+  → Stakes: Tricky (requires thoughtful company-specific questions)
+
+SELECTION RULES FOR HR:
+1. Generate a mix of stakes levels — not all Common, not all Sensitive
+2. Each question should be a single, specific interview question (not a broad theme)
+3. For Sensitive questions (HARD difficulty), include coaching context in the title
+4. The hrQuestionCategory field MUST be set to one of:
+   CAREER_NARRATIVE | MOTIVATION_AND_FIT | SELF_ASSESSMENT | WORK_STYLE | LOGISTICS | QUESTIONS_FOR_THEM`,
     SQL: `Patterns: INNER/LEFT/RIGHT JOINs, Subqueries vs CTEs, Window Functions (ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, SUM OVER), GROUP BY with HAVING, EXISTS vs IN, Self JOINs, Recursive CTEs, Query optimization and indexing strategy`,
   };
 
   const system = `You are a curriculum designer selecting interview problems for a preparation platform.
-
 ${data.category === "CODING" || data.category === "SQL" ? leetcodeGuidance : ""}
-
 SLOTS TO FILL:
 ${slotInstructions}
-
 TEAM INTELLIGENCE (use this to select appropriate problems):
 ${data.teamContext || "New team — start with accessible fundamentals."}
-
 DIFFICULTY REQUIREMENT:
 ${data.difficultyInstruction}
-
 AVOID DUPLICATES (these are already in the team):
 ${data.existingProblems || "None — fresh start."}
-
 CATEGORY: ${data.category}
 TOPIC GUIDANCE:
 ${categoryDepth[data.category] || ""}
-
 ${data.targetCompany ? `TARGET COMPANY STYLE: ${data.targetCompany} — prioritize problems this company is known for.` : ""}
 ${data.focusAreas ? `ADMIN FOCUS REQUEST: ${data.focusAreas} — prioritize these areas.` : ""}
-
 SELECTION RULES:
 1. Problems must form a logical learning progression — easier concepts first
 2. No duplicate titles with the existing team problems listed above
 3. Match the difficulty for each slot exactly
 4. For CODING: only select well-known LeetCode problems you are confident about
 5. Set urlConfidence honestly — we would rather show no link than a broken one
-
 Return JSON:
 {
   "selections": [
     {
-      "title": "exact problem title as it appears on LeetCode",
+      "title": "exact problem title",
       "difficulty": "EASY" | "MEDIUM" | "HARD",
-      "platform": "LEETCODE",
-      "url": "https://leetcode.com/problems/[exact-slug]/",
+      "platform": "LEETCODE" | "OTHER",
+      "url": "https://leetcode.com/problems/[exact-slug]/ or empty string for non-CODING",
       "urlConfidence": "high" | "medium" | "low",
       "pattern": "primary algorithm pattern or topic area",
-      "whySelected": "one sentence: why this problem for this team right now"
+      "whySelected": "one sentence: why this problem for this team right now",
+      "hrQuestionCategory": "CAREER_NARRATIVE | MOTIVATION_AND_FIT | SELF_ASSESSMENT | WORK_STYLE | LOGISTICS | QUESTIONS_FOR_THEM | null — set only for HR problems"
     }
   ],
   "learningPath": "one sentence describing how these problems build on each other"
@@ -1061,28 +1013,22 @@ Build a logical learning progression.`;
 }
 
 // ── AI Problem Generation — Stage 2: Rich Content ──────────────
-// One focused call per problem. Gets full educational content.
-// Called in parallel for all selected problems.
 export function problemContentGenerationPrompt(data) {
   const categoryInstructions = {
     CODING: `This is a coding/algorithm problem. Generate content that teaches the PATTERN, not just the solution.
-
 Admin notes MUST include:
 1. Brute force approach with time/space complexity
 2. Optimal approach with time/space complexity and WHY it is better
 3. The key insight that unlocks the solution (the "aha moment")
 4. Top 3 mistakes candidates make on this problem
 5. How to explain your approach clearly in an interview (2-3 sentences)`,
-
     SYSTEM_DESIGN: `This is a system design problem. Generate content that teaches distributed systems thinking.
-
 Admin notes MUST include:
 1. Functional requirements to clarify upfront
 2. Non-functional requirements (scale, latency, availability targets)
 3. High-level architecture with 3-5 key components
 4. The most important trade-off in this design and why
 5. What separates a Strong answer from a Weak answer`,
-
     LOW_LEVEL_DESIGN: `This is a Low-Level Design / Object-Oriented Design problem. Generate content that teaches OOP thinking, not just a solution.
 Admin notes MUST include:
 1. Core entities and their responsibilities (Single Responsibility Principle)
@@ -1092,36 +1038,40 @@ Admin notes MUST include:
 5. 3 extensibility follow-ups: "Now add X" — and how the design handles each
 6. The most common mistakes candidates make (e.g., making everything a subclass, god objects, wrong pattern)
 7. What separates a Strong answer from a Weak answer in this specific problem`,
-
     BEHAVIORAL: `This is a behavioral interview question. Generate content that teaches STAR storytelling.
-
 Admin notes MUST include:
 1. The core competency being tested
 2. What a Strong vs Weak STAR answer looks like with examples
 3. Red flags interviewers watch for
 4. How to quantify impact in the Result
 5. The most common mistake candidates make on this question`,
-
     CS_FUNDAMENTALS: `This is a CS fundamentals question. Generate content that builds deep understanding.
-
 Admin notes MUST include:
 1. The core concept explained in simple terms
 2. Where this concept appears in real production systems (2-3 specific examples)
 3. Common misconceptions to address
 4. How deep to go in a typical interview
 5. The "gotcha" follow-up question most interviewers ask`,
-
-    HR: `This is an HR/fit question. Generate content that teaches authentic, specific answering.
-
+    HR: `This is an HR interview question. Generate content that teaches authentic, specific answering.
 Admin notes MUST include:
-1. What the interviewer is truly assessing beneath the question
-2. The ideal answer structure with a concrete example
-3. How to make the answer company-specific
-4. Generic answers to avoid
-5. How to handle nerves or uncertainty on this type of question`,
+1. What the interviewer is truly assessing beneath the question (the real concern)
+2. What a Strong vs Weak answer looks like with concrete examples
+   Strong: "I'm particularly drawn to [Company]'s recent expansion into [market] because..."
+   Weak: "I love your innovative culture and great products"
+3. Red flags interviewers watch for (generic answers, badmouthing, no specifics)
+4. The common mistake candidates make on this specific question
+5. How to make the answer company-specific and authentic
 
+IMPORTANT FOR HR:
+- Set hrQuestionCategory to the appropriate value:
+  CAREER_NARRATIVE | MOTIVATION_AND_FIT | SELF_ASSESSMENT | WORK_STYLE | LOGISTICS | QUESTIONS_FOR_THEM
+- Leave realWorldContext as an empty string — HR questions have no "real world context" in the technical sense
+- Leave useCases as an empty string — not applicable to HR questions
+- Follow-up questions should be probing follow-ups an interviewer would ask, not technical sub-problems
+  EASY = standard follow-up probe (Common stakes)
+  MEDIUM = deeper probe requiring more thought (Tricky stakes)
+  HARD = most challenging follow-up — sensitive topic or requires deep self-reflection (Sensitive stakes)`,
     SQL: `This is a SQL problem. Generate content that teaches query thinking and optimization.
-
 Admin notes MUST include:
 1. How to approach schema analysis (what to look for first)
 2. Step-by-step query building walkthrough
@@ -1132,7 +1082,6 @@ Admin notes MUST include:
 
   const system = `You are a senior engineering interview coach creating educational content for a single problem.
 Goal: a candidate who reads this content should deeply understand the problem, the optimal approach, and how to explain it confidently in an interview.
-
 PROBLEM:
 Title: ${data.title}
 Category: ${data.category}
@@ -1140,32 +1089,31 @@ Difficulty: ${data.difficulty}
 Platform: ${data.platform}
 URL: ${data.url}
 Pattern/Topic: ${data.pattern || "Not specified"}
-
+${data.hrQuestionCategory ? `HR Question Category: ${data.hrQuestionCategory}` : ""}
 ${categoryInstructions[data.category] || categoryInstructions.CODING}
-
 ${data.targetCompany ? `COMPANY CONTEXT: This problem is commonly asked at ${data.targetCompany}. Tailor the teaching notes to their interview style.` : ""}
-
 Return JSON:
 {
-  "description": "Complete problem statement. For CODING/SQL: include the full problem description, input/output format, constraints, and 2 worked examples with expected output. For SYSTEM_DESIGN: the full design challenge with scale requirements. For BEHAVIORAL/HR: the interview question and scenario context.",
-  "realWorldContext": "2-3 sentences: where does this exact pattern/concept appear in real production systems? Be specific — name actual companies or products (e.g., 'LinkedIn uses this sliding window pattern for rate limiting their API endpoints').",
-  "useCases": "5 real-world use cases, each on a new line. Format: 'Company/System — exactly what they use this for'",
-  "adminNotes": "Comprehensive teaching guide following the category-specific structure above. Use numbered lists. Be concrete and specific. This is what coaches team members.",
+  "description": "Complete problem statement. For CODING/SQL: include the full problem description, input/output format, constraints, and 2 worked examples with expected output. For SYSTEM_DESIGN: the full design challenge with scale requirements. For BEHAVIORAL/HR: the interview question and scenario context — just the question itself, clearly worded.",
+  "realWorldContext": "2-3 sentences: where does this exact pattern/concept appear in real production systems? For HR problems: return empty string.",
+  "useCases": "5 real-world use cases, each on a new line. Format: 'Company/System — exactly what they use this for'. For HR problems: return empty string.",
+  "adminNotes": "Comprehensive teaching guide following the category-specific structure above. Use numbered lists. Be concrete and specific.",
   "tags": ["tag1", "tag2", "tag3"],
   "companyTags": ["company1", "company2"],
+  "hrQuestionCategory": "<string | null — for HR problems ONLY: CAREER_NARRATIVE | MOTIVATION_AND_FIT | SELF_ASSESSMENT | WORK_STYLE | LOGISTICS | QUESTIONS_FOR_THEM. For all other categories: null>",
   "followUpQuestions": [
     {
-      "question": "EASY follow-up that tests basic understanding of the concept",
+      "question": "First follow-up question",
       "difficulty": "EASY",
       "hint": "A nudge that opens the right thinking without giving the answer"
     },
     {
-      "question": "MEDIUM follow-up that applies the concept in a new context",
+      "question": "Second follow-up question",
       "difficulty": "MEDIUM",
       "hint": "A hint pointing toward the key insight needed"
     },
     {
-      "question": "HARD follow-up that tests mastery, edge cases, or optimization",
+      "question": "Third follow-up question",
       "difficulty": "HARD",
       "hint": "A hint that opens the right mental model for the advanced case"
     }
@@ -1173,7 +1121,6 @@ Return JSON:
 }`;
 
   const user = `Generate comprehensive educational content for: "${data.title}" (${data.difficulty} ${data.category})`;
-
   return { system, user };
 }
 
@@ -1196,36 +1143,47 @@ If the team is experienced, include more MEDIUM and HARD.`;
     difficultyInstruction = `All problems should be ${data.difficulty} difficulty.`;
   }
 
-  const system = `You are an expert interview preparation curriculum designer.
-Generate high-quality ${data.category} interview problems from LeetCode.
+  // HR problems have different fields than coding problems
+  const isHR = data.category === "HR";
+  const sourceField = isHR
+    ? `"source": "OTHER",
+      "sourceUrl": "",`
+    : `"source": "LEETCODE",
+      "sourceUrl": "string — exact LeetCode URL or empty string if not confident",`;
 
-For CODING/SQL problems:
+  const system = `You are an expert interview preparation curriculum designer.
+Generate high-quality ${data.category} interview problems.
+${
+  !isHR
+    ? `For CODING/SQL problems:
 - Use ONLY LeetCode: https://leetcode.com/problems/[slug]/
 - Only include URLs you are highly confident are correct
-- Slug is always lowercase-with-hyphens
-
+- Slug is always lowercase-with-hyphens`
+    : `For HR problems:
+- No external URLs needed — HR questions are self-contained
+- Each problem is a single specific interview question
+- Include hrQuestionCategory for each question`
+}
 ${difficultyInstruction}
-
 TEAM CONTEXT: ${data.teamContext || "New team"}
 AVOID DUPLICATES: ${data.existingProblems || "None"}
 ${data.targetCompany ? `TARGET: ${data.targetCompany} interview style` : ""}
 ${data.focusAreas ? `FOCUS: ${data.focusAreas}` : ""}
-
 RESPOND WITH EXACT JSON:
 {
   "problems": [
     {
       "title": "string",
-      "description": "string — full problem with examples and constraints",
+      "description": "string — the full question or problem statement",
       "difficulty": "EASY" | "MEDIUM" | "HARD",
       "category": "${data.category}",
-      "source": "LEETCODE",
-      "sourceUrl": "string — exact LeetCode URL or empty string if not confident",
+      ${sourceField}
       "tags": ["string"],
       "companyTags": ["string"],
-      "realWorldContext": "string",
-      "useCases": "string — newline separated",
-      "adminNotes": "string — teaching notes with approaches, edge cases, key insight",
+      "realWorldContext": "${isHR ? "" : "string"}",
+      "useCases": "${isHR ? "" : "string — newline separated"}",
+      "adminNotes": "string — teaching notes",
+      ${isHR ? '"hrQuestionCategory": "CAREER_NARRATIVE | MOTIVATION_AND_FIT | SELF_ASSESSMENT | WORK_STYLE | LOGISTICS | QUESTIONS_FOR_THEM",' : ""}
       "followUpQuestions": [
         { "question": "string", "difficulty": "EASY", "hint": "string" },
         { "question": "string", "difficulty": "MEDIUM", "hint": "string" },
@@ -1238,6 +1196,5 @@ RESPOND WITH EXACT JSON:
 
   const user = `Generate ${data.count} ${data.category.replace("_", " ").toLowerCase()} interview problem${data.count > 1 ? "s" : ""}.
 Count: ${data.count} | Difficulty: ${data.difficulty}`;
-
   return { system, user };
 }

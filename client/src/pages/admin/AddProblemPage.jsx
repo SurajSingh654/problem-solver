@@ -45,9 +45,25 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                 <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
-                                {problem.difficulty}
-                            </Badge>
+                            {problem.category === 'HR' ? (
+                                (() => {
+                                    const stakes = HR_STAKES[problem.difficulty]
+                                    return stakes ? (
+                                        <span className={cn('text-[10px] font-bold px-2 py-px rounded-full border flex items-center gap-1', stakes.bg)}>
+                                            <span>{stakes.icon}</span>
+                                            <span className={stakes.color}>{stakes.label}</span>
+                                        </span>
+                                    ) : (
+                                        <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
+                                            {problem.difficulty}
+                                        </Badge>
+                                    )
+                                })()
+                            ) : (
+                                <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
+                                    {problem.difficulty}
+                                </Badge>
+                            )}
                             {problem.source && problem.source !== 'OTHER' && (
                                 <span className="text-[10px] font-bold text-text-disabled bg-surface-3
                                    border border-border-subtle rounded-full px-2 py-px">
@@ -411,18 +427,24 @@ function AIGenerateScreen({ onBack }) {
                                 { id: 'auto', label: 'Auto', color: 'brand' },
                                 {
                                     id: 'EASY',
-                                    label: category === 'HR' ? `${HR_STAKES.EASY.icon} ${HR_STAKES.EASY.label}` : 'All Easy',
-                                    color: 'success'
+                                    label: category === 'HR'
+                                        ? `${HR_STAKES.EASY.icon} ${HR_STAKES.EASY.label}`
+                                        : 'All Easy',
+                                    color: 'success',
                                 },
                                 {
                                     id: 'MEDIUM',
-                                    label: category === 'HR' ? `${HR_STAKES.MEDIUM.icon} ${HR_STAKES.MEDIUM.label}` : 'All Medium',
-                                    color: 'warning'
+                                    label: category === 'HR'
+                                        ? `${HR_STAKES.MEDIUM.icon} ${HR_STAKES.MEDIUM.label}`
+                                        : 'All Medium',
+                                    color: 'warning',
                                 },
                                 {
                                     id: 'HARD',
-                                    label: category === 'HR' ? `${HR_STAKES.HARD.icon} ${HR_STAKES.HARD.label}` : 'All Hard',
-                                    color: 'danger'
+                                    label: category === 'HR'
+                                        ? `${HR_STAKES.HARD.icon} ${HR_STAKES.HARD.label}`
+                                        : 'All Hard',
+                                    color: 'danger',
                                 },
                                 { id: 'custom', label: 'Custom Mix', color: 'info' },
                             ].map(d => (
@@ -740,7 +762,6 @@ function AIGenerateScreen({ onBack }) {
 export default function AddProblemPage() {
     const navigate = useNavigate()
     const createProblem = useCreateProblem()
-    const [mode, setMode] = useState('ai')
 
     async function handleManualSubmit(data) {
         await createProblem.mutateAsync(data)
@@ -752,7 +773,7 @@ export default function AddProblemPage() {
             <button
                 onClick={() => navigate('/admin')}
                 className="flex items-center gap-1.5 text-sm text-text-tertiary
-                   hover:text-text-primary transition-colors mb-6"
+                           hover:text-text-primary transition-colors mb-6"
             >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" strokeWidth="2"
@@ -767,44 +788,10 @@ export default function AddProblemPage() {
                     Add Problems
                 </h1>
                 <p className="text-sm text-text-tertiary">
-                    Let AI generate problems for your team, or add them manually
+                    AI analyzes your team's level and generates appropriate problems
                 </p>
             </div>
-            {/* Mode toggle */}
-            <div className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1 mb-6 w-fit">
-                <button
-                    onClick={() => setMode('ai')}
-                    className={cn(
-                        'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all',
-                        mode === 'ai'
-                            ? 'bg-brand-400/15 text-brand-300 shadow-sm'
-                            : 'text-text-tertiary hover:text-text-primary'
-                    )}
-                >
-                    <span>🤖</span> AI Generate
-                </button>
-                <button
-                    onClick={() => setMode('manual')}
-                    className={cn(
-                        'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all',
-                        mode === 'manual'
-                            ? 'bg-surface-4 text-text-primary shadow-sm'
-                            : 'text-text-tertiary hover:text-text-primary'
-                    )}
-                >
-                    <span>✏️</span> Manual Add
-                </button>
-            </div>
-            {/* Content */}
-            {mode === 'ai' ? (
-                <AIGenerateScreen onBack={() => setMode('manual')} />
-            ) : (
-                <ProblemForm
-                    onSubmit={handleManualSubmit}
-                    isSubmitting={createProblem.isPending}
-                    submitLabel="Create Problem"
-                />
-            )}
+            <AIGenerateScreen />
         </div>
     )
 }

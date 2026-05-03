@@ -37,7 +37,25 @@ export async function reviewSolution(req, res) {
 
     const solution = await prisma.solution.findFirst({
       where: { id: solutionId, userId, teamId },
-      include: {
+      select: {
+        id: true,
+        approach: true,
+        code: true,
+        language: true,
+        bruteForce: true,
+        optimizedApproach: true,
+        timeComplexity: true,
+        spaceComplexity: true,
+        keyInsight: true,
+        feynmanExplanation: true,
+        realWorldConnection: true,
+        confidence: true,
+        pattern: true,
+        reviewCount: true,
+        aiFeedback: true,
+        timeTaken: true,
+        solveMethod: true,
+        categorySpecificData: true, // ← ADD THIS
         problem: {
           select: {
             id: true,
@@ -1265,6 +1283,7 @@ export async function generateProblemsAI(req, res) {
             url: selection.url,
             pattern: selection.pattern,
             targetCompany,
+            hrQuestionCategory: selection.hrQuestionCategory || null, // ← ADD THIS
           });
 
         // Category-specific token budgets and model selection.
@@ -1314,23 +1333,41 @@ export async function generateProblemsAI(req, res) {
 
         const content = JSON.parse(contentResponse.choices[0].message.content);
 
+        const isHRProblem = category === "HR";
+
         return {
           title: selection.title,
           difficulty: selection.difficulty,
           category,
           source: selection.platform,
-          // Clear low-confidence URLs — better no link than a broken one
-          sourceUrl:
-            selection.urlConfidence === "low" ? "" : selection.url || "",
+          // HR problems never have external source URLs
+          sourceUrl: isHRProblem
+            ? ""
+            : selection.urlConfidence === "low"
+              ? ""
+              : selection.url || "",
           description: content.description || "",
-          realWorldContext: content.realWorldContext || "",
-          useCases: content.useCases || "",
+          // HR: realWorldContext and useCases are empty (not applicable)
+          realWorldContext: isHRProblem ? "" : content.realWorldContext || "",
+          useCases: isHRProblem ? "" : content.useCases || "",
           adminNotes: content.adminNotes || "",
-          tags: (content.tags || []).filter(Boolean),
-          companyTags: (content.companyTags || []).filter(Boolean),
+          // HR: no algorithm tags or company tags
+          tags: isHRProblem ? [] : (content.tags || []).filter(Boolean),
+          companyTags: isHRProblem
+            ? []
+            : (content.companyTags || []).filter(Boolean),
           followUpQuestions: content.followUpQuestions || [],
           whySelected: selection.whySelected || "",
           urlConfidence: selection.urlConfidence || "high",
+          // HR: pass hrQuestionCategory through for categoryData storage
+          // Uses content.hrQuestionCategory (from Stage 3 AI response) or
+          // falls back to selection.hrQuestionCategory (from Stage 2 selection)
+          ...(isHRProblem && {
+            hrQuestionCategory:
+              content.hrQuestionCategory ||
+              selection.hrQuestionCategory ||
+              null,
+          }),
         };
       } catch (err) {
         console.error(

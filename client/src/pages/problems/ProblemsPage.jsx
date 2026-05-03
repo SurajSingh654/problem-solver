@@ -13,31 +13,75 @@ import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
 import { EmptyState } from '@components/ui/EmptyState'
 import { cn } from '@utils/cn'
-import { SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
+import { PROBLEM_CATEGORIES, HR_STAKES } from '@utils/constants'
+
+// ── Helpers ────────────────────────────────────────────
+
+// Get the display label for a difficulty value, considering category.
+// HR problems use stakes labels (Common/Tricky/Sensitive) instead of Easy/Medium/Hard.
+function getDifficultyLabel(difficulty, category) {
+    if (category === 'HR') {
+        return HR_STAKES[difficulty]?.label || difficulty
+    }
+    const d = difficulty?.toLowerCase()
+    return d ? d.charAt(0).toUpperCase() + d.slice(1) : difficulty
+}
+
+// Get the display color class for a difficulty value, considering category.
+function getDifficultyColor(difficulty, category) {
+    if (category === 'HR') {
+        return HR_STAKES[difficulty]?.color || 'text-text-secondary'
+    }
+    const colors = { EASY: 'text-success', MEDIUM: 'text-warning', HARD: 'text-danger' }
+    return colors[difficulty] || 'text-text-secondary'
+}
 
 // ── Stats bar ──────────────────────────────────────────
+// Category-aware: shows stakes labels for HR problems in the count.
 function StatsBar({ problems }) {
     const total = problems.length
     const solved = problems.filter(p => p.isSolved).length
-    const easy = problems.filter(p => p.difficulty === 'EASY').length
-    const medium = problems.filter(p => p.difficulty === 'MEDIUM').length
-    const hard = problems.filter(p => p.difficulty === 'HARD').length
+
+    // Separate HR and non-HR for accurate stats display
+    const hrProblems = problems.filter(p => p.category === 'HR')
+    const nonHrProblems = problems.filter(p => p.category !== 'HR')
+
+    const easy = nonHrProblems.filter(p => p.difficulty === 'EASY').length
+    const medium = nonHrProblems.filter(p => p.difficulty === 'MEDIUM').length
+    const hard = nonHrProblems.filter(p => p.difficulty === 'HARD').length
+
+    // HR stakes counts
+    const common = hrProblems.filter(p => p.difficulty === 'EASY').length
+    const tricky = hrProblems.filter(p => p.difficulty === 'MEDIUM').length
+    const sensitive = hrProblems.filter(p => p.difficulty === 'HARD').length
 
     return (
         <div className="flex items-center gap-4 flex-wrap text-xs text-text-tertiary">
             <span className="font-semibold text-text-primary">{total} problems</span>
             <span className="text-success font-semibold">{solved} solved</span>
-            <span className="text-success">{easy} Easy</span>
-            <span className="text-warning">{medium} Medium</span>
-            <span className="text-danger">{hard} Hard</span>
+            {nonHrProblems.length > 0 && (
+                <>
+                    <span className="text-success">{easy} Easy</span>
+                    <span className="text-warning">{medium} Medium</span>
+                    <span className="text-danger">{hard} Hard</span>
+                </>
+            )}
+            {hrProblems.length > 0 && (
+                <>
+                    {common > 0 && <span className="text-success">{common} Common</span>}
+                    {tricky > 0 && <span className="text-warning">{tricky} Tricky</span>}
+                    {sensitive > 0 && <span className="text-danger">{sensitive} Sensitive</span>}
+                </>
+            )}
         </div>
     )
 }
 
-// ── List row (alternative view) ────────────────────────
+// ── List row ───────────────────────────────────────────
 function ProblemListRow({ problem, index }) {
     const navigate = useNavigate()
-    const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
+    const isHR = problem.category === 'HR'
+    const stakes = isHR ? HR_STAKES[problem.difficulty] : null
 
     return (
         <motion.div
@@ -78,26 +122,50 @@ function ProblemListRow({ problem, index }) {
 
             {/* Badges */}
             <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-                <Badge variant={DIFF_VARIANT[problem.difficulty] || 'brand'} size="xs">
-                    {problem.difficulty?.charAt(0) + problem.difficulty?.slice(1).toLowerCase()}
-                </Badge>
-                {problem.tags?.slice(0, 2).map(t => (
-                    <span key={t} className="text-[11px] text-text-tertiary bg-surface-3
+                {/* HR: stakes badge */}
+                {isHR && stakes ? (
+                    <span className={cn(
+                        'text-[10px] font-bold px-2 py-px rounded-full border',
+                        stakes.bg
+                    )}>
+                        <span className={stakes.color}>{stakes.icon} {stakes.label}</span>
+                    </span>
+                ) : (
+                    // Non-HR: standard difficulty badge
+                    <Badge
+                        variant={
+                            problem.difficulty === 'EASY' ? 'easy'
+                                : problem.difficulty === 'MEDIUM' ? 'medium'
+                                    : problem.difficulty === 'HARD' ? 'hard'
+                                        : 'brand'
+                        }
+                        size="xs"
+                    >
+                        {getDifficultyLabel(problem.difficulty, problem.category)}
+                    </Badge>
+                )}
+
+                {/* Tags — not shown for HR */}
+                {!isHR && problem.tags?.slice(0, 2).map(t => (
+                    <span key={t}
+                        className="text-[11px] text-text-tertiary bg-surface-3
                                    px-1.5 py-px rounded border border-border-subtle hidden md:inline">
                         {t}
                     </span>
                 ))}
             </div>
 
-            {/* Solved count */}
+            {/* Solution count */}
             <span className="text-xs text-text-disabled flex-shrink-0 hidden sm:block">
-                {problem.solutionCount || 0} solved
+                {problem.solutionCount || 0} {isHR ? 'answers' : 'solved'}
             </span>
         </motion.div>
     )
 }
 
-// ── Main ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// MAIN PAGE
+// ══════════════════════════════════════════════════════
 export default function ProblemsPage() {
     const navigate = useNavigate()
     const { isTeamAdmin, isPersonalMode } = useTeamContext()
@@ -131,11 +199,24 @@ export default function ProblemsPage() {
         return list
     }, [allProblems, search, difficulty, category, tag, showPinned])
 
-    // Available tags from problems
+    // Available tags from non-HR problems (HR problems don't use algorithmic tags)
     const availableTags = useMemo(() => {
-        const t = new Set(allProblems.flatMap(p => p.tags || []))
+        const t = new Set(
+            allProblems
+                .filter(p => p.category !== 'HR')
+                .flatMap(p => p.tags || [])
+        )
         return [...t].slice(0, 20)
     }, [allProblems])
+
+    // Whether any HR problems exist — affects filter row labels
+    const hasHRProblems = useMemo(
+        () => allProblems.some(p => p.category === 'HR'),
+        [allProblems]
+    )
+
+    // Whether the current category filter is HR
+    const isHRFilter = category === 'HR'
 
     const hasFilters = difficulty || tag || search || showPinned || category
 
@@ -146,6 +227,28 @@ export default function ProblemsPage() {
         setTag('')
         setShowPinned(false)
     }
+
+    // Difficulty filter options — label changes when HR category is selected
+    const difficultyOptions = [
+        {
+            id: 'EASY',
+            label: isHRFilter ? `${HR_STAKES.EASY.icon} ${HR_STAKES.EASY.label}` : 'Easy',
+            activeClass: 'bg-success/15 border-success/40 text-success',
+            dot: 'bg-success',
+        },
+        {
+            id: 'MEDIUM',
+            label: isHRFilter ? `${HR_STAKES.MEDIUM.icon} ${HR_STAKES.MEDIUM.label}` : 'Medium',
+            activeClass: 'bg-warning/15 border-warning/40 text-warning',
+            dot: 'bg-warning',
+        },
+        {
+            id: 'HARD',
+            label: isHRFilter ? `${HR_STAKES.HARD.icon} ${HR_STAKES.HARD.label}` : 'Hard',
+            activeClass: 'bg-danger/15 border-danger/40 text-danger',
+            dot: 'bg-danger',
+        },
+    ]
 
     return (
         <div className="p-6 max-w-[1200px] mx-auto">
@@ -196,7 +299,7 @@ export default function ProblemsPage() {
                     />
                 </div>
                 <div className="flex items-center bg-surface-2 border border-border-default
-                        rounded-lg p-1 gap-1 flex-shrink-0">
+                                rounded-lg p-1 gap-1 flex-shrink-0">
                     <button
                         onClick={() => setViewMode('grid')}
                         className={cn(
@@ -275,36 +378,37 @@ export default function ProblemsPage() {
                     </div>
                 </div>
 
-                {/* Row 2: Difficulty + Pinned */}
+                {/* Row 2: Difficulty / Stakes + Pinned */}
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest w-16 flex-shrink-0">
-                        Level
+                        {isHRFilter ? 'Stakes' : 'Level'}
                     </span>
-                    <div className="flex gap-1.5">
-                        {['EASY', 'MEDIUM', 'HARD'].map(d => {
-                            const count = allProblems.filter(p => p.difficulty === d).length
-                            const colors = {
-                                EASY: { active: 'bg-success/15 border-success/40 text-success', dot: 'bg-success' },
-                                MEDIUM: { active: 'bg-warning/15 border-warning/40 text-warning', dot: 'bg-warning' },
-                                HARD: { active: 'bg-danger/15 border-danger/40 text-danger', dot: 'bg-danger' },
-                            }
+                    <div className="flex gap-1.5 flex-wrap">
+                        {difficultyOptions.map(d => {
+                            // Count problems matching this difficulty, filtered by current category if set
+                            const count = allProblems.filter(p =>
+                                p.difficulty === d.id &&
+                                (category ? p.category === category : true)
+                            ).length
                             return (
                                 <button
-                                    key={d}
-                                    onClick={() => setDifficulty(v => v === d ? '' : d)}
+                                    key={d.id}
+                                    onClick={() => setDifficulty(v => v === d.id ? '' : d.id)}
                                     className={cn(
                                         'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg',
                                         'text-[11px] font-semibold border transition-all duration-150',
-                                        difficulty === d
-                                            ? colors[d].active
+                                        difficulty === d.id
+                                            ? d.activeClass
                                             : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
                                     )}
                                 >
-                                    <span className={cn('w-1.5 h-1.5 rounded-full', colors[d].dot)} />
-                                    {d.charAt(0) + d.slice(1).toLowerCase()}
+                                    {!isHRFilter && (
+                                        <span className={cn('w-1.5 h-1.5 rounded-full', d.dot)} />
+                                    )}
+                                    {d.label}
                                     <span className={cn(
                                         'text-[9px] px-1 py-px rounded-full font-bold',
-                                        difficulty === d ? 'bg-white/10' : 'bg-surface-4 text-text-disabled'
+                                        difficulty === d.id ? 'bg-white/10' : 'bg-surface-4 text-text-disabled'
                                     )}>
                                         {count}
                                     </span>
@@ -326,8 +430,8 @@ export default function ProblemsPage() {
                     </div>
                 </div>
 
-                {/* Row 3: Tags */}
-                {availableTags.length > 0 && (
+                {/* Row 3: Tags — hidden when HR category is filtered (HR has no algo tags) */}
+                {availableTags.length > 0 && !isHRFilter && (
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest w-16 flex-shrink-0">
                             Tags
@@ -352,15 +456,15 @@ export default function ProblemsPage() {
                     </div>
                 )}
 
-                {/* Active filters summary */}
-                {hasFilters && (
-                    <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
-                        <StatsBar problems={filtered} />
+                {/* Active filters summary / Stats */}
+                <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
+                    <StatsBar problems={filtered} />
+                    {hasFilters && (
                         <button
                             onClick={clearFilters}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                               text-xs font-semibold text-danger border border-danger/25
-                               bg-danger/8 hover:bg-danger/15 transition-all"
+                                       text-xs font-semibold text-danger border border-danger/25
+                                       bg-danger/8 hover:bg-danger/15 transition-all"
                         >
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" strokeWidth="3"
@@ -370,14 +474,8 @@ export default function ProblemsPage() {
                             </svg>
                             Clear all
                         </button>
-                    </div>
-                )}
-
-                {!hasFilters && !isLoading && (
-                    <div className="pt-2 border-t border-border-subtle">
-                        <StatsBar problems={filtered} />
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {/* Content */}
@@ -407,10 +505,7 @@ export default function ProblemsPage() {
                         }
                     />
                 ) : viewMode === 'grid' ? (
-                    <motion.div
-                        layout
-                        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-                    >
+                    <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <AnimatePresence mode="popLayout">
                             {filtered.map((problem, i) => (
                                 <ProblemCard key={problem.id} problem={problem} index={i} />
