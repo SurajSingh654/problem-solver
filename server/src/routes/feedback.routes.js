@@ -1,44 +1,55 @@
-import { Router } from "express";
-import { authenticate } from "../middleware/auth.middleware.js";
-import { requireSuperAdmin } from "../middleware/superAdmin.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
-import { teamContext } from "../middleware/team.middleware.js";
+import { Router } from 'express'
+import { authenticate } from '../middleware/auth.middleware.js'
+import { requireSuperAdmin } from '../middleware/superAdmin.middleware.js'
+import { validate } from '../middleware/validate.middleware.js'
+import { optionalTeamContext } from '../middleware/team.middleware.js'
 import {
-  submitFeedback,
-  listFeedback,
-  updateFeedbackStatus,
-  getFeedback,
-  getSimilarReports, // NEW
-} from "../controllers/feedback.controller.js";
+    submitFeedback,
+    listFeedback,
+    updateFeedbackStatus,
+    getFeedback,
+    getSimilarReports,
+} from '../controllers/feedback.controller.js'
 import {
-  createFeedbackSchema,
-  updateFeedbackStatusSchema,
-} from "../schemas/feedback.schema.js";
+    createFeedbackSchema,
+    updateFeedbackStatusSchema,
+} from '../schemas/feedback.schema.js'
 
-const router = Router();
+const router = Router()
 
-router.use(authenticate);
+router.use(authenticate)
 
-// NEW: Similar reports — called as user types, before submission
-// Must come before /:feedbackId to avoid route conflict
-router.get("/similar", teamContext({ required: false }), getSimilarReports);
+// Similar reports — called as user types, before submission
+router.get(
+    '/similar',
+    optionalTeamContext,
+    getSimilarReports
+)
 
+// Submit feedback — works in team and individual mode
 router.post(
-  "/",
-  teamContext({ required: false }),
-  validate(createFeedbackSchema),
-  submitFeedback,
-);
+    '/',
+    optionalTeamContext,
+    validate(createFeedbackSchema),
+    submitFeedback
+)
 
-router.get("/", teamContext({ required: false }), listFeedback);
+// List feedback — role-scoped server-side
+router.get(
+    '/',
+    optionalTeamContext,
+    listFeedback
+)
 
-router.get("/:feedbackId", getFeedback);
+// Get single report
+router.get('/:feedbackId', getFeedback)
 
+// Update status — SUPER_ADMIN only
 router.patch(
-  "/:feedbackId/status",
-  requireSuperAdmin,
-  validate(updateFeedbackStatusSchema),
-  updateFeedbackStatus,
-);
+    '/:feedbackId/status',
+    requireSuperAdmin,
+    validate(updateFeedbackStatusSchema),
+    updateFeedbackStatus
+)
 
-export default router;
+export default router
