@@ -84,3 +84,6 @@ export const SUPER_ADMIN_PASSWORD = optional('SUPER_ADMIN_PASSWORD', '')
 // ── Feature flags ────────────────────────────────────────────
 export const ENABLE_COMPETITIONS = optional('ENABLE_COMPETITIONS', 'false') === 'true'
 export const ENABLE_AI_PROBLEMS = optional('ENABLE_AI_PROBLEMS', 'true') === 'true'
+
+// -- Feedback notification email (optional) ─────────────────────────────────────────
+export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

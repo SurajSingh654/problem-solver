@@ -148,6 +148,31 @@ enum CompetitionStatus {
   CANCELLED
 }
 
+
+  /// Feedback report type — what kind of report is this
+  enum FeedbackType {
+    BUG
+    SUGGESTION
+    QUESTION
+  }
+
+  /// Feedback lifecycle status — admin tracks resolution
+  enum FeedbackStatus {
+    OPEN
+    ACKNOWLEDGED
+    IN_PROGRESS
+    RESOLVED
+    WONT_FIX
+  }
+
+  /// Bug severity — helps admin prioritize triage
+  enum FeedbackSeverity {
+    LOW
+    MEDIUM
+    HIGH
+    CRITICAL
+  }
+
 // ============================================================================
 // USER
 // ============================================================================
@@ -215,6 +240,8 @@ model User {
   // JSON: { categories: [...], difficulty: "MEDIUM", dailyCount: 2,
   //         targetCompanyStyle: "google", patterns: [...] }
   aiProblemConfig Json?
+
+  feedbackReports  FeedbackReport[]
 
   // ── Soft delete ────────────────────────────────────
   deletedAt DateTime?
@@ -290,6 +317,8 @@ model Team {
   //         frequency: "daily", autoPublish: false, targetCompanyStyle: "google" }
   aiProblemsEnabled Boolean @default(true)
   aiProblemConfig   Json?
+
+  feedbackReports  FeedbackReport[]
 
   // ── Soft delete ────────────────────────────────────
   deletedAt DateTime?
@@ -991,6 +1020,68 @@ model PlatformAnalysis {
   // Fetch latest analysis quickly
   @@index([createdAt(sort: Desc)])
   @@map("platform_analyses")
+}
+
+
+
+// ============================================================================
+// FEEDBACK REPORT
+// ============================================================================
+/// User-submitted bug report, suggestion, or question.
+///
+/// DESIGN DECISIONS:
+///
+/// 1. teamId is nullable — works in both team and individual (personal) mode.
+///    The member's current team context at time of submission is captured
+///    so admin can understand the context without asking.
+///
+/// 2. severity is set by the submitter, not computed. This is intentional —
+///    the person experiencing the issue knows the impact better than any
+///    heuristic. Admin can override in adminNote.
+///
+/// 3. stepsToReproduce is separate from description. Bug reports need
+///    reproducible steps; suggestions and questions do not. Keeping them
+///    separate makes the form adapt per type and keeps data clean.
+///
+/// 4. On submit: DB write + email notification fire together.
+///    Email is fire-and-forget (failure does not fail the submission).
+///    Member always gets confirmation that their report was received.
+model FeedbackReport {
+  id          String           @id @default(cuid())
+
+  // ── Report content ─────────────────────────────────
+  type        FeedbackType     @default(BUG)
+  title       String
+  description String
+  severity    FeedbackSeverity @default(MEDIUM)
+
+  // ── Context ────────────────────────────────────────
+  affectedArea      String?
+  stepsToReproduce  String?
+
+  // ── Status tracking ────────────────────────────────
+  status      FeedbackStatus   @default(OPEN)
+  adminNote   String?
+
+  // ── Submitter ──────────────────────────────────────
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Team context (nullable) ────────────────────────
+  teamId      String?
+  team        Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  resolvedAt  DateTime?
+
+  // ── Indexes ────────────────────────────────────────
+  @@index([status, createdAt(sort: Desc)], map: "idx_feedback_status_created")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_feedback_user")
+  @@index([teamId, createdAt(sort: Desc)], map: "idx_feedback_team")
+
+  @@map("feedback_reports")
 }
 
 // ============================================================================

@@ -84,6 +84,8 @@ const AllTeamsPage = lazy(() => import('@pages/superadmin/AllTeamsPage'))
 const AllUsersPage = lazy(() => import('@pages/superadmin/AllUsersPage'))
 const SuperAdminAnalyticsPage = lazy(() => import('@pages/superadmin/SuperAdminAnalyticsPage'))
 const TodoPage = lazy(() => import('@pages/superadmin/TodoPage'))
+const FeedbackPage = lazy(() => import('@pages/FeedbackPage'))
+const FeedbackInboxPage = lazy(() => import('@pages/superadmin/FeedbackInboxPage'))
 
 
 // ============================================================================
@@ -188,6 +190,7 @@ export default function App() {
             <Route path="/super-admin/teams" element={<Lazy><AllTeamsPage /></Lazy>} />
             <Route path="/super-admin/users" element={<Lazy><AllUsersPage /></Lazy>} />
             <Route path="/super-admin/analytics" element={<Lazy><SuperAdminAnalyticsPage /></Lazy>} />
+            <Route path="/super-admin/feedback" element={<Lazy><FeedbackInboxPage /></Lazy>} />
             {/* SuperAdmin also needs profile + settings within their layout */}
             <Route path="/super-admin/profile/:userId" element={<ProfilePage />} />
             <Route path="/super-admin/profile" element={<ProfilePage />} />
@@ -208,6 +211,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
+            <Route path="feedback" element={<Lazy><FeedbackPage /></Lazy>} />
             {/* ── Dashboard ─────────────────────────────────────────── */}
             <Route index element={<Dashboard />} />
 

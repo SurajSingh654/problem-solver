@@ -45,6 +45,7 @@ export default function Sidebar() {
             { to: '/super-admin/analytics', icon: '📊', label: 'Platform Analytics' },
             { to: '/super-admin/showcase', icon: '🎪', label: 'Showcase' },
             { to: '/super-admin/roadmap', icon: '🗺️', label: 'Product Roadmap' },
+            { to: '/super-admin/feedback', icon: '🐛', label: 'Feedback Inbox' },
             { to: '/super-admin/settings', icon: '⚙️', label: 'Settings' },
             { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]
@@ -58,6 +59,7 @@ export default function Sidebar() {
             { to: '/mock-interview', icon: '💬', label: 'Mock Interview' },
             { to: '/interview-history', icon: '📜', label: 'Interview History' },
             { to: '/report', icon: '📈', label: 'Intelligence Report' },
+            { to: '/feedback', icon: '🐛', label: 'Feedback & Issues' },
         ]
 
         // Leaderboard only in team mode (not personal)

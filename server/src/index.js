@@ -56,6 +56,9 @@ import platformRoutes from "./routes/platform.routes.js";
 // ── WebSocket ────────────────────────────────────────────────
 import { setupWebSocket } from "./services/websocket.service.js";
 
+// ── Feedback routes ───────────────────────────────────────────────
+import feedbackRoutes from './routes/feedback.routes.js'
+
 // ============================================================================
 // APP SETUP
 // ============================================================================
@@ -165,6 +168,12 @@ function mountRoutes(prefix) {
 
   // ── Users ────────────────────────────────────────────────
   app.use(`${prefix}/users`, apiLimiter, userRoutes);
+
+
+
+
+// alongside the other route registrations:
+app.use(`${prefix}/feedback`, feedbackRoutes)
 }
 
 // Canonical versioned routes
