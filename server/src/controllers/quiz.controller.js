@@ -186,6 +186,7 @@ Each question must have exactly 4 options labeled A, B, C, D.
 Difficulty level: ${difficulty || "MEDIUM"}.
 ${context ? `Focus specifically on: ${context}` : ""}
 Make ALL four options plausible — wrong options should represent common misconceptions or subtle errors, not obvious wrong answers.
+CRITICAL: Distribute correct answers randomly across A, B, C, and D. Do NOT make A the correct answer more often than the others. A balanced distribution is required — approximately 25% each.
 ${deduplicationInstruction}
 ${weaknessInstruction}
 ${progressionInstruction}
@@ -197,7 +198,7 @@ Return JSON:
       "id": <number 1 to ${count}>,
       "question": "...",
       "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
-      "correctAnswer": "A",
+      "correctAnswer": "<one of: A, B, C, or D — must be distributed randomly across questions>",
       "explanation": "Brief explanation of why this is correct and why the other options are wrong.",
       "difficulty": "EASY" | "MEDIUM" | "HARD"
     }

@@ -63,11 +63,25 @@ function FormSection({ icon, title, hint, badge, required, children, className }
     )
 }
 
-// ── Pattern selector ───────────────────────────────────
+// Change state initialization
+const [patterns, setPatterns] = useState([])
+
+// Replace PatternSelector component entirely
 function PatternSelector({ config, value, onChange }) {
+    // value is now string[] 
     const suggestions = config.suggestions?.length > 0
         ? config.suggestions
         : PATTERNS.map(p => p.label)
+
+    function toggle(s) {
+        onChange(value.includes(s)
+            ? value.filter(v => v !== s)
+            : [...value, s]
+        )
+    }
+
+    const [customInput, setCustomInput] = useState('')
+
     return (
         <div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
@@ -75,29 +89,73 @@ function PatternSelector({ config, value, onChange }) {
                     <button
                         key={s}
                         type="button"
-                        onClick={() => onChange(value === s ? '' : s)}
+                        onClick={() => toggle(s)}
                         className={cn(
                             'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold',
-                            'transition-all duration-150',
-                            value === s
+                            'transition-all duration-150 flex items-center justify-between gap-2',
+                            value.includes(s)
                                 ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
                                 : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
                         )}
                     >
-                        {s}
+                        <span>{s}</span>
+                        {value.includes(s) && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="3"
+                                strokeLinecap="round" strokeLinejoin="round"
+                                className="flex-shrink-0">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        )}
                     </button>
                 ))}
             </div>
+            {/* Selected chips */}
+            {value.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                    {value.map(v => (
+                        <span key={v}
+                            className="flex items-center gap-1 text-[10px] font-bold
+                                       bg-brand-400/15 text-brand-300 border border-brand-400/25
+                                       px-2 py-px rounded-full">
+                            {v}
+                            <button
+                                type="button"
+                                onClick={() => toggle(v)}
+                                className="hover:text-brand-200 transition-colors leading-none"
+                            >
+                                ×
+                            </button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            {/* Custom input */}
             <input
                 type="text"
-                placeholder="Or type custom..."
-                value={!suggestions.includes(value) ? value : ''}
-                onChange={e => onChange(e.target.value)}
+                value={customInput}
+                onChange={e => setCustomInput(e.target.value)}
+                onKeyDown={e => {
+                    if (e.key === 'Enter' && customInput.trim()) {
+                        e.preventDefault()
+                        const custom = customInput.trim()
+                        if (!value.includes(custom)) {
+                            onChange([...value, custom])
+                        }
+                        setCustomInput('')
+                    }
+                }}
+                placeholder="Or type custom and press Enter..."
                 className="w-full bg-surface-3 border border-border-strong rounded-xl
                            text-sm text-text-primary placeholder:text-text-tertiary
                            px-3.5 py-2.5 outline-none
                            focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
             />
+            {value.length > 1 && (
+                <p className="text-[10px] text-text-disabled mt-1">
+                    {value.length} patterns selected
+                </p>
+            )}
         </div>
     )
 }
@@ -2104,7 +2162,9 @@ export default function SubmitSolutionPage() {
     const [feynmanExplanation, setFeynmanExplanation] = useState('')
     const [realWorldConnection, setRealWorldConnection] = useState('')
     const [confidence, setConfidence] = useState(0)
+    const confidenceRef = useRef(0)
     const [followUpAnswers, setFollowUpAnswers] = useState({})
+
 
     // ── System Design workspace state ──────────────────
     const [sdData, setSdData] = useState({
@@ -2181,207 +2241,221 @@ export default function SubmitSolutionPage() {
     const followUpCount = problem?.followUpQuestions?.length || 0
     const answeredCount = Object.values(followUpAnswers).filter(v => v?.trim()).length
 
-    // ── Submit ─────────────────────────────────────────
-    async function onSubmit() {
-        if (confidence === 0) {
-            toast.error('Please set your confidence level')
-            return
-        }
-
-        // SD validation
-        if (isSystemDesign) {
-            const hasMinContent =
-                (sdData.functionalRequirements?.trim().length ?? 0) > 20 ||
-                (sdData.architectureNotes?.trim().length ?? 0) > 20
-            if (!hasMinContent) {
-                toast.error('Fill in Functional Requirements or Architecture before submitting.')
-                return
-            }
-        }
-
-        // LLD validation
-        if (isLowLevelDesign) {
-            const hasMinContent =
-                (lldData.entities?.trim().length ?? 0) > 20 ||
-                (code?.trim().length ?? 0) > 20
-            if (!hasMinContent) {
-                toast.error('Fill in Entity Identification or write some implementation code before submitting.')
-                return
-            }
-        }
-
-        // HR validation: at least the analysis and answer must be filled
-        if (isHR) {
-            // Require at least one character in either the analysis or the answer.
-            // We do not enforce a length threshold here — the AI reviewer will assess quality.
-            // Validation only blocks completely empty submissions to prevent accidental submits.
-            const hasAnalysis = (hrData.underlyingConcern?.trim().length ?? 0) > 0
-            const hasAnswer = (hrData.answer?.trim().length ?? 0) > 0
-            if (!hasAnalysis && !hasAnswer) {
-                toast.error(
-                    'Your answer workspace is empty. Fill in at least one section before submitting.',
-                    { duration: 5000 }
-                )
-                return
-            }
-        }
-
-        // Behavioral validation: require at minimum situation OR action.
-        // Competency is the ideal first step but we don't hard-block on it —
-        // the AI reviewer will flag its absence in the evaluation.
-        // We block only fully empty submissions.
-        if (isBehavioral) {
-            const hasSituation = (behavioralData.situation?.trim().length ?? 0) > 0
-            const hasAction = (behavioralData.action?.trim().length ?? 0) > 0
-            if (!hasSituation && !hasAction) {
-                toast.error(
-                    'Your STAR workspace is empty. Fill in at least Situation or Action before submitting.',
-                    { duration: 5000 }
-                )
-                return
-            }
-        }
-
-        // Technical Knowledge validation: require at minimum subject OR coreExplanation.
-        // Block only fully empty submissions — the AI reviewer assesses depth.
-        if (isTechnicalKnowledge) {
-            const hasSubject = (tkData.subject?.trim().length ?? 0) > 0
-            const hasExplanation = (tkData.coreExplanation?.trim().length ?? 0) > 0
-            if (!hasSubject && !hasExplanation) {
-                toast.error(
-                    'Your Technical Knowledge workspace is empty. Fill in at least Subject or Mechanism before submitting.',
-                    { duration: 5000 }
-                )
-                return
-            }
-        }
-
-        if (isDatabase) {
-            const isQueryMode = dbProblemType !== 'SCHEMA_DESIGN'
-            const hasQuery = isQueryMode
-                ? (dbData.sqlQuery?.trim().length ?? 0) > 0 || (dbData.queryApproach?.trim().length ?? 0) > 0
-                : (dbData.schemaDesign?.trim().length ?? 0) > 0
-            if (!hasQuery) {
-                toast.error(
-                    isQueryMode
-                        ? 'Write your SQL query or at least the query approach before submitting.'
-                        : 'Design your schema before submitting.',
-                    { duration: 5000 }
-                )
-                return
-            }
-        }
-
-        const followUpAnswersArray = Object.entries(followUpAnswers)
-            .filter(([, text]) => text?.trim())
-            .map(([questionId, text]) => ({
-                followUpQuestionId: questionId,
-                answerText: text.trim(),
-            }))
-
-        // Field mapping into Solution columns for backward compat and RAG.
-        // HR field mapping:
-        //   approach           → underlyingConcern (primary analytical input)
-        //   keyInsight         → answer (the actual polished response — most important)
-        //   feynmanExplanation → companyConnection (company-specific evidence)
-        //   realWorldConnection→ selfAssessment (reflection on the answer)
-        const data = {
-            approach: isSystemDesign
-                ? sdData.functionalRequirements
-                : isLowLevelDesign ? lldData.entities
-                    : isHR ? hrData.underlyingConcern
-                        : isBehavioral ? behavioralData.situation
-                            : isTechnicalKnowledge ? tkData.coreExplanation
-                                : isDatabase
-                                    ? (dbProblemType === 'SCHEMA_DESIGN'
-                                        ? dbData.schemaDesign       // Schema → approach for RAG embedding
-                                        : dbData.queryApproach)     // Query analysis → approach
-                                    : (approach || null),
-
-            code: isSystemDesign
-                ? sdData.apiDesign
-                : isHR ? null
-                    : isBehavioral ? null
-                        : isTechnicalKnowledge ? null
-                            : isDatabase
-                                ? (dbData.sqlQuery || null)    // SQL query → code field
-                                : (code || null),
-
-            language: isSystemDesign
-                ? 'plaintext'
-                : isHR ? null
-                    : isBehavioral ? null
-                        : isTechnicalKnowledge ? null
-                            : isDatabase
-                                ? (dbData.sqlQuery ? 'SQL' : null)
-                                : (code ? language : null),
-
-            pattern: isHR
-                ? (hrQuestionCategory || null)
-                : isBehavioral ? (behavioralData.competency?.trim() || null)
-                    : isTechnicalKnowledge ? (tkData.subject?.trim() || null)
-                        : isDatabase
-                            ? (dbProblemType || null)      // problem type stored in pattern for RAG signals
-                            : (pattern || null),
-
-            keyInsight: isSystemDesign
-                ? sdData.tradeoffReasoning
-                : isLowLevelDesign ? lldData.designPattern
-                    : isHR ? hrData.answer
-                        : isBehavioral ? behavioralData.result
-                            : isTechnicalKnowledge ? tkData.tradeoffs
-                                : isDatabase
-                                    ? (dbProblemType === 'SCHEMA_DESIGN'
-                                        ? dbData.normalizationReasoning
-                                        : dbData.indexStrategy)
-                                    : (keyInsight || null),
-
-            feynmanExplanation: isSystemDesign
-                ? sdData.architectureNotes
-                : isLowLevelDesign ? lldData.solidAnalysis
-                    : isHR ? hrData.companyConnection
-                        : isBehavioral ? behavioralData.reflection
-                            : isTechnicalKnowledge ? tkData.realWorldUsage
-                                : isDatabase
-                                    ? (dbProblemType === 'SCHEMA_DESIGN'
-                                        ? dbData.indexDesign
-                                        : dbData.optimizationNotes)
-                                    : (feynmanExplanation || null),
-
-            realWorldConnection: isSystemDesign
-                ? sdData.capacityEstimation
-                : isLowLevelDesign ? lldData.extensibilityAnalysis
-                    : isHR ? hrData.selfAssessment
-                        : (isBehavioral || isTechnicalKnowledge || isDatabase)
-                            ? null
-                            : (realWorldConnection || null),
-
-            categorySpecificData: isSystemDesign
-                ? { ...sdData, diagramData: sdDiagram }
-                : isLowLevelDesign ? { ...lldData, implementationCode: code }
-                    : isHR ? { ...hrData, questionCategory: hrQuestionCategory }
-                        : isBehavioral ? { ...behavioralData }
-                            : isTechnicalKnowledge ? { ...tkData }
-                                : isDatabase
-                                    ? { ...dbData, problemType: dbProblemType }
-                                    : undefined,
-            followUpAnswers: followUpAnswersArray,
-        }
-
-        try {
-            await submitSolution.mutateAsync({ problemId, data })
-            toast.success(
-                isSystemDesign
-                    ? 'Design submitted! AI will analyze your architecture.'
-                    : isHR
-                        ? 'Answer submitted! AI will review your authenticity and specificity.'
-                        : 'Solution submitted! AI will analyze it.'
-            )
-            navigate(`/problems/${problemId}`)
-        } catch {
-            // error handled by mutation
-        }
+    // Replace the ConfidencePicker onChange handler
+    function handleConfidenceChange(val) {
+        setConfidence(val)
+        confidenceRef.current = val
     }
+
+    // Update validation in onSubmit to use ref
+    if (confidenceRef.current === 0) {
+        toast.error('Please set your confidence level')
+        return
+    }
+
+    // Update data object to use ref
+    confidence: confidenceRef.current,
+
+        // ── Submit ─────────────────────────────────────────
+        async function onSubmit() {
+            if (confidence === 0) {
+                toast.error('Please set your confidence level')
+                return
+            }
+
+            // SD validation
+            if (isSystemDesign) {
+                const hasMinContent =
+                    (sdData.functionalRequirements?.trim().length ?? 0) > 20 ||
+                    (sdData.architectureNotes?.trim().length ?? 0) > 20
+                if (!hasMinContent) {
+                    toast.error('Fill in Functional Requirements or Architecture before submitting.')
+                    return
+                }
+            }
+
+            // LLD validation
+            if (isLowLevelDesign) {
+                const hasMinContent =
+                    (lldData.entities?.trim().length ?? 0) > 20 ||
+                    (code?.trim().length ?? 0) > 20
+                if (!hasMinContent) {
+                    toast.error('Fill in Entity Identification or write some implementation code before submitting.')
+                    return
+                }
+            }
+
+            // HR validation: at least the analysis and answer must be filled
+            if (isHR) {
+                // Require at least one character in either the analysis or the answer.
+                // We do not enforce a length threshold here — the AI reviewer will assess quality.
+                // Validation only blocks completely empty submissions to prevent accidental submits.
+                const hasAnalysis = (hrData.underlyingConcern?.trim().length ?? 0) > 0
+                const hasAnswer = (hrData.answer?.trim().length ?? 0) > 0
+                if (!hasAnalysis && !hasAnswer) {
+                    toast.error(
+                        'Your answer workspace is empty. Fill in at least one section before submitting.',
+                        { duration: 5000 }
+                    )
+                    return
+                }
+            }
+
+            // Behavioral validation: require at minimum situation OR action.
+            // Competency is the ideal first step but we don't hard-block on it —
+            // the AI reviewer will flag its absence in the evaluation.
+            // We block only fully empty submissions.
+            if (isBehavioral) {
+                const hasSituation = (behavioralData.situation?.trim().length ?? 0) > 0
+                const hasAction = (behavioralData.action?.trim().length ?? 0) > 0
+                if (!hasSituation && !hasAction) {
+                    toast.error(
+                        'Your STAR workspace is empty. Fill in at least Situation or Action before submitting.',
+                        { duration: 5000 }
+                    )
+                    return
+                }
+            }
+
+            // Technical Knowledge validation: require at minimum subject OR coreExplanation.
+            // Block only fully empty submissions — the AI reviewer assesses depth.
+            if (isTechnicalKnowledge) {
+                const hasSubject = (tkData.subject?.trim().length ?? 0) > 0
+                const hasExplanation = (tkData.coreExplanation?.trim().length ?? 0) > 0
+                if (!hasSubject && !hasExplanation) {
+                    toast.error(
+                        'Your Technical Knowledge workspace is empty. Fill in at least Subject or Mechanism before submitting.',
+                        { duration: 5000 }
+                    )
+                    return
+                }
+            }
+
+            if (isDatabase) {
+                const isQueryMode = dbProblemType !== 'SCHEMA_DESIGN'
+                const hasQuery = isQueryMode
+                    ? (dbData.sqlQuery?.trim().length ?? 0) > 0 || (dbData.queryApproach?.trim().length ?? 0) > 0
+                    : (dbData.schemaDesign?.trim().length ?? 0) > 0
+                if (!hasQuery) {
+                    toast.error(
+                        isQueryMode
+                            ? 'Write your SQL query or at least the query approach before submitting.'
+                            : 'Design your schema before submitting.',
+                        { duration: 5000 }
+                    )
+                    return
+                }
+            }
+
+            const followUpAnswersArray = Object.entries(followUpAnswers)
+                .filter(([, text]) => text?.trim())
+                .map(([questionId, text]) => ({
+                    followUpQuestionId: questionId,
+                    answerText: text.trim(),
+                }))
+
+            // Field mapping into Solution columns for backward compat and RAG.
+            // HR field mapping:
+            //   approach           → underlyingConcern (primary analytical input)
+            //   keyInsight         → answer (the actual polished response — most important)
+            //   feynmanExplanation → companyConnection (company-specific evidence)
+            //   realWorldConnection→ selfAssessment (reflection on the answer)
+            const data = {
+                approach: isSystemDesign
+                    ? sdData.functionalRequirements
+                    : isLowLevelDesign ? lldData.entities
+                        : isHR ? hrData.underlyingConcern
+                            : isBehavioral ? behavioralData.situation
+                                : isTechnicalKnowledge ? tkData.coreExplanation
+                                    : isDatabase
+                                        ? (dbProblemType === 'SCHEMA_DESIGN'
+                                            ? dbData.schemaDesign       // Schema → approach for RAG embedding
+                                            : dbData.queryApproach)     // Query analysis → approach
+                                        : (approach || null),
+
+                code: isSystemDesign
+                    ? sdData.apiDesign
+                    : isHR ? null
+                        : isBehavioral ? null
+                            : isTechnicalKnowledge ? null
+                                : isDatabase
+                                    ? (dbData.sqlQuery || null)    // SQL query → code field
+                                    : (code || null),
+
+                language: isSystemDesign
+                    ? 'plaintext'
+                    : isHR ? null
+                        : isBehavioral ? null
+                            : isTechnicalKnowledge ? null
+                                : isDatabase
+                                    ? (dbData.sqlQuery ? 'SQL' : null)
+                                    : (code ? language : null),
+
+                pattern: isHR
+                    ? (hrQuestionCategory || null)
+                    : isBehavioral ? (behavioralData.competency?.trim() || null)
+                        : isTechnicalKnowledge ? (tkData.subject?.trim() || null)
+                            : isDatabase ? (dbProblemType || null)
+                                : (patterns.length > 0 ? patterns.join(', ') : null),
+
+                keyInsight: isSystemDesign
+                    ? sdData.tradeoffReasoning
+                    : isLowLevelDesign ? lldData.designPattern
+                        : isHR ? hrData.answer
+                            : isBehavioral ? behavioralData.result
+                                : isTechnicalKnowledge ? tkData.tradeoffs
+                                    : isDatabase
+                                        ? (dbProblemType === 'SCHEMA_DESIGN'
+                                            ? dbData.normalizationReasoning
+                                            : dbData.indexStrategy)
+                                        : (keyInsight || null),
+
+                feynmanExplanation: isSystemDesign
+                    ? sdData.architectureNotes
+                    : isLowLevelDesign ? lldData.solidAnalysis
+                        : isHR ? hrData.companyConnection
+                            : isBehavioral ? behavioralData.reflection
+                                : isTechnicalKnowledge ? tkData.realWorldUsage
+                                    : isDatabase
+                                        ? (dbProblemType === 'SCHEMA_DESIGN'
+                                            ? dbData.indexDesign
+                                            : dbData.optimizationNotes)
+                                        : (feynmanExplanation || null),
+
+                realWorldConnection: isSystemDesign
+                    ? sdData.capacityEstimation
+                    : isLowLevelDesign ? lldData.extensibilityAnalysis
+                        : isHR ? hrData.selfAssessment
+                            : (isBehavioral || isTechnicalKnowledge || isDatabase)
+                                ? null
+                                : (realWorldConnection || null),
+
+                categorySpecificData: isSystemDesign
+                    ? { ...sdData, diagramData: sdDiagram }
+                    : isLowLevelDesign ? { ...lldData, implementationCode: code }
+                        : isHR ? { ...hrData, questionCategory: hrQuestionCategory }
+                            : isBehavioral ? { ...behavioralData }
+                                : isTechnicalKnowledge ? { ...tkData }
+                                    : isDatabase
+                                        ? { ...dbData, problemType: dbProblemType }
+                                        : undefined,
+                followUpAnswers: followUpAnswersArray,
+            }
+
+            try {
+                await submitSolution.mutateAsync({ problemId, data })
+                toast.success(
+                    isSystemDesign
+                        ? 'Design submitted! AI will analyze your architecture.'
+                        : isHR
+                            ? 'Answer submitted! AI will review your authenticity and specificity.'
+                            : 'Solution submitted! AI will analyze it.'
+                )
+                navigate(`/problems/${problemId}`)
+            } catch {
+                // error handled by mutation
+            }
+        }
 
     if (isLoading) return <PageSpinner />
 
@@ -2719,8 +2793,8 @@ export default function SubmitSolutionPage() {
                             >
                                 <PatternSelector
                                     config={fields.patternIdentified}
-                                    value={pattern}
-                                    onChange={setPattern}
+                                    value={patterns}
+                                    onChange={setPatterns}
                                 />
                             </FormSection>
                         )}
@@ -2796,7 +2870,7 @@ export default function SubmitSolutionPage() {
                                                 : "Be honest — AI will flag if your confidence doesn't match your solution quality"
                     }
                 >
-                    <ConfidencePicker value={confidence} onChange={setConfidence} />
+                    <ConfidencePicker value={confidence} onChange={handleConfidenceChange} />
                 </FormSection>
 
                 {/* Follow-up questions */}

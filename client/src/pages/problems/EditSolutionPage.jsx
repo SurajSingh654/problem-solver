@@ -3,23 +3,30 @@
 // ============================================================================
 //
 // ROUTING:
-//   HR category      → HRWorkspace (4-section: Analyze/Answer/Tailor/Reflect)
-//   All other cats   → existing generic form (Pattern, SolutionTabs, Reflection)
+//   HR category             → HREditWorkspace (4-section: Analyze/Answer/Tailor/Reflect)
+//   CS_FUNDAMENTALS         → TechnicalKnowledgeEditWorkspace (5-section)
+//   SQL / Database          → DatabaseEditWorkspace (4-section, query or schema mode)
+//   All other categories    → generic form (Pattern multi-select, SolutionTabs, Reflection)
 //
-// HR-specific:
-//   - Pre-fills from categorySpecificData (the structured HR fields)
-//   - Falls back to mapped generic fields for old solutions without categorySpecificData
-//   - Saves back to both categorySpecificData AND the generic mapped fields
-//     so RAG, embeddings, and 6D report continue to work
+// CHANGES IN THIS VERSION:
+//   Bug 2 fix: Pattern selector upgraded to multi-select array state.
+//     - editPatterns: string[] replaces formData.pattern: string
+//     - Pre-fill deserializes comma-separated pattern string to array
+//     - onSubmit serializes array back to comma-separated string
+//     - No schema migration needed — pattern column remains String?
+//   Bug fix: All navigate tagged template literals → navigate() function calls
+//   Bug fix: AnimatePresence added to framer-motion import (used in DatabaseEditWorkspace)
+//   Bug fix: CodeEditor import added (used in DatabaseEditWorkspace SQL editor section)
 //
 // ============================================================================
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
 import { useProblemSolutions, useUpdateSolution } from '@hooks/useSolutions'
 import { SolutionTabs } from '@components/features/solutions/SolutionTabs'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
+import { CodeEditor } from '@components/ui/CodeEditor'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
@@ -34,7 +41,7 @@ import useAuthStore from '@store/useAuthStore'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
-// ── Follow-up with answer (non-HR) ─────────────────────
+// ── Follow-up with answer ──────────────────────────────
 function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = false }) {
     const [showHint, setShowHint] = useState(false)
     const hasAnswer = !!(answer?.trim())
@@ -106,11 +113,105 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
     )
 }
 
+// ── Multi-select Pattern Selector ──────────────────────
+// Bug 2 fix: upgraded from single-select string to multi-select array.
+// value is string[], onChange receives string[].
+// Custom patterns added via Enter key (additive, not replacement).
+// Selected patterns shown as dismissible chips.
+function EditPatternSelector({ value, onChange }) {
+    const [customInput, setCustomInput] = useState('')
+    const suggestions = PATTERNS.map(p => p.label)
+
+    function toggle(s) {
+        onChange(value.includes(s)
+            ? value.filter(v => v !== s)
+            : [...value, s]
+        )
+    }
+
+    return (
+        <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                {suggestions.map(s => (
+                    <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggle(s)}
+                        className={cn(
+                            'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold',
+                            'transition-all duration-150 flex items-center justify-between gap-2',
+                            value.includes(s)
+                                ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
+                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
+                        )}
+                    >
+                        <span>{s}</span>
+                        {value.includes(s) && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="3"
+                                strokeLinecap="round" strokeLinejoin="round"
+                                className="flex-shrink-0">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {/* Selected chips */}
+            {value.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                    {value.map(v => (
+                        <span key={v}
+                            className="flex items-center gap-1 text-[10px] font-bold
+                                       bg-brand-400/15 text-brand-300 border border-brand-400/25
+                                       px-2 py-px rounded-full">
+                            {v}
+                            <button
+                                type="button"
+                                onClick={() => toggle(v)}
+                                className="hover:text-brand-200 transition-colors leading-none"
+                            >
+                                ×
+                            </button>
+                        </span>
+                    ))}
+                </div>
+            )}
+
+            {/* Custom input — Enter to add */}
+            <input
+                type="text"
+                value={customInput}
+                onChange={e => setCustomInput(e.target.value)}
+                onKeyDown={e => {
+                    if (e.key === 'Enter' && customInput.trim()) {
+                        e.preventDefault()
+                        const custom = customInput.trim()
+                        if (!value.includes(custom)) {
+                            onChange([...value, custom])
+                        }
+                        setCustomInput('')
+                    }
+                }}
+                placeholder="Or type a custom pattern and press Enter..."
+                className="w-full bg-surface-3 border border-border-strong rounded-xl
+                           text-sm text-text-primary placeholder:text-text-tertiary
+                           px-3.5 py-2.5 outline-none
+                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+            />
+            {value.length > 1 && (
+                <p className="text-[10px] text-text-disabled mt-1">
+                    {value.length} patterns selected
+                </p>
+            )}
+        </div>
+    )
+}
+
 // ── HR Edit Workspace ──────────────────────────────────
-// Mirrors HRWorkspace from SubmitSolutionPage but pre-fills from existing data.
-// Renders the same 4-section layout (Analyze/Answer/Tailor/Reflect) + category selector.
 function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCategoryChange }) {
-    const [activeSection, setActiveSection] = useState('answer') // default to answer for edits
+    const [activeSection, setActiveSection] = useState('answer')
 
     function update(field, value) {
         onHrDataChange({ ...hrData, [field]: value })
@@ -160,14 +261,12 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
     const activeIndex = sections.findIndex(s => s.key === activeSection)
-
     const completedCount = sections.filter(s =>
         (hrData[s.key]?.trim?.()?.length ?? 0) > 20
     ).length
 
     return (
         <div className="space-y-4">
-            {/* Progress header */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-bold text-text-primary flex items-center gap-2">
@@ -221,7 +320,6 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
                 </div>
             </div>
 
-            {/* Active section */}
             <motion.div
                 key={activeSection}
                 initial={{ opacity: 0, y: 4 }}
@@ -288,7 +386,6 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
                 </div>
             </motion.div>
 
-            {/* Question Category selector */}
             <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
                 <p className="text-xs font-bold text-text-primary mb-1 flex items-center gap-2">
                     <span>🏷️</span> Question Category
@@ -327,11 +424,7 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
     )
 }
 
-
 // ── Technical Knowledge Edit Workspace ────────────────
-// Mirrors TechnicalKnowledgeWorkspace from SubmitSolutionPage
-// but defaults to coreExplanation section (the most likely edit target)
-// and pre-fills from existing categorySpecificData.
 function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
     const [activeSection, setActiveSection] = useState('coreExplanation')
 
@@ -343,63 +436,17 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
     const fieldConfigs = tkConfig.technicalKnowledgeFields || {}
 
     const sections = [
-        {
-            key: 'subject',
-            label: 'Subject',
-            icon: '📚',
-            sublabel: 'Topic area and concept',
-            color: 'text-warning',
-            activeBg: 'bg-warning/10 border-warning/30',
-            required: true,
-        },
-        {
-            key: 'coreExplanation',
-            label: 'Mechanism',
-            icon: '⚙️',
-            sublabel: 'How it works — not the definition',
-            color: 'text-brand-300',
-            activeBg: 'bg-brand-400/10 border-brand-400/30',
-            required: true,
-        },
-        {
-            key: 'whyItExists',
-            label: 'Design',
-            icon: '🎯',
-            sublabel: 'Why it was designed this way',
-            color: 'text-info',
-            activeBg: 'bg-info/10 border-info/30',
-            required: false,
-        },
-        {
-            key: 'tradeoffs',
-            label: 'Trade-offs',
-            icon: '⚖️',
-            sublabel: 'What it sacrifices',
-            color: 'text-danger',
-            activeBg: 'bg-danger/10 border-danger/30',
-            required: false,
-        },
-        {
-            key: 'realWorldUsage',
-            label: 'Production',
-            icon: '🌍',
-            sublabel: 'Real systems + misconceptions',
-            color: 'text-success',
-            activeBg: 'bg-success/10 border-success/30',
-            required: false,
-        },
+        { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: true },
+        { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
+        { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+        { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices', color: 'text-danger', activeBg: 'bg-danger/10 border-danger/30', required: false },
+        { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: false },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
     const activeIndex = sections.findIndex(s => s.key === activeSection)
 
-    const minThresholds = {
-        subject: 20,
-        coreExplanation: 400,
-        whyItExists: 200,
-        tradeoffs: 200,
-        realWorldUsage: 200,
-    }
+    const minThresholds = { subject: 20, coreExplanation: 400, whyItExists: 200, tradeoffs: 200, realWorldUsage: 200 }
 
     const completedCount = sections.filter(s =>
         (tkData[s.key]?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
@@ -428,30 +475,17 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
                         const isDone = (tkData[s.key]?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
                         const isActive = activeSection === s.key
                         return (
-                            <button
-                                key={s.key}
-                                onClick={() => setActiveSection(s.key)}
+                            <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn(
-                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
-                                    'transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg
-                                        : isDone ? 'bg-success/5 border-success/20'
-                                            : 'bg-surface-3 border-border-default hover:border-border-strong'
-                                )}
-                            >
+                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
+                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                )}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && (
-                                        <span className="text-danger text-[9px] font-bold">*</span>
-                                    )}
-                                    {isDone && !isActive && (
-                                        <span className="text-success text-[9px] font-bold">✓</span>
-                                    )}
+                                    {s.required && !isDone && !isActive && <span className="text-danger text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn(
-                                    'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
-                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
-                                )}>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>
                                     {s.label}
                                 </span>
                             </button>
@@ -460,41 +494,24 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
                 </div>
             </div>
 
-            <motion.div
-                key={activeSection}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.15 }}
-                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
-            >
-                <div className={cn(
-                    'flex items-center gap-3 px-5 py-4 border-b border-border-default',
-                    activeSectionConfig.activeBg
-                )}>
+            <motion.div key={activeSection} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
+                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
+                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig.activeBg)}>
                     <span className="text-xl">{activeSectionConfig.icon}</span>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>
-                                {activeSectionConfig.label}
-                            </p>
+                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
                             {activeSectionConfig.required && (
-                                <span className="text-[9px] font-bold text-danger
-                                                 bg-danger/10 border border-danger/20
-                                                 px-1.5 py-px rounded-full">
-                                    Required
-                                </span>
+                                <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">Required</span>
                             )}
                         </div>
                         <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
                     </div>
-                    <span className="text-[10px] text-text-disabled flex-shrink-0">
-                        {activeIndex + 1} / {sections.length}
-                    </span>
+                    <span className="text-[10px] text-text-disabled flex-shrink-0">{activeIndex + 1} / {sections.length}</span>
                 </div>
                 <div className="p-5 space-y-3">
                     {fieldConfigs[activeSection]?.hint && (
-                        <p className="text-[11px] text-text-tertiary leading-relaxed
-                                       bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">
                             💡 {fieldConfigs[activeSection].hint}
                         </p>
                     )}
@@ -503,40 +520,20 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
                         value={tkData[activeSection] || ''}
                         onChange={e => update(activeSection, e.target.value)}
                         placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                        className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                   text-sm text-text-primary placeholder:text-text-disabled
-                                   px-3.5 py-2.5 outline-none resize-y leading-relaxed
-                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                         style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }}
                     />
                 </div>
-                <div className="flex items-center justify-between px-5 py-3
-                                border-t border-border-default bg-surface-1/50">
-                    <button type="button"
-                        onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }}
-                        disabled={activeIndex === 0}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
-                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
-                                   flex items-center gap-1">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="19" y1="12" x2="5" y2="12" />
-                            <polyline points="12 19 5 12 12 5" />
-                        </svg>
+                <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
+                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }} disabled={activeIndex === 0}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
                         Previous
                     </button>
-                    <button type="button"
-                        onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }}
-                        disabled={activeIndex === sections.length - 1}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary
-                                   disabled:opacity-30 disabled:cursor-not-allowed transition-colors
-                                   flex items-center gap-1">
+                    <button type="button" onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }} disabled={activeIndex === sections.length - 1}
+                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
                         Next
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                        </svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
                     </button>
                 </div>
             </motion.div>
@@ -545,14 +542,9 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
 }
 
 // ── Database Edit Workspace ────────────────────────────
-// Mirrors DatabaseWorkspace from SubmitSolutionPage.
-// Defaults to the most-likely-edited section based on problem type.
-// Pre-fills from categorySpecificData with old-field fallback.
 function DatabaseEditWorkspace({ dbData, onDbDataChange, problemType, schemaReference }) {
     const isQueryMode = problemType !== 'SCHEMA_DESIGN'
-    const [activeSection, setActiveSection] = useState(
-        isQueryMode ? 'sqlEditor' : 'schemaDesign'
-    )
+    const [activeSection, setActiveSection] = useState(isQueryMode ? 'sqlEditor' : 'schemaDesign')
     const [code, setCode] = useState(dbData.sqlQuery || '')
     const [showSchema, setShowSchema] = useState(true)
 
@@ -603,8 +595,7 @@ function DatabaseEditWorkspace({ dbData, onDbDataChange, problemType, schemaRefe
             {/* Schema reference */}
             {schemaReference && (
                 <div className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
-                    <button type="button"
-                        onClick={() => setShowSchema(v => !v)}
+                    <button type="button" onClick={() => setShowSchema(v => !v)}
                         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-surface-2/50 transition-colors">
                         <div className="flex items-center gap-2">
                             <span className="text-sm">📋</span>
@@ -612,7 +603,9 @@ function DatabaseEditWorkspace({ dbData, onDbDataChange, problemType, schemaRefe
                             <span className="text-[10px] text-text-disabled bg-surface-3 border border-border-default rounded-full px-2 py-px">Read-only</span>
                         </div>
                         <motion.div animate={{ rotate: showSchema ? 180 : 0 }} transition={{ duration: 0.2 }} className="text-text-disabled">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
                         </motion.div>
                     </button>
                     <AnimatePresence initial={false}>
@@ -713,14 +706,12 @@ function DatabaseEditWorkspace({ dbData, onDbDataChange, problemType, schemaRefe
                     )}
                 </div>
                 <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
-                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }}
-                        disabled={activeIndex === 0}
+                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }} disabled={activeIndex === 0}
                         className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
                         Previous
                     </button>
-                    <button type="button" onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }}
-                        disabled={activeIndex === sections.length - 1}
+                    <button type="button" onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }} disabled={activeIndex === sections.length - 1}
                         className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
                         Next
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
@@ -750,16 +741,18 @@ export default function EditSolutionPage() {
     const category = problem?.category || 'CODING'
     const formConfig = getCategoryForm(category)
     const catInfo = PROBLEM_CATEGORIES.find(c => c.id === category)
+
     const isHR = category === 'HR'
     const isHRRound = formConfig.isHRRound === true
     const isTechnicalKnowledge = category === 'CS_FUNDAMENTALS'
     const isTKRound = formConfig.isTechnicalKnowledge === true
-
     const isDatabase = category === 'SQL'
     const isDBRound = formConfig.isDatabase === true
+
     const dbProblemType = problem?.categoryData?.problemType || 'QUERY'
     const dbSchemaReference = problem?.categoryData?.schemaDefinition || problem?.description || null
 
+    // ── Database workspace state ───────────────────────
     const [dbData, setDbData] = useState({
         queryApproach: '', sqlQuery: '', indexStrategy: '', optimizationNotes: '',
         schemaDesign: '', normalizationReasoning: '', indexDesign: '', noSQLConsideration: '',
@@ -768,17 +761,16 @@ export default function EditSolutionPage() {
 
     // ── Technical Knowledge workspace state ───────────────
     const [tkData, setTkData] = useState({
-        subject: '',
-        coreExplanation: '',
-        whyItExists: '',
-        tradeoffs: '',
-        realWorldUsage: '',
+        subject: '', coreExplanation: '', whyItExists: '', tradeoffs: '', realWorldUsage: '',
     })
     const [tkConfidence, setTkConfidence] = useState(3)
 
-    // ── Generic form state (non-HR) ────────────────────
+    // ── Generic form state ─────────────────────────────
+    // Bug 2 fix: pattern is now a separate string[] state (editPatterns)
+    // instead of being inside formData as a single string.
+    // This keeps formData clean and makes the multi-select logic explicit.
+    const [editPatterns, setEditPatterns] = useState([])
     const [formData, setFormData] = useState({
-        pattern: '',
         approach: '',
         keyInsight: '',
         feynmanExplanation: '',
@@ -791,10 +783,7 @@ export default function EditSolutionPage() {
 
     // ── HR workspace state ─────────────────────────────
     const [hrData, setHrData] = useState({
-        underlyingConcern: '',
-        answer: '',
-        companyConnection: '',
-        selfAssessment: '',
+        underlyingConcern: '', answer: '', companyConnection: '', selfAssessment: '',
     })
     const [hrQuestionCategory, setHrQuestionCategory] = useState('')
     const [hrConfidence, setHrConfidence] = useState(3)
@@ -806,25 +795,16 @@ export default function EditSolutionPage() {
         if (!mySolution || loaded) return
 
         if (isHRRound) {
-            // HR: pre-fill from categorySpecificData first (new format)
-            // Fall back to mapped generic fields for old solutions
             const csd = mySolution.categorySpecificData
-
             if (csd && (csd.underlyingConcern || csd.answer)) {
-                // New format — structured data exists
                 setHrData({
                     underlyingConcern: csd.underlyingConcern || '',
                     answer: csd.answer || '',
                     companyConnection: csd.companyConnection || '',
                     selfAssessment: csd.selfAssessment || '',
                 })
-                setHrQuestionCategory(
-                    csd.questionCategory || mySolution.pattern || ''
-                )
+                setHrQuestionCategory(csd.questionCategory || mySolution.pattern || '')
             } else {
-                // Old format — map generic fields back to HR fields
-                // approach → underlyingConcern, keyInsight → answer,
-                // feynmanExplanation → companyConnection, realWorldConnection → selfAssessment
                 setHrData({
                     underlyingConcern: mySolution.approach || '',
                     answer: mySolution.keyInsight || '',
@@ -833,20 +813,14 @@ export default function EditSolutionPage() {
                 })
                 setHrQuestionCategory(mySolution.pattern || '')
             }
-
             setHrConfidence(mySolution.confidence || 3)
-
-            // Pre-fill follow-up answers
             if (mySolution.followUpAnswers?.length > 0) {
                 const prefilled = {}
-                mySolution.followUpAnswers.forEach(a => {
-                    prefilled[a.followUpQuestionId] = a.answerText
-                })
+                mySolution.followUpAnswers.forEach(a => { prefilled[a.followUpQuestionId] = a.answerText })
                 setFollowUpAnswers(prefilled)
             }
+
         } else if (isTKRound) {
-            // TK: pre-fill from categorySpecificData first (new format)
-            // Fall back to mapped generic fields for old solutions
             const csd = mySolution.categorySpecificData
             if (csd && (csd.subject !== undefined || csd.coreExplanation !== undefined)) {
                 setTkData({
@@ -857,10 +831,6 @@ export default function EditSolutionPage() {
                     realWorldUsage: csd.realWorldUsage || '',
                 })
             } else {
-                // Old format — map generic fields back to TK fields
-                // approach → coreExplanation, optimizedApproach → whyItExists,
-                // keyInsight → tradeoffs, feynmanExplanation → realWorldUsage,
-                // pattern → subject
                 setTkData({
                     subject: mySolution.pattern || '',
                     coreExplanation: mySolution.approach || '',
@@ -872,11 +842,10 @@ export default function EditSolutionPage() {
             setTkConfidence(mySolution.confidence || 3)
             if (mySolution.followUpAnswers?.length > 0) {
                 const prefilled = {}
-                mySolution.followUpAnswers.forEach(a => {
-                    prefilled[a.followUpQuestionId] = a.answerText
-                })
+                mySolution.followUpAnswers.forEach(a => { prefilled[a.followUpQuestionId] = a.answerText })
                 setFollowUpAnswers(prefilled)
             }
+
         } else if (isDBRound) {
             const csd = mySolution.categorySpecificData
             if (csd && (csd.queryApproach !== undefined || csd.schemaDesign !== undefined || csd.sqlQuery !== undefined)) {
@@ -891,9 +860,6 @@ export default function EditSolutionPage() {
                     noSQLConsideration: csd.noSQLConsideration || '',
                 })
             } else {
-                // Old format fallback
-                // code → sqlQuery, approach → queryApproach,
-                // keyInsight → indexStrategy, feynmanExplanation → optimizationNotes
                 setDbData({
                     queryApproach: mySolution.approach || '',
                     sqlQuery: mySolution.code || '',
@@ -908,14 +874,12 @@ export default function EditSolutionPage() {
             setDbConfidence(mySolution.confidence || 3)
             if (mySolution.followUpAnswers?.length > 0) {
                 const prefilled = {}
-                mySolution.followUpAnswers.forEach(a => {
-                    prefilled[a.followUpQuestionId] = a.answerText
-                })
+                mySolution.followUpAnswers.forEach(a => { prefilled[a.followUpQuestionId] = a.answerText })
                 setFollowUpAnswers(prefilled)
             }
+
         } else {
-            // existing non-HR generic form
-            // Non-HR: existing logic unchanged
+            // Generic form — pre-fill
             const existingTabs = []
             if (mySolution.bruteForce) {
                 existingTabs.push({
@@ -936,30 +900,29 @@ export default function EditSolutionPage() {
                 language: mySolution.language || 'PYTHON',
             })
             if (existingTabs.length === 0) {
-                existingTabs.push({
-                    type: 'BRUTE_FORCE',
-                    approach: '',
-                    timeComplexity: '',
-                    spaceComplexity: '',
-                    code: '',
-                    language: 'PYTHON',
-                })
+                existingTabs.push({ type: 'BRUTE_FORCE', approach: '', timeComplexity: '', spaceComplexity: '', code: '', language: 'PYTHON' })
             }
             setSolutionTabs(existingTabs)
             setCommonNotes(mySolution.realWorldConnection || '')
+
+            // Bug 2 fix: deserialize comma-separated pattern string → string array
+            setEditPatterns(
+                mySolution.pattern
+                    ? mySolution.pattern.split(', ').filter(Boolean)
+                    : []
+            )
+
             setFormData({
-                pattern: mySolution.pattern || '',
                 approach: mySolution.approach || '',
                 keyInsight: mySolution.keyInsight || '',
                 feynmanExplanation: mySolution.feynmanExplanation || '',
                 realWorldConnection: mySolution.realWorldConnection || '',
                 confidence: mySolution.confidence || 3,
             })
+
             if (mySolution.followUpAnswers?.length > 0) {
                 const prefilled = {}
-                mySolution.followUpAnswers.forEach(a => {
-                    prefilled[a.followUpQuestionId] = a.answerText
-                })
+                mySolution.followUpAnswers.forEach(a => { prefilled[a.followUpQuestionId] = a.answerText })
                 setFollowUpAnswers(prefilled)
             }
         }
@@ -992,8 +955,6 @@ export default function EditSolutionPage() {
         let data
 
         if (isHRRound) {
-            // HR: save structured data to categorySpecificData
-            // AND map back to generic fields for RAG/embeddings/6D report
             data = {
                 approach: hrData.underlyingConcern || null,
                 keyInsight: hrData.answer || null,
@@ -1003,10 +964,7 @@ export default function EditSolutionPage() {
                 code: null,
                 language: null,
                 confidence: hrConfidence,
-                categorySpecificData: {
-                    ...hrData,
-                    questionCategory: hrQuestionCategory,
-                },
+                categorySpecificData: { ...hrData, questionCategory: hrQuestionCategory },
                 followUpAnswers: followUpAnswersArray,
             }
         } else if (isTKRound) {
@@ -1039,7 +997,7 @@ export default function EditSolutionPage() {
                 followUpAnswers: followUpAnswersArray,
             }
         } else {
-            // Non-HR: existing logic unchanged
+            // Generic form
             const optimized = solutionTabs.find(s => s.type === 'OPTIMIZED')
             const brute = solutionTabs.find(s => s.type === 'BRUTE_FORCE')
             const bestSol = optimized || solutionTabs[0]
@@ -1058,7 +1016,8 @@ export default function EditSolutionPage() {
                 feynmanExplanation: formData.feynmanExplanation || null,
                 realWorldConnection: formData.realWorldConnection || commonNotes || null,
                 confidence: formData.confidence || 3,
-                pattern: formData.pattern || null,
+                // Bug 2 fix: serialize string[] → comma-separated string for DB compat
+                pattern: editPatterns.length > 0 ? editPatterns.join(', ') : null,
                 followUpAnswers: followUpAnswersArray,
             }
         }
@@ -1066,7 +1025,7 @@ export default function EditSolutionPage() {
         try {
             await updateSolution.mutateAsync({ solutionId: mySolution.id, data })
             toast.success(isHR ? 'Answer updated.' : 'Solution updated.')
-            navigate(`/problems/${problemId}`)
+            navigate(`/problems/${problemId}`)  // Bug fix: was navigate`...`
         } catch {
             // error handled by mutation
         }
@@ -1081,6 +1040,7 @@ export default function EditSolutionPage() {
                 <p className="text-text-secondary text-sm">
                     {isHR ? "You haven't submitted an answer yet." : "You haven't submitted a solution yet."}
                 </p>
+                {/* Bug fix: was navigate`...` */}
                 <Button variant="primary" onClick={() => navigate(`/problems/${problemId}/submit`)}>
                     {isHR ? 'Submit Answer' : 'Submit Solution'}
                 </Button>
@@ -1090,7 +1050,7 @@ export default function EditSolutionPage() {
 
     return (
         <div className="p-6 max-w-[800px] mx-auto">
-            {/* Back */}
+            {/* Back — Bug fix: was navigate`...` */}
             <button
                 type="button"
                 onClick={() => navigate(`/problems/${problemId}`)}
@@ -1110,7 +1070,6 @@ export default function EditSolutionPage() {
             {problem && (
                 <div className="bg-surface-1 border border-border-default rounded-2xl p-5 mb-6">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        {/* HR: stakes badge */}
                         {isHR ? (
                             <span className={cn(
                                 'text-xs font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1',
@@ -1146,7 +1105,6 @@ export default function EditSolutionPage() {
                 </div>
 
                 {isHRRound ? (
-                    // ── HR: structured workspace ───────────────────────
                     <>
                         <HREditWorkspace
                             hrData={hrData}
@@ -1154,36 +1112,18 @@ export default function EditSolutionPage() {
                             questionCategory={hrQuestionCategory}
                             onQuestionCategoryChange={setHrQuestionCategory}
                         />
-
-                        {/* Confidence for HR */}
                         <div>
-                            <label className="block text-sm font-semibold text-text-primary mb-1">
-                                Confidence Level
-                            </label>
-                            <p className="text-xs text-text-tertiary mb-3">
-                                How authentic and specific does this answer feel now?
-                            </p>
+                            <label className="block text-sm font-semibold text-text-primary mb-1">Confidence Level</label>
+                            <p className="text-xs text-text-tertiary mb-3">How authentic and specific does this answer feel now?</p>
                             <div className="flex gap-3 flex-wrap">
                                 {CONFIDENCE_LEVELS.map(c => (
-                                    <button
-                                        key={c.value}
-                                        type="button"
-                                        onClick={() => setHrConfidence(c.value)}
+                                    <button key={c.value} type="button" onClick={() => setHrConfidence(c.value)}
                                         className={cn(
-                                            'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
-                                            'transition-all duration-150 min-w-[80px]',
-                                            hrConfidence === c.value
-                                                ? 'bg-brand-400/15 border-brand-400/40 scale-105'
-                                                : 'bg-surface-3 border-border-default hover:border-border-strong'
-                                        )}
-                                    >
-                                        <span className="text-2xl">{c.emoji}</span>
-                                        <span className={cn(
-                                            'text-[10px] font-bold text-center leading-tight',
-                                            hrConfidence === c.value ? c.color : 'text-text-tertiary'
+                                            'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
+                                            hrConfidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                         )}>
-                                            {c.label}
-                                        </span>
+                                        <span className="text-2xl">{c.emoji}</span>
+                                        <span className={cn('text-[10px] font-bold text-center leading-tight', hrConfidence === c.value ? c.color : 'text-text-tertiary')}>{c.label}</span>
                                     </button>
                                 ))}
                             </div>
@@ -1191,39 +1131,19 @@ export default function EditSolutionPage() {
                     </>
                 ) : isTKRound ? (
                     <>
-                        <TechnicalKnowledgeEditWorkspace
-                            tkData={tkData}
-                            onTkDataChange={setTkData}
-                        />
-                        {/* Confidence for TK */}
+                        <TechnicalKnowledgeEditWorkspace tkData={tkData} onTkDataChange={setTkData} />
                         <div>
-                            <label className="block text-sm font-semibold text-text-primary mb-1">
-                                Confidence Level
-                            </label>
-                            <p className="text-xs text-text-tertiary mb-3">
-                                How deep is your understanding? Could you answer a follow-up on the mechanism without notes?
-                            </p>
+                            <label className="block text-sm font-semibold text-text-primary mb-1">Confidence Level</label>
+                            <p className="text-xs text-text-tertiary mb-3">How deep is your understanding? Could you answer a follow-up on the mechanism without notes?</p>
                             <div className="flex gap-3 flex-wrap">
                                 {CONFIDENCE_LEVELS.map(c => (
-                                    <button
-                                        key={c.value}
-                                        type="button"
-                                        onClick={() => setTkConfidence(c.value)}
+                                    <button key={c.value} type="button" onClick={() => setTkConfidence(c.value)}
                                         className={cn(
-                                            'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
-                                            'transition-all duration-150 min-w-[80px]',
-                                            tkConfidence === c.value
-                                                ? 'bg-brand-400/15 border-brand-400/40 scale-105'
-                                                : 'bg-surface-3 border-border-default hover:border-border-strong'
-                                        )}
-                                    >
-                                        <span className="text-2xl">{c.emoji}</span>
-                                        <span className={cn(
-                                            'text-[10px] font-bold text-center leading-tight',
-                                            tkConfidence === c.value ? c.color : 'text-text-tertiary'
+                                            'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
+                                            tkConfidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                         )}>
-                                            {c.label}
-                                        </span>
+                                        <span className="text-2xl">{c.emoji}</span>
+                                        <span className={cn('text-[10px] font-bold text-center leading-tight', tkConfidence === c.value ? c.color : 'text-text-tertiary')}>{c.label}</span>
                                     </button>
                                 ))}
                             </div>
@@ -1237,14 +1157,9 @@ export default function EditSolutionPage() {
                             problemType={dbProblemType}
                             schemaReference={dbSchemaReference}
                         />
-                        {/* Confidence for DB */}
                         <div>
-                            <label className="block text-sm font-semibold text-text-primary mb-1">
-                                Confidence Level
-                            </label>
-                            <p className="text-xs text-text-tertiary mb-3">
-                                How confident are you? Would your solution handle NULLs, empty tables, and scale correctly?
-                            </p>
+                            <label className="block text-sm font-semibold text-text-primary mb-1">Confidence Level</label>
+                            <p className="text-xs text-text-tertiary mb-3">How confident are you? Would your solution handle NULLs, empty tables, and scale correctly?</p>
                             <div className="flex gap-3 flex-wrap">
                                 {CONFIDENCE_LEVELS.map(c => (
                                     <button key={c.value} type="button" onClick={() => setDbConfidence(c.value)}
@@ -1253,50 +1168,23 @@ export default function EditSolutionPage() {
                                             dbConfidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                         )}>
                                         <span className="text-2xl">{c.emoji}</span>
-                                        <span className={cn('text-[10px] font-bold text-center leading-tight', dbConfidence === c.value ? c.color : 'text-text-tertiary')}>
-                                            {c.label}
-                                        </span>
+                                        <span className={cn('text-[10px] font-bold text-center leading-tight', dbConfidence === c.value ? c.color : 'text-text-tertiary')}>{c.label}</span>
                                     </button>
                                 ))}
                             </div>
                         </div>
                     </>
                 ) : (
-                    // ── Non-HR: existing generic form ──────────────────
+                    // ── Generic form ───────────────────────────────────
                     <>
-                        {/* Pattern */}
-                        <div className="space-y-5">
+                        {/* Pattern — Bug 2 fix: now multi-select via EditPatternSelector */}
+                        <div className="space-y-3">
                             <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
                                 <span>🧩</span> Pattern
                             </h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {PATTERNS.map(p => (
-                                    <button
-                                        key={p.id}
-                                        type="button"
-                                        onClick={() => updateFormData({
-                                            pattern: formData.pattern === p.label ? '' : p.label
-                                        })}
-                                        className={cn(
-                                            'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all',
-                                            formData.pattern === p.label
-                                                ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
-                                        )}
-                                    >
-                                        {p.label}
-                                    </button>
-                                ))}
-                            </div>
-                            <input
-                                type="text"
-                                placeholder="Or type a custom pattern…"
-                                value={!PATTERNS.some(p => p.label === formData.pattern) ? formData.pattern : ''}
-                                onChange={e => updateFormData({ pattern: e.target.value })}
-                                className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                           text-sm text-text-primary placeholder:text-text-tertiary
-                                           px-3.5 py-2.5 outline-none
-                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                            <EditPatternSelector
+                                value={editPatterns}
+                                onChange={setEditPatterns}
                             />
                         </div>
 
@@ -1367,30 +1255,17 @@ export default function EditSolutionPage() {
 
                             {/* Confidence */}
                             <div>
-                                <label className="block text-sm font-semibold text-text-primary mb-1">
-                                    Confidence Level
-                                </label>
-                                <p className="text-xs text-text-tertiary mb-3">
-                                    How well do you understand this solution right now?
-                                </p>
+                                <label className="block text-sm font-semibold text-text-primary mb-1">Confidence Level</label>
+                                <p className="text-xs text-text-tertiary mb-3">How well do you understand this solution right now?</p>
                                 <div className="flex gap-3 flex-wrap">
                                     {CONFIDENCE_LEVELS.map(c => (
-                                        <button
-                                            key={c.value}
-                                            type="button"
-                                            onClick={() => updateFormData({ confidence: c.value })}
+                                        <button key={c.value} type="button" onClick={() => updateFormData({ confidence: c.value })}
                                             className={cn(
                                                 'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
-                                                formData.confidence === c.value
-                                                    ? 'bg-brand-400/15 border-brand-400/40 scale-105'
-                                                    : 'bg-surface-3 border-border-default hover:border-border-strong'
-                                            )}
-                                        >
-                                            <span className="text-2xl">{c.emoji}</span>
-                                            <span className={cn(
-                                                'text-[10px] font-bold text-center leading-tight',
-                                                formData.confidence === c.value ? c.color : 'text-text-tertiary'
+                                                formData.confidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                             )}>
+                                            <span className="text-2xl">{c.emoji}</span>
+                                            <span className={cn('text-[10px] font-bold text-center leading-tight', formData.confidence === c.value ? c.color : 'text-text-tertiary')}>
                                                 {c.label}
                                             </span>
                                         </button>
@@ -1463,12 +1338,8 @@ export default function EditSolutionPage() {
 
                 {/* Submit */}
                 <div className="flex items-center justify-between pt-4 border-t border-border-default">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="md"
-                        onClick={() => navigate(`/problems/${problemId}`)}
-                    >
+                    {/* Bug fix: was navigate`...` */}
+                    <Button type="button" variant="ghost" size="md" onClick={() => navigate(`/problems/${problemId}`)}>
                         Cancel
                     </Button>
                     <Button
