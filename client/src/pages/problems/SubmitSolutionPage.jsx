@@ -1,7 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — Submit Solution Page
 // ============================================================================
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
@@ -27,46 +27,9 @@ const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 // All other categories are self-contained.
 const EXTERNAL_LINK_CATEGORIES = ['CODING', 'SQL']
 
-// ── Section wrapper ────────────────────────────────────
-function FormSection({ icon, title, hint, badge, required, children, className }) {
-    return (
-        <div className={cn(
-            'bg-surface-1 border border-border-default rounded-2xl p-5',
-            className
-        )}>
-            <div className="flex items-start gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
-                                justify-center text-base flex-shrink-0 mt-0.5">
-                    {icon}
-                </div>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-bold text-text-primary">{title}</h3>
-                        {required && (
-                            <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                             bg-danger/10 text-danger border border-danger/20">
-                                Required
-                            </span>
-                        )}
-                        {badge && (
-                            <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                             bg-brand-400/15 text-brand-300 border border-brand-400/25">
-                                {badge}
-                            </span>
-                        )}
-                    </div>
-                    {hint && <p className="text-xs text-text-tertiary mt-0.5">{hint}</p>}
-                </div>
-            </div>
-            {children}
-        </div>
-    )
-}
-
 // Change state initialization
 const [patterns, setPatterns] = useState([])
 
-// Replace PatternSelector component entirely
 function PatternSelector({ config, value, onChange }) {
     // value is now string[] 
     const suggestions = config.suggestions?.length > 0
@@ -156,6 +119,42 @@ function PatternSelector({ config, value, onChange }) {
                     {value.length} patterns selected
                 </p>
             )}
+        </div>
+    )
+}
+
+// ── Section wrapper ────────────────────────────────────
+function FormSection({ icon, title, hint, badge, required, children, className }) {
+    return (
+        <div className={cn(
+            'bg-surface-1 border border-border-default rounded-2xl p-5',
+            className
+        )}>
+            <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
+                                justify-center text-base flex-shrink-0 mt-0.5">
+                    {icon}
+                </div>
+                <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-bold text-text-primary">{title}</h3>
+                        {required && (
+                            <span className="text-[9px] font-bold px-1.5 py-px rounded-full
+                                             bg-danger/10 text-danger border border-danger/20">
+                                Required
+                            </span>
+                        )}
+                        {badge && (
+                            <span className="text-[9px] font-bold px-1.5 py-px rounded-full
+                                             bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                                {badge}
+                            </span>
+                        )}
+                    </div>
+                    {hint && <p className="text-xs text-text-tertiary mt-0.5">{hint}</p>}
+                </div>
+            </div>
+            {children}
         </div>
     )
 }
