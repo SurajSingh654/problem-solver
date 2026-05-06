@@ -792,7 +792,7 @@ export default function Dashboard() {
               See all →
             </button>
           </div>
-          {dueReviews.length > 0 ? (
+          {(dueReviews.length > 0 || dueCount > 0) ? (
             <ReviewPreview reviews={dueReviews} totalDue={dueCount} />
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
