@@ -63,7 +63,6 @@ import SuperAdminDashboard from '@pages/superadmin/SuperAdminDashboard'
 
 // ── Heavy pages (lazy — loaded on demand) ────────────────────
 const MockInterviewPage = lazy(() => import('@pages/MockInterviewPage'))
-const InterviewSimPage = lazy(() => import('@pages/InterviewSimPage'))
 
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
@@ -232,12 +231,6 @@ export default function App() {
             <Route
               path="mock-interview"
               element={<Lazy><MockInterviewPage /></Lazy>}
-            />
-
-            {/* ── Interview Simulation (lazy) ───────────────────────── */}
-            <Route
-              path="interview-sim"
-              element={<Lazy><InterviewSimPage /></Lazy>}
             />
 
             {/* ── Interview History ─────────────────────────────────── */}

@@ -44,7 +44,6 @@ import teamRoutes from "./routes/team.routes.js";
 import problemRoutes from "./routes/problems.routes.js";
 import solutionRoutes from "./routes/solutions.routes.js";
 import quizRoutes from "./routes/quiz.routes.js";
-import simRoutes from "./routes/sim.routes.js";
 import interviewRoutes from "./routes/interview.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
@@ -155,7 +154,6 @@ function mountRoutes(prefix) {
 
   // ── Practice (team-scoped) ───────────────────────────────
   app.use(`${prefix}/quizzes`, apiLimiter, quizRoutes);
-  app.use(`${prefix}/sim`, apiLimiter, simRoutes);
   app.use(`${prefix}/interview-v2`, apiLimiter, interviewRoutes);
 
   // ── Intelligence (team-scoped) ───────────────────────────
@@ -228,7 +226,6 @@ async function start() {
       console.log(`   ├── /api/v1/problems     (CRUD, team-scoped)`);
       console.log(`   ├── /api/v1/solutions    (submit, review queue)`);
       console.log(`   ├── /api/v1/quizzes      (AI generation, history)`);
-      console.log(`   ├── /api/v1/sim          (timer sessions)`);
       console.log(`   ├── /api/v1/interview-v2 (AI mock interviews)`);
       console.log(`   ├── /api/v1/ai           (review, hints, coaching)`);
       console.log(`   ├── /api/v1/stats        (personal, leaderboard, 6D)`);
