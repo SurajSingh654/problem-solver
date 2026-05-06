@@ -513,7 +513,7 @@ export default function TeamAnalyticsPage() {
                                     { label: 'Solved 1+', value: metrics.funnel.solvedOne, color: 'bg-brand-400' },
                                     { label: 'Solved 3+', value: metrics.funnel.solvedThree, color: 'bg-info' },
                                     { label: 'Used Quiz', value: metrics.funnel.usedQuiz, color: 'bg-warning' },
-                                    { label: 'Mock Interview', value: metrics.funnel.usedSim, color: 'bg-success' },
+                                    { label: 'Mock Interview', value: metrics.interviews.uniqueMembers, color: 'bg-success' },
                                     { label: 'Active 7d', value: metrics.funnel.activeWeekly, color: 'bg-success' },
                                 ].map(step => (
                                     <FunnelBar key={step.label} label={step.label} value={step.value}
@@ -555,7 +555,7 @@ export default function TeamAnalyticsPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {[
                                 { icon: '🧠', label: 'AI Quiz', rate: metrics.quizzes.adoptionRate },
-                                { icon: '⏱️', label: 'Interview Sim', rate: metrics.simulations.adoptionRate },
+                                { icon: '💬', label: 'Mock Interview', rate: Math.round((metrics.interviews.uniqueMembers / Math.max(metrics.users.total, 1)) * 100) },
                                 { icon: '🤖', label: 'AI Review', rate: metrics.solutions.aiReviewRate },
                                 { icon: '🔁', label: 'Spaced Review', rate: metrics.reviews.engagementRate },
                             ].map(f => (

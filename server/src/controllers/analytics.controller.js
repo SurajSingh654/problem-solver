@@ -350,7 +350,7 @@ export async function getProductHealth(req, res) {
       solvedOne: solvedAtLeastOne,
       solvedThree: solvedThreeOrMore,
       usedQuiz: quizMembersCount,
-      usedSim: simMembersCount,
+      usedMockInterview: interviewMembersCount,
       activeWeekly: activeRegular,
     };
 
