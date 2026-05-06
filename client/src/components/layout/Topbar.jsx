@@ -22,8 +22,8 @@ const PAGE_META = {
     '/admin': { title: 'Admin Panel', crumb: 'Admin' },
     '/admin/problems/new': { title: 'Add Problem', crumb: 'Admin' },
     '/settings': { title: 'Settings', crumb: 'Account' },
-    '/docs/readme': { title: 'README', crumb: 'Docs' },
-    '/docs/setup': { title: 'Setup Guide', crumb: 'Docs' },
+    // '/docs/readme': { title: 'README', crumb: 'Docs' },
+    // '/docs/setup': { title: 'Setup Guide', crumb: 'Docs' },
     // SuperAdmin pages
     '/super-admin': { title: 'Platform Dashboard', crumb: 'Platform' },
     '/super-admin/teams': { title: 'All Teams', crumb: 'Platform' },
