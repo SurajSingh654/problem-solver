@@ -1850,3 +1850,86 @@ export async function getShowcaseStats(req, res) {
     return error(res, "Failed to fetch showcase stats.", 500);
   }
 }
+
+// ============================================================================
+// TEAM ACTIVITY FEED
+// ============================================================================
+//
+// Returns the most recent solutions submitted by any team member.
+// Used by the Dashboard activity feed to show team pulse.
+//
+// Design decisions:
+// 1. Capped at 20 items — enough for a meaningful feed, not overwhelming
+// 2. Ordered by createdAt DESC — most recent first
+// 3. Includes problem metadata (title, difficulty, category) for display
+// 4. Includes user info for attribution
+// 5. Only returns solutions from the last 14 days — older activity
+//    is not relevant for the "what's happening now" dashboard signal
+//
+export async function getTeamActivity(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
+    const recentSolutions = await prisma.solution.findMany({
+      where: {
+        teamId,
+        createdAt: { gte: fourteenDaysAgo },
+      },
+      select: {
+        id: true,
+        confidence: true,
+        pattern: true,
+        createdAt: true,
+        userId: true,
+        user: {
+          select: { id: true, name: true, avatarUrl: true },
+        },
+        problem: {
+          select: {
+            id: true,
+            title: true,
+            difficulty: true,
+            category: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+
+    // Shape into activity feed format expected by ActivityFeed component
+    const activities = recentSolutions.map((s) => ({
+      solutionId: s.id,
+      problemId: s.problem?.id,
+      problemTitle: s.problem?.title || "Unknown Problem",
+      difficulty: s.problem?.difficulty || "MEDIUM",
+      category: s.problem?.category || "CODING",
+      username: s.user?.name || "Unknown",
+      avatarColor: s.user?.avatarUrl || "#7c6ff7",
+      confidence: s.confidence || 0,
+      solvedAt: s.createdAt,
+      isOwn: s.userId === userId,
+    }));
+
+    // Summary stats for the activity section header
+    const uniqueContributors = new Set(recentSolutions.map((s) => s.userId))
+      .size;
+    const totalInPeriod = recentSolutions.length;
+
+    return success(res, {
+      activities,
+      meta: {
+        totalInPeriod,
+        uniqueContributors,
+        periodDays: 14,
+      },
+    });
+  } catch (err) {
+    console.error("Team activity error:", err);
+    return error(res, "Failed to fetch team activity.", 500);
+  }
+}
