@@ -90,3 +90,19 @@ export function useTeamActivity() {
     // will still work with a personal team
   });
 }
+
+// NEW: Team analytics data hook
+// Fetches product health scoped to the current team.
+// The backend already handles team-scoping based on req.teamId.
+// Separate from leaderboard — each has its own cache key and stale time.
+export function useTeamAnalytics(period = 30) {
+  const { teamQueryKey } = useTeamContext();
+  return useQuery({
+    queryKey: [...teamQueryKey, "analytics", period],
+    queryFn: async () => {
+      const res = await api.get(`/admin/product-health?period=${period}`);
+      return res.data.data;
+    },
+    staleTime: 1000 * 60 * 5, // 5 min — analytics data doesn't need real-time freshness
+  });
+}
