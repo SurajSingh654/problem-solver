@@ -4,6 +4,7 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_FAST } from "../config/env.js";
+import { recomputeSkillsFromQuiz } from "../services/skillComputation.service.js";
 
 // ============================================================================
 // GENERATE QUIZ — with past-attempt intelligence
@@ -610,6 +611,8 @@ ${wrongAnswers
       where: { id: quizId },
       data: { aiAnalysis: analysis },
     });
+
+    recomputeSkillsFromInterview(sessionId).catch(() => {});
   } catch (err) {
     console.error("Quiz analysis error:", err.message);
   }

@@ -10,6 +10,7 @@ import {
   getShowcaseStats,
   getTeamActivity,
 } from "../controllers/stats.controller.js";
+import { getUserSkillProfile } from '../services/skillComputation.service.js'
 
 const router = Router();
 
@@ -22,5 +23,14 @@ router.get("/showcase", requireTeamContext, getShowcaseStats);
 router.get("/platform", requireSuperAdmin, getPlatformStats);
 // NEW: Team activity feed for dashboard
 router.get("/activity", requireTeamContext, getTeamActivity);
+router.get('/skills', requireTeamContext, async (req, res) => {
+    try {
+        const profiles = await getUserSkillProfile(req.user.id)
+        return success(res, { skills: profiles })
+    } catch (err) {
+        console.error('Get skill profile error:', err)
+        return error(res, 'Failed to fetch skill profile.', 500)
+    }
+})
 
 export default router;

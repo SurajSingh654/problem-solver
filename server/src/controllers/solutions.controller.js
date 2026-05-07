@@ -9,6 +9,9 @@ import {
   confidenceToQuality,
 } from "../utils/sm2.js";
 
+// After the existing embedding generation:
+import { recomputeSkillsFromSolution } from '../services/skillComputation.service.js'
+
 // ============================================================================
 // SUBMIT SOLUTION
 // ============================================================================
@@ -127,6 +130,7 @@ export async function submitSolution(req, res) {
 
     updateStreak(userId).catch(() => {});
     generateSolutionEmbedding(solution.id).catch(() => {});
+    recomputeSkillsFromSolution(solution.id).catch(() => {})
 
     return success(res, { message: "Solution submitted.", solution }, 201);
   } catch (err) {
@@ -511,6 +515,7 @@ export async function updateSolution(req, res) {
 
     if (data.approach || data.code || data.keyInsight) {
       generateSolutionEmbedding(solutionId).catch(() => {});
+      recomputeSkillsFromSolution(solutionId).catch(() => {}) 
     }
 
     return success(res, { message: "Solution updated.", solution });
