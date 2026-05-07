@@ -33,3 +33,75 @@ export const updateFeedbackStatusSchema = z.object({
   ]),
   adminNote: z.string().max(1000).optional().nullable(),
 });
+
+
+
+// ── Export query schema ───────────────────────────────────────
+// Validates the GET /feedback/export query string.
+// All filters optional — no filter means "export everything SuperAdmin can see"
+// which is safe because the route is already SUPER_ADMIN-gated.
+export const exportFeedbackQuerySchema = z.object({
+  format: z.enum(["csv", "json", "markdown"]),
+  ids: z
+    .string()
+    .optional()
+    .transform((v) =>
+      v
+        ? v
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined,
+    ),
+  type: z
+    .string()
+    .optional()
+    .transform((v) =>
+      v
+        ? v
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => ["BUG", "SUGGESTION", "QUESTION"].includes(s))
+        : undefined,
+    ),
+  status: z
+    .string()
+    .optional()
+    .transform((v) =>
+      v
+        ? v
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) =>
+              [
+                "OPEN",
+                "ACKNOWLEDGED",
+                "IN_PROGRESS",
+                "RESOLVED",
+                "WONT_FIX",
+              ].includes(s),
+            )
+        : undefined,
+    ),
+  severity: z
+    .string()
+    .optional()
+    .transform((v) =>
+      v
+        ? v
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(s))
+        : undefined,
+    ),
+  teamId: z.string().optional(),
+  userId: z.string().optional(),
+  from: z
+    .string()
+    .optional()
+    .refine((v) => !v || !isNaN(Date.parse(v)), "Invalid 'from' date"),
+  to: z
+    .string()
+    .optional()
+    .refine((v) => !v || !isNaN(Date.parse(v)), "Invalid 'to' date"),
+});

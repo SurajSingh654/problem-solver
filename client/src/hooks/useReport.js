@@ -106,3 +106,16 @@ export function useTeamAnalytics(period = 30) {
     staleTime: 1000 * 60 * 5, // 5 min — analytics data doesn't need real-time freshness
   });
 }
+
+// NEW: Skill profile hook
+export function useSkillProfile() {
+    const { teamQueryKey } = useTeamContext()
+    return useQuery({
+        queryKey: [...teamQueryKey, 'skills'],
+        queryFn: async () => {
+            const res = await api.get('/stats/skills')
+            return res.data.data.skills || []
+        },
+        staleTime: 1000 * 60 * 5, // 5 min — skill scores change with activity
+    })
+}

@@ -25,6 +25,7 @@ import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { sendFeedbackNotificationEmail } from "../services/email.service.js";
 import { FEEDBACK_NOTIFICATION_EMAIL } from "../config/env.js";
+import { exportFeedbackQuerySchema } from "../schemas/feedback.schema.js";
 
 // ── Severity sort order for admin inbox ───────────────────────
 const SEVERITY_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
@@ -429,4 +430,367 @@ async function getFeedbackSummary() {
   ]);
 
   return { open, acknowledged, inProgress, critical };
+}
+
+// ============================================================================
+// EXPORT FEEDBACK (SUPER_ADMIN only)
+// ============================================================================
+//
+// Streams a downloadable CSV / JSON / Markdown of selected or filtered
+// feedback reports. The Markdown format is structured so it can be pasted
+// directly into any AI assistant with project context and the AI will
+// understand each report well enough to propose or implement a fix.
+//
+// Query params (all optional except format):
+//   format   — csv | json | markdown  (required)
+//   ids      — comma-separated feedback IDs (overrides all filters)
+//   type     — comma-separated: BUG,SUGGESTION,QUESTION
+//   status   — comma-separated: OPEN,ACKNOWLEDGED,IN_PROGRESS,RESOLVED,WONT_FIX
+//   severity — comma-separated: LOW,MEDIUM,HIGH,CRITICAL
+//   teamId   — scope to one team
+//   userId   — scope to one submitter
+//   from / to — ISO dates for createdAt range
+//
+// Hard cap: MAX_EXPORT_ROWS = 5000 to keep memory bounded.
+// Route middleware (requireSuperAdmin) enforces access — re-checked here
+// as defense-in-depth.
+// ============================================================================
+const MAX_EXPORT_ROWS = 5000;
+
+export async function exportFeedback(req, res) {
+  try {
+    // Defense in depth
+    if (req.user?.globalRole !== "SUPER_ADMIN") {
+      return error(res, "Not authorized.", 403, "SUPER_ADMIN_REQUIRED");
+    }
+
+    // Validate query
+    const parsed = exportFeedbackQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return error(
+        res,
+        "Invalid export parameters.",
+        400,
+        "VALIDATION_ERROR",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+
+    const { format, ids, type, status, severity, teamId, userId, from, to } =
+      parsed.data;
+
+    // Build where clause — if ids are given, they win
+    const where = {};
+    if (ids && ids.length > 0) {
+      where.id = { in: ids };
+    } else {
+      if (type?.length) where.type = { in: type };
+      if (status?.length) where.status = { in: status };
+      if (severity?.length) where.severity = { in: severity };
+      if (teamId) where.teamId = teamId;
+      if (userId) where.userId = userId;
+      if (from || to) {
+        where.createdAt = {};
+        if (from) where.createdAt.gte = new Date(from);
+        if (to) where.createdAt.lte = new Date(to);
+      }
+    }
+
+    const reports = await prisma.feedbackReport.findMany({
+      where,
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        team: { select: { id: true, name: true } },
+      },
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+      take: MAX_EXPORT_ROWS,
+    });
+
+    // Audit log
+    console.log(
+      `[Feedback Export] user=${req.user.id} format=${format} ` +
+        `count=${reports.length} ids=${ids?.length || 0} ` +
+        `filters={type:${type?.join("|") || ""},status:${status?.join("|") || ""},` +
+        `severity:${severity?.join("|") || ""},teamId:${teamId || ""},` +
+        `userId:${userId || ""},from:${from || ""},to:${to || ""}}`,
+    );
+
+    if (reports.length === 0) {
+      return error(
+        res,
+        "No feedback reports match the selected filters.",
+        404,
+        "EXPORT_EMPTY",
+      );
+    }
+
+    // Build filename
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 16);
+    const typeSlug =
+      type && type.length === 1 ? type[0].toLowerCase() : "feedback";
+    const ext = format === "csv" ? "csv" : format === "json" ? "json" : "md";
+    const filename = `probsolver-${typeSlug}-${ts}.${ext}`;
+
+    // Build body
+    let body;
+    let contentType;
+    if (format === "csv") {
+      body = buildCsv(reports);
+      contentType = "text/csv; charset=utf-8";
+    } else if (format === "json") {
+      body = JSON.stringify(
+        {
+          exportedAt: new Date().toISOString(),
+          exportedBy: { id: req.user.id, email: req.user.email },
+          count: reports.length,
+          filters: { ids, type, status, severity, teamId, userId, from, to },
+          reports: reports.map(toPlainReport),
+        },
+        null,
+        2,
+      );
+      contentType = "application/json; charset=utf-8";
+    } else {
+      body = buildMarkdown(reports, { exportedBy: req.user.email });
+      contentType = "text/markdown; charset=utf-8";
+    }
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Disposition, X-Export-Count",
+    );
+    res.setHeader("X-Export-Count", String(reports.length));
+    return res.status(200).send(body);
+  } catch (err) {
+    console.error("Export feedback error:", err);
+    return error(res, "Failed to export feedback.", 500);
+  }
+}
+
+// ── Plain object used by JSON format ─────────────────────
+function toPlainReport(r) {
+  return {
+    id: r.id,
+    type: r.type,
+    status: r.status,
+    severity: r.severity,
+    title: r.title,
+    description: r.description,
+    stepsToReproduce: r.stepsToReproduce,
+    affectedArea: r.affectedArea,
+    submitterName: r.user?.name || null,
+    submitterEmail: r.user?.email || null,
+    submitterId: r.userId,
+    teamName: r.team?.name || null,
+    teamId: r.teamId,
+    adminNote: r.adminNote,
+    createdAt: r.createdAt?.toISOString?.() || r.createdAt,
+    updatedAt: r.updatedAt?.toISOString?.() || r.updatedAt,
+    resolvedAt: r.resolvedAt
+      ? r.resolvedAt.toISOString?.() || r.resolvedAt
+      : null,
+  };
+}
+
+// ── CSV builder (RFC 4180) ──────────────────────────────
+function csvEscape(value) {
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+function buildCsv(reports) {
+  const headers = [
+    "id",
+    "type",
+    "status",
+    "severity",
+    "title",
+    "description",
+    "stepsToReproduce",
+    "affectedArea",
+    "submitterName",
+    "submitterEmail",
+    "teamName",
+    "teamId",
+    "adminNote",
+    "createdAt",
+    "updatedAt",
+    "resolvedAt",
+  ];
+
+  // Prefix with UTF-8 BOM so Excel opens it with correct encoding
+  const BOM = "\uFEFF";
+  const lines = [headers.join(",")];
+
+  for (const r of reports) {
+    const row = [
+      r.id,
+      r.type,
+      r.status,
+      r.severity,
+      r.title,
+      r.description,
+      r.stepsToReproduce || "",
+      r.affectedArea || "",
+      r.user?.name || "",
+      r.user?.email || "",
+      r.team?.name || "",
+      r.teamId || "",
+      r.adminNote || "",
+      r.createdAt?.toISOString?.() || r.createdAt || "",
+      r.updatedAt?.toISOString?.() || r.updatedAt || "",
+      r.resolvedAt ? r.resolvedAt.toISOString?.() || r.resolvedAt : "",
+    ];
+    lines.push(row.map(csvEscape).join(","));
+  }
+
+  return BOM + lines.join("\r\n");
+}
+
+// ── Markdown builder — AI-ready format ──────────────────
+// Each report is a self-contained section with all context an AI needs
+// (ProbSolver project context + reproduction steps + submitter) to
+// understand and resolve the issue.
+function buildMarkdown(reports, { exportedBy } = {}) {
+  const byType = { BUG: [], SUGGESTION: [], QUESTION: [] };
+  for (const r of reports) (byType[r.type] || byType.BUG).push(r);
+
+  const now = new Date().toISOString();
+  const out = [];
+
+  // ── Header ──────────────────────────────────────────
+  out.push(`# ProbSolver — Feedback Export`);
+  out.push("");
+  out.push(`> Exported ${now}${exportedBy ? ` by ${exportedBy}` : ""}`);
+  out.push(
+    `> Total: **${reports.length}** — ` +
+      `🐛 ${byType.BUG.length} bugs · ` +
+      `💡 ${byType.SUGGESTION.length} suggestions · ` +
+      `❓ ${byType.QUESTION.length} questions`,
+  );
+  out.push("");
+
+  // ── AI instruction block ───────────────────────────
+  // Gives any downstream AI the context it needs to act on these reports.
+  out.push(`## Instructions for AI assistants`);
+  out.push("");
+  out.push(
+    "These are user-submitted reports for **ProbSolver**, a production interview-preparation platform " +
+      "(React 18 + Vite client, Express + PostgreSQL/pgvector server, Prisma ORM, GPT-4o for AI features). " +
+      "Each report below is self-contained. For bugs, reproduction steps are provided where the submitter " +
+      "included them. Treat every fix as production-grade: proper error handling, edge cases, input validation, " +
+      "and no shortcuts.",
+  );
+  out.push("");
+
+  // ── Table of contents ──────────────────────────────
+  out.push(`## Contents`);
+  out.push("");
+  let idx = 1;
+  for (const t of ["BUG", "SUGGESTION", "QUESTION"]) {
+    if (byType[t].length === 0) continue;
+    const label =
+      t === "BUG" ? "Bugs" : t === "SUGGESTION" ? "Suggestions" : "Questions";
+    out.push(`### ${label} (${byType[t].length})`);
+    for (const r of byType[t]) {
+      out.push(
+        `${idx}. [${r.title}](#${slugify(`${idx}-${r.title}`)}) — \`${r.severity}\` · \`${r.status}\``,
+      );
+      idx++;
+    }
+    out.push("");
+  }
+
+  // ── Individual reports ─────────────────────────────
+  idx = 1;
+  for (const t of ["BUG", "SUGGESTION", "QUESTION"]) {
+    if (byType[t].length === 0) continue;
+    const header =
+      t === "BUG"
+        ? "🐛 Bugs"
+        : t === "SUGGESTION"
+          ? "💡 Suggestions"
+          : "❓ Questions";
+    out.push("---");
+    out.push("");
+    out.push(`# ${header}`);
+    out.push("");
+
+    for (const r of byType[t]) {
+      const anchor = slugify(`${idx}-${r.title}`);
+      out.push(`<a id="${anchor}"></a>`);
+      out.push(`## ${idx}. ${r.title}`);
+      out.push("");
+
+      // Metadata table — compact, scannable
+      out.push(`| | |`);
+      out.push(`|---|---|`);
+      out.push(`| **ID** | \`${r.id}\` |`);
+      out.push(`| **Type** | ${r.type} |`);
+      out.push(`| **Status** | ${r.status} |`);
+      out.push(`| **Severity** | ${r.severity} |`);
+      if (r.affectedArea) out.push(`| **Affected Area** | ${r.affectedArea} |`);
+      out.push(
+        `| **Submitter** | ${escapeMd(r.user?.name || "—")} (${r.user?.email || "—"}) |`,
+      );
+      if (r.team?.name) out.push(`| **Team** | ${escapeMd(r.team.name)} |`);
+      out.push(`| **Created** | ${toIso(r.createdAt)} |`);
+      if (r.resolvedAt) out.push(`| **Resolved** | ${toIso(r.resolvedAt)} |`);
+      out.push("");
+
+      // Description
+      out.push(`### Description`);
+      out.push("");
+      out.push(r.description || "_(no description provided)_");
+      out.push("");
+
+      // Bug-specific: repro steps
+      if (r.type === "BUG" && r.stepsToReproduce) {
+        out.push(`### Steps to Reproduce`);
+        out.push("");
+        out.push("```");
+        out.push(r.stepsToReproduce);
+        out.push("```");
+        out.push("");
+      }
+
+      // Admin note if any
+      if (r.adminNote) {
+        out.push(`### Admin Note`);
+        out.push("");
+        out.push(`> ${r.adminNote.split("\n").join("\n> ")}`);
+        out.push("");
+      }
+
+      idx++;
+    }
+  }
+
+  return out.join("\n");
+}
+
+// ── Markdown helpers ─────────────────────────────────
+function escapeMd(s) {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/\|/g, "\\|");
+}
+
+function toIso(d) {
+  if (!d) return "";
+  if (typeof d === "string") return d;
+  return d.toISOString?.() || String(d);
+}
+
+function slugify(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }

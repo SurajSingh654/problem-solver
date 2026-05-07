@@ -56,7 +56,7 @@ import platformRoutes from "./routes/platform.routes.js";
 import { setupWebSocket } from "./services/websocket.service.js";
 
 // ── Feedback routes ───────────────────────────────────────────────
-import feedbackRoutes from './routes/feedback.routes.js'
+import feedbackRoutes from "./routes/feedback.routes.js";
 
 // ============================================================================
 // APP SETUP
@@ -84,6 +84,7 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Team-Id"],
+    exposedHeaders: ["Content-Disposition", "X-Export-Count"],
   }),
 );
 
@@ -167,11 +168,8 @@ function mountRoutes(prefix) {
   // ── Users ────────────────────────────────────────────────
   app.use(`${prefix}/users`, apiLimiter, userRoutes);
 
-
-
-
-// alongside the other route registrations:
-app.use(`${prefix}/feedback`, feedbackRoutes)
+  // alongside the other route registrations:
+  app.use(`${prefix}/feedback`, feedbackRoutes);
 }
 
 // Canonical versioned routes

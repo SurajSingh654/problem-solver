@@ -9,11 +9,14 @@ import {
     updateFeedbackStatus,
     getFeedback,
     getSimilarReports,
+    exportFeedback,
 } from '../controllers/feedback.controller.js'
 import {
     createFeedbackSchema,
     updateFeedbackStatusSchema,
 } from '../schemas/feedback.schema.js'
+
+import { exportLimiter } from '../middleware/rateLimit.middleware.js'
 
 const router = Router()
 
@@ -39,6 +42,16 @@ router.get(
     '/',
     optionalTeamContext,
     listFeedback
+)
+
+// Export feedback — SUPER_ADMIN only
+// MUST be declared before /:feedbackId so Express does not treat
+// "export" as a feedbackId parameter.
+router.get(
+    '/export',
+    requireSuperAdmin,
+    exportLimiter,
+    exportFeedback
 )
 
 // Get single report

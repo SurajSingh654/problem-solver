@@ -1,13 +1,14 @@
 // ============================================================================
-// ProbSolver v3.0 — Feedback Page (Member Submission)
+// ProbSolver v3.0 — Feedback Page (Member Submission + SuperAdmin Export)
 // ============================================================================
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSubmitFeedback, useFeedbackList, useSimilarFeedback } from '@hooks/useFeedback'
+import { useSubmitFeedback, useFeedbackList, useSimilarFeedback, useExportFeedback } from '@hooks/useFeedback'
 import { Button } from '@components/ui/Button'
-import { Input } from '@components/ui/Input'
 import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
+import useAuthStore from '@store/useAuthStore'
+import FeedbackExportBar from '@components/features/feedback/FeedbackExportBar'
 
 const TYPES = [
     {
@@ -83,12 +84,8 @@ function StatusBadge({ status }) {
 }
 
 // ── Similar reports panel ──────────────────────────────
-// Shown inline while the user is composing their report.
-// Surfaces open reports that may already describe the same issue.
-// Never blocks submission — always gives the user a choice.
 function SimilarReportsPanel({ similar, onDismiss }) {
     if (!similar || similar.length === 0) return null
-
     return (
         <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -121,7 +118,6 @@ function SimilarReportsPanel({ similar, onDismiss }) {
                     </svg>
                 </button>
             </div>
-
             <div className="space-y-2.5">
                 {similar.map(report => {
                     const t = TYPE_CONFIG[report.type] || TYPE_CONFIG.BUG
@@ -163,7 +159,6 @@ function SimilarReportsPanel({ similar, onDismiss }) {
                     )
                 })}
             </div>
-
             <p className="text-[11px] text-text-disabled mt-3 pt-3 border-t border-border-subtle">
                 If your issue is different from the above, go ahead and submit — your report is still valuable.
             </p>
@@ -171,12 +166,14 @@ function SimilarReportsPanel({ similar, onDismiss }) {
     )
 }
 
-// ── All reports list (visible to all members) ──────────
-// UPDATED: was "My Reports" showing only the user's own reports.
-// Now shows all reports from the team so everyone knows what's been raised.
+// ── All reports list with SuperAdmin selection + export ──────────
 function AllReports() {
+    const { user } = useAuthStore()
+    const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
+
     const [statusFilter, setStatusFilter] = useState('')
     const [typeFilter, setTypeFilter] = useState('')
+    const [selectedIds, setSelectedIds] = useState(new Set())
 
     const { data, isLoading } = useFeedbackList({
         status: statusFilter || undefined,
@@ -184,9 +181,62 @@ function AllReports() {
     })
 
     const reports = data?.reports || []
+    const total = data?.pagination?.total || reports.length
+
+    // ── Selection handlers ──────────────────────────────
+    function toggleSelect(id) {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    function toggleSelectAll() {
+        if (reports.length === 0) return
+        const allOnPageSelected = reports.every(r => selectedIds.has(r.id))
+        if (allOnPageSelected) {
+            // Deselect all on current page
+            setSelectedIds(prev => {
+                const next = new Set(prev)
+                reports.forEach(r => next.delete(r.id))
+                return next
+            })
+        } else {
+            // Select all on current page
+            setSelectedIds(prev => {
+                const next = new Set(prev)
+                reports.forEach(r => next.add(r.id))
+                return next
+            })
+        }
+    }
+
+    function clearSelection() {
+        setSelectedIds(new Set())
+    }
+
+    const allOnPageSelected = reports.length > 0 && reports.every(r => selectedIds.has(r.id))
+    const someOnPageSelected = reports.some(r => selectedIds.has(r.id))
+
+    // Build filters object for export bar
+    const activeFilters = {}
+    if (typeFilter) activeFilters.type = typeFilter
+    if (statusFilter) activeFilters.status = statusFilter
 
     return (
         <div className="space-y-4">
+            {/* SuperAdmin export bar */}
+            {isSuperAdmin && (
+                <FeedbackExportBar
+                    selectedIds={Array.from(selectedIds)}
+                    totalCount={total}
+                    filters={activeFilters}
+                    onClearSelection={clearSelection}
+                />
+            )}
+
             {/* Filter row */}
             <div className="flex flex-wrap gap-2">
                 <div className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1">
@@ -233,7 +283,7 @@ function AllReports() {
                 </div>
             </div>
 
-            {/* Reports */}
+            {/* Reports list */}
             {isLoading ? (
                 <div className="text-center py-8">
                     <p className="text-xs text-text-disabled">Loading reports...</p>
@@ -249,18 +299,61 @@ function AllReports() {
                 </div>
             ) : (
                 <div className="space-y-3">
+                    {/* Select all header — SuperAdmin only */}
+                    {isSuperAdmin && (
+                        <div className="flex items-center gap-3 px-4 py-2 bg-surface-2/50 border border-border-subtle rounded-xl">
+                            <input
+                                type="checkbox"
+                                checked={allOnPageSelected}
+                                ref={el => {
+                                    if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected
+                                }}
+                                onChange={toggleSelectAll}
+                                className="w-4 h-4 rounded border-border-strong text-brand-400
+                                           focus:ring-brand-400/30 focus:ring-2 cursor-pointer
+                                           bg-surface-3 accent-brand-400"
+                                aria-label="Select all reports on this page"
+                            />
+                            <span className="text-xs text-text-tertiary">
+                                {allOnPageSelected
+                                    ? `All ${reports.length} on this page selected`
+                                    : someOnPageSelected
+                                        ? `${selectedIds.size} selected`
+                                        : `Select all on this page (${reports.length})`}
+                            </span>
+                        </div>
+                    )}
+
                     {reports.map((report, i) => {
                         const t = TYPE_CONFIG[report.type] || TYPE_CONFIG.BUG
+                        const isSelected = selectedIds.has(report.id)
                         return (
                             <motion.div
                                 key={report.id}
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.04 }}
-                                className="bg-surface-2 border border-border-default rounded-xl p-4"
+                                className={cn(
+                                    'bg-surface-2 border rounded-xl p-4 transition-colors',
+                                    isSelected
+                                        ? 'border-brand-400/40 bg-brand-400/5'
+                                        : 'border-border-default'
+                                )}
                             >
                                 <div className="flex items-start justify-between gap-3 mb-2">
                                     <div className="flex items-start gap-2 flex-1 min-w-0">
+                                        {/* Checkbox — SuperAdmin only */}
+                                        {isSuperAdmin && (
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleSelect(report.id)}
+                                                className="w-4 h-4 rounded border-border-strong text-brand-400
+                                                           focus:ring-brand-400/30 focus:ring-2 cursor-pointer
+                                                           bg-surface-3 accent-brand-400 mt-0.5 flex-shrink-0"
+                                                aria-label={`Select report: ${report.title}`}
+                                            />
+                                        )}
                                         <span className="text-base flex-shrink-0 mt-0.5">{t.icon}</span>
                                         <div className="min-w-0">
                                             <p className="text-sm font-semibold text-text-primary truncate">
@@ -283,12 +376,17 @@ function AllReports() {
                                     </div>
                                     <StatusBadge status={report.status} />
                                 </div>
-                                <p className="text-xs text-text-tertiary leading-relaxed line-clamp-2 ml-6">
+                                <p className={cn(
+                                    'text-xs text-text-tertiary leading-relaxed line-clamp-2',
+                                    isSuperAdmin ? 'ml-12' : 'ml-6'
+                                )}>
                                     {report.description}
                                 </p>
-                                {/* Admin note — shown to all if present */}
                                 {report.adminNote && (
-                                    <div className="mt-3 pt-3 border-t border-border-subtle ml-6">
+                                    <div className={cn(
+                                        'mt-3 pt-3 border-t border-border-subtle',
+                                        isSuperAdmin ? 'ml-12' : 'ml-6'
+                                    )}>
                                         <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
                                             Admin Response
                                         </p>
@@ -311,7 +409,6 @@ function AllReports() {
 // ══════════════════════════════════════════════════════
 export default function FeedbackPage() {
     const submitFeedback = useSubmitFeedback()
-
     const [type, setType] = useState('BUG')
     const [title, setTitle] = useState('')
     const [description, setDescription] = useState('')
@@ -322,7 +419,6 @@ export default function FeedbackPage() {
     const [activeTab, setActiveTab] = useState('submit')
     const [dismissedSimilar, setDismissedSimilar] = useState(false)
 
-    // Debounced title for similarity check
     const [debouncedTitle, setDebouncedTitle] = useState('')
     const debounceRef = useRef(null)
 
@@ -330,13 +426,11 @@ export default function FeedbackPage() {
         if (debounceRef.current) clearTimeout(debounceRef.current)
         debounceRef.current = setTimeout(() => {
             setDebouncedTitle(title)
-            // Reset dismissed state when title changes significantly
             if (title.trim().length < 5) setDismissedSimilar(false)
         }, 600)
         return () => clearTimeout(debounceRef.current)
     }, [title])
 
-    // Reset dismissed when title changes meaningfully
     useEffect(() => {
         setDismissedSimilar(false)
     }, [debouncedTitle])
@@ -390,12 +484,11 @@ export default function FeedbackPage() {
                 </p>
             </div>
 
-            {/* Tabs — UPDATED: "My Reports" → "All Reports" */}
+            {/* Tabs */}
             <div className="flex gap-1 bg-surface-2 border border-border-default
                             rounded-xl p-1 mb-6">
                 {[
                     { id: 'submit', label: 'Submit Report', icon: '📝' },
-                    // UPDATED: was "My Reports" — now "All Reports" since members see everything
                     { id: 'all', label: 'All Reports', icon: '📋' },
                 ].map(tab => (
                     <button
@@ -417,7 +510,6 @@ export default function FeedbackPage() {
 
             {activeTab === 'submit' ? (
                 <div className="space-y-5">
-                    {/* Success banner */}
                     {submitted && (
                         <motion.div
                             initial={{ opacity: 0, y: -8 }}
@@ -487,7 +579,6 @@ export default function FeedbackPage() {
 
                         {/* Main fields */}
                         <div className="bg-surface-1 border border-border-default rounded-2xl p-5 space-y-4">
-                            {/* Title — similar detection fires here */}
                             <div>
                                 <label className="block text-sm font-semibold text-text-primary mb-1.5">
                                     Title
@@ -512,7 +603,6 @@ export default function FeedbackPage() {
                                 />
                             </div>
 
-                            {/* SIMILAR REPORTS PANEL — shown inline after title input */}
                             <AnimatePresence>
                                 {showSimilarPanel && (
                                     <SimilarReportsPanel
@@ -522,7 +612,6 @@ export default function FeedbackPage() {
                                 )}
                             </AnimatePresence>
 
-                            {/* Description */}
                             <div>
                                 <label className="block text-sm font-semibold text-text-primary mb-1.5">
                                     Description
@@ -547,7 +636,6 @@ export default function FeedbackPage() {
                                 />
                             </div>
 
-                            {/* Affected area */}
                             <div>
                                 <label className="block text-sm font-semibold text-text-primary mb-1.5">
                                     Affected Area
@@ -668,7 +756,6 @@ export default function FeedbackPage() {
                     </form>
                 </div>
             ) : (
-                // UPDATED: was MyReports() — now AllReports() with full team visibility
                 <AllReports />
             )}
         </div>
