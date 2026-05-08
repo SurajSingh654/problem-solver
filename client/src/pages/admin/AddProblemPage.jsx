@@ -13,6 +13,7 @@ import { Spinner } from '@components/ui/Spinner'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import api from '@services/api'
+import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { PROBLEM_CATEGORIES, CATEGORY_GENERATION_CONFIG, HR_STAKES } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
@@ -152,26 +153,24 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                             {problem.description && (
                                 <div>
                                     <p className="text-[10px] font-bold text-text-disabled uppercase
-                                   tracking-widest mb-1">Description</p>
-                                    <p className="text-xs text-text-secondary leading-relaxed
-                                   whitespace-pre-wrap">{problem.description}</p>
+           tracking-widest mb-1">Description</p>
+                                    <MarkdownRenderer content={problem.description} size="sm" />
                                 </div>
                             )}
                             {problem.realWorldContext && (
                                 <div>
                                     <p className="text-[10px] font-bold text-text-disabled uppercase
-                                   tracking-widest mb-1">Real World Context</p>
-                                    <p className="text-xs text-text-tertiary leading-relaxed">
-                                        {problem.realWorldContext}
-                                    </p>
+           tracking-widest mb-1">Real World Context</p>
+                                    <MarkdownRenderer content={problem.realWorldContext} size="sm"
+                                        className="text-text-tertiary" />
                                 </div>
                             )}
                             {adminNotesDisplay && (
                                 <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
                                     <p className="text-[10px] font-bold text-warning uppercase
-                                   tracking-widest mb-1">Teaching Notes</p>
-                                    <p className="text-xs text-text-tertiary leading-relaxed
-                                   whitespace-pre-wrap">{adminNotesDisplay}</p>
+           tracking-widest mb-1">Teaching Notes</p>
+                                    <MarkdownRenderer content={adminNotesDisplay} size="sm"
+                                        className="text-text-tertiary" />
                                 </div>
                             )}
                             {problem.followUpQuestions?.length > 0 && (

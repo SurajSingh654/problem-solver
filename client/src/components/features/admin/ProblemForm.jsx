@@ -11,6 +11,7 @@ import { ChipInput } from '@components/ui/ChipInput'
 import { Input } from '@components/ui/Input'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
+import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { useGenerateContent, useAIStatus } from '@hooks/useAI'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
@@ -36,7 +37,6 @@ const CATEGORY_FIELD_CONFIG = {
     BEHAVIORAL: { showUrl: false, showDifficulty: false, showCompanyTags: true, showUseCases: false, showAlgoTags: false, showFollowUps: true, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
     CS_FUNDAMENTALS: { showUrl: false, showDifficulty: true, showCompanyTags: false, showUseCases: true, showAlgoTags: true, showFollowUps: true, showRealWorld: true, tagLabel: 'Topic Tags', tagPlaceholder: 'e.g. Virtual Memory, TCP, Indexing…' },
     HR: { showUrl: false, showDifficulty: false, showCompanyTags: false, showUseCases: false, showAlgoTags: false, showFollowUps: false, showRealWorld: false, tagLabel: '', tagPlaceholder: '' },
-    // Replace the existing SQL entry
     SQL: {
         showUrl: true,
         showDifficulty: true,
@@ -45,7 +45,7 @@ const CATEGORY_FIELD_CONFIG = {
         showAlgoTags: true,
         showFollowUps: true,
         showRealWorld: true,
-        isDatabase: true,  // ← new flag
+        isDatabase: true,
         tagLabel: 'Query / Design Patterns',
         tagPlaceholder: 'e.g. JOIN, Window Function, CTE, Schema Design, Indexing…',
     },
@@ -58,7 +58,6 @@ const CATEGORY_DESCRIPTION_CONFIG = {
     BEHAVIORAL: { label: 'Question & Context', placeholder: 'Write the behavioral question and add context:\n• What is the interviewer really assessing?\n• What makes a strong answer?', hint: 'Help members understand what a great answer looks like.', required: true, rows: 6 },
     CS_FUNDAMENTALS: { label: 'Topic Description', placeholder: 'Describe the topic and expected depth:\n• Core concept to explain\n• Sub-topics to cover\n• Common misconceptions to address', hint: 'Guide members on how deep they should go.', required: true, rows: 6 },
     HR: { label: 'Question & Guidance', placeholder: 'Write the HR question and add guidance:\n• What is the interviewer really asking?\n• Tips for an authentic answer', hint: 'Help members prepare thoughtful, specific responses.', required: true, rows: 6 },
-    // Replace the existing SQL entry
     SQL: {
         label: 'Problem Statement & Schema',
         placeholder:
@@ -125,6 +124,77 @@ function FormSection({ title, icon, children }) {
     )
 }
 
+// ── Textarea with integrated Markdown preview toggle ───────────
+// When content exists, shows a Write/Preview toggle so admins can
+// see how AI-generated Markdown will render to members.
+function MarkdownTextarea({ label, optional, hint, rows = 3, value, ...props }) {
+    const [showPreview, setShowPreview] = useState(false)
+    const hasContent = Boolean(value)
+
+    return (
+        <div>
+            {label && (
+                <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-semibold text-text-primary">
+                        {label}
+                        {optional && (
+                            <span className="ml-1.5 text-xs font-normal text-text-disabled">optional</span>
+                        )}
+                    </label>
+                    {hasContent && (
+                        <div className="flex gap-1 bg-surface-2 border border-border-default rounded-lg p-0.5">
+                            <button
+                                type="button"
+                                onClick={() => setShowPreview(false)}
+                                className={cn(
+                                    'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
+                                    !showPreview
+                                        ? 'bg-brand-400/15 text-brand-300'
+                                        : 'text-text-tertiary hover:text-text-primary'
+                                )}
+                            >
+                                Write
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowPreview(true)}
+                                className={cn(
+                                    'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
+                                    showPreview
+                                        ? 'bg-brand-400/15 text-brand-300'
+                                        : 'text-text-tertiary hover:text-text-primary'
+                                )}
+                            >
+                                Preview
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+            {hint && <p className="text-xs text-text-tertiary mb-2">{hint}</p>}
+
+            {showPreview && hasContent ? (
+                <div className="w-full bg-surface-3 border border-border-strong rounded-xl
+                               px-3.5 py-2.5 min-h-[80px]">
+                    <MarkdownRenderer content={value} size="sm" />
+                </div>
+            ) : (
+                <textarea
+                    rows={rows}
+                    value={value}
+                    className="w-full bg-surface-3 border border-border-strong rounded-xl
+                               text-sm text-text-primary placeholder:text-text-tertiary
+                               px-3.5 py-2.5 outline-none resize-none
+                               focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                               transition-all duration-150"
+                    {...props}
+                />
+            )}
+        </div>
+    )
+}
+
+// ── Plain textarea (no preview needed) ─────────────────────────
 function Textarea({ label, optional, hint, rows = 3, ...props }) {
     return (
         <div>
@@ -157,9 +227,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
         resolver: zodResolver(schema),
         defaultValues: {
             title: initialData?.title || '',
-            // AFTER — platform is now in categoryData.platform
             source: initialData?.categoryData?.platform || 'OTHER',
-            // FIX 2: sourceUrl lives inside categoryData, not top-level
             sourceUrl: initialData?.categoryData?.sourceUrl || '',
             difficulty: initialData?.difficulty || 'MEDIUM',
             category: initialData?.category || 'CODING',
@@ -171,7 +239,6 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
 
     // Uncontrolled state
     const [tags, setTags] = useState(initialData?.tags || [])
-    // FIX 3: companyTags lives inside categoryData, not top-level
     const [companyTags, setCompanyTags] = useState(
         initialData?.categoryData?.companyTags ||
         initialData?.companyTags ||
@@ -188,7 +255,6 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     )
     const [isPinned, setIsPinned] = useState(initialData?.isPinned || false)
     const [isBlindChallenge, setIsBlindChallenge] = useState(initialData?.isBlindChallenge || false)
-
     const [dbProblemType, setDbProblemType] = useState(
         initialData?.categoryData?.problemType || 'QUERY'
     )
@@ -200,12 +266,14 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const selectedSource = watch('source')
     const selectedDifficulty = watch('difficulty')
     const selectedCategory = watch('category')
+    const descriptionValue = watch('description')
+    const realWorldContextValue = watch('realWorldContext')
+    const adminNotesValue = watch('adminNotes')
 
     const fieldConfig = CATEGORY_FIELD_CONFIG[selectedCategory] || CATEGORY_FIELD_CONFIG.CODING
     const descConfig = CATEGORY_DESCRIPTION_CONFIG[selectedCategory] || CATEGORY_DESCRIPTION_CONFIG.CODING
     const patternSuggestions = PATTERNS.map(p => p.label)
 
-    // AFTER — source from form goes to categoryData.platform, not DB source column
     function onFormSubmit(data) {
         const { sourceUrl, source, ...rest } = data
         onSubmit({
@@ -216,7 +284,6 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                 sourceUrl: sourceUrl || '',
                 companyTags: fieldConfig.showCompanyTags ? companyTags : [],
                 platform: source || 'OTHER',
-                // Database: store problem type so workspace knows what to render
                 ...(data.category === 'SQL' ? { problemType: dbProblemType } : {}),
             },
             tags,
@@ -325,31 +392,16 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     {...register('title')}
                 />
 
-                {/* Description — category-aware */}
-                <div>
-                    <label className="block text-sm font-semibold text-text-primary mb-1.5">
-                        {descConfig.label}
-                        {descConfig.required && (
-                            <span className="ml-1 text-danger text-xs">*</span>
-                        )}
-                        {!descConfig.required && (
-                            <span className="ml-1.5 text-xs font-normal text-text-disabled">
-                                optional
-                            </span>
-                        )}
-                    </label>
-                    <p className="text-xs text-text-tertiary mb-2">{descConfig.hint}</p>
-                    <textarea
-                        rows={descConfig.rows}
-                        placeholder={descConfig.placeholder}
-                        className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                   text-sm text-text-primary placeholder:text-text-tertiary
-                                   px-3.5 py-2.5 outline-none resize-y
-                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                                   transition-all duration-150"
-                        {...register('description')}
-                    />
-                </div>
+                {/* Description — category-aware with Markdown preview */}
+                <MarkdownTextarea
+                    label={descConfig.label}
+                    optional={!descConfig.required}
+                    hint={descConfig.hint}
+                    rows={descConfig.rows}
+                    placeholder={descConfig.placeholder}
+                    value={descriptionValue}
+                    {...register('description')}
+                />
 
                 {/* Source Platform */}
                 <div>
@@ -477,15 +529,18 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                     const source = watch('source')
                                     const sourceUrl = watch('sourceUrl')
                                     const difficulty = watch('difficulty')
+
                                     if (!title) {
                                         toast.warning('Enter a problem title first')
                                         return
                                     }
+
                                     const hasExisting =
                                         watch('realWorldContext') ||
                                         watch('adminNotes') ||
                                         useCases.length > 0 ||
                                         followUps.length > 0
+
                                     if (hasExisting) {
                                         const confirmed = window.confirm(
                                             'AI-generated content will replace your current entries for:\n\n' +
@@ -494,15 +549,23 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                         )
                                         if (!confirmed) return
                                     }
+
                                     try {
                                         const res = await aiGenerate.mutateAsync({
                                             title, source, sourceUrl, difficulty, tags,
                                             category: watch('category'),
                                         })
                                         const content = res.data.data.content
+
                                         if (content.description) setValue('description', content.description)
                                         if (content.realWorldContext) setValue('realWorldContext', content.realWorldContext)
-                                        if (content.adminNotes) setValue('adminNotes', content.adminNotes)
+                                        if (content.adminNotes) {
+                                            // Normalize: AI sometimes returns adminNotes as object
+                                            const notes = typeof content.adminNotes === 'object'
+                                                ? Object.values(content.adminNotes).join('\n\n')
+                                                : content.adminNotes
+                                            setValue('adminNotes', notes)
+                                        }
                                         if (content.useCases) {
                                             const cases = typeof content.useCases === 'string'
                                                 ? content.useCases.split('\n').filter(Boolean).map(s => s.replace(/^\d+\.\s*/, '').trim())
@@ -540,12 +603,13 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                 )}
 
                 {fieldConfig.showRealWorld && (
-                    <Textarea
+                    <MarkdownTextarea
                         label="Real World Context"
                         optional
-                        hint="Where does this problem pattern appear in real software?"
+                        hint="Where does this problem pattern appear in real software? Supports Markdown."
                         placeholder="e.g. Hash maps are used in database indexing to achieve O(1) lookups…"
                         rows={3}
+                        value={realWorldContextValue}
                         {...register('realWorldContext')}
                     />
                 )}
@@ -561,12 +625,13 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     />
                 )}
 
-                <Textarea
-                    label="Admin Notes"
+                <MarkdownTextarea
+                    label="Admin Notes (Teaching Notes)"
                     optional
-                    hint="Internal notes visible only to admins"
+                    hint="Internal notes for admins — teaching points, common mistakes, review guidance. Supports Markdown."
                     placeholder="Teaching notes, common mistakes, hints for review…"
-                    rows={2}
+                    rows={3}
+                    value={adminNotesValue}
                     {...register('adminNotes')}
                 />
             </FormSection>

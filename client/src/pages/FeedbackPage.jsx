@@ -9,6 +9,7 @@ import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import useAuthStore from '@store/useAuthStore'
 import FeedbackExportBar from '@components/features/feedback/FeedbackExportBar'
+import { RichTextEditor } from '@components/ui/RichTextEditor'
 
 const TYPES = [
     {
@@ -704,31 +705,15 @@ export default function FeedbackPage() {
                                         ))}
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-text-primary mb-1.5">
-                                        Steps to Reproduce
-                                        <span className="ml-1.5 text-xs font-normal text-text-disabled">
-                                            optional but very helpful
-                                        </span>
-                                    </label>
-                                    <textarea
-                                        rows={4}
-                                        value={stepsToReproduce}
-                                        onChange={e => setStepsToReproduce(e.target.value)}
-                                        placeholder={
-                                            '1. Go to Problems page\n' +
-                                            '2. Click on any Behavioral problem\n' +
-                                            '3. Fill in the STAR workspace\n' +
-                                            '4. Click Submit\n' +
-                                            '5. Error appears: [describe error]'
-                                        }
-                                        className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                                   text-sm text-text-primary placeholder:text-text-disabled
-                                                   font-mono text-xs
-                                                   px-3.5 py-2.5 outline-none resize-y
-                                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                                    />
-                                </div>
+                                <RichTextEditor
+                                    label="Steps to Reproduce"
+                                    optional
+                                    hint="Use numbered lists for clear reproduction steps"
+                                    content={stepsToReproduce}
+                                    onChange={setStepsToReproduce}
+                                    placeholder="1. Go to the page&#10;2. Click the button&#10;3. Observe the error"
+                                    minHeight="100px"
+                                />
                             </motion.div>
                         )}
 

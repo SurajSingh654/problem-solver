@@ -188,10 +188,11 @@ function ReportCard({ report, isSelected, onToggleSelect }) {
                                 <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">
                                     Steps to Reproduce
                                 </p>
-                                <pre className="text-xs text-text-secondary bg-surface-0 border border-border-default
-                                                rounded-lg p-3 whitespace-pre-wrap leading-relaxed">
-                                    {report.stepsToReproduce}
-                                </pre>
+                                <div
+                                    className="text-xs text-text-secondary bg-surface-0 border border-border-default
+                       rounded-lg p-3 leading-relaxed prose-content"
+                                    dangerouslySetInnerHTML={{ __html: report.stepsToReproduce }}
+                                />
                             </div>
                         )}
                         <div className="pt-3 border-t border-border-subtle">
