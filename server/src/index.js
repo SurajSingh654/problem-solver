@@ -58,6 +58,8 @@ import { setupWebSocket } from "./services/websocket.service.js";
 // ── Feedback routes ───────────────────────────────────────────────
 import feedbackRoutes from "./routes/feedback.routes.js";
 
+import designStudioRoutes from "./routes/designStudio.routes.js";
+
 // ============================================================================
 // APP SETUP
 // ============================================================================
@@ -170,6 +172,9 @@ function mountRoutes(prefix) {
 
   // alongside the other route registrations:
   app.use(`${prefix}/feedback`, feedbackRoutes);
+
+  // ── Design Studio (self-paced design practice) ─────────
+  app.use(`${prefix}/design-studio`, apiLimiter, designStudioRoutes);
 }
 
 // Canonical versioned routes
