@@ -57,6 +57,7 @@ export default function Sidebar() {
             { to: '/review', icon: '🧠', label: 'Review Queue' },
             { to: '/quizzes', icon: '🧩', label: 'Quizzes' },
             { to: '/mock-interview', icon: '💬', label: 'Mock Interview' },
+            { to: '/design-studio', icon: '🏗️', label: 'Design Studio' },
             { to: '/interview-history', icon: '📜', label: 'Interview History' },
             { to: '/report', icon: '📈', label: 'Intelligence Report' },
             { to: '/feedback', icon: '🐛', label: 'Feedback & Issues' },

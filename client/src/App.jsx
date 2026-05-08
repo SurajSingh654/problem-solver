@@ -21,18 +21,15 @@
 //    provides a loading fallback while chunks download.
 //
 // ============================================================================
-
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-
 // ── Layout ───────────────────────────────────────────────────
 import { AppShell } from '@components/layout/AppShell'
 import ProtectedRoute from '@components/layout/ProtectedRoute'
 import { Spinner } from '@components/ui/Spinner'
 import { ToastContainer } from '@components/ui/Toast'
 import useAuthStore from '@store/useAuthStore'
-
 // ── Auth pages (always eager — small bundle) ─────────────────
 import Login from '@pages/auth/Login'
 import Register from '@pages/auth/Register'
@@ -40,10 +37,8 @@ import VerifyEmailPage from '@pages/auth/VerifyEmailPage'
 import ForgotPasswordPage from '@pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
 import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
-
 // ── Onboarding (eager — first thing new users see) ───────────
 import OnboardingPage from '@pages/OnboardingPage'
-
 // ── Core pages (eager — frequently accessed) ─────────────────
 import Dashboard from '@pages/Dashboard'
 import LeaderboardPage from '@pages/LeaderboardPage'
@@ -53,24 +48,20 @@ import QuizPage from '@pages/QuizPage'
 import ProfilePage from '@pages/ProfilePage'
 import SettingsPage from '@pages/SettingsPage'
 import InterviewHistoryPage from '@pages/InterviewHistoryPage'
-
 // ── Team pages (eager — critical for onboarding flow) ────────
 import TeamManagePage from '@pages/team/TeamManagePage'
 import TeamPendingPage from '@pages/team/TeamPendingPage'
-
 // ── Super Admin (eager — only loaded for SUPER_ADMIN) ────────
 import SuperAdminDashboard from '@pages/superadmin/SuperAdminDashboard'
-
 // ── Heavy pages (lazy — loaded on demand) ────────────────────
 const MockInterviewPage = lazy(() => import('@pages/MockInterviewPage'))
-
+const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
 const AddProblemPage = lazy(() => import('@pages/admin/AddProblemPage'))
 const EditProblemPage = lazy(() => import('@pages/admin/EditProblemPage'))
 const ProductHealthPage = lazy(() => import('@pages/admin/ProductHealthPage'))
 const ShowcasePage = lazy(() => import('@pages/admin/showcase/ShowcasePage'))
-
 // ── Docs (lazy — rarely accessed) ────────────────────────────
 const ReadmePage = lazy(() => import('@pages/docs/ReadmePage'))
 const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
@@ -86,11 +77,9 @@ const TodoPage = lazy(() => import('@pages/superadmin/TodoPage'))
 const FeedbackPage = lazy(() => import('@pages/FeedbackPage'))
 const FeedbackInboxPage = lazy(() => import('@pages/superadmin/FeedbackInboxPage'))
 
-
 // ============================================================================
 // QUERY CLIENT
 // ============================================================================
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -101,11 +90,9 @@ const queryClient = new QueryClient({
     },
   },
 })
-
 // ============================================================================
 // SUSPENSE FALLBACK
 // ============================================================================
-
 function PageLoader() {
   return (
     <div className="flex items-center justify-center h-[60vh]">
@@ -116,12 +103,10 @@ function PageLoader() {
     </div>
   )
 }
-
 // Wraps lazy-loaded routes in Suspense
 function Lazy({ children }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>
 }
-
 // ── Catch-all: redirect based on role ────────────────────────
 function CatchAllRedirect() {
   const { user, isAuthenticated } = useAuthStore()
@@ -129,17 +114,14 @@ function CatchAllRedirect() {
   if (user?.globalRole === 'SUPER_ADMIN') return <Navigate to="/super-admin" replace />
   return <Navigate to="/" replace />
 }
-
 // ============================================================================
 // APP
 // ============================================================================
-
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-
           {/* ============================================================ */}
           {/* PUBLIC ROUTES — No authentication required                   */}
           {/* ============================================================ */}
@@ -148,7 +130,6 @@ export default function App() {
           <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
           <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-
           {/* ============================================================ */}
           {/* AUTH-ONLY ROUTES — Logged in but no team context required    */}
           {/* These are for users who haven't completed onboarding yet,   */}
@@ -162,7 +143,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/onboarding"
             element={
@@ -171,7 +151,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           {/* ============================================================ */}
           {/* SUPER ADMIN ROUTES — Platform-level management              */}
           {/* Wrapped in AppShell for consistent layout.                  */}
@@ -197,7 +176,6 @@ export default function App() {
             <Route path="/super-admin/showcase" element={<Lazy><ShowcasePage /></Lazy>} />
             <Route path="/super-admin/roadmap" element={<Lazy><TodoPage /></Lazy>} />
           </Route>
-
           {/* ============================================================ */}
           {/* MAIN APP ROUTES — Require auth + onboarding + team context  */}
           {/* Every page inside here can rely on req.teamId being set.    */}
@@ -210,50 +188,37 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="feedback" element={<Lazy><FeedbackPage /></Lazy>} />
             {/* ── Dashboard ─────────────────────────────────────────── */}
             <Route index element={<Dashboard />} />
-
             {/* ── Problems ──────────────────────────────────────────── */}
-            {/* TODO: Replace with dedicated ProblemListPage / ProblemDetailPage */}
             <Route path="problems" element={<Lazy><ProblemsPage /></Lazy>} />
             <Route path="problems/:problemId" element={<Lazy><ProblemDetailPage /></Lazy>} />
             <Route path="problems/:problemId/submit" element={<Lazy><SubmitSolutionPage /></Lazy>} />
             <Route path="problems/:problemId/edit-solution/:solutionId" element={<Lazy><EditSolutionPage /></Lazy>} />
-
             {/* ── Solutions & Review ────────────────────────────────── */}
             <Route path="review" element={<ReviewQueuePage />} />
-
             {/* ── Quizzes ───────────────────────────────────────────── */}
             <Route path="quizzes" element={<QuizPage />} />
-
             {/* ── Mock Interview (lazy — heavy: Excalidraw + WS) ────── */}
-            <Route
-              path="mock-interview"
-              element={<Lazy><MockInterviewPage /></Lazy>}
-            />
-
+            <Route path="mock-interview" element={<Lazy><MockInterviewPage /></Lazy>} />
+            {/* ── Design Studio (lazy — heavy: Excalidraw + AI) ─────── */}
+            <Route path="design-studio" element={<Lazy><DesignStudioPage /></Lazy>} />
             {/* ── Interview History ─────────────────────────────────── */}
             <Route path="interview-history" element={<InterviewHistoryPage />} />
-
-            {/* ── Leaderboard (team-only — LeaderboardPage handles    */}
-            {/*    the redirect for individual-mode users internally)  */}
+            {/* ── Leaderboard ───────────────────────────────────────── */}
             <Route path="leaderboard" element={<LeaderboardPage />} />
-
             {/* ── Intelligence Report ───────────────────────────────── */}
             <Route path="report" element={<ReportPage />} />
-
+            {/* ── Feedback ──────────────────────────────────────────── */}
+            <Route path="feedback" element={<Lazy><FeedbackPage /></Lazy>} />
             {/* ── Profile ───────────────────────────────────────────── */}
             <Route path="profile" element={<ProfilePage />} />
             <Route path="profile/:userId" element={<ProfilePage />} />
-
             {/* ── Settings ──────────────────────────────────────────── */}
             <Route path="settings" element={<SettingsPage />} />
-
             {/* ── Team Management ───────────────────────────────────── */}
             <Route path="team" element={<TeamManagePage />} />
             <Route path="team/pending" element={<TeamPendingPage />} />
-
             {/* ── Team Admin Routes (TEAM_ADMIN or SUPER_ADMIN) ────── */}
             <Route
               path="admin"
@@ -295,18 +260,15 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             {/* ── Documentation (lazy) ──────────────────────────────── */}
             <Route path="docs/readme" element={<Lazy><ReadmePage /></Lazy>} />
             <Route path="docs/setup" element={<Lazy><SetupPage /></Lazy>} />
             <Route path="docs/deploy" element={<Lazy><DeployPage /></Lazy>} />
           </Route>
-
           {/* ============================================================ */}
           {/* CATCH-ALL — Redirect unknown routes to home                 */}
           {/* ============================================================ */}
           <Route path="*" element={<CatchAllRedirect />} />
-
         </Routes>
       </BrowserRouter>
       <ToastContainer />
