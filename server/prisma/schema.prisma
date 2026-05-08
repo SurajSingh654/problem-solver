@@ -198,6 +198,23 @@ enum CompetitionStatus {
   }
 
 
+
+
+  /// Design Studio session type — HLD or LLD
+enum DesignType {
+  SYSTEM_DESIGN
+  LOW_LEVEL_DESIGN
+}
+
+/// Design Studio session lifecycle
+enum DesignSessionStatus {
+  IN_PROGRESS
+  VALIDATING
+  COMPLETED
+  ABANDONED
+}
+
+
 // ============================================================================
 // USER
 // ============================================================================
@@ -267,6 +284,9 @@ model User {
   aiProblemConfig Json?
 
   feedbackReports  FeedbackReport[]
+
+
+  designSessions   DesignSession[]
 
   // ── Soft delete ────────────────────────────────────
   deletedAt DateTime?
@@ -349,6 +369,9 @@ model Team {
   aiProblemConfig   Json?
 
   feedbackReports  FeedbackReport[]
+
+
+  designSessions   DesignSession[]
 
   // ── Soft delete ────────────────────────────────────
   deletedAt DateTime?
@@ -530,6 +553,8 @@ model Problem {
 
 
   assessmentResponses AssessmentResponse[]
+  
+  designSessions   DesignSession[]
 
   // ── Vector embedding ───────────────────────────────
   // Column + HNSW index created via raw SQL migration:
@@ -983,6 +1008,197 @@ model InterviewMessage {
   @@index([sessionId, createdAt])
   @@map("interview_messages")
 }
+
+
+
+// ============================================================================
+// DESIGN SESSION (Design Studio — Practice + Validate + Evaluate)
+// ============================================================================
+/// A self-paced design practice session in the Design Studio.
+///
+/// DESIGN DECISIONS:
+///
+/// 1. Separate from Solution model. A Solution is a one-shot submission to a
+///    specific problem that gets AI-reviewed once. A DesignSession is an
+///    iterative practice environment with per-phase AI coaching, scenario
+///    testing, flow simulation, and comprehensive evaluation. The data shapes,
+///    lifecycle, and interaction patterns are fundamentally different.
+///
+/// 2. Separate from InterviewSession. The Mock Interview is a real-time
+///    conversational AI interaction over WebSocket with streaming. The Design
+///    Studio is self-paced, phase-based, with on-demand AI coaching (not
+///    streaming conversation). Different UX, different AI interaction model.
+///
+/// 3. Multiple sessions per problem allowed (no unique constraint on
+///    userId+problemId). Users should practice the same design problem
+///    multiple times and see improvement over attempts. This is deliberate
+///    practice — repetition with feedback is how expertise develops.
+///
+/// 4. JSON columns for phase data. Each phase stores structured content
+///    that varies by design type (HLD vs LLD) and phase. These are never
+///    used in WHERE clauses — they're read/write blobs persisted per save.
+///    Using JSON avoids 11+ nullable text columns that would be sparse.
+///
+/// 5. AI interactions stored in a JSON array on the session (not a separate
+///    table). Rationale: interactions are always read/written with the session,
+///    never queried independently, and keeping them inline avoids N+1 queries
+///    when loading a session. Estimated max: ~50 interactions per session
+///    (3-5 per phase × 11 phases) — well within JSON column performance.
+///
+/// 6. diagramData stores the Excalidraw elements JSON string. This can be
+///    large (50-200KB for complex diagrams) but is always loaded with the
+///    session and never queried. String type (not Json) because Excalidraw
+///    outputs a serialized string that we pass through unchanged.
+///
+/// 7. Timer is soft (elapsed time tracked, no auto-advance). The session
+///    stores totalTimeSpent (seconds) and per-phase time in phaseTimings JSON.
+///    This enables analytics: "You spend 40% of time on requirements but
+///    only 10% on trade-offs — that's inverted from what interviewers expect."
+///
+/// 8. Scoring uses the same 0-10 scale as Solution reviews for consistency
+///    across the platform. The 10 evaluation dimensions are stored as a JSON
+///    object in the evaluation field (not 10 separate Float columns) because
+///    dimensions may evolve and we don't want a migration every time we
+///    refine the scoring model.
+///
+/// 9. problemId is optional. Users can start a freeform design session
+///    without selecting a specific problem (e.g., "I want to practice
+///    designing a chat app" without it being tied to a team problem).
+///    When present, enables comparison across users on the same problem.
+///
+/// 10. teamId is optional. Works in both team and individual (personal) mode.
+///     When in team mode, enables team-wide analytics: "Which design problems
+///     does the team struggle with most?"
+model DesignSession {
+  id String @id @default(cuid())
+
+  // ── User ───────────────────────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Team scope (optional) ──────────────────────────
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  // ── Problem reference (optional — freeform allowed) ─
+  problemId String?
+  problem   Problem? @relation(fields: [problemId], references: [id], onDelete: SetNull)
+
+  // ── Session configuration ──────────────────────────
+  designType DesignType
+  difficulty Difficulty @default(MEDIUM)
+  title      String     // User-facing title: problem title or custom name
+
+  // ── Session lifecycle ──────────────────────────────
+  status DesignSessionStatus @default(IN_PROGRESS)
+
+  // ── Current progress ───────────────────────────────
+  // Which phase the user is currently on (0-indexed)
+  // Used to restore position when resuming a session
+  currentPhase Int @default(0)
+
+  // ── DESIGN PHASE DATA ──────────────────────────────
+  // JSON object with keys matching phase IDs.
+  // For SYSTEM_DESIGN:
+  //   { requirements, capacityEstimation, apiDesign, dataModel,
+  //     architectureNotes, deepDive, tradeoffs }
+  // For LOW_LEVEL_DESIGN:
+  //   { requirements, entities, classHierarchy, designPatterns,
+  //     methodSignatures, solidAnalysis }
+  // Each value is the user's text content for that phase.
+  phases Json?
+
+  // ── DIAGRAM DATA ───────────────────────────────────
+  // Excalidraw elements JSON string — persisted across all phases.
+  // Stored as String (not Json) because we pass it through unchanged.
+  // Can be null if user hasn't drawn anything yet.
+  diagramData String? @db.Text
+
+  // ── COMPONENT ANNOTATIONS ──────────────────────────
+  // JSON array of { componentName, purpose, technology, notes }
+  // User annotates each component drawn on the canvas.
+  // Separate from diagramData because AI reads this (not the diagram).
+  componentAnnotations Json?
+
+  // ── DATA FLOW DESCRIPTION ──────────────────────────
+  // Text description of how data flows through the system.
+  // AI uses this + componentAnnotations to understand the architecture
+  // since it cannot see the visual diagram.
+  dataFlowDescription String? @db.Text
+
+  // ── VALIDATION PHASE DATA ──────────────────────────
+  // scenarios: AI-generated scenarios tailored to this design
+  //   Array of { id, scenario, userResponse, aiVerdict, status }
+  //   status: 'pending' | 'answered' | 'evaluated'
+  //   aiVerdict: 'PASS' | 'PARTIAL' | 'FAIL' + explanation
+  scenarios Json?
+
+  // flowSimulation: request path traces with latency annotations
+  //   Array of { flowName, hops: [{ from, to, latency, payload, failureHandling }],
+  //              totalLatency, bottleneck, spofWarnings }
+  flowSimulation Json?
+
+  // scaleAnalysis: user's analysis at 1x, 10x, 100x scale
+  //   { current: text, tenX: text, hundredX: text, failureAtScale: text }
+  scaleAnalysis Json?
+
+  // ── AI INTERACTIONS LOG ────────────────────────────
+  // Array of { phase, mode, userQuery, aiResponse, timestamp }
+  // mode: 'validate' | 'guide' | 'teach'
+  // Never queried independently — always loaded with the session.
+  // Enables: showing learning journey, preventing repeat answers,
+  // and analytics on which concepts users struggle with most.
+  aiInteractions Json?
+
+  // ── EVALUATION (final comprehensive AI assessment) ──
+  // Set when status transitions to COMPLETED.
+  // JSON: {
+  //   dimensions: { requirementsCompleteness: 0-10, estimationSoundness: 0-10,
+  //     apiDesignQuality: 0-10, dataModelCorrectness: 0-10,
+  //     architectureCoherence: 0-10, deepDiveDepth: 0-10,
+  //     tradeoffAwareness: 0-10, scenarioResilience: 0-10,
+  //     scaleReadiness: 0-10, communicationClarity: 0-10 },
+  //   overallScore: 0-10 (weighted average),
+  //   criticalGaps: [string],
+  //   strengths: [string],
+  //   improvements: [string],
+  //   industryComparison: string,
+  //   readinessVerdict: string,
+  //   suggestedNextSteps: [string]
+  // }
+  evaluation Json?
+
+  // ── TIMING ─────────────────────────────────────────
+  // Total seconds spent in this session (cumulative across resumes)
+  totalTimeSpent Int @default(0)
+
+  // Per-phase time breakdown: { [phaseId]: seconds }
+  // Enables: "You spend 40% on requirements but 10% on trade-offs"
+  phaseTimings Json?
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Indexes ────────────────────────────────────────
+  // "My design sessions" — for the Design Studio history page
+  @@index([userId, createdAt(sort: Desc)])
+  // "My sessions for a specific problem" — for attempt comparison
+  @@index([userId, problemId, createdAt(sort: Desc)])
+  // "Team design sessions" — for team analytics
+  @@index([teamId, createdAt(sort: Desc)])
+  // Active sessions (for cleanup/monitoring)
+  @@index([status, createdAt])
+  // Filter by design type
+  @@index([userId, designType, createdAt(sort: Desc)])
+
+  @@map("design_sessions")
+}
+
+
 
 // ============================================================================
 // COMPETITION (FUTURE — Schema placeholder)

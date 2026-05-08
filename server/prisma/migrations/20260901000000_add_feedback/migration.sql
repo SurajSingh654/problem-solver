@@ -54,3 +54,7 @@ CREATE INDEX "idx_feedback_user" ON "feedback_reports" ("userId", "createdAt" DE
 
 -- Per-team reports (for team admins)
 CREATE INDEX "idx_feedback_team" ON "feedback_reports" ("teamId", "createdAt" DESC);
+
+
+-- Fix: moved from 20260507063611 to correct replay order
+ALTER TABLE "feedback_reports" ALTER COLUMN "updatedAt" DROP DEFAULT;
