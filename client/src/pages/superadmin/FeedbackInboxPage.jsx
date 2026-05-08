@@ -1,14 +1,14 @@
 // ============================================================================
-// ProbSolver v3.0 — Feedback Inbox (Super Admin)
+// ProbSolver v3.0 — Feedback Inbox (Super Admin) with Export
 // ============================================================================
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useFeedbackList, useUpdateFeedbackStatus } from '@hooks/useFeedback'
-import { Badge } from '@components/ui/Badge'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
+import FeedbackExportBar from '@components/features/feedback/FeedbackExportBar'
 
 const STATUS_OPTIONS = [
     { id: 'OPEN', label: 'Open', color: 'text-info bg-info/10 border-info/20' },
@@ -57,8 +57,8 @@ function SummaryBar({ summary }) {
     )
 }
 
-// ── Report card with inline status update ──────────────────────
-function ReportCard({ report }) {
+// ── Report card with inline status update + checkbox ───────────
+function ReportCard({ report, isSelected, onToggleSelect }) {
     const updateStatus = useUpdateFeedbackStatus()
     const [expanded, setExpanded] = useState(false)
     const [editingStatus, setEditingStatus] = useState(false)
@@ -82,11 +82,13 @@ function ReportCard({ report }) {
             layout
             className={cn(
                 'border rounded-xl overflow-hidden transition-all',
-                report.severity === 'CRITICAL'
-                    ? 'border-danger/30 bg-danger/3'
-                    : report.severity === 'HIGH'
-                        ? 'border-orange-400/20 bg-surface-1'
-                        : 'border-border-default bg-surface-1'
+                isSelected
+                    ? 'border-brand-400/40 bg-brand-400/5'
+                    : report.severity === 'CRITICAL'
+                        ? 'border-danger/30 bg-danger/3'
+                        : report.severity === 'HIGH'
+                            ? 'border-orange-400/20 bg-surface-1'
+                            : 'border-border-default bg-surface-1'
             )}
         >
             {/* Card header */}
@@ -94,6 +96,20 @@ function ReportCard({ report }) {
                 className="flex items-start gap-3 p-4 cursor-pointer hover:bg-surface-2/50 transition-colors"
                 onClick={() => setExpanded(v => !v)}
             >
+                {/* Checkbox */}
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => {
+                        e.stopPropagation()
+                        onToggleSelect(report.id)
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 rounded border-border-strong text-brand-400
+                               focus:ring-brand-400/30 focus:ring-2 cursor-pointer
+                               bg-surface-3 accent-brand-400 mt-0.5 flex-shrink-0"
+                    aria-label={`Select report: ${report.title}`}
+                />
                 <span className="text-xl flex-shrink-0 mt-0.5">{type.icon}</span>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-2 flex-wrap mb-1">
@@ -159,7 +175,6 @@ function ReportCard({ report }) {
                     className="border-t border-border-default"
                 >
                     <div className="p-4 space-y-4">
-                        {/* Description */}
                         <div>
                             <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">
                                 Description
@@ -168,8 +183,6 @@ function ReportCard({ report }) {
                                 {report.description}
                             </p>
                         </div>
-
-                        {/* Steps to reproduce */}
                         {report.stepsToReproduce && (
                             <div>
                                 <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">
@@ -181,8 +194,6 @@ function ReportCard({ report }) {
                                 </pre>
                             </div>
                         )}
-
-                        {/* Status update */}
                         <div className="pt-3 border-t border-border-subtle">
                             {!editingStatus ? (
                                 <div className="flex items-center justify-between">
@@ -208,7 +219,6 @@ function ReportCard({ report }) {
                                 </div>
                             ) : (
                                 <div className="space-y-3" onClick={e => e.stopPropagation()}>
-                                    {/* Status picker */}
                                     <div>
                                         <p className="text-xs font-semibold text-text-primary mb-2">
                                             New Status
@@ -231,8 +241,6 @@ function ReportCard({ report }) {
                                             ))}
                                         </div>
                                     </div>
-
-                                    {/* Admin note */}
                                     <div>
                                         <label className="block text-xs font-semibold text-text-primary mb-1.5">
                                             Note for member
@@ -251,7 +259,6 @@ function ReportCard({ report }) {
                                                        focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                                         />
                                     </div>
-
                                     <div className="flex items-center gap-2">
                                         <Button
                                             variant="primary"
@@ -285,6 +292,7 @@ function ReportCard({ report }) {
 export default function FeedbackInboxPage() {
     const [statusFilter, setStatusFilter] = useState('')
     const [typeFilter, setTypeFilter] = useState('')
+    const [selectedIds, setSelectedIds] = useState(new Set())
 
     const { data, isLoading } = useFeedbackList({
         status: statusFilter || undefined,
@@ -293,6 +301,47 @@ export default function FeedbackInboxPage() {
 
     const reports = data?.reports || []
     const summary = data?.summary
+    const total = data?.pagination?.total || reports.length
+
+    // ── Selection handlers ──────────────────────────────
+    function toggleSelect(id) {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    function toggleSelectAll() {
+        if (reports.length === 0) return
+        const allOnPageSelected = reports.every(r => selectedIds.has(r.id))
+        if (allOnPageSelected) {
+            setSelectedIds(prev => {
+                const next = new Set(prev)
+                reports.forEach(r => next.delete(r.id))
+                return next
+            })
+        } else {
+            setSelectedIds(prev => {
+                const next = new Set(prev)
+                reports.forEach(r => next.add(r.id))
+                return next
+            })
+        }
+    }
+
+    function clearSelection() {
+        setSelectedIds(new Set())
+    }
+
+    const allOnPageSelected = reports.length > 0 && reports.every(r => selectedIds.has(r.id))
+    const someOnPageSelected = reports.some(r => selectedIds.has(r.id))
+
+    // Build filters object for export bar
+    const activeFilters = {}
+    if (typeFilter) activeFilters.type = typeFilter
+    if (statusFilter) activeFilters.status = statusFilter
 
     return (
         <div className="p-6 max-w-[900px] mx-auto">
@@ -303,12 +352,20 @@ export default function FeedbackInboxPage() {
                 </h1>
                 <p className="text-sm text-text-tertiary">
                     All member-submitted bug reports, suggestions, and questions.
-                    Critical and High severity items are listed first.
+                    Select reports and export them as CSV, JSON, or Markdown for AI-assisted resolution.
                 </p>
             </div>
 
             {/* Summary */}
             <SummaryBar summary={summary} />
+
+            {/* Export Bar */}
+            <FeedbackExportBar
+                selectedIds={Array.from(selectedIds)}
+                totalCount={total}
+                filters={activeFilters}
+                onClearSelection={clearSelection}
+            />
 
             {/* Filters */}
             <div className="flex flex-wrap gap-2 mb-5">
@@ -333,7 +390,6 @@ export default function FeedbackInboxPage() {
                         </button>
                     ))}
                 </div>
-
                 <div className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1">
                     {[
                         { id: '', label: 'All Types' },
@@ -376,6 +432,29 @@ export default function FeedbackInboxPage() {
                 </div>
             ) : (
                 <div className="space-y-3">
+                    {/* Select all header */}
+                    <div className="flex items-center gap-3 px-4 py-2 bg-surface-2/50 border border-border-subtle rounded-xl">
+                        <input
+                            type="checkbox"
+                            checked={allOnPageSelected}
+                            ref={el => {
+                                if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected
+                            }}
+                            onChange={toggleSelectAll}
+                            className="w-4 h-4 rounded border-border-strong text-brand-400
+                                       focus:ring-brand-400/30 focus:ring-2 cursor-pointer
+                                       bg-surface-3 accent-brand-400"
+                            aria-label="Select all reports on this page"
+                        />
+                        <span className="text-xs text-text-tertiary">
+                            {allOnPageSelected
+                                ? `All ${reports.length} on this page selected`
+                                : someOnPageSelected
+                                    ? `${selectedIds.size} selected`
+                                    : `Select all on this page (${reports.length})`}
+                        </span>
+                    </div>
+
                     {reports.map((report, i) => (
                         <motion.div
                             key={report.id}
@@ -383,7 +462,11 @@ export default function FeedbackInboxPage() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.04 }}
                         >
-                            <ReportCard report={report} />
+                            <ReportCard
+                                report={report}
+                                isSelected={selectedIds.has(report.id)}
+                                onToggleSelect={toggleSelect}
+                            />
                         </motion.div>
                     ))}
                 </div>
