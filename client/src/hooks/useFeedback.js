@@ -68,7 +68,6 @@ export function useUpdateFeedbackStatus() {
   });
 }
 
-
 // ── Extract filename from Content-Disposition header ──
 // Handles both `filename="x.csv"` and `filename=x.csv` variants.
 function filenameFromHeaders(headers, fallback) {
@@ -99,10 +98,13 @@ export function useExportFeedback() {
     mutationFn: async ({ format, ids, filters }) => {
       const res = await feedbackApi.export({ format, ids, filters });
 
-      // If the server sent an error as JSON but axios parsed it as a blob,
-      // detect and surface it cleanly.
       const contentType = res.headers?.["content-type"] || "";
-      if (contentType.includes("application/json")) {
+      const contentDisposition = res.headers?.["content-disposition"] || "";
+
+      // Only treat as error if it's JSON WITHOUT a Content-Disposition header.
+      // A JSON export file will have Content-Disposition: attachment; filename="..."
+      // An error response will NOT have Content-Disposition.
+      if (contentType.includes("application/json") && !contentDisposition) {
         const text = await res.data.text();
         let parsed;
         try {
@@ -110,17 +112,17 @@ export function useExportFeedback() {
         } catch {
           throw new Error("Export failed: unexpected server response.");
         }
-        const message =
-          parsed?.error?.message || "Export failed.";
-        throw new Error(message);
+        if (parsed?.error?.message) {
+          throw new Error(parsed.error.message);
+        }
       }
 
       const fallback =
         format === "csv"
           ? "feedback-export.csv"
           : format === "json"
-          ? "feedback-export.json"
-          : "feedback-export.md";
+            ? "feedback-export.json"
+            : "feedback-export.md";
       const filename = filenameFromHeaders(res.headers, fallback);
       triggerBlobDownload(res.data, filename);
       return {

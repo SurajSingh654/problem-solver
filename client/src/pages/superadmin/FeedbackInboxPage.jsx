@@ -10,6 +10,33 @@ import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
 import FeedbackExportBar from '@components/features/feedback/FeedbackExportBar'
 
+const SUGGESTED_NOTES = {
+    OPEN: [
+        "Reopening — the issue persists after the previous fix.",
+        "Reopening for further investigation.",
+    ],
+    ACKNOWLEDGED: [
+        "Thanks for reporting — we've confirmed this issue and added it to our backlog.",
+        "This bug is acknowledged, thanks for reporting. We'll prioritize it shortly.",
+        "We've seen this and are investigating. Will update you once we have a fix timeline.",
+    ],
+    IN_PROGRESS: [
+        "We're actively working on this. Expect a fix in the next deployment.",
+        "Currently being implemented — will update when it's live.",
+        "This is in development now. Thanks for your patience.",
+    ],
+    RESOLVED: [
+        "Fixed and deployed. Please verify on your end and let us know if it recurs.",
+        "This has been resolved in the latest release. Thanks for reporting!",
+        "Implemented as suggested — the feature is now live. Thank you for the feedback!",
+    ],
+    WONT_FIX: [
+        "After review, this is working as intended. Here's why: ",
+        "We've decided not to implement this at this time due to scope/priority constraints.",
+        "This conflicts with an existing design decision. Feel free to discuss further if needed.",
+    ],
+}
+
 const STATUS_OPTIONS = [
     { id: 'OPEN', label: 'Open', color: 'text-info bg-info/10 border-info/20' },
     { id: 'ACKNOWLEDGED', label: 'Acknowledged', color: 'text-warning bg-warning/10 border-warning/20' },
@@ -242,6 +269,7 @@ function ReportCard({ report, isSelected, onToggleSelect }) {
                                             ))}
                                         </div>
                                     </div>
+                                    {/* Admin note with suggestions */}
                                     <div>
                                         <label className="block text-xs font-semibold text-text-primary mb-1.5">
                                             Note for member
@@ -249,15 +277,35 @@ function ReportCard({ report, isSelected, onToggleSelect }) {
                                                 optional — visible to the submitter
                                             </span>
                                         </label>
+                                        {/* Suggested notes — clickable chips */}
+                                        {SUGGESTED_NOTES[newStatus]?.length > 0 && (
+                                            <div className="mb-2">
+                                                <p className="text-[10px] text-text-disabled mb-1.5">Quick suggestions:</p>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {SUGGESTED_NOTES[newStatus].map((note, idx) => (
+                                                        <button
+                                                            key={idx}
+                                                            type="button"
+                                                            onClick={() => setAdminNote(note)}
+                                                            className="text-[10px] text-text-tertiary bg-surface-3 border border-border-subtle
+                                   rounded-lg px-2.5 py-1.5 text-left hover:border-brand-400/30
+                                   hover:text-text-secondary transition-colors leading-tight max-w-[280px]"
+                                                        >
+                                                            {note}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                         <textarea
                                             rows={3}
                                             value={adminNote}
                                             onChange={e => setAdminNote(e.target.value)}
                                             placeholder="e.g. This will be fixed in the next deployment. Thanks for reporting!"
                                             className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                                       text-sm text-text-primary placeholder:text-text-disabled
-                                                       px-3 py-2 outline-none resize-none
-                                                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                   text-sm text-text-primary placeholder:text-text-disabled
+                   px-3 py-2 outline-none resize-none
+                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                                         />
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -374,8 +422,10 @@ export default function FeedbackInboxPage() {
                     {[
                         { id: '', label: 'All' },
                         { id: 'OPEN', label: 'Open' },
+                        { id: 'ACKNOWLEDGED', label: 'Acknowledged' },
                         { id: 'IN_PROGRESS', label: 'In Progress' },
                         { id: 'RESOLVED', label: 'Resolved' },
+                        { id: 'WONT_FIX', label: "Won't Fix" },
                     ].map(s => (
                         <button
                             key={s.id}
