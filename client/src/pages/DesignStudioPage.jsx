@@ -504,13 +504,40 @@ function DesignWorkspace({ sessionId }) {
                     })}
                 </div>
 
-                {/* Timer */}
+                {/* Timer + Session Controls */}
                 <div className="flex items-center gap-3">
                     <span className="text-xs font-mono text-text-disabled">{timeDisplay}</span>
                     <span className={cn(
                         'w-2 h-2 rounded-full',
                         savePhase.isPending || saveDiagram.isPending ? 'bg-warning animate-pulse' : 'bg-success'
                     )} title={savePhase.isPending ? 'Saving...' : 'Saved'} />
+                    <div className="w-px h-4 bg-border-default" />
+                    <button
+                        onClick={() => {
+                            if (window.confirm('End this session? You can resume it later from the Design Studio.')) {
+                                updateTiming.mutate({ sessionId, totalTimeSpent: elapsedTime })
+                                navigate('/design-studio')
+                            }
+                        }}
+                        className="text-[10px] font-semibold px-3 py-1.5 rounded-lg border
+                   bg-surface-3 border-border-default text-text-tertiary
+                   hover:text-text-primary hover:border-border-strong transition-colors"
+                    >
+                        Pause & Exit
+                    </button>
+                    <button
+                        onClick={() => {
+                            if (window.confirm('Mark this session as complete? This will save your progress and you can request AI evaluation.')) {
+                                updateTiming.mutate({ sessionId, totalTimeSpent: elapsedTime })
+                                updateStatus.mutate({ sessionId, status: 'VALIDATING' })
+                                toast.success('Session ready for validation — generate scenarios to test your design!')
+                            }
+                        }}
+                        className="text-[10px] font-bold px-3 py-1.5 rounded-lg
+                   bg-brand-400 text-white hover:bg-brand-400/90 transition-colors"
+                    >
+                        Complete Design →
+                    </button>
                 </div>
             </div>
 
