@@ -34,6 +34,7 @@ import {
   submitScenarioResponse,
   evaluateScenario,
   saveFlowSimulation,
+  deleteFlowSimulation,
   saveScaleAnalysis,
   requestFinalEvaluation,
 } from "../controllers/designStudio.controller.js";
@@ -146,6 +147,9 @@ router.post(
   validate(saveFlowSimulationSchema),
   saveFlowSimulation,
 );
+
+// Delete a flow simulation by id
+router.delete("/:sessionId/flows/:flowId", deleteFlowSimulation);
 
 // ── Scale analysis routes ────────────────────────────────
 

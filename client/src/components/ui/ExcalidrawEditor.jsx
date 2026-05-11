@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import '@excalidraw/excalidraw/index.css'
 
-export function ExcalidrawEditor({ onChange, initialData, theme }) {
+export function ExcalidrawEditor({ onChange, initialData, theme, viewModeEnabled = false }) {
     const [ExcalidrawComponent, setExcalidrawComponent] = useState(null)
     const [loadError, setLoadError] = useState(false)
     const containerRef = useRef(null)
@@ -146,8 +146,9 @@ export function ExcalidrawEditor({ onChange, initialData, theme }) {
             <ExcalidrawComponent
                 excalidrawAPI={handleExcalidrawAPI}
                 initialData={parsedInitialData}
-                onChange={handleChange}
+                onChange={viewModeEnabled ? undefined : handleChange}
                 theme={resolvedTheme}
+                viewModeEnabled={viewModeEnabled}
                 UIOptions={{
                     canvasActions: {
                         export: false,

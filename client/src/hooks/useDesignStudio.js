@@ -245,6 +245,27 @@ export function useSaveFlowSimulation() {
   });
 }
 
+// ── Delete flow simulation ────────────────────────────────
+export function useDeleteFlowSimulation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ sessionId, flowId }) =>
+      designStudioApi.deleteFlow(sessionId, flowId),
+    onSuccess: (_, { sessionId }) => {
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.SESSION(sessionId),
+      });
+      toast.success("Flow deleted.");
+    },
+    onError: (err) => {
+      toast.error(
+        err?.response?.data?.error?.message || "Failed to delete flow.",
+      );
+    },
+  });
+}
+
 // ── Save scale analysis ───────────────────────────────────
 export function useSaveScaleAnalysis() {
   return useMutation({

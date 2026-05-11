@@ -22,6 +22,7 @@ import {
     useEvaluateScenario,
     useSaveScaleAnalysis,
     useSaveFlowSimulation,
+    useDeleteFlowSimulation,
     useRequestEvaluation,
     useUpdateSessionStatus,
 } from '@hooks/useDesignStudio'
@@ -281,7 +282,7 @@ function CreateSessionScreen({ onCreated, onBack }) {
 // AI cannot see the visual diagram. It reads componentAnnotations + this
 // dataFlowDescription to understand architecture. Without a value here, every
 // AI prompt loses that context.
-function DataFlowPanel({ value, onChange, isCollapsed, onToggle }) {
+function DataFlowPanel({ value, onChange, isCollapsed, onToggle, isReadOnly = false }) {
     const preview = (value || '').trim().slice(0, 60)
     return (
         <div className="border-t border-border-default">
@@ -313,8 +314,12 @@ function DataFlowPanel({ value, onChange, isCollapsed, onToggle }) {
                                 rows={4}
                                 value={value || ''}
                                 onChange={e => onChange(e.target.value)}
-                                placeholder="Walk a request through your components, step by step. Mention where caching, async queues, and failure handling kick in."
-                                className="w-full bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-3 py-2 outline-none resize-y leading-relaxed focus:border-brand-400/40 focus:ring-2 focus:ring-brand-400/20"
+                                readOnly={isReadOnly}
+                                placeholder={isReadOnly ? '(no data flow described)' : 'Walk a request through your components, step by step. Mention where caching, async queues, and failure handling kick in.'}
+                                className={cn(
+                                    'w-full bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-3 py-2 outline-none resize-y leading-relaxed focus:border-brand-400/40 focus:ring-2 focus:ring-brand-400/20',
+                                    isReadOnly && 'cursor-default opacity-80'
+                                )}
                             />
                         </div>
                     </motion.div>
@@ -327,18 +332,19 @@ function DataFlowPanel({ value, onChange, isCollapsed, onToggle }) {
 // ══════════════════════════════════════════════════════════════════════════
 // COMPONENT ANNOTATIONS PANEL
 // ══════════════════════════════════════════════════════════════════════════
-function ComponentAnnotationsPanel({ annotations, onChange, isCollapsed, onToggle }) {
+function ComponentAnnotationsPanel({ annotations, onChange, isCollapsed, onToggle, isReadOnly = false }) {
     const [newName, setNewName] = useState('')
 
     function addComponent() {
-        if (!newName.trim()) return
+        if (!newName.trim() || isReadOnly) return
         onChange([...(annotations || []), { componentName: newName.trim(), purpose: '', technology: '', notes: '' }])
         setNewName('')
     }
     function updateComponent(i, field, value) {
+        if (isReadOnly) return
         const updated = [...(annotations || [])]; updated[i] = { ...updated[i], [field]: value }; onChange(updated)
     }
-    function removeComponent(i) { onChange((annotations || []).filter((_, idx) => idx !== i)) }
+    function removeComponent(i) { if (!isReadOnly) onChange((annotations || []).filter((_, idx) => idx !== i)) }
 
     return (
         <div className="border-t border-border-default">
@@ -361,25 +367,29 @@ function ComponentAnnotationsPanel({ annotations, onChange, isCollapsed, onToggl
                                 <div key={i} className="bg-surface-2 border border-border-subtle rounded-lg p-2.5 space-y-1.5">
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs font-bold text-text-primary">{comp.componentName}</span>
-                                        <button onClick={() => removeComponent(i)} className="text-text-disabled hover:text-danger text-[10px]">✕</button>
+                                        {!isReadOnly && (
+                                            <button onClick={() => removeComponent(i)} className="text-text-disabled hover:text-danger text-[10px]">✕</button>
+                                        )}
                                     </div>
-                                    <input type="text" value={comp.purpose} onChange={e => updateComponent(i, 'purpose', e.target.value)} placeholder="Purpose..."
-                                        className="w-full bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40" />
+                                    <input type="text" value={comp.purpose} onChange={e => updateComponent(i, 'purpose', e.target.value)} readOnly={isReadOnly} placeholder="Purpose..."
+                                        className={cn('w-full bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40', isReadOnly && 'cursor-default opacity-80')} />
                                     <div className="flex gap-1.5">
-                                        <input type="text" value={comp.technology} onChange={e => updateComponent(i, 'technology', e.target.value)} placeholder="Technology..."
-                                            className="flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40" />
-                                        <input type="text" value={comp.notes} onChange={e => updateComponent(i, 'notes', e.target.value)} placeholder="Notes..."
-                                            className="flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40" />
+                                        <input type="text" value={comp.technology} onChange={e => updateComponent(i, 'technology', e.target.value)} readOnly={isReadOnly} placeholder="Technology..."
+                                            className={cn('flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40', isReadOnly && 'cursor-default opacity-80')} />
+                                        <input type="text" value={comp.notes} onChange={e => updateComponent(i, 'notes', e.target.value)} readOnly={isReadOnly} placeholder="Notes..."
+                                            className={cn('flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40', isReadOnly && 'cursor-default opacity-80')} />
                                     </div>
                                 </div>
                             ))}
-                            <div className="flex gap-2">
-                                <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') addComponent() }} placeholder="Add component..."
-                                    className="flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40" />
-                                <button onClick={addComponent} disabled={!newName.trim()}
-                                    className="text-[10px] font-bold text-brand-300 px-2.5 py-1.5 bg-brand-400/10 border border-brand-400/20 rounded-lg hover:bg-brand-400/20 transition-colors disabled:opacity-40">+ Add</button>
-                            </div>
+                            {!isReadOnly && (
+                                <div className="flex gap-2">
+                                    <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') addComponent() }} placeholder="Add component..."
+                                        className="flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40" />
+                                    <button onClick={addComponent} disabled={!newName.trim()}
+                                        className="text-[10px] font-bold text-brand-300 px-2.5 py-1.5 bg-brand-400/10 border border-brand-400/20 rounded-lg hover:bg-brand-400/20 transition-colors disabled:opacity-40">+ Add</button>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}
@@ -502,7 +512,7 @@ function AIResponsePanel({ response, onDismiss }) {
 // ══════════════════════════════════════════════════════════════════════════
 // CHUNK 2: SCENARIO TESTING UI
 // ══════════════════════════════════════════════════════════════════════════
-function ScenarioTestingView({ session, sessionId, onEvaluationReady }) {
+function ScenarioTestingView({ session, sessionId, onEvaluationReady, isReadOnly = false }) {
     const submitResponse = useSubmitScenarioResponse()
     const evaluateScenario = useEvaluateScenario()
     const requestEvaluation = useRequestEvaluation()
@@ -561,7 +571,7 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady }) {
                     <span className="text-xs text-text-disabled">
                         {evaluatedCount}/{scenarios.length} evaluated
                     </span>
-                    {allEvaluated && (
+                    {allEvaluated && !isReadOnly && (
                         <Button variant="primary" size="sm" loading={requestEvaluation.isPending}
                             onClick={handleRequestFinalEval}>
                             Get Final Evaluation →
@@ -639,7 +649,7 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady }) {
 
                             {/* Response area */}
                             <div className="px-5 pb-5 space-y-3">
-                                {!isEvaluated && (
+                                {!isEvaluated && !isReadOnly && (
                                     <>
                                         <textarea
                                             rows={4}
@@ -668,6 +678,12 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady }) {
                                             )}
                                         </div>
                                     </>
+                                )}
+                                {!isEvaluated && isReadOnly && scenario.userResponse && (
+                                    <div className="bg-surface-2 border border-border-subtle rounded-xl p-3">
+                                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">Your Response</p>
+                                        <p className="text-xs text-text-secondary leading-relaxed">{scenario.userResponse}</p>
+                                    </div>
                                 )}
 
                                 {/* Verdict display */}
@@ -726,7 +742,7 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady }) {
 // ══════════════════════════════════════════════════════════════════════════
 // CHUNK 2: SCALE ANALYSIS UI
 // ══════════════════════════════════════════════════════════════════════════
-function ScaleAnalysisView({ session, sessionId }) {
+function ScaleAnalysisView({ session, sessionId, isReadOnly = false }) {
     const saveScale = useSaveScaleAnalysis()
     const [scaleData, setScaleData] = useState({
         current: session.scaleAnalysis?.current || '',
@@ -789,9 +805,11 @@ function ScaleAnalysisView({ session, sessionId }) {
                         Stress-test your design at different traffic levels. What breaks and when?
                     </p>
                 </div>
-                <Button variant="secondary" size="sm" loading={saveScale.isPending} onClick={handleSave}>
-                    Save Analysis
-                </Button>
+                {!isReadOnly && (
+                    <Button variant="secondary" size="sm" loading={saveScale.isPending} onClick={handleSave}>
+                        Save Analysis
+                    </Button>
+                )}
             </div>
 
             <div className="space-y-4">
@@ -807,10 +825,14 @@ function ScaleAnalysisView({ session, sessionId }) {
                                 rows={5}
                                 value={scaleData[scale.id]}
                                 onChange={e => setScaleData(prev => ({ ...prev, [scale.id]: e.target.value }))}
-                                placeholder={scale.placeholder}
-                                className="w-full bg-surface-0/80 border border-border-default rounded-xl text-sm text-text-primary
-                                           placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed
-                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                readOnly={isReadOnly}
+                                placeholder={isReadOnly ? '(not filled in)' : scale.placeholder}
+                                className={cn(
+                                    'w-full bg-surface-0/80 border border-border-default rounded-xl text-sm text-text-primary',
+                                    'placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed',
+                                    'focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20',
+                                    isReadOnly && 'cursor-default opacity-80'
+                                )}
                             />
                         </div>
                     </div>
@@ -827,8 +849,9 @@ function ScaleAnalysisView({ session, sessionId }) {
 // ordered sequence of hops with per-hop latency. Server computes totalLatency
 // and bottleneck. Final-eval prompt reads flowSimulation[] to grade scale &
 // resilience reasoning.
-function FlowSimulationView({ session, sessionId }) {
+function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
     const saveFlow = useSaveFlowSimulation()
+    const deleteFlow = useDeleteFlowSimulation()
     const existingFlows = session.flowSimulation || []
 
     const emptyHop = () => ({ from: '', to: '', latencyMs: '', payload: '', failureHandling: '' })
@@ -914,6 +937,21 @@ function FlowSimulationView({ session, sessionId }) {
                                             )}
                                         </div>
                                     </div>
+                                    {!isReadOnly && flow.id && (
+                                        <button
+                                            onClick={() => {
+                                                if (window.confirm(`Delete flow "${flow.flowName}"?`)) {
+                                                    deleteFlow.mutate({ sessionId, flowId: flow.id })
+                                                }
+                                            }}
+                                            title="Delete flow"
+                                            className="text-text-disabled hover:text-danger transition-colors p-1 flex-shrink-0"
+                                        >
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-2 14H7L5 6" />
+                                            </svg>
+                                        </button>
+                                    )}
                                 </div>
                                 <div className="space-y-1.5">
                                     {(flow.hops || []).map((h, j) => (
@@ -943,7 +981,8 @@ function FlowSimulationView({ session, sessionId }) {
                 </section>
             )}
 
-            {/* ── New flow builder ───────────────────────────────────────── */}
+            {/* ── New flow builder (hidden when session is terminal) ───── */}
+            {isReadOnly ? null : (
             <section className="bg-surface-1 border border-border-default rounded-2xl p-5 space-y-4">
                 <div className="flex items-center gap-2">
                     <span className="text-base">➕</span>
@@ -1063,6 +1102,7 @@ function FlowSimulationView({ session, sessionId }) {
                     </Button>
                 </div>
             </section>
+            )}
         </div>
     )
 }
@@ -1342,6 +1382,9 @@ function DesignWorkspace({ sessionId, onBack }) {
 
     const phases = session?.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES
     const activePhase = phases[activePhaseIdx]
+    // Read-only mode: terminal statuses can't be edited. All user-triggered
+    // saves no-op, text inputs are readOnly, and edit action buttons are hidden.
+    const isReadOnly = session?.status === 'COMPLETED' || session?.status === 'ABANDONED'
 
     // Seed local editable state from the server ONCE, on first session load.
     // Subsequent session refetches (triggered by mutations) must NOT overwrite
@@ -1435,6 +1478,7 @@ function DesignWorkspace({ sessionId, onBack }) {
     }, [sessionId])
 
     function handlePhaseChange(value) {
+        if (isReadOnly) return
         const newContent = { ...phaseContent, [activePhase.id]: value }
         setPhaseContent(newContent)
         if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -1444,14 +1488,16 @@ function DesignWorkspace({ sessionId, onBack }) {
     }
 
     const handleDiagramChange = useCallback((data) => {
+        if (isReadOnly) return
         setDiagramData(data)
         if (diagramDebounceRef.current) clearTimeout(diagramDebounceRef.current)
         diagramDebounceRef.current = setTimeout(() => {
             saveDiagram.mutate({ sessionId, diagramData: data, componentAnnotations: annotations, dataFlowDescription: dataFlow })
         }, 2000)
-    }, [sessionId, annotations, dataFlow])
+    }, [sessionId, annotations, dataFlow, isReadOnly])
 
     function handleAnnotationsChange(newAnnotations) {
+        if (isReadOnly) return
         setAnnotations(newAnnotations)
         if (annotationsDebounceRef.current) clearTimeout(annotationsDebounceRef.current)
         annotationsDebounceRef.current = setTimeout(() => {
@@ -1465,6 +1511,7 @@ function DesignWorkspace({ sessionId, onBack }) {
     }
 
     function handleDataFlowChange(newDataFlow) {
+        if (isReadOnly) return
         setDataFlow(newDataFlow)
         if (dataFlowDebounceRef.current) clearTimeout(dataFlowDebounceRef.current)
         dataFlowDebounceRef.current = setTimeout(() => {
@@ -1626,6 +1673,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <ScenarioTestingView
                         session={session}
                         sessionId={sessionId}
+                        isReadOnly={isReadOnly}
                         onEvaluationReady={() => setWorkspaceMode('evaluation')}
                     />
                 </div>
@@ -1665,7 +1713,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                    <ScaleAnalysisView session={session} sessionId={sessionId} />
+                    <ScaleAnalysisView session={session} sessionId={sessionId} isReadOnly={isReadOnly} />
                 </div>
             </div>
         )
@@ -1709,7 +1757,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                    <FlowSimulationView session={session} sessionId={sessionId} />
+                    <FlowSimulationView session={session} sessionId={sessionId} isReadOnly={isReadOnly} />
                 </div>
             </div>
         )
@@ -1756,6 +1804,16 @@ function DesignWorkspace({ sessionId, onBack }) {
     // ── DESIGN VIEW (default) ────────────────────────────
     return (
         <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+            {isReadOnly && (
+                <div className={cn(
+                    'flex items-center justify-center gap-2 py-1.5 text-[10px] font-bold uppercase tracking-widest border-b',
+                    session.status === 'ABANDONED'
+                        ? 'bg-surface-3 text-text-disabled border-border-default'
+                        : 'bg-success/10 text-success border-success/20'
+                )}>
+                    {session.status === 'ABANDONED' ? '⏸ Abandoned — read-only' : '🔒 Completed — read-only'}
+                </div>
+            )}
             {/* Top Bar */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
                 <div className="flex items-center gap-3">
@@ -1795,12 +1853,12 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <Button variant="ghost" size="sm" onClick={() => setWorkspaceMode('flow')}>
                         Flows
                     </Button>
-                    {session.status !== 'COMPLETED' && (
+                    {!isReadOnly && (
                         <Button variant="secondary" size="sm" onClick={handleCompleteDesign} loading={updateSessionStatus.isPending}>
                             Complete Design
                         </Button>
                     )}
-                    {canValidate && session.status === 'IN_PROGRESS' && (
+                    {!isReadOnly && canValidate && session.status === 'IN_PROGRESS' && (
                         <Button variant="primary" size="sm" loading={generateScenarios.isPending} onClick={handleStartValidation}>
                             Validate Design →
                         </Button>
@@ -1820,7 +1878,7 @@ function DesignWorkspace({ sessionId, onBack }) {
 
             {/* Canvas */}
             <div style={{ height: `${100 - panelHeight}%` }} className="flex-shrink-0 relative">
-                <ExcalidrawEditor onChange={handleDiagramChange} initialData={diagramData} />
+                <ExcalidrawEditor onChange={handleDiagramChange} initialData={diagramData} viewModeEnabled={isReadOnly} />
             </div>
 
             {/* Resize Handle */}
@@ -1858,18 +1916,24 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <textarea
                         value={phaseContent[activePhase.id] || ''}
                         onChange={e => handlePhaseChange(e.target.value)}
-                        placeholder={`Write your ${activePhase.label.toLowerCase()} here...`}
-                        className="w-full h-full min-h-[120px] bg-transparent text-sm text-text-primary placeholder:text-text-disabled outline-none resize-none leading-relaxed"
+                        readOnly={isReadOnly}
+                        placeholder={isReadOnly ? '(not filled in)' : `Write your ${activePhase.label.toLowerCase()} here...`}
+                        className={cn(
+                            'w-full h-full min-h-[120px] bg-transparent text-sm text-text-primary placeholder:text-text-disabled outline-none resize-none leading-relaxed',
+                            isReadOnly && 'cursor-default opacity-90'
+                        )}
                     />
                     <AIResponsePanel response={aiResponse} onDismiss={() => setAiResponse(null)} />
                     <AICoachingBar sessionId={sessionId} phaseId={activePhase.id} onResponse={setAiResponse} />
                 </div>
 
                 <DataFlowPanel value={dataFlow} onChange={handleDataFlowChange}
-                    isCollapsed={dataFlowCollapsed} onToggle={() => setDataFlowCollapsed(v => !v)} />
+                    isCollapsed={dataFlowCollapsed} onToggle={() => setDataFlowCollapsed(v => !v)}
+                    isReadOnly={isReadOnly} />
 
                 <ComponentAnnotationsPanel annotations={annotations} onChange={handleAnnotationsChange}
-                    isCollapsed={annotationsCollapsed} onToggle={() => setAnnotationsCollapsed(v => !v)} />
+                    isCollapsed={annotationsCollapsed} onToggle={() => setAnnotationsCollapsed(v => !v)}
+                    isReadOnly={isReadOnly} />
             </div>
         </div>
     )

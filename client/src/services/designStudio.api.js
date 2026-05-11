@@ -42,6 +42,9 @@ export const designStudioApi = {
   saveFlow: (sessionId, data) =>
     api.post(`/design-studio/${sessionId}/flows`, data),
 
+  deleteFlow: (sessionId, flowId) =>
+    api.delete(`/design-studio/${sessionId}/flows/${flowId}`),
+
   // ── Scale analysis ──────────────────────────────────────
   saveScaleAnalysis: (sessionId, data) =>
     api.patch(`/design-studio/${sessionId}/scale`, data),

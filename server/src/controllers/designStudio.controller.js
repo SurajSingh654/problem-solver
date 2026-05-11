@@ -694,6 +694,40 @@ export async function saveFlowSimulation(req, res) {
 }
 
 // ============================================================================
+// DELETE FLOW SIMULATION
+// ============================================================================
+export async function deleteFlowSimulation(req, res) {
+  try {
+    const { sessionId, flowId } = req.params;
+    const userId = req.user.id;
+
+    const session = await prisma.designSession.findUnique({
+      where: { id: sessionId },
+      select: { id: true, userId: true, flowSimulation: true },
+    });
+
+    if (!session) return error(res, "Session not found.", 404);
+    if (session.userId !== userId) return error(res, "Not authorized.", 403);
+
+    const existing = session.flowSimulation || [];
+    const updated = existing.filter((f) => f.id !== flowId);
+    if (updated.length === existing.length) {
+      return error(res, "Flow not found.", 404);
+    }
+
+    await prisma.designSession.update({
+      where: { id: sessionId },
+      data: { flowSimulation: updated },
+    });
+
+    return success(res, { message: "Flow deleted.", flowId });
+  } catch (err) {
+    console.error("Delete flow simulation error:", err);
+    return error(res, "Failed to delete flow.", 500);
+  }
+}
+
+// ============================================================================
 // SAVE SCALE ANALYSIS
 // ============================================================================
 export async function saveScaleAnalysis(req, res) {
