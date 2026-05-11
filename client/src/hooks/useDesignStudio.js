@@ -63,15 +63,25 @@ export function useDeleteDesignSession() {
   });
 }
 
+// Debounced toast for auto-save failures. Auto-save runs continuously,
+// so if the server is unreachable we don't want one toast per keystroke.
+// Once per 30s is enough for the user to notice something is wrong.
+let lastAutoSaveErrorToastAt = 0;
+function reportAutoSaveError(scope, err) {
+  console.error(`[DesignStudio] ${scope} save failed:`, err?.message || err);
+  const now = Date.now();
+  if (now - lastAutoSaveErrorToastAt < 30_000) return;
+  lastAutoSaveErrorToastAt = now;
+  toast.error("Couldn't auto-save your work. Check your connection.");
+}
+
 // ── Save phase content (debounced auto-save) ──────────────
 export function useSavePhase() {
   return useMutation({
     mutationFn: ({ sessionId, phaseId, content }) =>
       designStudioApi.savePhase(sessionId, { phaseId, content }),
     // No toast on success — this fires on every keystroke/blur
-    onError: (err) => {
-      console.error("[DesignStudio] Phase save failed:", err.message);
-    },
+    onError: (err) => reportAutoSaveError("Phase", err),
   });
 }
 
@@ -89,9 +99,7 @@ export function useSaveDiagram() {
         componentAnnotations,
         dataFlowDescription,
       }),
-    onError: (err) => {
-      console.error("[DesignStudio] Diagram save failed:", err.message);
-    },
+    onError: (err) => reportAutoSaveError("Diagram", err),
   });
 }
 
@@ -104,9 +112,7 @@ export function useUpdateTiming() {
       if (typeof currentPhase === "number") body.currentPhase = currentPhase;
       return designStudioApi.updateTiming(sessionId, body);
     },
-    onError: (err) => {
-      console.error("[DesignStudio] Timing update failed:", err.message);
-    },
+    onError: (err) => reportAutoSaveError("Timing", err),
   });
 }
 
