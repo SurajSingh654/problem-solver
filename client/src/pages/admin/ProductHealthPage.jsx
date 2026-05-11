@@ -56,7 +56,7 @@ function StatTile({ icon, value, label, sub, color, onClick }) {
             onClick={onClick}
             className={cn(
                 'relative bg-surface-1 border border-border-default rounded-xl p-4 text-center overflow-hidden',
-                onClick && 'cursor-pointer hover:border-brand-400/30 transition-colors'
+                onClick && 'cursor-pointer hover:border-brand-line transition-colors'
             )}
         >
             <div className={cn('absolute top-0 left-0 right-0 h-0.5', color || 'bg-brand-400')} />
@@ -110,7 +110,7 @@ function WeeklyBars({ data, label }) {
                             transition={{ duration: 0.5, delay: i * 0.05 }}
                             className={cn(
                                 'flex-1 rounded-t-lg relative group transition-opacity',
-                                isLatest ? 'bg-brand-400' : 'bg-brand-400/35'
+                                isLatest ? 'bg-brand-400' : 'bg-brand-soft'
                             )}
                         >
                             <div className="absolute -top-5 left-1/2 -translate-x-1/2
@@ -161,7 +161,7 @@ function AdoptionBar({ icon, label, rate }) {
 function MemberRow({ member, rank, index, currentUserId }) {
     const isYou = member.id === currentUserId
     const score = member.compositeScore || 0
-    const scoreColor = score >= 70 ? 'text-success' : score >= 45 ? 'text-warning' : 'text-danger'
+    const scoreColor = score >= 70 ? 'text-success-fg' : score >= 45 ? 'text-warning-fg' : 'text-danger-fg'
 
     const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
 
@@ -173,7 +173,7 @@ function MemberRow({ member, rank, index, currentUserId }) {
             className={cn(
                 'flex items-center gap-3 p-3 rounded-xl border transition-all',
                 isYou
-                    ? 'bg-brand-400/5 border-brand-400/25'
+                    ? 'bg-brand-soft border-brand-line'
                     : 'bg-surface-2 border-border-default hover:border-border-strong'
             )}
         >
@@ -193,12 +193,12 @@ function MemberRow({ member, rank, index, currentUserId }) {
                     <span className="text-xs font-bold text-text-primary truncate">{member.name}</span>
                     {isYou && (
                         <span className="text-[9px] px-1 py-px rounded-full
-                                         bg-brand-400/15 text-brand-300 border border-brand-400/20 flex-shrink-0">
+                                         bg-brand-soft text-brand-fg-soft border border-brand-line flex-shrink-0">
                             you
                         </span>
                     )}
                     {member.teamRole === 'TEAM_ADMIN' && (
-                        <span className="text-[9px] text-warning flex-shrink-0">👑</span>
+                        <span className="text-[9px] text-warning-fg flex-shrink-0">👑</span>
                     )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -206,7 +206,7 @@ function MemberRow({ member, rank, index, currentUserId }) {
                         {member.totalSolved || 0} solved
                     </span>
                     {(member.streak || 0) > 0 && (
-                        <span className="text-[10px] text-warning">
+                        <span className="text-[10px] text-warning-fg">
                             {member.streak}🔥
                         </span>
                     )}
@@ -280,10 +280,10 @@ function HealthRing({ score }) {
 
 function InsightCard({ insight, index }) {
     const typeConfig = {
-        positive: { icon: '✅', border: 'border-success/20', bg: 'bg-success/3' },
-        warning: { icon: '⚠️', border: 'border-warning/20', bg: 'bg-warning/3' },
-        critical: { icon: '🚨', border: 'border-danger/20', bg: 'bg-danger/3' },
-        opportunity: { icon: '💡', border: 'border-brand-400/20', bg: 'bg-brand-400/3' },
+        positive: { icon: '✅', border: 'border-success-line', bg: 'bg-success-soft' },
+        warning: { icon: '⚠️', border: 'border-warning-line', bg: 'bg-warning-soft' },
+        critical: { icon: '🚨', border: 'border-danger-line', bg: 'bg-danger-soft' },
+        opportunity: { icon: '💡', border: 'border-brand-line', bg: 'bg-brand-soft' },
     }
     const c = typeConfig[insight.type] || typeConfig.opportunity
     return (
@@ -295,7 +295,7 @@ function InsightCard({ insight, index }) {
                     <h4 className="text-sm font-bold text-text-primary mb-0.5">{insight.title}</h4>
                     <p className="text-xs text-text-tertiary leading-relaxed mb-1.5">{insight.detail}</p>
                     {insight.action && (
-                        <p className="text-xs font-semibold text-brand-300">→ {insight.action}</p>
+                        <p className="text-xs font-semibold text-brand-fg-soft">→ {insight.action}</p>
                     )}
                 </div>
             </div>
@@ -304,11 +304,11 @@ function InsightCard({ insight, index }) {
 }
 
 function RecommendationCard({ rec, index }) {
-    const priorityColor = { 1: 'border-danger/25 bg-danger/3', 2: 'border-warning/25 bg-warning/3', 3: 'border-info/25 bg-info/3' }
+    const priorityColor = { 1: 'border-danger-line bg-danger-soft', 2: 'border-warning-line bg-warning-soft', 3: 'border-info-line bg-info-soft' }
     const effortBadge = {
-        low: 'bg-success/12 text-success border-success/25',
-        medium: 'bg-warning/12 text-warning border-warning/25',
-        high: 'bg-danger/12 text-danger border-danger/25',
+        low: 'bg-success-soft text-success-fg border-success-line',
+        medium: 'bg-warning-soft text-warning-fg border-warning-line',
+        high: 'bg-danger-soft text-danger-fg border-danger-line',
     }
     return (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }}
@@ -401,7 +401,7 @@ export default function TeamAnalyticsPage() {
                             <button key={d} onClick={() => { setPeriod(d); setAnalysis(null) }}
                                 className={cn(
                                     'px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
-                                    period === d ? 'bg-brand-400/15 text-brand-300' : 'text-text-tertiary hover:text-text-primary'
+                                    period === d ? 'bg-brand-soft text-brand-fg-soft' : 'text-text-tertiary hover:text-text-primary'
                                 )}>
                                 {d}d
                             </button>
@@ -446,7 +446,7 @@ export default function TeamAnalyticsPage() {
                         className={cn(
                             'flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap',
                             activeTab === t.id
-                                ? 'bg-brand-400/15 text-brand-300'
+                                ? 'bg-brand-soft text-brand-fg-soft'
                                 : 'text-text-tertiary hover:text-text-primary'
                         )}>
                         <span>{t.icon}</span>
@@ -462,14 +462,14 @@ export default function TeamAnalyticsPage() {
                     <AnimatePresence>
                         {analysis && (
                             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                                className="bg-surface-1 border border-brand-400/20 rounded-2xl p-5">
+                                className="bg-surface-1 border border-brand-line rounded-2xl p-5">
                                 <div className="flex items-start gap-4 flex-wrap">
                                     <HealthRing score={analysis.healthScore || 50} />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-2">
                                             <p className="text-sm font-bold text-text-primary">Team Health Summary</p>
                                             <span className="text-[9px] font-bold px-2 py-0.5 rounded-full
-                                                             bg-brand-400/12 text-brand-300 border border-brand-400/25">
+                                                             bg-brand-soft text-brand-fg-soft border border-brand-line">
                                                 AI Generated
                                             </span>
                                         </div>
@@ -480,9 +480,9 @@ export default function TeamAnalyticsPage() {
                                             <div className="flex flex-wrap gap-2 mt-3">
                                                 {Object.entries(analysis.trends).map(([key, trend]) => {
                                                     const trendConfig = {
-                                                        growing: 'bg-success/12 text-success border-success/25',
-                                                        stable: 'bg-info/12 text-info border-info/25',
-                                                        declining: 'bg-danger/12 text-danger border-danger/25',
+                                                        growing: 'bg-success-soft text-success-fg border-success-line',
+                                                        stable: 'bg-info-soft text-info-fg border-info-line',
+                                                        declining: 'bg-danger-soft text-danger-fg border-danger-line',
                                                     }
                                                     return (
                                                         <span key={key} className={cn(
@@ -537,7 +537,7 @@ export default function TeamAnalyticsPage() {
                                     <div key={g.label} className="text-center">
                                         <div className={cn(
                                             'text-sm font-extrabold font-mono',
-                                            g.value > 0 ? 'text-success' : g.value < 0 ? 'text-danger' : 'text-text-primary'
+                                            g.value > 0 ? 'text-success-fg' : g.value < 0 ? 'text-danger-fg' : 'text-text-primary'
                                         )}>
                                             {g.value > 0 ? '+' : ''}{g.value}%
                                         </div>
@@ -565,7 +565,7 @@ export default function TeamAnalyticsPage() {
                         {/* Coaching nudge */}
                         {metrics.solutions.aiReviewRate < 40 && (
                             <div className="mt-4 pt-4 border-t border-border-default">
-                                <p className="text-[11px] text-warning flex items-start gap-2">
+                                <p className="text-[11px] text-warning-fg flex items-start gap-2">
                                     <span className="flex-shrink-0">⚠️</span>
                                     <span>
                                         Only {metrics.solutions.aiReviewRate}% of solutions have AI review.
@@ -591,7 +591,7 @@ export default function TeamAnalyticsPage() {
                                 <div key={q.label} className="text-center bg-surface-2 rounded-xl p-3">
                                     <div className={cn(
                                         'text-lg font-extrabold font-mono',
-                                        q.value >= 60 ? 'text-success' : q.value >= 30 ? 'text-warning' : 'text-danger'
+                                        q.value >= 60 ? 'text-success-fg' : q.value >= 30 ? 'text-warning-fg' : 'text-danger-fg'
                                     )}>
                                         {q.value}%
                                     </div>
@@ -628,7 +628,7 @@ export default function TeamAnalyticsPage() {
                             <SectionHeader icon="👥" title="Member Performance"
                                 subtitle="Composite readiness score — not gameable" />
                             <button onClick={() => navigate('/leaderboard')}
-                                className="text-xs font-bold text-brand-300 hover:text-brand-200 transition-colors">
+                                className="text-xs font-bold text-brand-fg-soft hover:text-brand-200 transition-colors">
                                 Full Leaderboard →
                             </button>
                         </div>
@@ -682,7 +682,7 @@ export default function TeamAnalyticsPage() {
 
                     {/* At-risk members */}
                     {metrics?.users?.atRisk?.length > 0 && (
-                        <div className="bg-warning/3 border border-warning/20 rounded-2xl p-5">
+                        <div className="bg-warning-soft border border-warning-line rounded-2xl p-5">
                             <SectionHeader icon="⚠️" title="Members at Risk"
                                 subtitle="Active before but haven't practiced in 7-30 days" />
                             <div className="space-y-2">
@@ -703,7 +703,7 @@ export default function TeamAnalyticsPage() {
                                                 {m.solutionCount} solved total
                                             </span>
                                         </div>
-                                        <span className="text-[10px] text-warning bg-warning/10 border border-warning/20
+                                        <span className="text-[10px] text-warning-fg bg-warning-soft border border-warning-line
                                                          px-2 py-0.5 rounded-full font-bold">
                                             Needs nudge
                                         </span>
@@ -819,7 +819,7 @@ export default function TeamAnalyticsPage() {
                             {Object.entries(metrics.problems.difficultyDistribution).map(([diff, count]) => {
                                 const total = metrics.problems.total
                                 const pct = total > 0 ? Math.round((count / total) * 100) : 0
-                                const color = diff === 'EASY' ? 'text-success' : diff === 'MEDIUM' ? 'text-warning' : 'text-danger'
+                                const color = diff === 'EASY' ? 'text-success-fg' : diff === 'MEDIUM' ? 'text-warning-fg' : 'text-danger-fg'
                                 const bg = diff === 'EASY' ? 'bg-success' : diff === 'MEDIUM' ? 'bg-warning' : 'bg-danger'
                                 return (
                                     <div key={diff} className="flex-1 bg-surface-2 rounded-2xl p-4 text-center">
@@ -840,7 +840,7 @@ export default function TeamAnalyticsPage() {
                             const hardPct = total > 0 ? metrics.problems.difficultyDistribution.HARD / total : 0
                             if (hardPct < 0.15 && total > 5) {
                                 return (
-                                    <p className="text-[11px] text-warning mt-3 flex items-start gap-2">
+                                    <p className="text-[11px] text-warning-fg mt-3 flex items-start gap-2">
                                         <span>⚠️</span>
                                         <span>Only {Math.round(hardPct * 100)}% of problems are Hard. FAANG candidates need more Hard problems — aim for at least 20-25%.</span>
                                     </p>
@@ -866,7 +866,7 @@ export default function TeamAnalyticsPage() {
                                             <Badge variant={p.difficulty === 'EASY' ? 'easy' : p.difficulty === 'HARD' ? 'hard' : 'medium'} size="xs">
                                                 {p.difficulty}
                                             </Badge>
-                                            <span className="text-xs font-bold font-mono text-brand-300">{p.solutions}✓</span>
+                                            <span className="text-xs font-bold font-mono text-brand-fg-soft">{p.solutions}✓</span>
                                         </div>
                                     </div>
                                 ))}
@@ -876,7 +876,7 @@ export default function TeamAnalyticsPage() {
 
                     {/* Unsolved problems */}
                     {metrics.problems.unsolved?.length > 0 && (
-                        <div className="bg-brand-400/3 border border-brand-400/20 rounded-2xl p-5">
+                        <div className="bg-brand-soft border border-brand-line rounded-2xl p-5">
                             <SectionHeader icon="📭" title={`Unsolved Problems (${metrics.problems.unsolved.length})`}
                                 subtitle="Added to the team but no one has attempted them yet" />
                             <div className="space-y-2">
@@ -890,7 +890,7 @@ export default function TeamAnalyticsPage() {
                                 ))}
                             </div>
                             <button onClick={() => navigate('/problems')}
-                                className="text-xs font-bold text-brand-300 hover:text-brand-200 transition-colors mt-3 flex items-center gap-1">
+                                className="text-xs font-bold text-brand-fg-soft hover:text-brand-200 transition-colors mt-3 flex items-center gap-1">
                                 View all problems →
                             </button>
                         </div>
@@ -955,14 +955,14 @@ export default function TeamAnalyticsPage() {
                     ) : (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
                             {/* Health score + summary */}
-                            <div className="bg-surface-1 border border-brand-400/20 rounded-2xl p-5">
+                            <div className="bg-surface-1 border border-brand-line rounded-2xl p-5">
                                 <div className="flex items-start gap-5 flex-wrap">
                                     <HealthRing score={analysis.healthScore || 50} />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-2">
                                             <p className="text-sm font-bold text-text-primary">Executive Summary</p>
                                             <span className="text-[9px] font-bold px-2 py-0.5 rounded-full
-                                                             bg-brand-400/12 text-brand-300 border border-brand-400/25">
+                                                             bg-brand-soft text-brand-fg-soft border border-brand-line">
                                                 AI Generated
                                             </span>
                                         </div>
@@ -1014,9 +1014,9 @@ export default function TeamAnalyticsPage() {
                                         <div className="space-y-2">
                                             {analysis.risks.map((risk, i) => {
                                                 const severityConfig = {
-                                                    high: { icon: '🔴', border: 'border-danger/25 bg-danger/3' },
-                                                    medium: { icon: '🟡', border: 'border-warning/25 bg-warning/3' },
-                                                    low: { icon: '🟢', border: 'border-success/25 bg-success/3' },
+                                                    high: { icon: '🔴', border: 'border-danger-line bg-danger-soft' },
+                                                    medium: { icon: '🟡', border: 'border-warning-line bg-warning-soft' },
+                                                    low: { icon: '🟢', border: 'border-success-line bg-success-soft' },
                                                 }
                                                 const c = severityConfig[risk.severity] || severityConfig.medium
                                                 return (
@@ -1028,7 +1028,7 @@ export default function TeamAnalyticsPage() {
                                                             <div>
                                                                 <h4 className="text-sm font-bold text-text-primary mb-0.5">{risk.title}</h4>
                                                                 <p className="text-xs text-text-tertiary leading-relaxed mb-1">{risk.detail}</p>
-                                                                <p className="text-xs text-brand-300 font-semibold">Mitigation: {risk.mitigation}</p>
+                                                                <p className="text-xs text-brand-fg-soft font-semibold">Mitigation: {risk.mitigation}</p>
                                                             </div>
                                                         </div>
                                                     </motion.div>

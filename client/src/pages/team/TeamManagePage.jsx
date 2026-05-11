@@ -261,7 +261,7 @@ export default function TeamManagePage() {
                     <motion.div
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-warning/5 border border-warning/20 rounded-xl p-5 mb-6"
+                        className="bg-warning-soft border border-warning-line rounded-xl p-5 mb-6"
                     >
                         <div className="flex items-center gap-3">
                             <span className="text-xl">⏳</span>
@@ -275,7 +275,7 @@ export default function TeamManagePage() {
                                 </p>
                             </div>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full
-                                           bg-warning/10 text-warning border border-warning/20">
+                                           bg-warning-soft text-warning-fg border border-warning-line">
                                 PENDING
                             </span>
                         </div>
@@ -328,7 +328,7 @@ export default function TeamManagePage() {
                                         </Button>
                                     </div>
                                     {joinError && (
-                                        <p className="text-xs text-danger mt-2">{joinError}</p>
+                                        <p className="text-xs text-danger-fg mt-2">{joinError}</p>
                                     )}
                                 </motion.div>
                             )}
@@ -389,7 +389,7 @@ export default function TeamManagePage() {
                                             {createResult && (
                                                 <p className={cn(
                                                     'text-xs',
-                                                    createResult.success ? 'text-success' : 'text-danger'
+                                                    createResult.success ? 'text-success-fg' : 'text-danger-fg'
                                                 )}>
                                                     {createResult.message}
                                                 </p>
@@ -433,7 +433,7 @@ export default function TeamManagePage() {
                         size="sm"
                         onClick={handleLeave}
                         disabled={actionLoading === 'leave'}
-                        className="text-danger hover:text-danger"
+                        className="text-danger-fg hover:text-danger-fg"
                     >
                         Leave
                     </Button>
@@ -445,7 +445,7 @@ export default function TeamManagePage() {
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-5 mb-6"
+                    className="bg-brand-soft border border-brand-line rounded-xl p-5 mb-6"
                 >
                     <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-bold text-text-disabled uppercase tracking-widest">
@@ -454,13 +454,13 @@ export default function TeamManagePage() {
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setShowCode(!showCode)}
-                                className="text-xs text-brand-300 hover:text-brand-200"
+                                className="text-xs text-brand-fg-soft hover:text-brand-200"
                             >
                                 {showCode ? 'Hide' : 'Show'}
                             </button>
                             <button
                                 onClick={() => { navigator.clipboard.writeText(team.joinCode); }}
-                                className="text-xs text-brand-300 hover:text-brand-200"
+                                className="text-xs text-brand-fg-soft hover:text-brand-200"
                             >
                                 Copy
                             </button>
@@ -473,7 +473,7 @@ export default function TeamManagePage() {
                             </button>
                         </div>
                     </div>
-                    <p className="font-mono text-2xl font-extrabold tracking-[0.3em] text-brand-300">
+                    <p className="font-mono text-2xl font-extrabold tracking-[0.3em] text-brand-fg-soft">
                         {showCode ? team.joinCode : '••••••••'}
                     </p>
                     <p className="text-xs text-text-disabled mt-2">
@@ -510,7 +510,7 @@ export default function TeamManagePage() {
                                         className="w-full bg-surface-0 text-sm text-text-primary rounded-lg
                                px-3 py-2 border border-border-default resize-none
                                placeholder:text-text-disabled outline-none
-                               focus:border-brand-400/40"
+                               focus:border-brand-line"
                                     />
                                     <div className="flex items-center justify-between mt-3">
                                         <p className="text-xs text-text-disabled">Max 10 per batch</p>
@@ -526,7 +526,7 @@ export default function TeamManagePage() {
                                     {inviteResult && !inviteResult.error && (
                                         <div className="mt-3 space-y-1">
                                             {inviteResult.sent?.map((s) => (
-                                                <p key={s.email} className="text-xs text-success">✓ {s.email} — invited</p>
+                                                <p key={s.email} className="text-xs text-success-fg">✓ {s.email} — invited</p>
                                             ))}
                                             {inviteResult.skipped?.map((s) => (
                                                 <p key={s.email} className="text-xs text-text-disabled">⊘ {s.email} — {s.reason}</p>
@@ -534,7 +534,7 @@ export default function TeamManagePage() {
                                         </div>
                                     )}
                                     {inviteResult?.error && (
-                                        <p className="text-xs text-danger mt-2">{inviteResult.error}</p>
+                                        <p className="text-xs text-danger-fg mt-2">{inviteResult.error}</p>
                                     )}
                                 </div>
                             </motion.div>
@@ -558,7 +558,7 @@ export default function TeamManagePage() {
                         className={cn(
                             'flex items-center gap-4 px-5 py-3.5',
                             i < members.length - 1 && 'border-b border-border-subtle',
-                            member.id === user?.id && 'bg-brand-400/3'
+                            member.id === user?.id && 'bg-brand-soft'
                         )}
                     >
                         <Avatar name={member.name} url={member.avatarUrl} size="sm" />
@@ -568,13 +568,13 @@ export default function TeamManagePage() {
                                 <p className="text-xs font-bold text-text-primary truncate">
                                     {member.name}
                                     {member.id === user?.id && (
-                                        <span className="text-[9px] text-brand-300 ml-1.5">(you)</span>
+                                        <span className="text-[9px] text-brand-fg-soft ml-1.5">(you)</span>
                                     )}
                                 </p>
                                 <span className={cn(
                                     'text-[9px] font-bold px-1.5 py-px rounded-full border',
                                     member.teamRole === 'TEAM_ADMIN'
-                                        ? 'bg-warning/10 text-warning border-warning/20'
+                                        ? 'bg-warning-soft text-warning-fg border-warning-line'
                                         : 'bg-surface-2 text-text-disabled border-border-subtle'
                                 )}>
                                     {member.teamRole === 'TEAM_ADMIN' ? 'Admin' : 'Member'}
@@ -600,7 +600,7 @@ export default function TeamManagePage() {
                                     )}
                                     disabled={actionLoading === member.id}
                                     className="text-[10px] font-bold text-text-tertiary
-                             hover:text-brand-300 transition-colors px-2 py-1"
+                             hover:text-brand-fg-soft transition-colors px-2 py-1"
                                 >
                                     {member.teamRole === 'TEAM_ADMIN' ? 'Demote' : 'Promote'}
                                 </button>
@@ -608,7 +608,7 @@ export default function TeamManagePage() {
                                     onClick={() => handleRemoveMember(member.id, member.name)}
                                     disabled={actionLoading === member.id}
                                     className="text-[10px] font-bold text-text-disabled
-                             hover:text-danger transition-colors px-2 py-1"
+                             hover:text-danger-fg transition-colors px-2 py-1"
                                 >
                                     Remove
                                 </button>

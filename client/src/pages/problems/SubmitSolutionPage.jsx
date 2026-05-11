@@ -30,7 +30,7 @@ function FormSection({ icon, title, hint, badge, required, children, className }
             className
         )}>
             <div className="flex items-start gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center
+                <div className="w-8 h-8 rounded-lg bg-brand-soft flex items-center
                                 justify-center text-base flex-shrink-0 mt-0.5">
                     {icon}
                 </div>
@@ -39,13 +39,13 @@ function FormSection({ icon, title, hint, badge, required, children, className }
                         <h3 className="text-sm font-bold text-text-primary">{title}</h3>
                         {required && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                             bg-danger/10 text-danger border border-danger/20">
+                                             bg-danger-soft text-danger-fg border border-danger-line">
                                 Required
                             </span>
                         )}
                         {badge && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                             bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                                             bg-brand-soft text-brand-fg-soft border border-brand-line">
                                 {badge}
                             </span>
                         )}
@@ -89,8 +89,8 @@ function PatternSelector({ config, value, onChange }) {
                             'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold',
                             'transition-all duration-150 flex items-center justify-between gap-2',
                             value.includes(s)
-                                ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
+                                ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-line'
                         )}
                     >
                         <span>{s}</span>
@@ -112,7 +112,7 @@ function PatternSelector({ config, value, onChange }) {
                     {value.map(v => (
                         <span key={v}
                             className="flex items-center gap-1 text-[10px] font-bold
-                                       bg-brand-400/15 text-brand-300 border border-brand-400/25
+                                       bg-brand-soft text-brand-fg-soft border border-brand-line
                                        px-2 py-px rounded-full">
                             {v}
                             <button
@@ -170,7 +170,7 @@ function ConfidencePicker({ value, onChange }) {
                         'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
                         'transition-all duration-150 min-w-[80px]',
                         value === c.value
-                            ? 'bg-brand-400/15 border-brand-400/40 scale-105'
+                            ? 'bg-brand-soft border-brand-line scale-105'
                             : 'bg-surface-3 border-border-default hover:border-border-strong'
                     )}
                 >
@@ -199,7 +199,7 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
             transition={{ delay: index * 0.05 }}
             className={cn(
                 'rounded-xl border p-4 transition-colors',
-                hasAnswer ? 'bg-success/3 border-success/20' : 'bg-surface-2 border-border-default'
+                hasAnswer ? 'bg-success-soft border-success-line' : 'bg-surface-2 border-border-default'
             )}
         >
             <div className="flex items-start justify-between gap-3 mb-3">
@@ -208,7 +208,7 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
                         'flex-shrink-0 w-5 h-5 rounded-full flex items-center',
                         'justify-center text-[10px] font-bold mt-0.5',
                         hasAnswer
-                            ? 'bg-success/15 text-success'
+                            ? 'bg-success-soft text-success-fg'
                             : 'bg-surface-3 border border-border-default text-text-disabled'
                     )}>
                         {hasAnswer ? '✓' : index + 1}
@@ -241,7 +241,7 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
                     <button
                         type="button"
                         onClick={() => setShowHint(!showHint)}
-                        className="text-[10px] text-brand-300 hover:text-brand-200
+                        className="text-[10px] text-brand-fg-soft hover:text-brand-200
                                    transition-colors flex items-center gap-1"
                     >
                         💡 {showHint ? 'Hide hint' : 'Show hint'}
@@ -299,10 +299,10 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
     const fieldConfigs = hrConfig.hrFields || {}
 
     const sections = [
-        { key: 'underlyingConcern', label: 'Analyze', icon: '🔍', sublabel: 'What are they really checking?', color: 'text-danger', activeBg: 'bg-danger/10 border-danger/30', required: true },
-        { key: 'answer', label: 'Answer', icon: '💬', sublabel: 'Your complete polished response', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'companyConnection', label: 'Tailor', icon: '🎯', sublabel: 'Make it specific to this company', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: false },
-        { key: 'selfAssessment', label: 'Reflect', icon: '🪞', sublabel: 'Honest self-assessment', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: false },
+        { key: 'underlyingConcern', label: 'Analyze', icon: '🔍', sublabel: 'What are they really checking?', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: true },
+        { key: 'answer', label: 'Answer', icon: '💬', sublabel: 'Your complete polished response', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'companyConnection', label: 'Tailor', icon: '🎯', sublabel: 'Make it specific to this company', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
+        { key: 'selfAssessment', label: 'Reflect', icon: '🪞', sublabel: 'Honest self-assessment', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
@@ -336,14 +336,14 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
                             <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn(
                                     'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                 )}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && <span className="text-danger text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                    {s.required && !isDone && <span className="text-danger-fg text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>
                                     {s.label}
                                 </span>
                             </button>
@@ -353,7 +353,7 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
             </div>
 
             {completedCount === 0 && (
-                <p className="text-[10px] text-warning flex items-center gap-1.5 mt-2">
+                <p className="text-[10px] text-warning-fg flex items-center gap-1.5 mt-2">
                     <span>⚠️</span>
                     Fill in <strong>Analyze</strong> or <strong>Answer</strong> sections above before submitting
                 </p>
@@ -367,7 +367,7 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
                         <div className="flex items-center gap-2">
                             <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
                             {activeSectionConfig.required && (
-                                <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">Required</span>
+                                <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>
                             )}
                         </div>
                         <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
@@ -445,10 +445,10 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
     const fieldConfigs = behavioralConfig.behavioralFields || {}
 
     const sections = [
-        { key: 'competency', label: 'Competency', icon: '🎯', sublabel: 'What is this question really testing?', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: true },
-        { key: 'situation', label: 'Situation', icon: '📖', sublabel: 'Set the scene — specific and scoped', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'action', label: 'Action', icon: '⚡', sublabel: 'What YOU did — use "I" not "we"', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: true },
-        { key: 'result', label: 'Result', icon: '📊', sublabel: 'Quantified outcome and impact', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+        { key: 'competency', label: 'Competency', icon: '🎯', sublabel: 'What is this question really testing?', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: true },
+        { key: 'situation', label: 'Situation', icon: '📖', sublabel: 'Set the scene — specific and scoped', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'action', label: 'Action', icon: '⚡', sublabel: 'What YOU did — use "I" not "we"', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true },
+        { key: 'result', label: 'Result', icon: '📊', sublabel: 'Quantified outcome and impact', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
         { key: 'reflection', label: 'Reflection', icon: '🔬', sublabel: "Learning and what you'd change", color: 'text-purple-400', activeBg: 'bg-purple-400/10 border-purple-400/30', required: false },
     ]
 
@@ -470,7 +470,7 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
                     <p className="text-xs font-bold text-text-primary flex items-center gap-2"><span>🗣️</span> STAR Workspace</p>
                     <div className="flex items-center gap-2">
                         {requiredComplete && (
-                            <span className="text-[10px] font-bold text-success flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-success-fg flex items-center gap-1">
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                                 Core complete
                             </span>
@@ -488,13 +488,13 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
                         return (
                             <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn('flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
+                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && <span className="text-danger text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                    {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>{s.label}</span>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>{s.label}</span>
                             </button>
                         )
                     })}
@@ -503,7 +503,7 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
 
             {!requiredComplete && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                    className="bg-success/3 border border-success/15 rounded-xl px-4 py-3 flex items-start gap-3">
+                    className="bg-success-soft border border-success-line rounded-xl px-4 py-3 flex items-start gap-3">
                     <span className="text-base flex-shrink-0 mt-0.5">💡</span>
                     <div>
                         <p className="text-xs font-semibold text-text-primary mb-1">Fill sections in order for the strongest answer</p>
@@ -519,7 +519,7 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
-                            {activeSectionConfig.required && <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">Required</span>}
+                            {activeSectionConfig.required && <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>}
                             {!activeSectionConfig.required && <span className="text-[9px] font-bold text-text-disabled bg-surface-3 border border-border-default px-1.5 py-px rounded-full">High signal</span>}
                         </div>
                         <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
@@ -536,7 +536,7 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
                     {activeCharCount > 0 && (
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between text-[10px]">
-                                <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success' : isShort ? 'text-warning' : 'text-text-disabled')}>
+                                <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success-fg' : isShort ? 'text-warning-fg' : 'text-text-disabled')}>
                                     {activeCharCount >= threshold ? '✓ Good depth' : isShort ? `Still shallow — aim for ${threshold - activeCharCount} more chars` : 'Keep going...'}
                                 </span>
                                 <span className="text-text-disabled tabular-nums">{activeCharCount} / ~{threshold}</span>
@@ -626,11 +626,11 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
     const fieldConfigs = tkConfig.technicalKnowledgeFields || {}
 
     const sections = [
-        { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: true },
-        { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
-        { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices, when to choose differently', color: 'text-danger', activeBg: 'bg-danger/10 border-danger/30', required: false },
-        { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: false },
+        { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true },
+        { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
+        { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices, when to choose differently', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: false },
+        { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
@@ -660,13 +660,13 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
                         return (
                             <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn('flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
+                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && <span className="text-danger text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                    {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>{s.label}</span>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>{s.label}</span>
                             </button>
                         )
                     })}
@@ -675,7 +675,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
 
             {!(tkData.coreExplanation?.trim?.()?.length > 100) && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                    className="bg-warning/3 border border-warning/15 rounded-xl px-4 py-3 flex items-start gap-3">
+                    className="bg-warning-soft border border-warning-line rounded-xl px-4 py-3 flex items-start gap-3">
                     <span className="text-base flex-shrink-0 mt-0.5">⚙️</span>
                     <div>
                         <p className="text-xs font-semibold text-text-primary mb-1">Explain the mechanism, not the definition</p>
@@ -691,7 +691,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
-                            {activeSectionConfig.required && <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">Required</span>}
+                            {activeSectionConfig.required && <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>}
                             {!activeSectionConfig.required && <span className="text-[9px] font-bold text-text-disabled bg-surface-3 border border-border-default px-1.5 py-px rounded-full">High signal</span>}
                         </div>
                         <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
@@ -706,7 +706,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">Quick pick a topic</p>
-                                <button type="button" onClick={() => setShowSubjectPicker(v => !v)} className="text-[10px] text-brand-300 hover:text-brand-200 transition-colors">
+                                <button type="button" onClick={() => setShowSubjectPicker(v => !v)} className="text-[10px] text-brand-fg-soft hover:text-brand-200 transition-colors">
                                     {showSubjectPicker ? 'Hide' : 'Show topics'}
                                 </button>
                             </div>
@@ -720,7 +720,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
                                                     <button key={item} type="button"
                                                         onClick={() => { update('subject', `${group} — ${item}`); setShowSubjectPicker(false); setActiveSection('coreExplanation') }}
                                                         className={cn('text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150',
-                                                            tkData.subject === `${group} — ${item}` ? 'bg-warning/15 border-warning/40 text-warning' : 'bg-surface-3 border-border-default text-text-secondary hover:border-warning/30 hover:text-warning')}>
+                                                            tkData.subject === `${group} — ${item}` ? 'bg-warning-soft border-warning-line text-warning-fg' : 'bg-surface-3 border-border-default text-text-secondary hover:border-warning-line hover:text-warning-fg')}>
                                                         {item}
                                                     </button>
                                                 ))}
@@ -740,7 +740,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
                     {!isSubjectActive && activeCharCount > 0 && (
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between text-[10px]">
-                                <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success' : isShort ? 'text-warning' : 'text-text-disabled')}>
+                                <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success-fg' : isShort ? 'text-warning-fg' : 'text-text-disabled')}>
                                     {activeCharCount >= threshold ? '✓ Good depth' : isShort ? `Shallow — aim for ${threshold - activeCharCount} more chars` : 'Keep going...'}
                                 </span>
                                 <span className="text-text-disabled tabular-nums">{activeCharCount} / ~{threshold}</span>
@@ -794,15 +794,15 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
     const isQueryMode = problemType !== 'SCHEMA_DESIGN'
 
     const sections = isQueryMode ? [
-        { key: 'queryApproach', label: 'Approach', icon: '🧠', sublabel: 'Schema analysis and query plan', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'sqlEditor', label: 'Query', icon: '🗄️', sublabel: 'Write your SQL', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: true },
-        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', sublabel: 'What indexes you would add and why', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: false },
-        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', sublabel: 'Performance and edge cases', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+        { key: 'queryApproach', label: 'Approach', icon: '🧠', sublabel: 'Schema analysis and query plan', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'sqlEditor', label: 'Query', icon: '🗄️', sublabel: 'Write your SQL', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: true },
+        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', sublabel: 'What indexes you would add and why', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
+        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', sublabel: 'Performance and edge cases', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
     ] : [
-        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', sublabel: 'Table definitions and constraints', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', sublabel: 'Normalization and design choices', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: false },
-        { key: 'indexDesign', label: 'Indexes', icon: '⚡', sublabel: 'Index design per access pattern', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: false },
-        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', sublabel: 'Would any part benefit from NoSQL?', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', sublabel: 'Table definitions and constraints', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', sublabel: 'Normalization and design choices', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
+        { key: 'indexDesign', label: 'Indexes', icon: '⚡', sublabel: 'Index design per access pattern', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
+        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', sublabel: 'Would any part benefit from NoSQL?', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
@@ -869,13 +869,13 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
                         return (
                             <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn('flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
+                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && <span className="text-danger text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                    {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>{s.label}</span>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>{s.label}</span>
                             </button>
                         )
                     })}
@@ -889,7 +889,7 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <p className={cn('text-sm font-bold', activeSectionConfig?.color)}>{activeSectionConfig?.label}</p>
-                            {activeSectionConfig?.required && <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">Required</span>}
+                            {activeSectionConfig?.required && <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>}
                             {!activeSectionConfig?.required && <span className="text-[9px] font-bold text-text-disabled bg-surface-3 border border-border-default px-1.5 py-px rounded-full">High signal</span>}
                         </div>
                         <p className="text-[11px] text-text-disabled">{activeSectionConfig?.sublabel}</p>
@@ -905,7 +905,7 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
                             <CodeEditor code={code} onChange={updateCode} language="SQL" onLanguageChange={() => { }}
                                 selectorStyle="none" languages={[{ id: 'SQL', label: 'SQL' }]} height="300px" showLanguageSelector={false} />
                             {code.trim().length > 0 && (
-                                <p className="text-[10px] text-success flex items-center gap-1">
+                                <p className="text-[10px] text-success-fg flex items-center gap-1">
                                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                                     Query written — AI will review for correctness, optimization, and edge cases
                                 </p>
@@ -923,7 +923,7 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
                             {activeCharCount > 0 && (
                                 <div className="space-y-1.5">
                                     <div className="flex items-center justify-between text-[10px]">
-                                        <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success' : isShort ? 'text-warning' : 'text-text-disabled')}>
+                                        <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success-fg' : isShort ? 'text-warning-fg' : 'text-text-disabled')}>
                                             {activeCharCount >= threshold ? '✓ Good depth' : isShort ? `Shallow — aim for ${threshold - activeCharCount} more chars` : 'Keep going...'}
                                         </span>
                                         <span className="text-text-disabled tabular-nums">{activeCharCount} / ~{threshold}</span>
@@ -1155,13 +1155,13 @@ export default function SubmitSolutionPage() {
                     Back to problem
                 </button>
 
-                <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-6">
+                <div className="bg-brand-soft border border-brand-line rounded-2xl p-6">
                     <div className="flex items-start gap-3 mb-4">
                         <span className="text-3xl flex-shrink-0 mt-1">
                             {isSystemDesign ? '🏗️' : '🔧'}
                         </span>
                         <div>
-                            <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
+                            <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">
                                 This problem now uses Design Studio
                             </p>
                             <h2 className="text-lg font-extrabold text-text-primary mb-1">{problem.title}</h2>
@@ -1178,12 +1178,12 @@ export default function SubmitSolutionPage() {
                             What you get instead
                         </p>
                         <ul className="text-xs text-text-secondary space-y-1.5">
-                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>AI coach at every phase (Validate / Guide / Teach)</li>
-                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>AI-generated scenarios tailored to YOUR design</li>
-                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Scale analysis (1x / 10x / 100x / failure)</li>
-                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Flow simulation with latency tracing</li>
-                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Comprehensive scored evaluation (GPT-4o, 10 dimensions)</li>
-                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Multiple attempts tracked per problem</li>
+                            <li className="flex items-start gap-2"><span className="text-success-fg flex-shrink-0">✓</span>AI coach at every phase (Validate / Guide / Teach)</li>
+                            <li className="flex items-start gap-2"><span className="text-success-fg flex-shrink-0">✓</span>AI-generated scenarios tailored to YOUR design</li>
+                            <li className="flex items-start gap-2"><span className="text-success-fg flex-shrink-0">✓</span>Scale analysis (1x / 10x / 100x / failure)</li>
+                            <li className="flex items-start gap-2"><span className="text-success-fg flex-shrink-0">✓</span>Flow simulation with latency tracing</li>
+                            <li className="flex items-start gap-2"><span className="text-success-fg flex-shrink-0">✓</span>Comprehensive scored evaluation (GPT-4o, 10 dimensions)</li>
+                            <li className="flex items-start gap-2"><span className="text-success-fg flex-shrink-0">✓</span>Multiple attempts tracked per problem</li>
                         </ul>
                     </div>
 
@@ -1238,7 +1238,7 @@ export default function SubmitSolutionPage() {
                 <h2 className="text-base font-bold text-text-primary mb-2">{problem.title}</h2>
                 {hasExternalLink && (
                     <a href={problem.categoryData.sourceUrl} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-400/10 border border-brand-400/25 text-sm font-semibold text-brand-300 hover:text-brand-200 hover:bg-brand-400/15 transition-all">
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-soft border border-brand-line text-sm font-semibold text-brand-fg-soft hover:text-brand-200 hover:bg-brand-soft transition-all">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
                         </svg>
@@ -1250,7 +1250,7 @@ export default function SubmitSolutionPage() {
 
             {/* Banners */}
             {hasExternalLink && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-info/5 border border-info/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-info-soft border border-info-line rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">💡</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">Solve first, then reflect here</p>
@@ -1260,7 +1260,7 @@ export default function SubmitSolutionPage() {
             )}
             {/* SD/LLD instructional banners removed — those categories never reach this code. */}
             {isHR && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-danger/5 border border-danger/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-danger-soft border border-danger-line rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🤝</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">Analyze before you answer</p>
@@ -1269,7 +1269,7 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
             {isBehavioral && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-success/5 border border-success/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-success-soft border border-success-line rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🗣️</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">Name the competency before writing your story</p>
@@ -1278,7 +1278,7 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
             {isTechnicalKnowledge && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-warning/5 border border-warning/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-warning-soft border border-warning-line rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🧠</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">Explain the mechanism, not the definition</p>
@@ -1287,7 +1287,7 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
             {isDatabase && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-brand-soft border border-brand-line rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🗄️</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">
@@ -1340,7 +1340,7 @@ export default function SubmitSolutionPage() {
                         )}
 
                         {fields.keyInsight?.show && (
-                            <FormSection icon="💡" title={fields.keyInsight.label || 'Key Insight'} hint={fields.keyInsight.hint} className="bg-brand-400/3 border-brand-400/20">
+                            <FormSection icon="💡" title={fields.keyInsight.label || 'Key Insight'} hint={fields.keyInsight.hint} className="bg-brand-soft border-brand-line">
                                 <textarea rows={2} value={keyInsight} onChange={e => setKeyInsight(e.target.value)}
                                     placeholder={fields.keyInsight.placeholder || 'The one thing that makes this click...'}
                                     className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-tertiary px-3.5 py-2.5 outline-none resize-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20" />
@@ -1392,7 +1392,7 @@ export default function SubmitSolutionPage() {
                             <div className="mt-4 pt-4 border-t border-border-subtle">
                                 <div className="flex items-center justify-between text-xs mb-1.5">
                                     <span className="text-text-disabled">Progress</span>
-                                    <span className={cn('font-semibold', answeredCount === followUpCount ? 'text-success' : answeredCount > 0 ? 'text-brand-300' : 'text-text-disabled')}>
+                                    <span className={cn('font-semibold', answeredCount === followUpCount ? 'text-success-fg' : answeredCount > 0 ? 'text-brand-fg-soft' : 'text-text-disabled')}>
                                         {answeredCount}/{followUpCount} answered
                                         {!isHR && answeredCount > 0 && `(+${Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus)`}
                                     </span>
@@ -1418,7 +1418,7 @@ export default function SubmitSolutionPage() {
                         {(() => {
                             if (isHR) {
                                 const workspaceEmpty = (hrData.underlyingConcern?.trim().length ?? 0) === 0 && (hrData.answer?.trim().length ?? 0) === 0
-                                if (workspaceEmpty) return <span className="text-xs text-warning hidden sm:block font-semibold">Fill in the Answer workspace above first</span>
+                                if (workspaceEmpty) return <span className="text-xs text-warning-fg hidden sm:block font-semibold">Fill in the Answer workspace above first</span>
                             }
                             if (confidence === 0) return <span className="text-xs text-text-disabled hidden sm:block">Set confidence to submit</span>
                             return null

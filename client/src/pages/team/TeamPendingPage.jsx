@@ -127,13 +127,13 @@ export default function TeamPendingPage() {
               key={team.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-surface-1 border border-warning/20 rounded-xl p-5 text-left"
+              className="bg-surface-1 border border-warning-line rounded-xl p-5 text-left"
             >
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-lg">🚀</span>
                 <h3 className="text-sm font-bold text-text-primary">{team.name}</h3>
                 <span className="text-[9px] font-bold px-2 py-0.5 rounded-full
-                                 bg-warning/10 text-warning border border-warning/20">
+                                 bg-warning-soft text-warning-fg border border-warning-line">
                   PENDING
                 </span>
               </div>
@@ -158,7 +158,7 @@ export default function TeamPendingPage() {
       <div className="flex items-center justify-center gap-2 mb-8">
         <div className={cn(
           'w-2 h-2 rounded-full',
-          checking ? 'bg-warning animate-pulse' : 'bg-success/50'
+          checking ? 'bg-warning animate-pulse' : 'bg-success-soft'
         )} />
         <p className="text-xs text-text-disabled">
           {checking ? 'Checking status...' : 'Auto-checking every 30 seconds'}
@@ -194,9 +194,9 @@ export default function TeamPendingPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mt-8 bg-danger/5 border border-danger/20 rounded-xl p-5 text-left"
+          className="mt-8 bg-danger-soft border border-danger-line rounded-xl p-5 text-left"
         >
-          <h3 className="text-sm font-bold text-danger mb-2">Team Request Rejected</h3>
+          <h3 className="text-sm font-bold text-danger-fg mb-2">Team Request Rejected</h3>
           {pendingTeams
             .filter((t) => t.status === 'REJECTED')
             .map((t) => (

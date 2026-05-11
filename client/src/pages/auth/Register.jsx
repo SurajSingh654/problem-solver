@@ -110,7 +110,7 @@ export default function Register() {
         <div className="min-h-screen bg-surface-0 flex relative overflow-hidden">
             {/* Left — form */}
             <div className="flex-1 flex items-center justify-center p-6 relative z-10">
-                <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-brand-400/5 rounded-full blur-[120px] pointer-events-none" />
+                <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-brand-soft rounded-full blur-[120px] pointer-events-none" />
 
                 <motion.div
                     initial={{ opacity: 0, x: -24 }}
@@ -215,10 +215,10 @@ export default function Register() {
                                             />
                                         ))}
                                     </div>
-                                    <span className={`text-xs font-medium transition-colors ${strength.score <= 1 ? 'text-danger' :
-                                            strength.score <= 2 ? 'text-warning' :
-                                                strength.score <= 3 ? 'text-brand-300' :
-                                                    'text-success'
+                                    <span className={`text-xs font-medium transition-colors ${strength.score <= 1 ? 'text-danger-fg' :
+                                            strength.score <= 2 ? 'text-warning-fg' :
+                                                strength.score <= 3 ? 'text-brand-fg-soft' :
+                                                    'text-success-fg'
                                         }`}>
                                         {strength.label}
                                     </span>
@@ -266,7 +266,7 @@ export default function Register() {
                             Already have an account?{' '}
                             <Link
                                 to="/auth/login"
-                                className="text-brand-300 font-semibold hover:text-brand-200 transition-colors"
+                                className="text-brand-fg-soft font-semibold hover:text-brand-200 transition-colors"
                             >
                                 Sign in
                             </Link>
@@ -282,14 +282,14 @@ export default function Register() {
                 transition={{ duration: 0.4, delay: 0.1, ease: 'easeOut' }}
                 className="hidden lg:flex w-[440px] flex-col justify-center px-12 relative overflow-hidden hero-gradient"
             >
-                <div className="absolute top-[-100px] right-[-100px] w-[400px] h-[400px] bg-brand-400/8 rounded-full blur-[100px] pointer-events-none" />
+                <div className="absolute top-[-100px] right-[-100px] w-[400px] h-[400px] bg-brand-soft rounded-full blur-[100px] pointer-events-none" />
                 <div className="absolute bottom-[-100px] left-[-100px] w-[300px] h-[300px] bg-blue-500/6 rounded-full blur-[100px] pointer-events-none" />
 
                 <div className="relative z-10">
                     <div className="mb-10">
-                        <div className="inline-flex items-center gap-2 bg-brand-400/10 border border-brand-400/20 rounded-full px-4 py-2 mb-5">
+                        <div className="inline-flex items-center gap-2 bg-brand-soft border border-brand-line rounded-full px-4 py-2 mb-5">
                             <div className="w-2 h-2 bg-success rounded-full animate-pulse-dot" />
-                            <span className="text-xs font-semibold text-brand-300">
+                            <span className="text-xs font-semibold text-brand-fg-soft">
                                 Join the community
                             </span>
                         </div>

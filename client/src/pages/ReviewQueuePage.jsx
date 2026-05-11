@@ -45,7 +45,7 @@ function ConfidencePicker({ value, onChange }) {
                         'flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl border',
                         'transition-all duration-150 min-w-[68px]',
                         value === c.value
-                            ? 'bg-brand-400/15 border-brand-400/40 scale-105'
+                            ? 'bg-brand-soft border-brand-line scale-105'
                             : 'bg-surface-3 border-border-default hover:border-border-strong'
                     )}
                 >
@@ -93,7 +93,7 @@ function RecallTimer({ seconds, onExpire }) {
             </div>
             <span className={cn(
                 'text-xs font-mono font-bold',
-                isLow ? 'text-danger animate-pulse' : 'text-text-tertiary'
+                isLow ? 'text-danger-fg animate-pulse' : 'text-text-tertiary'
             )}>
                 {mins}:{secs}
             </span>
@@ -196,16 +196,16 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 {/* SM-2 state indicator */}
                                 {solution.sm2Repetitions > 0 && (
                                     <span className="text-[9px] font-bold px-2 py-px rounded-full border
-                                                   bg-brand-400/8 text-brand-300 border-brand-400/20">
+                                                   bg-brand-soft text-brand-fg-soft border-brand-line">
                                         EF {(solution.sm2EasinessFactor ?? 2.5).toFixed(1)}
                                     </span>
                                 )}
                                 {/* Phase indicator */}
                                 <span className={cn(
                                     'text-[9px] font-bold px-2 py-px rounded-full border ml-auto',
-                                    phase === 'recall' ? 'bg-warning/10 text-warning border-warning/25'
-                                        : phase === 'reveal' ? 'bg-info/10 text-info border-info/25'
-                                            : 'bg-success/10 text-success border-success/25'
+                                    phase === 'recall' ? 'bg-warning-soft text-warning-fg border-warning-line'
+                                        : phase === 'reveal' ? 'bg-info-soft text-info-fg border-info-line'
+                                            : 'bg-success-soft text-success-fg border-success-line'
                                 )}>
                                     {phase === 'recall' ? '① Recall' : phase === 'reveal' ? '② Review' : '③ Rate'}
                                 </span>
@@ -241,7 +241,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                             ════════════════════════════════════════ */}
                         {phase === 'recall' && (
                             <div className="p-5 space-y-4">
-                                <div className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4">
+                                <div className="bg-brand-soft border border-brand-line rounded-xl p-4">
                                     <div className="flex items-center justify-between mb-2">
                                         <p className="text-sm font-bold text-text-primary">
                                             🧠 Before looking at your notes...
@@ -326,8 +326,8 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     </div>
 
                                     {/* Original notes */}
-                                    <div className="rounded-xl border border-brand-400/20 bg-brand-400/3 p-4">
-                                        <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-2">
+                                    <div className="rounded-xl border border-brand-line bg-brand-soft p-4">
+                                        <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-2">
                                             Your original notes
                                         </p>
                                         {hasNotes ? (
@@ -335,7 +335,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                 {solution.pattern && (
                                                     <div>
                                                         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Pattern</p>
-                                                        <p className="text-xs font-semibold text-brand-300">{solution.pattern}</p>
+                                                        <p className="text-xs font-semibold text-brand-fg-soft">{solution.pattern}</p>
                                                     </div>
                                                 )}
                                                 {solution.keyInsight && (
@@ -398,7 +398,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                             </p>
                                             <button
                                                 onClick={() => setShowAiHints(v => !v)}
-                                                className="text-[10px] text-brand-300 hover:text-brand-200 transition-colors"
+                                                className="text-[10px] text-brand-fg-soft hover:text-brand-200 transition-colors"
                                             >
                                                 {showAiHints ? 'Hide' : 'Show questions'}
                                             </button>
@@ -413,7 +413,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                         transition={{ delay: i * 0.08 }}
                                                         className="flex items-start gap-2.5 bg-surface-2 rounded-lg p-3"
                                                     >
-                                                        <span className="text-[10px] font-bold text-brand-300 flex-shrink-0 mt-0.5">
+                                                        <span className="text-[10px] font-bold text-brand-fg-soft flex-shrink-0 mt-0.5">
                                                             Q{i + 1}
                                                         </span>
                                                         <div className="flex-1 min-w-0">
@@ -422,9 +422,9 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                             </p>
                                                             <span className={cn(
                                                                 'text-[9px] font-bold mt-1 inline-block',
-                                                                q.focus === 'pattern' ? 'text-brand-300'
-                                                                    : q.focus === 'complexity' ? 'text-warning'
-                                                                        : q.focus === 'edge_case' ? 'text-danger'
+                                                                q.focus === 'pattern' ? 'text-brand-fg-soft'
+                                                                    : q.focus === 'complexity' ? 'text-warning-fg'
+                                                                        : q.focus === 'edge_case' ? 'text-danger-fg'
                                                                             : 'text-text-disabled'
                                                             )}>
                                                                 {q.focus?.replace('_', ' ')}
@@ -486,13 +486,13 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                             'flex items-start gap-3 px-4 py-3 rounded-xl border',
                                             isRecallPass
                                                 ? 'bg-surface-2 border-border-default'
-                                                : 'bg-warning/5 border-warning/25'
+                                                : 'bg-warning-soft border-warning-line'
                                         )}
                                     >
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                             stroke="currentColor" strokeWidth="2"
                                             strokeLinecap="round" strokeLinejoin="round"
-                                            className="text-brand-300 flex-shrink-0 mt-0.5">
+                                            className="text-brand-fg-soft flex-shrink-0 mt-0.5">
                                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                                             <line x1="16" y1="2" x2="16" y2="6" />
                                             <line x1="8" y1="2" x2="8" y2="6" />
@@ -501,14 +501,14 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         <div className="flex-1">
                                             <p className="text-xs text-text-secondary">
                                                 Next review:{' '}
-                                                <span className="font-semibold text-brand-300">{nextDate}</span>
+                                                <span className="font-semibold text-brand-fg-soft">{nextDate}</span>
                                                 <span className="text-text-disabled ml-1">
                                                     (in {nextDays} day{nextDays !== 1 ? 's' : ''})
                                                 </span>
                                             </p>
                                             {/* SM-2 outcome explanation */}
                                             {confidence <= 2 && (
-                                                <p className="text-[11px] text-warning mt-1">
+                                                <p className="text-[11px] text-warning-fg mt-1">
                                                     Didn't recall it — repetition counter resets to 0. Back in 1 day.
                                                     EF decreases slightly (harder to space out).
                                                 </p>
@@ -524,7 +524,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                 </p>
                                             )}
                                             {confidence === 5 && (
-                                                <p className="text-[11px] text-success mt-1">
+                                                <p className="text-[11px] text-success-fg mt-1">
                                                     Perfect recall — maximum EF increase. Interval extends significantly.
                                                 </p>
                                             )}
@@ -534,8 +534,8 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
 
                                 {/* SM-2 explanation for first-time users */}
                                 {(solution.reviewCount || 0) === 0 && (
-                                    <div className="bg-info/5 border border-info/20 rounded-xl p-3">
-                                        <p className="text-[10px] font-bold text-info mb-1">
+                                    <div className="bg-info-soft border border-info-line rounded-xl p-3">
+                                        <p className="text-[10px] font-bold text-info-fg mb-1">
                                             How SM-2 works
                                         </p>
                                         <p className="text-[10px] text-text-tertiary leading-relaxed">
@@ -619,8 +619,8 @@ function PatternGroupHeader({ pattern, count, onReviewAll }) {
                 <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
                     Pattern
                 </span>
-                <span className="text-xs font-bold text-brand-300 bg-brand-400/10
-                                 border border-brand-400/20 rounded-full px-2.5 py-0.5">
+                <span className="text-xs font-bold text-brand-fg-soft bg-brand-soft
+                                 border border-brand-line rounded-full px-2.5 py-0.5">
                     {pattern || 'No Pattern Tagged'}
                 </span>
                 <span className="text-[11px] text-text-disabled">
@@ -630,7 +630,7 @@ function PatternGroupHeader({ pattern, count, onReviewAll }) {
             {count > 1 && (
                 <button
                     onClick={onReviewAll}
-                    className="text-[11px] font-semibold text-brand-300 hover:text-brand-200 transition-colors"
+                    className="text-[11px] font-semibold text-brand-fg-soft hover:text-brand-200 transition-colors"
                 >
                     Review all →
                 </button>
@@ -668,18 +668,18 @@ function DueCard({ solution, index, onReview }) {
                 'group bg-surface-1 border rounded-2xl p-5 transition-all duration-200',
                 'hover:-translate-y-0.5 hover:shadow-md',
                 overdueDays > 3
-                    ? 'border-danger/25 hover:border-danger/40'
+                    ? 'border-danger-line hover:border-danger-line'
                     : overdueDays > 0
-                        ? 'border-warning/25 hover:border-warning/40'
-                        : 'border-border-default hover:border-brand-400/30'
+                        ? 'border-warning-line hover:border-warning-line'
+                        : 'border-border-default hover:border-brand-line'
             )}
         >
             <div className="flex items-start gap-4">
                 <div className={cn(
                     'w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 border',
-                    overdueDays > 3 ? 'bg-danger/10 border-danger/25'
-                        : overdueDays > 0 ? 'bg-warning/10 border-warning/25'
-                            : 'bg-brand-400/10 border-brand-400/20'
+                    overdueDays > 3 ? 'bg-danger-soft border-danger-line'
+                        : overdueDays > 0 ? 'bg-warning-soft border-warning-line'
+                            : 'bg-brand-soft border-brand-line'
                 )}>
                     🧠
                 </div>
@@ -704,10 +704,10 @@ function DueCard({ solution, index, onReview }) {
                                     <span className={cn(
                                         'text-[9px] font-bold px-1.5 py-px rounded-full border',
                                         retentionHealth === 'strong'
-                                            ? 'bg-success/10 text-success border-success/20'
+                                            ? 'bg-success-soft text-success-fg border-success-line'
                                             : retentionHealth === 'building'
-                                                ? 'bg-warning/10 text-warning border-warning/20'
-                                                : 'bg-danger/10 text-danger border-danger/20'
+                                                ? 'bg-warning-soft text-warning-fg border-warning-line'
+                                                : 'bg-danger-soft text-danger-fg border-danger-line'
                                     )}>
                                         {retentionHealth === 'strong' ? '↑ Strong'
                                             : retentionHealth === 'building' ? '~ Building'
@@ -719,10 +719,10 @@ function DueCard({ solution, index, onReview }) {
                                     <span className={cn(
                                         'text-[9px] font-mono font-bold px-1.5 py-px rounded-full border',
                                         retentionEstimate >= 70
-                                            ? 'bg-success/8 text-success border-success/15'
+                                            ? 'bg-success-soft text-success-fg border-success-line'
                                             : retentionEstimate >= 40
-                                                ? 'bg-warning/8 text-warning border-warning/15'
-                                                : 'bg-danger/8 text-danger border-danger/15'
+                                                ? 'bg-warning-soft text-warning-fg border-warning-line'
+                                                : 'bg-danger-soft text-danger-fg border-danger-line'
                                     )}>
                                         ~{retentionEstimate}% retained
                                     </span>
@@ -733,10 +733,10 @@ function DueCard({ solution, index, onReview }) {
                         <span className={cn(
                             'text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0',
                             overdueDays > 3
-                                ? 'bg-danger/15 text-danger border border-danger/30'
+                                ? 'bg-danger-soft text-danger-fg border border-danger-line'
                                 : overdueDays > 0
-                                    ? 'bg-warning/15 text-warning border border-warning/30'
-                                    : 'bg-brand-400/12 text-brand-300 border border-brand-400/25'
+                                    ? 'bg-warning-soft text-warning-fg border border-warning-line'
+                                    : 'bg-brand-soft text-brand-fg-soft border border-brand-line'
                         )}>
                             {overdueDays === 0 ? 'Due today'
                                 : overdueDays === 1 ? '1d overdue'
@@ -768,7 +768,7 @@ function DueCard({ solution, index, onReview }) {
                     {/* Key insight preview */}
                     {solution.keyInsight && (
                         <p className="text-xs text-text-tertiary leading-relaxed mb-3
-                                       border-l-2 border-brand-400/30 pl-3 italic line-clamp-2">
+                                       border-l-2 border-brand-line pl-3 italic line-clamp-2">
                             "{solution.keyInsight}"
                         </p>
                     )}
@@ -828,7 +828,7 @@ function UpcomingCard({ solution, index }) {
                             solution.problem?.difficulty?.slice(1).toLowerCase()}
                     </Badge>
                     {solution.pattern && (
-                        <span className="text-[10px] text-brand-300">{solution.pattern}</span>
+                        <span className="text-[10px] text-brand-fg-soft">{solution.pattern}</span>
                     )}
                     <span className="text-[11px] text-text-tertiary">
                         in {daysUntil} day{daysUntil !== 1 ? 's' : ''}
@@ -842,7 +842,7 @@ function UpcomingCard({ solution, index }) {
             </div>
             <span className={cn(
                 'text-[10px] font-bold flex-shrink-0',
-                daysUntil <= 2 ? 'text-warning' : 'text-text-disabled'
+                daysUntil <= 2 ? 'text-warning-fg' : 'text-text-disabled'
             )}>
                 {daysUntil <= 2
                     ? 'Soon'
@@ -956,7 +956,7 @@ export default function ReviewQueuePage() {
                             className={cn(
                                 'text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all',
                                 groupByPattern
-                                    ? 'bg-brand-400/15 border-brand-400/30 text-brand-300'
+                                    ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                     : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-primary'
                             )}
                         >
@@ -983,12 +983,12 @@ export default function ReviewQueuePage() {
                         initial={{ opacity: 0, y: -12 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -12 }}
-                        className="bg-success/10 border border-success/30 rounded-2xl p-5
+                        className="bg-success-soft border border-success-line rounded-2xl p-5
                                    flex items-center gap-4 mb-6"
                     >
                         <div className="text-3xl flex-shrink-0">🎉</div>
                         <div className="flex-1">
-                            <p className="text-sm font-bold text-success">Review session complete!</p>
+                            <p className="text-sm font-bold text-success-fg">Review session complete!</p>
                             <p className="text-xs text-text-secondary mt-0.5">
                                 You actively recalled {sessionCount} problem{sessionCount !== 1 ? 's' : ''}.
                                 SM-2 has updated each interval based on your ratings.
@@ -1015,22 +1015,22 @@ export default function ReviewQueuePage() {
                         label: 'Due Now',
                         value: totalDue,
                         icon: '🧠',
-                        color: totalDue > 0 ? 'text-warning' : 'text-success',
-                        bg: totalDue > 0 ? 'bg-warning/10 border-warning/20' : 'bg-success/10 border-success/20',
+                        color: totalDue > 0 ? 'text-warning-fg' : 'text-success-fg',
+                        bg: totalDue > 0 ? 'bg-warning-soft border-warning-line' : 'bg-success-soft border-success-line',
                     },
                     {
                         label: 'Done This Session',
                         value: totalDoneToday,
                         icon: '✅',
-                        color: 'text-success',
-                        bg: 'bg-success/10 border-success/20',
+                        color: 'text-success-fg',
+                        bg: 'bg-success-soft border-success-line',
                     },
                     {
                         label: 'Coming (14d)',
                         value: upcoming.length,
                         icon: '📅',
-                        color: 'text-brand-300',
-                        bg: 'bg-brand-400/10 border-brand-400/20',
+                        color: 'text-brand-fg-soft',
+                        bg: 'bg-brand-soft border-brand-line',
                     },
                     {
                         label: 'Total Tracked',
@@ -1083,7 +1083,7 @@ export default function ReviewQueuePage() {
                 <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mb-6"
+                    className="bg-brand-soft border border-brand-line rounded-xl p-4 mb-6"
                 >
                     <div className="flex items-start gap-3">
                         <span className="text-lg flex-shrink-0">🧪</span>
@@ -1107,7 +1107,7 @@ export default function ReviewQueuePage() {
             {totalDue > 0 ? (
                 <div className="mb-8">
                     <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-4">
-                        <span className="text-warning">⚡</span>
+                        <span className="text-warning-fg">⚡</span>
                         Due Now
                         <Badge variant="warning" size="xs">{totalDue}</Badge>
                         <span className="text-[10px] font-normal text-text-disabled ml-1">
@@ -1149,7 +1149,7 @@ export default function ReviewQueuePage() {
                 <motion.div
                     initial={{ opacity: 0, scale: 0.97 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-surface-1 border border-success/25 rounded-2xl p-10 text-center mb-8"
+                    className="bg-surface-1 border border-success-line rounded-2xl p-10 text-center mb-8"
                 >
                     <div className="text-5xl mb-4">
                         {totalDoneToday > 0 ? '🎉' : '✅'}

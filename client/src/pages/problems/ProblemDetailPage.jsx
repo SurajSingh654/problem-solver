@@ -124,7 +124,7 @@ function HRRealConcernPanel({ categoryId, description }) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.03 }}
-            className="bg-danger/5 border border-danger/15 rounded-2xl p-5 mb-6"
+            className="bg-danger-soft border border-danger-line rounded-2xl p-5 mb-6"
         >
             <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
                 <span>🔍</span> What the Interviewer Is Really Checking
@@ -227,7 +227,7 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.03 }}
-            className="bg-success/5 border border-success/15 rounded-2xl p-5 mb-6"
+            className="bg-success-soft border border-success-line rounded-2xl p-5 mb-6"
         >
             <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
                 <span>🎯</span> Competency Being Tested
@@ -237,7 +237,7 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                     <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
                         Competency
                     </p>
-                    <p className="text-base font-extrabold text-success">{competencyTag}</p>
+                    <p className="text-base font-extrabold text-success-fg">{competencyTag}</p>
                 </div>
             )}
             {coaching && (
@@ -251,16 +251,16 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                         </p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                        <div className="bg-success/5 border border-success/15 rounded-xl p-3">
-                            <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1.5">
+                        <div className="bg-success-soft border border-success-line rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-success-fg uppercase tracking-widest mb-1.5">
                                 ✓ Strong answer signals
                             </p>
                             <p className="text-[11px] text-text-tertiary leading-relaxed">
                                 {coaching.strongSignals}
                             </p>
                         </div>
-                        <div className="bg-danger/5 border border-danger/15 rounded-xl p-3">
-                            <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1.5">
+                        <div className="bg-danger-soft border border-danger-line rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-danger-fg uppercase tracking-widest mb-1.5">
                                 ✗ Weak answer signals
                             </p>
                             <p className="text-[11px] text-text-tertiary leading-relaxed">
@@ -268,8 +268,8 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
                             </p>
                         </div>
                     </div>
-                    <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
-                        <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">
+                    <div className="bg-warning-soft border border-warning-line rounded-xl p-3">
+                        <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-1">
                             ⚠️ Most common failure mode
                         </p>
                         <p className="text-[11px] text-text-tertiary leading-relaxed">
@@ -289,10 +289,10 @@ function BehavioralCompetencyPanel({ competencyTag, description }) {
             {!competencyTag && !coaching && (
                 <div className="space-y-2">
                     {[
-                        { label: 'S — Situation', desc: 'Set specific context. Name the project, team size, stakes, and timeline.', color: 'text-brand-300' },
-                        { label: 'T — Task', desc: 'What were YOU specifically responsible for? Not the team — you.', color: 'text-info' },
-                        { label: 'A — Action', desc: 'What did YOU do, step by step? Use "I" not "we". This is the core.', color: 'text-warning' },
-                        { label: 'R — Result', desc: 'What was the quantified outcome? Even rough numbers beat no numbers.', color: 'text-success' },
+                        { label: 'S — Situation', desc: 'Set specific context. Name the project, team size, stakes, and timeline.', color: 'text-brand-fg-soft' },
+                        { label: 'T — Task', desc: 'What were YOU specifically responsible for? Not the team — you.', color: 'text-info-fg' },
+                        { label: 'A — Action', desc: 'What did YOU do, step by step? Use "I" not "we". This is the core.', color: 'text-warning-fg' },
+                        { label: 'R — Result', desc: 'What was the quantified outcome? Even rough numbers beat no numbers.', color: 'text-success-fg' },
                     ].map(item => (
                         <div key={item.label}
                             className="flex items-start gap-3 bg-surface-1 border border-border-default
@@ -384,7 +384,7 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.03 }}
-            className="bg-warning/5 border border-warning/15 rounded-2xl p-5 mb-6"
+            className="bg-warning-soft border border-warning-line rounded-2xl p-5 mb-6"
         >
             <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
                 <span>🧠</span> Technical Knowledge — Evaluation Framework
@@ -395,22 +395,22 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                         icon: '⚙️',
                         label: 'Mechanism Depth',
                         desc: 'Do you know HOW it works, not just WHAT it is? Interviewers probe until you hit your ceiling.',
-                        color: 'text-brand-300',
-                        bg: 'bg-brand-400/5 border-brand-400/20',
+                        color: 'text-brand-fg-soft',
+                        bg: 'bg-brand-soft border-brand-line',
                     },
                     {
                         icon: '⚖️',
                         label: 'Trade-off Awareness',
                         desc: 'Do you know what was sacrificed to get the benefit? Senior candidates explain what they gave up.',
-                        color: 'text-danger',
-                        bg: 'bg-danger/5 border-danger/20',
+                        color: 'text-danger-fg',
+                        bg: 'bg-danger-soft border-danger-line',
                     },
                     {
                         icon: '🌍',
                         label: 'Real-world Anchoring',
                         desc: 'Can you connect it to a specific production system? Generic examples fail, named systems pass.',
-                        color: 'text-success',
-                        bg: 'bg-success/5 border-success/20',
+                        color: 'text-success-fg',
+                        bg: 'bg-success-soft border-success-line',
                     },
                 ].map(dim => (
                     <div key={dim.label} className={cn('rounded-xl border p-3', dim.bg)}>
@@ -438,16 +438,16 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                         </p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                        <div className="bg-success/5 border border-success/15 rounded-xl p-3">
-                            <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1.5">
+                        <div className="bg-success-soft border border-success-line rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-success-fg uppercase tracking-widest mb-1.5">
                                 ✓ Strong answer signals
                             </p>
                             <p className="text-[11px] text-text-tertiary leading-relaxed">
                                 {coaching.strongSignal}
                             </p>
                         </div>
-                        <div className="bg-danger/5 border border-danger/15 rounded-xl p-3">
-                            <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1.5">
+                        <div className="bg-danger-soft border border-danger-line rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-danger-fg uppercase tracking-widest mb-1.5">
                                 ✗ Weak answer signals
                             </p>
                             <p className="text-[11px] text-text-tertiary leading-relaxed">
@@ -455,8 +455,8 @@ function TechnicalKnowledgeSubjectPanel({ subjectTag, description }) {
                             </p>
                         </div>
                     </div>
-                    <div className="bg-warning/5 border border-warning/15 rounded-xl p-3 mb-3">
-                        <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">
+                    <div className="bg-warning-soft border border-warning-line rounded-xl p-3 mb-3">
+                        <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-1">
                             ⚠️ Most common failure mode
                         </p>
                         <p className="text-[11px] text-text-tertiary leading-relaxed">
@@ -497,8 +497,8 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
             className={cn(
                 'border rounded-2xl p-5 mb-6',
                 isQueryMode
-                    ? 'bg-brand-400/5 border-brand-400/20'
-                    : 'bg-info/5 border-info/20'
+                    ? 'bg-brand-soft border-brand-line'
+                    : 'bg-info-soft border-info-line'
             )}
         >
             <h2 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-3">
@@ -536,22 +536,22 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
                                 icon: '🏗️',
                                 label: 'Structural Correctness',
                                 desc: 'Do the tables support the stated access patterns? Are relationships modeled correctly (1:1, 1:N, N:M)?',
-                                color: 'text-brand-300',
-                                bg: 'bg-brand-400/5 border-brand-400/20',
+                                color: 'text-brand-fg-soft',
+                                bg: 'bg-brand-soft border-brand-line',
                             },
                             {
                                 icon: '💡',
                                 label: 'Design Reasoning',
                                 desc: 'Can you explain WHY each type, constraint, and normalization decision was made? This is what separates junior from senior candidates.',
-                                color: 'text-success',
-                                bg: 'bg-success/5 border-success/20',
+                                color: 'text-success-fg',
+                                bg: 'bg-success-soft border-success-line',
                             },
                             {
                                 icon: '⚡',
                                 label: 'Index Design',
                                 desc: 'Do your indexes match your access patterns? Each index should be justified by a named query.',
-                                color: 'text-warning',
-                                bg: 'bg-warning/5 border-warning/20',
+                                color: 'text-warning-fg',
+                                bg: 'bg-warning-soft border-warning-line',
                             },
                         ].map(dim => (
                             <div key={dim.label} className={cn('rounded-xl border p-3', dim.bg)}>
@@ -562,8 +562,8 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
                             </div>
                         ))}
                     </div>
-                    <div className="bg-danger/5 border border-danger/15 rounded-xl p-3 mb-3">
-                        <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1.5">
+                    <div className="bg-danger-soft border border-danger-line rounded-xl p-3 mb-3">
+                        <p className="text-[10px] font-bold text-danger-fg uppercase tracking-widest mb-1.5">
                             ⚠️ Most common failure modes
                         </p>
                         <div className="space-y-1">
@@ -575,7 +575,7 @@ function DatabaseSchemaPanel({ problemType, schemaReference, description }) {
                                 'Missing NOT NULL constraints on required columns',
                             ].map((item, i) => (
                                 <p key={i} className="text-[11px] text-text-tertiary flex items-start gap-2">
-                                    <span className="text-danger flex-shrink-0 mt-0.5">✗</span>
+                                    <span className="text-danger-fg flex-shrink-0 mt-0.5">✗</span>
                                     {item}
                                 </p>
                             ))}
@@ -723,15 +723,15 @@ export default function ProblemDetailPage() {
                             </span>
                         )}
                     {isPinned && (
-                        <span className="text-xs font-bold text-warning bg-warning/10
-                                         border border-warning/25 rounded-full px-2 py-0.5">
+                        <span className="text-xs font-bold text-warning-fg bg-warning-soft
+                                         border border-warning-line rounded-full px-2 py-0.5">
                             📌 Pinned
                         </span>
                     )}
                     {/* FIX 5: Category-appropriate solved badge label */}
                     {isSolved && (
-                        <span className="text-xs font-bold text-success bg-success/10
-                                         border border-success/25 rounded-full px-2 py-0.5
+                        <span className="text-xs font-bold text-success-fg bg-success-soft
+                                         border border-success-line rounded-full px-2 py-0.5
                                          flex items-center gap-1">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" strokeWidth="3"
@@ -762,9 +762,9 @@ export default function ProblemDetailPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
-                                           bg-brand-400/10 border border-brand-400/25
-                                           text-sm font-semibold text-brand-300 hover:text-brand-200
-                                           hover:bg-brand-400/15 transition-all"
+                                           bg-brand-soft border border-brand-line
+                                           text-sm font-semibold text-brand-fg-soft hover:text-brand-200
+                                           hover:bg-brand-soft transition-all"
                             >
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" strokeWidth="2"
@@ -806,7 +806,7 @@ export default function ProblemDetailPage() {
                         {problem.categoryData.companyTags.map(c => (
                             <span key={c}
                                 className="text-[10px] font-semibold text-warning
-                                           bg-warning/10 border border-warning/20
+                                           bg-warning-soft border border-warning-line
                                            rounded-full px-2.5 py-0.5">
                                 🏢 {c}
                             </span>
@@ -819,13 +819,13 @@ export default function ProblemDetailPage() {
                     <InfoChip
                         label={isHR ? 'Answers' : 'Solutions'}
                         value={teamSolutionCount || 0}
-                        color="text-brand-300"
+                        color="text-brand-fg-soft"
                     />
                     {followUpQuestions?.length > 0 && (
                         <InfoChip
                             label="Follow-ups"
                             value={followUpQuestions.length}
-                            color="text-info"
+                            color="text-info-fg"
                         />
                     )}
                     {createdBy && (
@@ -932,11 +932,11 @@ export default function ProblemDetailPage() {
                     className={cn(
                         'border rounded-2xl p-5 mb-6',
                         isSystemDesign
-                            ? 'bg-brand-400/5 border-brand-400/25'
+                            ? 'bg-brand-soft border-brand-line'
                             : isLLD
                                 ? 'bg-purple-400/5 border-purple-400/25'
                                 : category && category !== 'CODING'
-                                    ? 'bg-brand-400/3 border-brand-400/20'
+                                    ? 'bg-brand-soft border-brand-line'
                                     : 'bg-surface-1 border-border-default'
                     )}
                 >
@@ -972,8 +972,8 @@ export default function ProblemDetailPage() {
                         {isSystemDesign ? 'Real World Context — How Others Solved This' : 'Real World Context'}
                     </h2>
                     {isSystemDesign && isSolved && (
-                        <p className="text-[11px] text-text-tertiary mb-3 bg-success/5
-                                       border border-success/20 rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-text-tertiary mb-3 bg-success-soft
+                                       border border-success-line rounded-lg px-3 py-2">
                             ✓ You submitted your design. Compare your thinking with how real systems approach this.
                         </p>
                     )}
@@ -1021,7 +1021,7 @@ export default function ProblemDetailPage() {
                                 {/* FIX 1: navigate call corrected */}
                                 <button
                                     onClick={() => navigate(getPracticePath(category, problemId))}
-                                    className="mt-3 text-xs font-bold text-brand-300 hover:text-brand-200
+                                    className="mt-3 text-xs font-bold text-brand-fg-soft hover:text-brand-200
                                                transition-colors flex items-center gap-1"
                                 >
                                     Submit your design to unlock
@@ -1058,7 +1058,7 @@ export default function ProblemDetailPage() {
                         {isSolved && problem.userSolutionId && (
                             <button
                                 onClick={() => navigate(`/problems/${problemId}/edit-solution/${problem.userSolutionId}`)}
-                                className="text-xs font-semibold text-brand-300 hover:text-brand-200
+                                className="text-xs font-semibold text-brand-fg-soft hover:text-brand-200
                                            transition-colors flex items-center gap-1"
                             >
                                 Answer these
@@ -1120,7 +1120,7 @@ export default function ProblemDetailPage() {
                                     </div>
                                     {fq.hint && (
                                         <details className="mt-2">
-                                            <summary className="text-xs text-brand-300 cursor-pointer
+                                            <summary className="text-xs text-brand-fg-soft cursor-pointer
                                                                 hover:text-brand-200 transition-colors w-fit">
                                                 💡 Show hint
                                             </summary>
@@ -1152,15 +1152,15 @@ export default function ProblemDetailPage() {
                     className={cn(
                         'border rounded-2xl p-5 mb-6',
                         isAdmin
-                            ? 'bg-warning/5 border-warning/20'
+                            ? 'bg-warning-soft border-warning-line'
                             : isHR
-                                ? 'bg-danger/5 border-danger/20'
-                                : 'bg-brand-400/5 border-brand-400/20'
+                                ? 'bg-danger-soft border-danger-line'
+                                : 'bg-brand-soft border-brand-line'
                     )}
                 >
                     <h2 className={cn(
                         'text-sm font-bold flex items-center gap-2 mb-3',
-                        isAdmin ? 'text-warning' : isHR ? 'text-danger' : 'text-brand-300'
+                        isAdmin ? 'text-warning-fg' : isHR ? 'text-danger-fg' : 'text-brand-fg-soft'
                     )}>
                         <span>{isAdmin ? '⚡' : '📖'}</span>
                         {isAdmin
@@ -1246,7 +1246,7 @@ export default function ProblemDetailPage() {
                                 {/* FIX 1: navigate call corrected */}
                                 <button
                                     onClick={() => navigate(getPracticePath(category, problemId))}
-                                    className="mt-3 text-xs font-bold text-brand-300 hover:text-brand-200
+                                    className="mt-3 text-xs font-bold text-brand-fg-soft hover:text-brand-200
                                                transition-colors flex items-center gap-1"
                                 >
                                     Submit your {isHR ? 'answer' : isBehavioral ? 'response' : isDatabase ? 'solution' : 'explanation'} to unlock
@@ -1278,7 +1278,7 @@ export default function ProblemDetailPage() {
                         <button
                             type="button"
                             onClick={() => navigate(`/design-studio?problemId=${problemId}`)}
-                            className="text-[11px] font-bold text-brand-300 hover:text-brand-200 transition-colors"
+                            className="text-[11px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors"
                         >
                             Start new →
                         </button>
@@ -1286,9 +1286,9 @@ export default function ProblemDetailPage() {
                     <div className="space-y-2">
                         {designSessions.map((s) => {
                             const statusStyles = {
-                                IN_PROGRESS: 'text-brand-300 bg-brand-400/10 border-brand-400/20',
-                                VALIDATING: 'text-warning bg-warning/10 border-warning/20',
-                                COMPLETED: 'text-success bg-success/10 border-success/20',
+                                IN_PROGRESS: 'text-brand-fg-soft bg-brand-soft border-brand-line',
+                                VALIDATING: 'text-warning-fg bg-warning-soft border-warning-line',
+                                COMPLETED: 'text-success-fg bg-success-soft border-success-line',
                                 ABANDONED: 'text-text-disabled bg-surface-3 border-border-default',
                             }
                             const statusLabel = {
@@ -1303,7 +1303,7 @@ export default function ProblemDetailPage() {
                                     type="button"
                                     onClick={() => navigate(`/design-studio?problemId=${problemId}`)}
                                     className="w-full bg-surface-1 border border-border-default rounded-xl p-3
-                                               hover:border-brand-400/30 transition-all
+                                               hover:border-brand-line transition-all
                                                flex items-center justify-between gap-3 text-left"
                                 >
                                     <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
@@ -1317,7 +1317,7 @@ export default function ProblemDetailPage() {
                                             {Math.floor((s.totalTimeSpent || 0) / 60)}:{String((s.totalTimeSpent || 0) % 60).padStart(2, '0')} spent
                                         </span>
                                         {s.evaluationScore != null && (
-                                            <span className="text-xs font-bold text-brand-300 flex-shrink-0">
+                                            <span className="text-xs font-bold text-brand-fg-soft flex-shrink-0">
                                                 {s.evaluationScore}/10
                                             </span>
                                         )}

@@ -74,9 +74,9 @@ function SessionListView({ onSelectSession, onCreateNew }) {
     const hasActiveFilter = designTypeFilter !== 'ALL' || statusFilter !== 'ALL'
 
     const statusConfig = {
-        IN_PROGRESS: { label: 'In Progress', color: 'text-brand-300 bg-brand-400/10 border-brand-400/20' },
-        VALIDATING: { label: 'Validating', color: 'text-warning bg-warning/10 border-warning/20' },
-        COMPLETED: { label: 'Completed', color: 'text-success bg-success/10 border-success/20' },
+        IN_PROGRESS: { label: 'In Progress', color: 'text-brand-fg-soft bg-brand-soft border-brand-line' },
+        VALIDATING: { label: 'Validating', color: 'text-warning-fg bg-warning-soft border-warning-line' },
+        COMPLETED: { label: 'Completed', color: 'text-success-fg bg-success-soft border-success-line' },
         ABANDONED: { label: 'Abandoned', color: 'text-text-disabled bg-surface-3 border-border-default' },
     }
 
@@ -149,7 +149,7 @@ function SessionListView({ onSelectSession, onCreateNew }) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.04 }}
                                 className="bg-surface-1 border border-border-default rounded-xl p-4
-                                           hover:border-brand-400/30 transition-all cursor-pointer"
+                                           hover:border-brand-line transition-all cursor-pointer"
                                 onClick={() => onSelectSession(session.id)}
                             >
                                 <div className="flex items-start justify-between gap-3">
@@ -166,7 +166,7 @@ function SessionListView({ onSelectSession, onCreateNew }) {
                                                 <span className="text-[10px] text-text-disabled">{session.difficulty}</span>
                                                 <span className="text-[10px] text-text-disabled">{formatTime(session.totalTimeSpent)} spent</span>
                                                 {session.evaluationScore && (
-                                                    <span className="text-[10px] font-bold text-brand-300">Score: {session.evaluationScore}/10</span>
+                                                    <span className="text-[10px] font-bold text-brand-fg-soft">Score: {session.evaluationScore}/10</span>
                                                 )}
                                             </div>
                                         </div>
@@ -181,7 +181,7 @@ function SessionListView({ onSelectSession, onCreateNew }) {
                                                     }
                                                 }}
                                                 title="Abandon session"
-                                                className="text-text-disabled hover:text-warning transition-colors p-1"
+                                                className="text-text-disabled hover:text-warning-fg transition-colors p-1"
                                             >
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                     <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
@@ -191,7 +191,7 @@ function SessionListView({ onSelectSession, onCreateNew }) {
                                         <button
                                             onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this session? This cannot be undone.')) deleteSession.mutate(session.id) }}
                                             title="Delete session"
-                                            className="text-text-disabled hover:text-danger transition-colors p-1"
+                                            className="text-text-disabled hover:text-danger-fg transition-colors p-1"
                                         >
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                 <polyline points="3 6 5 6 21 6" /><path d="M19 6l-2 14H7L5 6" />
@@ -272,9 +272,9 @@ function ProblemPracticeView({ problemId, onSelectSession, onStartSession, onBac
     }
 
     const statusConfig = {
-        IN_PROGRESS: { label: 'In Progress', color: 'text-brand-300 bg-brand-400/10 border-brand-400/20' },
-        VALIDATING: { label: 'Validating', color: 'text-warning bg-warning/10 border-warning/20' },
-        COMPLETED: { label: 'Completed', color: 'text-success bg-success/10 border-success/20' },
+        IN_PROGRESS: { label: 'In Progress', color: 'text-brand-fg-soft bg-brand-soft border-brand-line' },
+        VALIDATING: { label: 'Validating', color: 'text-warning-fg bg-warning-soft border-warning-line' },
+        COMPLETED: { label: 'Completed', color: 'text-success-fg bg-success-soft border-success-line' },
         ABANDONED: { label: 'Abandoned', color: 'text-text-disabled bg-surface-3 border-border-default' },
     }
 
@@ -300,9 +300,9 @@ function ProblemPracticeView({ problemId, onSelectSession, onStartSession, onBac
                                 {designType === 'SYSTEM_DESIGN' ? 'System Design' : 'Low-Level Design'}
                             </span>
                             <span className={cn('text-[10px] font-bold px-2 py-px rounded-full border',
-                                problem.difficulty === 'EASY' ? 'text-success bg-success/10 border-success/20'
-                                    : problem.difficulty === 'HARD' ? 'text-danger bg-danger/10 border-danger/20'
-                                        : 'text-warning bg-warning/10 border-warning/20')}>
+                                problem.difficulty === 'EASY' ? 'text-success-fg bg-success-soft border-success-line'
+                                    : problem.difficulty === 'HARD' ? 'text-danger-fg bg-danger-soft border-danger-line'
+                                        : 'text-warning-fg bg-warning-soft border-warning-line')}>
                                 {problem.difficulty}
                             </span>
                         </div>
@@ -335,7 +335,7 @@ function ProblemPracticeView({ problemId, onSelectSession, onStartSession, onBac
                                     transition={{ delay: i * 0.04 }}
                                     onClick={() => onSelectSession(s.id)}
                                     className="bg-surface-1 border border-border-default rounded-xl p-3
-                                               hover:border-brand-400/30 transition-all cursor-pointer
+                                               hover:border-brand-line transition-all cursor-pointer
                                                flex items-center justify-between gap-3"
                                 >
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -346,7 +346,7 @@ function ProblemPracticeView({ problemId, onSelectSession, onStartSession, onBac
                                             {formatTime(s.totalTimeSpent)} spent
                                         </span>
                                         {s.evaluationScore && (
-                                            <span className="text-xs font-bold text-brand-300 flex-shrink-0">
+                                            <span className="text-xs font-bold text-brand-fg-soft flex-shrink-0">
                                                 {s.evaluationScore}/10
                                             </span>
                                         )}
@@ -365,7 +365,7 @@ function ProblemPracticeView({ problemId, onSelectSession, onStartSession, onBac
             )}
 
             {/* Start new session */}
-            <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
+            <div className="bg-brand-soft border border-brand-line rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-3">
                     <span className="text-lg">➕</span>
                     <h3 className="text-sm font-bold text-text-primary">Start a new practice session</h3>
@@ -381,9 +381,9 @@ function ProblemPracticeView({ problemId, onSelectSession, onStartSession, onBac
                         <button key={d} type="button" onClick={() => setDifficulty(d)}
                             className={cn('text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all',
                                 difficulty === d
-                                    ? d === 'EASY' ? 'bg-success/15 border-success/40 text-success'
-                                        : d === 'MEDIUM' ? 'bg-warning/15 border-warning/40 text-warning'
-                                            : 'bg-danger/15 border-danger/40 text-danger'
+                                    ? d === 'EASY' ? 'bg-success-soft border-success-line text-success-fg'
+                                        : d === 'MEDIUM' ? 'bg-warning-soft border-warning-line text-warning-fg'
+                                            : 'bg-danger-soft border-danger-line text-danger-fg'
                                     : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong')}>
                             {d}
                         </button>
@@ -434,7 +434,7 @@ function CreateSessionScreen({ onCreated, onBack }) {
                         ].map(t => (
                             <button key={t.id} type="button" onClick={() => setDesignType(t.id)}
                                 className={cn('flex flex-col items-start gap-2 p-4 rounded-xl border text-left transition-all',
-                                    designType === t.id ? 'bg-brand-400/10 border-brand-400/40 text-brand-300' : 'bg-surface-3 border-border-default hover:border-border-strong text-text-tertiary')}>
+                                    designType === t.id ? 'bg-brand-soft border-brand-line text-brand-fg-soft' : 'bg-surface-3 border-border-default hover:border-border-strong text-text-tertiary')}>
                                 <span className="text-2xl">{t.icon}</span>
                                 <span className="text-xs font-bold">{t.label}</span>
                                 <span className="text-[10px] text-text-disabled">{t.desc}</span>
@@ -455,7 +455,7 @@ function CreateSessionScreen({ onCreated, onBack }) {
                         {['EASY', 'MEDIUM', 'HARD'].map(d => (
                             <button key={d} type="button" onClick={() => setDifficulty(d)}
                                 className={cn('flex-1 py-2.5 rounded-xl border text-xs font-bold transition-all',
-                                    difficulty === d ? d === 'EASY' ? 'bg-success/12 border-success/30 text-success' : d === 'MEDIUM' ? 'bg-warning/12 border-warning/30 text-warning' : 'bg-danger/12 border-danger/30 text-danger'
+                                    difficulty === d ? d === 'EASY' ? 'bg-success-soft border-success-line text-success-fg' : d === 'MEDIUM' ? 'bg-warning-soft border-warning-line text-warning-fg' : 'bg-danger-soft border-danger-line text-danger-fg'
                                         : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong')}>{d}</button>
                         ))}
                     </div>
@@ -509,7 +509,7 @@ function DataFlowPanel({ value, onChange, isCollapsed, onToggle, isReadOnly = fa
                                 readOnly={isReadOnly}
                                 placeholder={isReadOnly ? '(no data flow described)' : 'Walk a request through your components, step by step. Mention where caching, async queues, and failure handling kick in.'}
                                 className={cn(
-                                    'w-full bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-3 py-2 outline-none resize-y leading-relaxed focus:border-brand-400/40 focus:ring-2 focus:ring-brand-400/20',
+                                    'w-full bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-3 py-2 outline-none resize-y leading-relaxed focus:border-brand-line focus:ring-2 focus:ring-brand-400/20',
                                     isReadOnly && 'cursor-default opacity-80'
                                 )}
                             />
@@ -560,16 +560,16 @@ function ComponentAnnotationsPanel({ annotations, onChange, isCollapsed, onToggl
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs font-bold text-text-primary">{comp.componentName}</span>
                                         {!isReadOnly && (
-                                            <button onClick={() => removeComponent(i)} className="text-text-disabled hover:text-danger text-[10px]">✕</button>
+                                            <button onClick={() => removeComponent(i)} className="text-text-disabled hover:text-danger-fg text-[10px]">✕</button>
                                         )}
                                     </div>
                                     <input type="text" value={comp.purpose} onChange={e => updateComponent(i, 'purpose', e.target.value)} readOnly={isReadOnly} placeholder="Purpose..."
-                                        className={cn('w-full bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40', isReadOnly && 'cursor-default opacity-80')} />
+                                        className={cn('w-full bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-line', isReadOnly && 'cursor-default opacity-80')} />
                                     <div className="flex gap-1.5">
                                         <input type="text" value={comp.technology} onChange={e => updateComponent(i, 'technology', e.target.value)} readOnly={isReadOnly} placeholder="Technology..."
-                                            className={cn('flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40', isReadOnly && 'cursor-default opacity-80')} />
+                                            className={cn('flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-line', isReadOnly && 'cursor-default opacity-80')} />
                                         <input type="text" value={comp.notes} onChange={e => updateComponent(i, 'notes', e.target.value)} readOnly={isReadOnly} placeholder="Notes..."
-                                            className={cn('flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40', isReadOnly && 'cursor-default opacity-80')} />
+                                            className={cn('flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-line', isReadOnly && 'cursor-default opacity-80')} />
                                     </div>
                                 </div>
                             ))}
@@ -577,9 +577,9 @@ function ComponentAnnotationsPanel({ annotations, onChange, isCollapsed, onToggl
                                 <div className="flex gap-2">
                                     <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter') addComponent() }} placeholder="Add component..."
-                                        className="flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-400/40" />
+                                        className="flex-1 bg-surface-3 border border-border-default rounded-lg text-[11px] text-text-primary placeholder:text-text-disabled px-2.5 py-1.5 outline-none focus:border-brand-line" />
                                     <button onClick={addComponent} disabled={!newName.trim()}
-                                        className="text-[10px] font-bold text-brand-300 px-2.5 py-1.5 bg-brand-400/10 border border-brand-400/20 rounded-lg hover:bg-brand-400/20 transition-colors disabled:opacity-40">+ Add</button>
+                                        className="text-[10px] font-bold text-brand-fg-soft px-2.5 py-1.5 bg-brand-soft border border-brand-line rounded-lg hover:bg-brand-soft transition-colors disabled:opacity-40">+ Add</button>
                                 </div>
                             )}
                         </div>
@@ -612,11 +612,11 @@ function AICoachingBar({ sessionId, phaseId, onResponse }) {
             <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-text-disabled">🤖 AI Coach:</span>
                 <button type="button" onClick={() => handleAsk('validate')} disabled={askCoach.isPending}
-                    className="text-[10px] font-semibold px-3 py-1.5 rounded-lg border bg-success/5 border-success/20 text-success hover:bg-success/10 transition-colors disabled:opacity-50">Am I on track?</button>
+                    className="text-[10px] font-semibold px-3 py-1.5 rounded-lg border bg-success-soft border-success-line text-success-fg hover:bg-success-soft transition-colors disabled:opacity-50">Am I on track?</button>
                 <button type="button" onClick={() => handleAsk('guide')} disabled={askCoach.isPending}
-                    className="text-[10px] font-semibold px-3 py-1.5 rounded-lg border bg-warning/5 border-warning/20 text-warning hover:bg-warning/10 transition-colors disabled:opacity-50">I'm stuck</button>
+                    className="text-[10px] font-semibold px-3 py-1.5 rounded-lg border bg-warning-soft border-warning-line text-warning-fg hover:bg-warning-soft transition-colors disabled:opacity-50">I'm stuck</button>
                 <button type="button" onClick={() => setShowTeachInput(!showTeachInput)} disabled={askCoach.isPending}
-                    className="text-[10px] font-semibold px-3 py-1.5 rounded-lg border bg-info/5 border-info/20 text-info hover:bg-info/10 transition-colors disabled:opacity-50">Teach me...</button>
+                    className="text-[10px] font-semibold px-3 py-1.5 rounded-lg border bg-info-soft border-info-line text-info-fg hover:bg-info-soft transition-colors disabled:opacity-50">Teach me...</button>
                 {askCoach.isPending && <Spinner size="sm" />}
             </div>
             {showTeachInput && (
@@ -635,18 +635,18 @@ function AIResponsePanel({ response, onDismiss }) {
     if (!response) return null
 
     const verdictConfig = {
-        on_track: { label: 'On Track', color: 'text-success bg-success/10 border-success/20' },
-        strong: { label: 'Strong', color: 'text-success bg-success/10 border-success/20' },
-        needs_work: { label: 'Needs Work', color: 'text-warning bg-warning/10 border-warning/20' },
+        on_track: { label: 'On Track', color: 'text-success-fg bg-success-soft border-success-line' },
+        strong: { label: 'Strong', color: 'text-success-fg bg-success-soft border-success-line' },
+        needs_work: { label: 'Needs Work', color: 'text-warning-fg bg-warning-soft border-warning-line' },
     }
     const verdictInfo = response.verdict ? verdictConfig[response.verdict] : null
 
     return (
         <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mt-3">
+            className="bg-brand-soft border border-brand-line rounded-xl p-4 mt-3">
             <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-brand-300">🤖 AI Coach</span>
+                    <span className="text-xs font-bold text-brand-fg-soft">🤖 AI Coach</span>
                     {verdictInfo && (
                         <span className={cn('text-[10px] font-bold px-2 py-px rounded-full border', verdictInfo.color)}>
                             {verdictInfo.label}
@@ -662,14 +662,14 @@ function AIResponsePanel({ response, onDismiss }) {
 
             {/* validate mode */}
             {response.specificStrength && (
-                <div className="mt-2 pt-2 border-t border-brand-400/10">
-                    <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1">Strength</p>
+                <div className="mt-2 pt-2 border-t border-brand-line">
+                    <p className="text-[10px] font-bold text-success-fg uppercase tracking-widest mb-1">Strength</p>
                     <p className="text-xs text-text-secondary leading-relaxed">{response.specificStrength}</p>
                 </div>
             )}
             {response.specificGap && (
                 <div className="mt-2">
-                    <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">Gap</p>
+                    <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-1">Gap</p>
                     <p className="text-xs text-text-secondary leading-relaxed">{response.specificGap}</p>
                 </div>
             )}
@@ -678,22 +678,22 @@ function AIResponsePanel({ response, onDismiss }) {
             {response.guidingQuestions?.length > 0 && (
                 <div className="space-y-1.5 mt-2">
                     {response.guidingQuestions.map((q, i) => (
-                        <p key={i} className="text-xs text-text-tertiary flex items-start gap-2"><span className="text-brand-300 flex-shrink-0">→</span>{q}</p>
+                        <p key={i} className="text-xs text-text-tertiary flex items-start gap-2"><span className="text-brand-fg-soft flex-shrink-0">→</span>{q}</p>
                     ))}
                 </div>
             )}
             {response.thinkAbout && (
-                <p className="text-[11px] text-text-tertiary leading-relaxed mt-2 pt-2 border-t border-brand-400/10 italic">
+                <p className="text-[11px] text-text-tertiary leading-relaxed mt-2 pt-2 border-t border-brand-line italic">
                     Think about: {response.thinkAbout}
                 </p>
             )}
 
             {/* teach mode */}
-            {response.conceptExplanation && <p className="text-xs text-text-secondary leading-relaxed mt-2 pt-2 border-t border-brand-400/10">{response.conceptExplanation}</p>}
+            {response.conceptExplanation && <p className="text-xs text-text-secondary leading-relaxed mt-2 pt-2 border-t border-brand-line">{response.conceptExplanation}</p>}
             {response.exampleInContext && <p className="text-[11px] text-text-tertiary leading-relaxed mt-2 italic">In your design: {response.exampleInContext}</p>}
             {response.relatedDecision && (
-                <div className="mt-2 pt-2 border-t border-brand-400/10">
-                    <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">This helps you decide</p>
+                <div className="mt-2 pt-2 border-t border-brand-line">
+                    <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">This helps you decide</p>
                     <p className="text-xs text-text-secondary leading-relaxed">{response.relatedDecision}</p>
                 </div>
             )}
@@ -716,9 +716,9 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady, isReadOnly
     const allEvaluated = scenarios.length > 0 && evaluatedCount === scenarios.length
 
     const verdictConfig = {
-        PASS: { label: 'PASS', color: 'text-success bg-success/10 border-success/20', icon: '✅' },
-        PARTIAL: { label: 'PARTIAL', color: 'text-warning bg-warning/10 border-warning/20', icon: '⚠️' },
-        FAIL: { label: 'FAIL', color: 'text-danger bg-danger/10 border-danger/20', icon: '❌' },
+        PASS: { label: 'PASS', color: 'text-success-fg bg-success-soft border-success-line', icon: '✅' },
+        PARTIAL: { label: 'PARTIAL', color: 'text-warning-fg bg-warning-soft border-warning-line', icon: '⚠️' },
+        FAIL: { label: 'FAIL', color: 'text-danger-fg bg-danger-soft border-danger-line', icon: '❌' },
     }
 
     async function handleSubmitResponse(scenarioId) {
@@ -798,7 +798,7 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady, isReadOnly
                             className={cn(
                                 'bg-surface-1 border rounded-2xl overflow-hidden',
                                 isEvaluated
-                                    ? verdict?.verdict === 'PASS' ? 'border-success/30' : verdict?.verdict === 'FAIL' ? 'border-danger/30' : 'border-warning/30'
+                                    ? verdict?.verdict === 'PASS' ? 'border-success-line' : verdict?.verdict === 'FAIL' ? 'border-danger-line' : 'border-warning-line'
                                     : 'border-border-default'
                             )}
                         >
@@ -820,9 +820,9 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady, isReadOnly
                                             )}
                                             {scenario.difficulty && (
                                                 <span className={cn('text-[10px] font-bold px-2 py-px rounded-full border',
-                                                    scenario.difficulty === 'easy' ? 'text-success bg-success/10 border-success/20'
-                                                        : scenario.difficulty === 'hard' ? 'text-danger bg-danger/10 border-danger/20'
-                                                            : 'text-warning bg-warning/10 border-warning/20')}>
+                                                    scenario.difficulty === 'easy' ? 'text-success-fg bg-success-soft border-success-line'
+                                                        : scenario.difficulty === 'hard' ? 'text-danger-fg bg-danger-soft border-danger-line'
+                                                            : 'text-warning-fg bg-warning-soft border-warning-line')}>
                                                     {scenario.difficulty}
                                                 </span>
                                             )}
@@ -881,9 +881,9 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady, isReadOnly
                                 {/* Verdict display */}
                                 {isEvaluated && verdict && (
                                     <div className={cn('rounded-xl p-4 space-y-3',
-                                        verdict.verdict === 'PASS' ? 'bg-success/5 border border-success/15'
-                                            : verdict.verdict === 'FAIL' ? 'bg-danger/5 border border-danger/15'
-                                                : 'bg-warning/5 border border-warning/15')}>
+                                        verdict.verdict === 'PASS' ? 'bg-success-soft border border-success-line'
+                                            : verdict.verdict === 'FAIL' ? 'bg-danger-soft border border-danger-line'
+                                                : 'bg-warning-soft border border-warning-line')}>
                                         {/* User's response */}
                                         <div>
                                             <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">Your Response</p>
@@ -897,11 +897,11 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady, isReadOnly
                                         {/* Missed points */}
                                         {verdict.missedPoints?.length > 0 && (
                                             <div>
-                                                <p className="text-[10px] font-bold text-danger uppercase tracking-widest mb-1">Missed</p>
+                                                <p className="text-[10px] font-bold text-danger-fg uppercase tracking-widest mb-1">Missed</p>
                                                 <ul className="space-y-1">
                                                     {verdict.missedPoints.map((point, j) => (
                                                         <li key={j} className="text-xs text-text-tertiary flex items-start gap-2">
-                                                            <span className="text-danger flex-shrink-0">•</span>{point}
+                                                            <span className="text-danger-fg flex-shrink-0">•</span>{point}
                                                         </li>
                                                     ))}
                                                 </ul>
@@ -910,11 +910,11 @@ function ScenarioTestingView({ session, sessionId, onEvaluationReady, isReadOnly
                                         {/* Suggestions */}
                                         {verdict.suggestions?.length > 0 && (
                                             <div>
-                                                <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">Suggestions</p>
+                                                <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">Suggestions</p>
                                                 <ul className="space-y-1">
                                                     {verdict.suggestions.map((sug, j) => (
                                                         <li key={j} className="text-xs text-text-tertiary flex items-start gap-2">
-                                                            <span className="text-brand-300 flex-shrink-0">→</span>{sug}
+                                                            <span className="text-brand-fg-soft flex-shrink-0">→</span>{sug}
                                                         </li>
                                                     ))}
                                                 </ul>
@@ -952,8 +952,8 @@ function ScaleAnalysisView({ session, sessionId, isReadOnly = false }) {
             id: 'current',
             label: '1x — Current Scale',
             icon: '📊',
-            color: 'text-success',
-            bg: 'bg-success/5 border-success/20',
+            color: 'text-success-fg',
+            bg: 'bg-success-soft border-success-line',
             hint: 'Does your design work at the scale you stated in capacity estimation? Walk through a normal request.',
             placeholder: 'At 23K messages/sec, my system handles this because...\n\nRequest path: Client → LB → Chat Service → Message Queue → DB\nEach component handles: [explain capacity]',
         },
@@ -961,8 +961,8 @@ function ScaleAnalysisView({ session, sessionId, isReadOnly = false }) {
             id: 'tenX',
             label: '10x — Growth Scale',
             icon: '📈',
-            color: 'text-warning',
-            bg: 'bg-warning/5 border-warning/20',
+            color: 'text-warning-fg',
+            bg: 'bg-warning-soft border-warning-line',
             hint: 'What breaks first at 10x traffic? What component hits its limit? How do you scale it?',
             placeholder: 'At 230K messages/sec:\n\n• First bottleneck: [component] because [reason]\n• Solution: [horizontal scaling / sharding / caching]\n• New components needed: [what and why]',
         },
@@ -970,8 +970,8 @@ function ScaleAnalysisView({ session, sessionId, isReadOnly = false }) {
             id: 'hundredX',
             label: '100x — Extreme Scale',
             icon: '🚀',
-            color: 'text-danger',
-            bg: 'bg-danger/5 border-danger/20',
+            color: 'text-danger-fg',
+            bg: 'bg-danger-soft border-danger-line',
             hint: 'At 100x, your architecture likely needs fundamental changes. What would you redesign?',
             placeholder: 'At 2.3M messages/sec:\n\n• Architecture changes needed: [what]\n• Database can no longer be: [current choice] → switch to: [new choice]\n• New patterns required: [e.g., event sourcing, CQRS, geo-sharding]',
         },
@@ -979,8 +979,8 @@ function ScaleAnalysisView({ session, sessionId, isReadOnly = false }) {
             id: 'failureAtScale',
             label: '🔥 Failure at Scale',
             icon: '💥',
-            color: 'text-danger',
-            bg: 'bg-danger/5 border-danger/20',
+            color: 'text-danger-fg',
+            bg: 'bg-danger-soft border-danger-line',
             hint: 'At 10x traffic, your cache goes cold (restart). What happens to your database? How do you recover?',
             placeholder: 'If Redis restarts at 10x traffic:\n\n• Thundering herd: all 230K req/sec hit the database directly\n• Database max capacity: [X] req/sec → overloaded by [Y]x\n• Mitigation: [circuit breaker / request coalescing / gradual warmup]\n• Recovery time: [estimate]',
         },
@@ -1119,11 +1119,11 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                             <span className="text-text-disabled">
                                                 {flow.hops?.length || 0} hop{flow.hops?.length === 1 ? '' : 's'}
                                             </span>
-                                            <span className="font-mono text-brand-300 font-bold">
+                                            <span className="font-mono text-brand-fg-soft font-bold">
                                                 {flow.totalLatency ?? 0}ms total
                                             </span>
                                             {flow.bottleneck && (
-                                                <span className="text-warning font-semibold">
+                                                <span className="text-warning-fg font-semibold">
                                                     Bottleneck: {flow.bottleneck}
                                                 </span>
                                             )}
@@ -1137,7 +1137,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                                 }
                                             }}
                                             title="Delete flow"
-                                            className="text-text-disabled hover:text-danger transition-colors p-1 flex-shrink-0"
+                                            className="text-text-disabled hover:text-danger-fg transition-colors p-1 flex-shrink-0"
                                         >
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                 <polyline points="3 6 5 6 21 6" /><path d="M19 6l-2 14H7L5 6" />
@@ -1202,7 +1202,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                             type="button"
                             onClick={addHop}
                             disabled={hops.length >= 20}
-                            className="text-[10px] font-bold text-brand-300 px-2.5 py-1 bg-brand-400/10 border border-brand-400/20 rounded-lg hover:bg-brand-400/20 transition-colors disabled:opacity-40"
+                            className="text-[10px] font-bold text-brand-fg-soft px-2.5 py-1 bg-brand-soft border border-brand-line rounded-lg hover:bg-brand-soft transition-colors disabled:opacity-40"
                         >
                             + Add Hop
                         </button>
@@ -1218,7 +1218,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                         <button
                                             type="button"
                                             onClick={() => removeHop(i)}
-                                            className="text-text-disabled hover:text-danger text-[10px] transition-colors"
+                                            className="text-text-disabled hover:text-danger-fg text-[10px] transition-colors"
                                         >
                                             ✕ Remove
                                         </button>
@@ -1231,7 +1231,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                         onChange={e => updateHop(i, 'from', e.target.value)}
                                         placeholder="From (e.g. Client)"
                                         maxLength={100}
-                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-line"
                                     />
                                     <input
                                         type="text"
@@ -1239,7 +1239,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                         onChange={e => updateHop(i, 'to', e.target.value)}
                                         placeholder="To (e.g. Load Balancer)"
                                         maxLength={100}
-                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-line"
                                     />
                                     <input
                                         type="number"
@@ -1248,7 +1248,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                         value={hop.latencyMs}
                                         onChange={e => updateHop(i, 'latencyMs', e.target.value)}
                                         placeholder="ms"
-                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40 font-mono"
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-line font-mono"
                                     />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -1258,7 +1258,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                         onChange={e => updateHop(i, 'payload', e.target.value)}
                                         placeholder="Payload (e.g. { userId, messageText })"
                                         maxLength={500}
-                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-line"
                                     />
                                     <input
                                         type="text"
@@ -1266,7 +1266,7 @@ function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
                                         onChange={e => updateHop(i, 'failureHandling', e.target.value)}
                                         placeholder="Failure handling (e.g. retry w/ backoff, DLQ)"
                                         maxLength={500}
-                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-line"
                                     />
                                 </div>
                             </div>
@@ -1329,10 +1329,10 @@ const LLD_DIMENSION_LABELS = {
 }
 
 function scoreColor(score) {
-    if (score >= 8) return { text: 'text-success', bar: 'bg-success', bg: 'bg-success/10', border: 'border-success/20' }
-    if (score >= 6) return { text: 'text-brand-300', bar: 'bg-brand-400', bg: 'bg-brand-400/10', border: 'border-brand-400/20' }
-    if (score >= 4) return { text: 'text-warning', bar: 'bg-warning', bg: 'bg-warning/10', border: 'border-warning/20' }
-    return { text: 'text-danger', bar: 'bg-danger', bg: 'bg-danger/10', border: 'border-danger/20' }
+    if (score >= 8) return { text: 'text-success-fg', bar: 'bg-success', bg: 'bg-success-soft', border: 'border-success-line' }
+    if (score >= 6) return { text: 'text-brand-fg-soft', bar: 'bg-brand-400', bg: 'bg-brand-soft', border: 'border-brand-line' }
+    if (score >= 4) return { text: 'text-warning-fg', bar: 'bg-warning', bg: 'bg-warning-soft', border: 'border-warning-line' }
+    return { text: 'text-danger-fg', bar: 'bg-danger', bg: 'bg-danger-soft', border: 'border-danger-line' }
 }
 
 function DimensionBar({ label, icon, score, index }) {
@@ -1369,9 +1369,9 @@ function DimensionBar({ label, icon, score, index }) {
 
 function BulletCard({ title, items, color, icon }) {
     const colorMap = {
-        success: { text: 'text-success', bg: 'bg-success/5', border: 'border-success/20', dot: 'text-success' },
-        danger: { text: 'text-danger', bg: 'bg-danger/5', border: 'border-danger/20', dot: 'text-danger' },
-        brand: { text: 'text-brand-300', bg: 'bg-brand-400/5', border: 'border-brand-400/20', dot: 'text-brand-300' },
+        success: { text: 'text-success-fg', bg: 'bg-success-soft', border: 'border-success-line', dot: 'text-success-fg' },
+        danger: { text: 'text-danger-fg', bg: 'bg-danger-soft', border: 'border-danger-line', dot: 'text-danger-fg' },
+        brand: { text: 'text-brand-fg-soft', bg: 'bg-brand-soft', border: 'border-brand-line', dot: 'text-brand-fg-soft' },
     }
     const c = colorMap[color] || colorMap.brand
     const list = Array.isArray(items) ? items : []
@@ -1508,15 +1508,15 @@ function EvaluationResultsView({ session }) {
 
             {/* ── Suggested Next Steps ─────────────────────────────────────── */}
             {Array.isArray(ev.suggestedNextSteps) && ev.suggestedNextSteps.length > 0 && (
-                <section className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
+                <section className="bg-brand-soft border border-brand-line rounded-2xl p-5">
                     <div className="flex items-center gap-2 mb-3">
                         <span className="text-base">🚀</span>
-                        <h3 className="text-xs font-bold text-brand-300 uppercase tracking-widest">Next Steps</h3>
+                        <h3 className="text-xs font-bold text-brand-fg-soft uppercase tracking-widest">Next Steps</h3>
                     </div>
                     <ol className="space-y-2">
                         {ev.suggestedNextSteps.map((step, i) => (
                             <li key={i} className="text-sm text-text-secondary leading-relaxed flex items-start gap-3">
-                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-brand-400/20 text-brand-300 text-[10px] font-bold flex items-center justify-center mt-0.5">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-brand-soft text-brand-fg-soft text-[10px] font-bold flex items-center justify-center mt-0.5">
                                     {i + 1}
                                 </span>
                                 <span>{step}</span>
@@ -1834,7 +1834,7 @@ function DesignWorkspace({ sessionId, onBack }) {
             title="View the source problem"
             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border
                        text-text-tertiary bg-surface-3 border-border-default
-                       hover:border-brand-400/30 transition-all"
+                       hover:border-brand-line transition-all"
         >
             📋 Problem
         </button>
@@ -1859,21 +1859,21 @@ function DesignWorkspace({ sessionId, onBack }) {
                         {viewProblemButton}
                         <button onClick={() => setWorkspaceMode('design')}
                             className={cn('text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all',
-                                'text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30')}>
+                                'text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line')}>
                             ← Back to Design
                         </button>
                         <button onClick={() => setWorkspaceMode('flow')}
-                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                             Flow Simulation →
                         </button>
                         <button onClick={() => setWorkspaceMode('scale')}
                             className={cn('text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all',
-                                'text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20')}>
+                                'text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft')}>
                             Scale Analysis →
                         </button>
                         {hasEvaluation && (
                             <button onClick={() => setWorkspaceMode('evaluation')}
-                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success bg-success/10 border-success/20 hover:bg-success/20 transition-all">
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success-fg bg-success-soft border-success-line hover:bg-success-soft transition-all">
                                 View Evaluation →
                             </button>
                         )}
@@ -1908,16 +1908,16 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <div className="flex items-center gap-2">
                         {viewProblemButton}
                         <button onClick={() => setWorkspaceMode('scenarios')}
-                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             ← Back to Scenarios
                         </button>
                         <button onClick={() => setWorkspaceMode('flow')}
-                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                             Flow Simulation →
                         </button>
                         {hasEvaluation && (
                             <button onClick={() => setWorkspaceMode('evaluation')}
-                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success bg-success/10 border-success/20 hover:bg-success/20 transition-all">
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success-fg bg-success-soft border-success-line hover:bg-success-soft transition-all">
                                 View Evaluation →
                             </button>
                         )}
@@ -1947,22 +1947,22 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <div className="flex items-center gap-2">
                         {viewProblemButton}
                         <button onClick={() => setWorkspaceMode('design')}
-                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             ← Back to Design
                         </button>
                         {session.scenarios?.length > 0 && (
                             <button onClick={() => setWorkspaceMode('scenarios')}
-                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                                 Scenarios →
                             </button>
                         )}
                         <button onClick={() => setWorkspaceMode('scale')}
-                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                             Scale Analysis →
                         </button>
                         {hasEvaluation && (
                             <button onClick={() => setWorkspaceMode('evaluation')}
-                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success bg-success/10 border-success/20 hover:bg-success/20 transition-all">
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success-fg bg-success-soft border-success-line hover:bg-success-soft transition-all">
                                 View Evaluation →
                             </button>
                         )}
@@ -1993,16 +1993,16 @@ function DesignWorkspace({ sessionId, onBack }) {
                         {viewProblemButton}
                         {session.scenarios?.length > 0 && (
                             <button onClick={() => setWorkspaceMode('scenarios')}
-                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                                 ← Scenarios
                             </button>
                         )}
                         <button onClick={() => setWorkspaceMode('flow')}
-                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             Flows
                         </button>
                         <button onClick={() => setWorkspaceMode('design')}
-                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             View Design
                         </button>
                     </div>
@@ -2022,7 +2022,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                     'flex items-center justify-center gap-2 py-1.5 text-[10px] font-bold uppercase tracking-widest border-b',
                     session.status === 'ABANDONED'
                         ? 'bg-surface-3 text-text-disabled border-border-default'
-                        : 'bg-success/10 text-success border-success/20'
+                        : 'bg-success-soft text-success-fg border-success-line'
                 )}>
                     {session.status === 'ABANDONED' ? '⏸ Abandoned — read-only' : '🔒 Completed — read-only'}
                 </div>
@@ -2049,7 +2049,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                         return (
                             <button key={phase.id} onClick={() => handlePhaseSwitch(idx)} title={phase.label}
                                 className={cn('w-7 h-7 rounded-full flex items-center justify-center text-xs transition-all',
-                                    isActive ? 'bg-brand-400 text-white scale-110' : hasContent ? 'bg-success/20 text-success border border-success/30' : 'bg-surface-3 text-text-disabled border border-border-default hover:border-brand-400/30')}>
+                                    isActive ? 'bg-brand-400 text-white scale-110' : hasContent ? 'bg-success-soft text-success-fg border border-success-line' : 'bg-surface-3 text-text-disabled border border-border-default hover:border-brand-line')}>
                                 {phase.icon}
                             </button>
                         )
@@ -2101,7 +2101,7 @@ function DesignWorkspace({ sessionId, onBack }) {
 
             {/* Resize Handle */}
             <div onMouseDown={handleDragStart}
-                className="h-2 bg-surface-2 border-y border-border-default cursor-row-resize flex items-center justify-center hover:bg-brand-400/10 transition-colors flex-shrink-0">
+                className="h-2 bg-surface-2 border-y border-border-default cursor-row-resize flex items-center justify-center hover:bg-brand-soft transition-colors flex-shrink-0">
                 <div className="w-8 h-0.5 bg-border-strong rounded-full" />
             </div>
 

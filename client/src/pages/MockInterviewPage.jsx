@@ -178,7 +178,7 @@ function VoiceModeInput({ onTranscript, disabled, sessionId }) {
     return (
         <div className="px-4 py-3 border-t border-border-default bg-surface-1/50">
             {error && (
-                <p className="text-xs text-danger mb-2 flex items-center gap-1.5">
+                <p className="text-xs text-danger-fg mb-2 flex items-center gap-1.5">
                     <span>⚠️</span> {error}
                 </p>
             )}
@@ -206,8 +206,8 @@ function VoiceModeInput({ onTranscript, disabled, sessionId }) {
                         isRecording
                             ? 'bg-danger border-danger text-white scale-110 shadow-lg animate-pulse'
                             : isProcessing
-                                ? 'bg-warning/20 border-warning text-warning'
-                                : 'bg-brand-400/15 border-brand-400/30 text-brand-300 hover:bg-brand-400/25 hover:scale-105'
+                                ? 'bg-warning-soft border-warning text-warning-fg'
+                                : 'bg-brand-soft border-brand-line text-brand-fg-soft hover:bg-brand-soft hover:scale-105'
                     )}
                 >
                     {isProcessing ? (
@@ -230,7 +230,7 @@ function VoiceModeInput({ onTranscript, disabled, sessionId }) {
                 <div className="text-center">
                     <p className={cn(
                         'text-xs font-semibold',
-                        isRecording ? 'text-danger' : isProcessing ? 'text-warning' : 'text-text-tertiary'
+                        isRecording ? 'text-danger-fg' : isProcessing ? 'text-warning-fg' : 'text-text-tertiary'
                     )}>
                         {isRecording ? 'Recording — tap to stop'
                             : isProcessing ? 'Transcribing...'
@@ -380,7 +380,7 @@ function SetupScreen({ onStart }) {
                                 'flex items-start gap-3 p-3 rounded-xl border text-left',
                                 'transition-all duration-150',
                                 company === s.id
-                                    ? 'bg-brand-400/10 border-brand-400/35'
+                                    ? 'bg-brand-soft border-brand-line'
                                     : 'bg-surface-2 border-border-default hover:border-border-strong'
                             )}
                         >
@@ -388,7 +388,7 @@ function SetupScreen({ onStart }) {
                             <div className="min-w-0">
                                 <span className={cn(
                                     'text-xs font-bold block',
-                                    company === s.id ? 'text-brand-300' : 'text-text-primary'
+                                    company === s.id ? 'text-brand-fg-soft' : 'text-text-primary'
                                 )}>
                                     {s.label}
                                 </span>
@@ -468,7 +468,7 @@ function SetupScreen({ onStart }) {
                                     'w-full flex items-center justify-between px-3 py-2.5 rounded-xl border',
                                     'text-left transition-all duration-150',
                                     duration === d.mins
-                                        ? 'bg-warning/12 border-warning/35 text-warning'
+                                        ? 'bg-warning-soft border-warning-line text-warning-fg'
                                         : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
                                 )}
                             >
@@ -514,7 +514,7 @@ function SetupScreen({ onStart }) {
                             className={cn(
                                 'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
                                 interviewMode === mode.id
-                                    ? 'bg-brand-400/10 border-brand-400/35'
+                                    ? 'bg-brand-soft border-brand-line'
                                     : 'bg-surface-2 border-border-default hover:border-border-strong'
                             )}
                         >
@@ -523,13 +523,13 @@ function SetupScreen({ onStart }) {
                                 <div className="flex items-center gap-2">
                                     <span className={cn(
                                         'text-xs font-bold',
-                                        interviewMode === mode.id ? 'text-brand-300' : 'text-text-primary'
+                                        interviewMode === mode.id ? 'text-brand-fg-soft' : 'text-text-primary'
                                     )}>
                                         {mode.label}
                                     </span>
                                     {mode.badge && (
-                                        <span className="text-[9px] font-bold text-success bg-success/10
-                                           border border-success/20 rounded-full px-1.5 py-px">
+                                        <span className="text-[9px] font-bold text-success-fg bg-success-soft
+                                           border border-success-line rounded-full px-1.5 py-px">
                                             {mode.badge}
                                         </span>
                                     )}
@@ -557,13 +557,13 @@ function SetupScreen({ onStart }) {
                     </h2>
                     {problemId && (
                         <button onClick={() => setProblemId(null)}
-                            className="text-[10px] text-danger hover:text-danger/80 font-semibold transition-colors">
+                            className="text-[10px] text-danger-fg hover:text-danger-fg/80 font-semibold transition-colors">
                             Clear
                         </button>
                     )}
                 </div>
                 {selectedProblem ? (
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-brand-400/8 border border-brand-400/25">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-brand-soft border border-brand-line">
                         <span className="text-lg">📋</span>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-text-primary truncate">{selectedProblem.title}</p>
@@ -583,7 +583,7 @@ function SetupScreen({ onStart }) {
                             <div className="max-h-[200px] overflow-y-auto space-y-1">
                                 {filtered.slice(0, 6).map(p => (
                                     <button key={p.id} onClick={() => { setProblemId(p.id); setFilter('') }}
-                                        className="w-full flex items-center gap-3 p-2.5 rounded-xl border bg-surface-2 border-border-default text-left hover:border-brand-400/30 transition-all">
+                                        className="w-full flex items-center gap-3 p-2.5 rounded-xl border bg-surface-2 border-border-default text-left hover:border-brand-line transition-all">
                                         <span className="text-sm font-semibold text-text-primary truncate flex-1">{p.title}</span>
                                         <Badge variant={p.difficulty === 'EASY' ? 'easy' : p.difficulty === 'HARD' ? 'hard' : 'medium'} size="xs">{p.difficulty}</Badge>
                                     </button>
@@ -604,7 +604,7 @@ function SetupScreen({ onStart }) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.14 }}
-                className="bg-surface-1 border border-brand-400/20 rounded-2xl p-5"
+                className="bg-surface-1 border border-brand-line rounded-2xl p-5"
             >
                 <div className="flex items-center gap-4 mb-5 pb-5 border-b border-border-default">
                     <Avatar name={persona?.label || 'Interviewer'} color="#7c6ff7" size="md" />
@@ -618,7 +618,7 @@ function SetupScreen({ onStart }) {
                         </p>
                     </div>
                     <div className="text-right">
-                        <p className="text-xs font-bold text-warning">{duration} min</p>
+                        <p className="text-xs font-bold text-warning-fg">{duration} min</p>
                         <p className="text-[10px] text-text-disabled">GPT-4o</p>
                     </div>
                 </div>
@@ -675,8 +675,8 @@ function InterviewTimer({ startedAt, duration, phases }) {
         <div className="flex items-center gap-3 px-4 py-2 bg-surface-1 border-b border-border-default">
             <div className={cn(
                 'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold',
-                isCritical ? 'bg-danger/15 text-danger animate-pulse' :
-                    isLow ? 'bg-warning/15 text-warning' :
+                isCritical ? 'bg-danger-soft text-danger-fg animate-pulse' :
+                    isLow ? 'bg-warning-soft text-warning-fg' :
                         'bg-surface-3 text-text-primary'
             )}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -723,7 +723,7 @@ function MessageBubble({ message }) {
         >
             <div className={cn(
                 'w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-1',
-                isUser ? 'bg-brand-400/20 text-brand-300' : 'bg-surface-4 text-text-secondary'
+                isUser ? 'bg-brand-soft text-brand-fg-soft' : 'bg-surface-4 text-text-secondary'
             )}>
                 {isUser ? '👤' : '🤖'}
             </div>
@@ -731,7 +731,7 @@ function MessageBubble({ message }) {
                 'px-4 py-3 rounded-2xl text-sm leading-relaxed',
                 'break-words whitespace-pre-wrap min-w-0 overflow-hidden',
                 isUser
-                    ? 'bg-brand-400/12 border border-brand-400/20 text-text-primary rounded-tr-md'
+                    ? 'bg-brand-soft border border-brand-line text-text-primary rounded-tr-md'
                     : 'bg-surface-2 border border-border-default text-text-secondary rounded-tl-md'
             )}>
                 {message.content}
@@ -792,7 +792,7 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
                         <button key={tab} onClick={() => setActiveTab(tab)}
                             className={cn(
                                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
-                                activeTab === tab ? 'bg-brand-400/15 text-brand-300' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
+                                activeTab === tab ? 'bg-brand-soft text-brand-fg-soft' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-3'
                             )}>
                             <span className="text-xs">{config.icon}</span>{config.label}
                         </button>
@@ -1036,20 +1036,20 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                         </div>
                         <div className="flex items-center gap-2">
                             {connected && (
-                                <span className="flex items-center gap-1 text-[10px] text-success">
+                                <span className="flex items-center gap-1 text-[10px] text-success-fg">
                                     <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-dot" />
                                     Live
                                 </span>
                             )}
                             <button onClick={() => setShowEndConfirm(true)}
-                                className="text-[10px] text-text-disabled hover:text-danger transition-colors px-2 py-1 rounded-lg border border-border-default hover:border-danger/30">
+                                className="text-[10px] text-text-disabled hover:text-danger-fg transition-colors px-2 py-1 rounded-lg border border-border-default hover:border-danger-line">
                                 End
                             </button>
                         </div>
 
                         {/* Add to interviewer header — shows when AI is speaking */}
                         {isVoiceMode && isSpeaking && (
-                            <span className="flex items-center gap-1 text-[10px] text-brand-300">
+                            <span className="flex items-center gap-1 text-[10px] text-brand-fg-soft">
                                 <span className="flex gap-0.5">
                                     {[0, 1, 2].map(i => (
                                         <motion.span key={i}
@@ -1165,17 +1165,17 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
 
     // Server sends STRONG_HIRE, NO_HIRE etc. — handle both formats
     const verdictConfig = {
-        'STRONG_HIRE': { color: 'text-success', emoji: '🏆', label: 'Strong Hire' },
-        'HIRE': { color: 'text-success', emoji: '✅', label: 'Hire' },
-        'LEAN_HIRE': { color: 'text-brand-300', emoji: '🤔', label: 'Lean Hire' },
-        'LEAN_NO_HIRE': { color: 'text-warning', emoji: '📈', label: 'Lean No Hire' },
-        'NO_HIRE': { color: 'text-danger', emoji: '💪', label: 'No Hire' },
+        'STRONG_HIRE': { color: 'text-success-fg', emoji: '🏆', label: 'Strong Hire' },
+        'HIRE': { color: 'text-success-fg', emoji: '✅', label: 'Hire' },
+        'LEAN_HIRE': { color: 'text-brand-fg-soft', emoji: '🤔', label: 'Lean Hire' },
+        'LEAN_NO_HIRE': { color: 'text-warning-fg', emoji: '📈', label: 'Lean No Hire' },
+        'NO_HIRE': { color: 'text-danger-fg', emoji: '💪', label: 'No Hire' },
         // Legacy format support
-        'Strong Hire': { color: 'text-success', emoji: '🏆', label: 'Strong Hire' },
-        'Hire': { color: 'text-success', emoji: '✅', label: 'Hire' },
-        'Lean Hire': { color: 'text-brand-300', emoji: '🤔', label: 'Lean Hire' },
-        'Lean No Hire': { color: 'text-warning', emoji: '📈', label: 'Lean No Hire' },
-        'No Hire': { color: 'text-danger', emoji: '💪', label: 'No Hire' },
+        'Strong Hire': { color: 'text-success-fg', emoji: '🏆', label: 'Strong Hire' },
+        'Hire': { color: 'text-success-fg', emoji: '✅', label: 'Hire' },
+        'Lean Hire': { color: 'text-brand-fg-soft', emoji: '🤔', label: 'Lean Hire' },
+        'Lean No Hire': { color: 'text-warning-fg', emoji: '📈', label: 'Lean No Hire' },
+        'No Hire': { color: 'text-danger-fg', emoji: '💪', label: 'No Hire' },
     }
 
     const verdict = verdictConfig[debrief.verdict] || { color: 'text-text-primary', emoji: '📊', label: debrief.verdict }
@@ -1195,7 +1195,7 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
             {/* Overall score */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                 className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6 text-center">
-                <div className="text-4xl font-extrabold font-mono text-brand-300 mb-1">
+                <div className="text-4xl font-extrabold font-mono text-brand-fg-soft mb-1">
                     {debrief.overallScore}/10
                 </div>
                 <p className="text-xs text-text-disabled uppercase tracking-wider">Overall Score</p>
@@ -1211,7 +1211,7 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                             <div key={key} className="text-center bg-surface-2 rounded-xl p-2.5">
                                 <div className={cn(
                                     'text-lg font-extrabold font-mono',
-                                    score >= 7 ? 'text-success' : score >= 5 ? 'text-warning' : 'text-danger'
+                                    score >= 7 ? 'text-success-fg' : score >= 5 ? 'text-warning-fg' : 'text-danger-fg'
                                 )}>
                                     {score}
                                 </div>
@@ -1275,8 +1275,8 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                                 className={cn(
                                     'flex items-center gap-3 p-3 rounded-xl border',
                                     signal.good
-                                        ? 'bg-success/5 border-success/20'
-                                        : 'bg-danger/5 border-danger/20'
+                                        ? 'bg-success-soft border-success-line'
+                                        : 'bg-danger-soft border-danger-line'
                                 )}
                             >
                                 <span className="text-base flex-shrink-0">{signal.icon}</span>
@@ -1286,7 +1286,7 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                                     </p>
                                     <p className={cn(
                                         'text-xs font-semibold mt-0.5',
-                                        signal.good ? 'text-success' : 'text-danger'
+                                        signal.good ? 'text-success-fg' : 'text-danger-fg'
                                     )}>
                                         {signal.value}
                                     </p>
@@ -1301,12 +1301,12 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 {debrief.strengths?.length > 0 && (
                     <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
-                        className="bg-success/5 border border-success/20 rounded-2xl p-5">
-                        <h3 className="text-xs font-bold text-success uppercase tracking-widest mb-3">✅ Strengths</h3>
+                        className="bg-success-soft border border-success-line rounded-2xl p-5">
+                        <h3 className="text-xs font-bold text-success-fg uppercase tracking-widest mb-3">✅ Strengths</h3>
                         <div className="space-y-2">
                             {debrief.strengths.map((s, i) => (
                                 <p key={i} className="text-xs text-text-secondary flex items-start gap-2">
-                                    <span className="text-success flex-shrink-0 mt-0.5">→</span> {s}
+                                    <span className="text-success-fg flex-shrink-0 mt-0.5">→</span> {s}
                                 </p>
                             ))}
                         </div>
@@ -1314,12 +1314,12 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
                 )}
                 {debrief.improvements?.length > 0 && (
                     <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
-                        className="bg-warning/5 border border-warning/20 rounded-2xl p-5">
-                        <h3 className="text-xs font-bold text-warning uppercase tracking-widest mb-3">🔧 Areas to Improve</h3>
+                        className="bg-warning-soft border border-warning-line rounded-2xl p-5">
+                        <h3 className="text-xs font-bold text-warning-fg uppercase tracking-widest mb-3">🔧 Areas to Improve</h3>
                         <div className="space-y-2">
                             {debrief.improvements.map((s, i) => (
                                 <p key={i} className="text-xs text-text-secondary flex items-start gap-2">
-                                    <span className="text-warning flex-shrink-0 mt-0.5">→</span> {s}
+                                    <span className="text-warning-fg flex-shrink-0 mt-0.5">→</span> {s}
                                 </p>
                             ))}
                         </div>
@@ -1330,12 +1330,12 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
             {/* Key moments */}
             {debrief.keyMoments?.length > 0 && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
-                    className="bg-info/5 border border-info/20 rounded-2xl p-5 mb-6">
-                    <h3 className="text-xs font-bold text-info uppercase tracking-widest mb-3">💡 Key Moments</h3>
+                    className="bg-info-soft border border-info-line rounded-2xl p-5 mb-6">
+                    <h3 className="text-xs font-bold text-info-fg uppercase tracking-widest mb-3">💡 Key Moments</h3>
                     <div className="space-y-2">
                         {debrief.keyMoments.map((m, i) => (
                             <p key={i} className="text-xs text-text-secondary flex items-start gap-2">
-                                <span className="text-info flex-shrink-0 mt-0.5">→</span> {m}
+                                <span className="text-info-fg flex-shrink-0 mt-0.5">→</span> {m}
                             </p>
                         ))}
                     </div>
@@ -1345,8 +1345,8 @@ function DebriefScreen({ debrief, sessionData, onNewInterview }) {
             {/* Summary */}
             {debrief.summary && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-                    className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6">
-                    <h3 className="text-xs font-bold text-brand-300 uppercase tracking-widest mb-2">📝 Summary</h3>
+                    className="bg-brand-soft border border-brand-line rounded-2xl p-5 mb-6">
+                    <h3 className="text-xs font-bold text-brand-fg-soft uppercase tracking-widest mb-2">📝 Summary</h3>
                     <p className="text-sm text-text-secondary leading-relaxed">{debrief.summary}</p>
                 </motion.div>
             )}

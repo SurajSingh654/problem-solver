@@ -182,9 +182,9 @@ function DimensionBar({ label, score, weight, feedback, delay = 0 }) {
                 </div>
                 <span className={cn(
                     'text-[10px] font-extrabold font-mono w-6 text-right flex-shrink-0',
-                    score >= 8 ? 'text-success' :
-                        score >= 6 ? 'text-brand-300' :
-                            score >= 4 ? 'text-warning' : 'text-danger'
+                    score >= 8 ? 'text-success-fg' :
+                        score >= 6 ? 'text-brand-fg-soft' :
+                            score >= 4 ? 'text-warning-fg' : 'text-danger-fg'
                 )}>
                     {score}
                 </span>
@@ -291,15 +291,15 @@ function FlagBanner({ flags, category }) {
                     className={cn(
                         'flex items-start gap-3 p-3.5 rounded-xl border',
                         flag.severity === 'critical'
-                            ? 'bg-danger/8 border-danger/25'
-                            : 'bg-warning/8 border-warning/25'
+                            ? 'bg-danger-soft border-danger-line'
+                            : 'bg-warning-soft border-warning-line'
                     )}
                 >
                     <span className="text-base flex-shrink-0 mt-0.5">{flag.icon}</span>
                     <div>
                         <p className={cn(
                             'text-xs font-bold mb-0.5',
-                            flag.severity === 'critical' ? 'text-danger' : 'text-warning'
+                            flag.severity === 'critical' ? 'text-danger-fg' : 'text-warning-fg'
                         )}>
                             {flag.label}
                         </p>
@@ -321,7 +321,7 @@ function ScoreTrend({ current, previous }) {
     return (
         <span className={cn(
             'text-[10px] font-bold px-2 py-0.5 rounded-full',
-            improved ? 'text-success bg-success/12' : 'text-danger bg-danger/12'
+            improved ? 'text-success-fg bg-success-soft' : 'text-danger-fg bg-danger-soft'
         )}>
             {improved ? '↑' : '↓'}{diff} from last
         </span>
@@ -360,10 +360,10 @@ function FollowUpSection({ followUpEvaluations, problemFollowUps, isHR = false }
                     <span className={cn(
                         'text-[9px] font-bold px-1.5 py-px rounded-full border flex-shrink-0 mt-0.5',
                         fq.difficulty === 'EASY'
-                            ? 'bg-success/10 text-success border-success/20'
+                            ? 'bg-success-soft text-success-fg border-success-line'
                             : fq.difficulty === 'MEDIUM'
-                                ? 'bg-warning/10 text-warning border-warning/20'
-                                : 'bg-danger/10 text-danger border-danger/20'
+                                ? 'bg-warning-soft text-warning-fg border-warning-line'
+                                : 'bg-danger-soft text-danger-fg border-danger-line'
                     )}>
                         {fq.difficulty}
                     </span>
@@ -380,10 +380,10 @@ function FollowUpSection({ followUpEvaluations, problemFollowUps, isHR = false }
                             !wasAnswered
                                 ? 'bg-surface-2 border-border-subtle'
                                 : score != null && score >= 7
-                                    ? 'bg-success/5 border-success/20'
+                                    ? 'bg-success-soft border-success-line'
                                     : score != null && score >= 5
-                                        ? 'bg-warning/5 border-warning/20'
-                                        : 'bg-danger/5 border-danger/20'
+                                        ? 'bg-warning-soft border-warning-line'
+                                        : 'bg-danger-soft border-danger-line'
                         )}
                     >
                         <div className="flex items-start justify-between gap-3">
@@ -403,8 +403,8 @@ function FollowUpSection({ followUpEvaluations, problemFollowUps, isHR = false }
                                 ) : score != null ? (
                                     <span className={cn(
                                         'text-[11px] font-extrabold font-mono',
-                                        score >= 7 ? 'text-success' :
-                                            score >= 5 ? 'text-warning' : 'text-danger'
+                                        score >= 7 ? 'text-success-fg' :
+                                            score >= 5 ? 'text-warning-fg' : 'text-danger-fg'
                                     )}>
                                         {score}/10
                                     </span>
@@ -533,8 +533,8 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
             >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-brand-400/15 border
-                                        border-brand-400/20 flex items-center justify-center text-xl">
+                        <div className="w-10 h-10 rounded-xl bg-brand-soft border
+                                        border-brand-line flex items-center justify-center text-xl">
                             🤖
                         </div>
                         <div>
@@ -617,7 +617,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                         <h3 className="text-sm font-bold text-text-primary">AI Review</h3>
                         {flagCount > 0 && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                             bg-danger/15 text-danger border border-danger/25">
+                                             bg-danger-soft text-danger-fg border border-danger-line">
                                 {flagCount} issue{flagCount !== 1 ? 's' : ''}
                             </span>
                         )}
@@ -627,7 +627,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                         />
                         {followUpBonus > 0 && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                             bg-success/12 text-success border border-success/20">
+                                             bg-success-soft text-success-fg border border-success-line">
                                 +{followUpBonus} bonus
                             </span>
                         )}
@@ -676,7 +676,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                             'px-3 py-2 rounded-t-lg text-xs font-semibold',
                                             'transition-all border-b-2',
                                             activeTab === tab.id
-                                                ? 'text-brand-300 border-brand-400 bg-brand-400/5'
+                                                ? 'text-brand-fg-soft border-brand-400 bg-brand-soft'
                                                 : 'text-text-tertiary border-transparent hover:text-text-secondary'
                                         )}
                                     >
@@ -692,7 +692,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                         <FlagBanner flags={latestReview.flags} category={inferredCategory} />
                                         {latestReview.strengths?.length > 0 && (
                                             <div>
-                                                <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-2.5">
+                                                <p className="text-[10px] font-bold text-success-fg uppercase tracking-widest mb-2.5">
                                                     ✅ Strengths
                                                 </p>
                                                 <div className="space-y-2">
@@ -707,7 +707,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                         )}
                                         {latestReview.gaps?.length > 0 && (
                                             <div>
-                                                <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-2.5">
+                                                <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-2.5">
                                                     ⚠️ Gaps
                                                 </p>
                                                 <div className="space-y-2">
@@ -721,16 +721,16 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                             </div>
                                         )}
                                         {latestReview.improvement && (
-                                            <div className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4">
-                                                <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-2">
+                                            <div className="bg-brand-soft border border-brand-line rounded-xl p-4">
+                                                <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-2">
                                                     💡 Key Improvement
                                                 </p>
                                                 <MarkdownRenderer content={latestReview.improvement} size="sm" />
                                             </div>
                                         )}
                                         {latestReview.interviewTip && (
-                                            <div className="bg-info/5 border border-info/20 rounded-xl p-4">
-                                                <p className="text-[10px] font-bold text-info uppercase tracking-widest mb-2">
+                                            <div className="bg-info-soft border border-info-line rounded-xl p-4">
+                                                <p className="text-[10px] font-bold text-info-fg uppercase tracking-widest mb-2">
                                                     🎯 Interview Tip
                                                 </p>
                                                 <MarkdownRenderer content={latestReview.interviewTip} size="sm" />
@@ -769,9 +769,9 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                             <span className={cn(
                                                                 'text-[10px] font-bold px-2 py-0.5 rounded-full',
                                                                 latestReview.patternBaseline.trend === 'improving'
-                                                                    ? 'bg-success/12 text-success'
+                                                                    ? 'bg-success-soft text-success-fg'
                                                                     : latestReview.patternBaseline.trend === 'declining'
-                                                                        ? 'bg-danger/12 text-danger'
+                                                                        ? 'bg-danger-soft text-danger-fg'
                                                                         : 'bg-surface-3 text-text-disabled'
                                                             )}>
                                                                 {latestReview.patternBaseline.trend === 'improving' ? '↑ Improving'
@@ -819,7 +819,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                             {followUpBonus > 0 && (
                                                 <div className="flex justify-between text-[10px]">
                                                     <span className="text-text-disabled">Follow-up bonus</span>
-                                                    <span className="font-bold text-success font-mono">
+                                                    <span className="font-bold text-success-fg font-mono">
                                                         +{followUpBonus}
                                                     </span>
                                                 </div>
@@ -828,9 +828,9 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                 <span className="text-text-secondary">Final score</span>
                                                 <span className={cn(
                                                     'font-mono',
-                                                    overallScore >= 8 ? 'text-success' :
-                                                        overallScore >= 6 ? 'text-brand-300' :
-                                                            overallScore >= 4 ? 'text-warning' : 'text-danger'
+                                                    overallScore >= 8 ? 'text-success-fg' :
+                                                        overallScore >= 6 ? 'text-brand-fg-soft' :
+                                                            overallScore >= 4 ? 'text-warning-fg' : 'text-danger-fg'
                                                 )}>
                                                     {overallScore}/10
                                                 </span>
@@ -863,11 +863,11 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                         <div key={c.label}
                                                             className={cn('rounded-xl p-3.5 border',
                                                                 c.correct
-                                                                    ? 'bg-success/5 border-success/20'
-                                                                    : 'bg-warning/5 border-warning/20'
+                                                                    ? 'bg-success-soft border-success-line'
+                                                                    : 'bg-warning-soft border-warning-line'
                                                             )}>
                                                             <p className="text-[10px] text-text-disabled mb-1">{c.label}</p>
-                                                            <p className={cn('text-lg font-extrabold font-mono', c.correct ? 'text-success' : 'text-warning')}>
+                                                            <p className={cn('text-lg font-extrabold font-mono', c.correct ? 'text-success-fg' : 'text-warning-fg')}>
                                                                 {c.value || '?'}
                                                             </p>
                                                             <p className="text-[9px] mt-0.5" style={{ color: c.correct ? '#22c55e' : '#eab308' }}>
@@ -897,10 +897,10 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                             <div className={cn(
                                                 'rounded-xl p-4 border',
                                                 latestReview.dimensionScores.codeCorrectness >= 7
-                                                    ? 'bg-success/5 border-success/20'
+                                                    ? 'bg-success-soft border-success-line'
                                                     : latestReview.dimensionScores.codeCorrectness >= 5
-                                                        ? 'bg-warning/5 border-warning/20'
-                                                        : 'bg-danger/5 border-danger/20'
+                                                        ? 'bg-warning-soft border-warning-line'
+                                                        : 'bg-danger-soft border-danger-line'
                                             )}>
                                                 <div className="flex items-center justify-between mb-2">
                                                     <p className="text-xs font-bold text-text-primary">
@@ -909,9 +909,9 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                     <span className={cn(
                                                         'text-xl font-extrabold font-mono',
                                                         latestReview.dimensionScores.codeCorrectness >= 7
-                                                            ? 'text-success'
+                                                            ? 'text-success-fg'
                                                             : latestReview.dimensionScores.codeCorrectness >= 5
-                                                                ? 'text-warning' : 'text-danger'
+                                                                ? 'text-warning-fg' : 'text-danger-fg'
                                                     )}>
                                                         {latestReview.dimensionScores.codeCorrectness}/10
                                                     </span>
@@ -927,7 +927,7 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                                                     }
                                                 </p>
                                                 {latestReview.dimensionScores.codeCorrectness <= 4 && (
-                                                    <p className="text-[10px] text-danger mt-2 font-semibold">
+                                                    <p className="text-[10px] text-danger-fg mt-2 font-semibold">
                                                         ⚠️ Interviewers will not proceed past this in a real interview.
                                                     </p>
                                                 )}

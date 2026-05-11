@@ -74,7 +74,7 @@ export default function ChangePasswordPage() {
                         {isForced ? (
                             <>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <div className="w-8 h-8 rounded-lg bg-warning/15 border border-warning/30
+                                    <div className="w-8 h-8 rounded-lg bg-warning-soft border border-warning-line
                                   flex items-center justify-center text-base flex-shrink-0">
                                         🔑
                                     </div>
@@ -85,7 +85,7 @@ export default function ChangePasswordPage() {
                                 <p className="text-sm text-text-secondary mb-1">
                                     Your admin has set a temporary password for you.
                                 </p>
-                                <p className="text-sm text-warning font-medium mb-0">
+                                <p className="text-sm text-warning-fg font-medium mb-0">
                                     You must set a new password before continuing.
                                 </p>
                             </>

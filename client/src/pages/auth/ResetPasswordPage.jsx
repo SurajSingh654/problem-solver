@@ -119,7 +119,7 @@ export default function ResetPasswordPage() {
                         No email provided. Start the reset process from the beginning.
                     </p>
                     <Link to="/auth/forgot-password"
-                        className="text-brand-300 font-semibold hover:text-brand-200">
+                        className="text-brand-fg-soft font-semibold hover:text-brand-200">
                         Go to Forgot Password
                     </Link>
                 </div>
@@ -142,7 +142,7 @@ export default function ResetPasswordPage() {
                             initial={{ scale: 0.5, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ delay: 0.1, type: 'spring', stiffness: 300 }}
-                            className="w-14 h-14 rounded-2xl bg-danger/15 border border-danger/25
+                            className="w-14 h-14 rounded-2xl bg-danger-soft border border-danger-line
                          flex items-center justify-center text-2xl mx-auto mb-5"
                         >
                             🔑
@@ -183,7 +183,7 @@ export default function ResetPasswordPage() {
                                                 'bg-surface-3 border-2 rounded-xl outline-none',
                                                 'transition-all duration-150',
                                                 digit
-                                                    ? 'border-brand-400 text-brand-300'
+                                                    ? 'border-brand-400 text-brand-fg-soft'
                                                     : 'border-border-strong text-text-primary',
                                                 'focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20'
                                             )}
@@ -204,13 +204,13 @@ export default function ResetPasswordPage() {
                             >
                                 {/* Show entered code */}
                                 <div className="flex items-center justify-center gap-2 mb-6
-                                bg-success/8 border border-success/25 rounded-xl py-3">
+                                bg-success-soft border border-success-line rounded-xl py-3">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                         stroke="#22c55e" strokeWidth="2.5"
                                         strokeLinecap="round" strokeLinejoin="round">
                                         <polyline points="20 6 9 17 4 12" />
                                     </svg>
-                                    <span className="text-xs font-semibold text-success">
+                                    <span className="text-xs font-semibold text-success-fg">
                                         Code verified: {code.join('')}
                                     </span>
                                     <button
@@ -274,7 +274,7 @@ export default function ResetPasswordPage() {
                         <div className="text-center mt-5">
                             <Link
                                 to="/auth/login"
-                                className="text-xs text-brand-300 font-semibold
+                                className="text-xs text-brand-fg-soft font-semibold
                            hover:text-brand-200 transition-colors"
                             >
                                 ← Back to Login

@@ -200,9 +200,9 @@ function generateVerdict(dims, overall, analytics, readiness) {
 function VerdictCard({ dims, overall, analytics, readiness }) {
   const verdict = generateVerdict(dims, overall, analytics, readiness)
 
-  const scoreColor = overall >= 75 ? 'text-success'
-    : overall >= 55 ? 'text-warning'
-      : 'text-danger'
+  const scoreColor = overall >= 75 ? 'text-success-fg'
+    : overall >= 55 ? 'text-warning-fg'
+      : 'text-danger-fg'
 
   return (
     <motion.div
@@ -249,9 +249,9 @@ function VerdictCard({ dims, overall, analytics, readiness }) {
             </h2>
             <span className={cn(
               'text-[9px] font-bold px-2 py-px rounded-full border',
-              overall >= 75 ? 'bg-success/10 text-success border-success/25'
-                : overall >= 55 ? 'bg-warning/10 text-warning border-warning/25'
-                  : 'bg-danger/10 text-danger border-danger/25'
+              overall >= 75 ? 'bg-success-soft text-success-fg border-success-line'
+                : overall >= 55 ? 'bg-warning-soft text-warning-fg border-warning-line'
+                  : 'bg-danger-soft text-danger-fg border-danger-line'
             )}>
               {overall >= 75 ? 'Onsite Ready' : overall >= 55 ? 'Phone Screen Ready' : overall >= 35 ? 'Building Foundation' : 'Getting Started'}
             </span>
@@ -275,8 +275,8 @@ function VerdictCard({ dims, overall, analytics, readiness }) {
                 <div className="text-center">
                   <p className={cn(
                     'text-base font-extrabold',
-                    analytics.confidenceTrend === 'improving' ? 'text-success'
-                      : analytics.confidenceTrend === 'declining' ? 'text-danger'
+                    analytics.confidenceTrend === 'improving' ? 'text-success-fg'
+                      : analytics.confidenceTrend === 'declining' ? 'text-danger-fg'
                         : 'text-text-secondary'
                   )}>
                     {analytics.confidenceTrend === 'improving' ? '↑' : analytics.confidenceTrend === 'declining' ? '↓' : '→'}
@@ -290,8 +290,8 @@ function VerdictCard({ dims, overall, analytics, readiness }) {
                 <div className="text-center">
                   <p className={cn(
                     'text-base font-extrabold font-mono',
-                    analytics.aiReview.trend === 'improving' ? 'text-success'
-                      : analytics.aiReview.trend === 'declining' ? 'text-danger'
+                    analytics.aiReview.trend === 'improving' ? 'text-success-fg'
+                      : analytics.aiReview.trend === 'declining' ? 'text-danger-fg'
                         : 'text-text-secondary'
                   )}>
                     {analytics.aiReview.avgScore}/100
@@ -302,10 +302,10 @@ function VerdictCard({ dims, overall, analytics, readiness }) {
                 </div>
               )}
               {analytics.overdueReviews > 0 && (
-                <div className="flex items-center gap-1.5 bg-warning/8 border border-warning/20
+                <div className="flex items-center gap-1.5 bg-warning-soft border border-warning-line
                                 rounded-lg px-2.5 py-1.5">
                   <span className="text-sm">⏰</span>
-                  <span className="text-xs font-bold text-warning">
+                  <span className="text-xs font-bold text-warning-fg">
                     {analytics.overdueReviews} overdue review{analytics.overdueReviews !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -342,8 +342,8 @@ function CompanyReadinessGrid({ tierResults, analytics }) {
             transition={{ delay: i * 0.06 }}
             className={cn(
               'flex items-start gap-3 p-3.5 rounded-xl border',
-              tier.ready ? 'bg-success/5 border-success/20'
-                : tier.close ? 'bg-warning/5 border-warning/20'
+              tier.ready ? 'bg-success-soft border-success-line'
+                : tier.close ? 'bg-warning-soft border-warning-line'
                   : 'bg-surface-2 border-border-default'
             )}
           >
@@ -363,20 +363,20 @@ function CompanyReadinessGrid({ tierResults, analytics }) {
                 </p>
               )}
               {!tier.ready && tier.close && (
-                <p className="text-[11px] text-warning mt-0.5 font-medium">
+                <p className="text-[11px] text-warning-fg mt-0.5 font-medium">
                   Very close — one focused push away
                 </p>
               )}
             </div>
             <div className="flex-shrink-0">
               {tier.ready ? (
-                <span className="text-[10px] font-bold text-success bg-success/12
-                                 border border-success/25 rounded-full px-2 py-px">
+                <span className="text-[10px] font-bold text-success-fg bg-success-soft
+                                 border border-success-line rounded-full px-2 py-px">
                   ✓ Ready
                 </span>
               ) : tier.close ? (
-                <span className="text-[10px] font-bold text-warning bg-warning/12
-                                 border border-warning/25 rounded-full px-2 py-px">
+                <span className="text-[10px] font-bold text-warning-fg bg-warning-soft
+                                 border border-warning-line rounded-full px-2 py-px">
                   Almost
                 </span>
               ) : (
@@ -398,15 +398,15 @@ function CompanyReadinessGrid({ tierResults, analytics }) {
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: 'Phone Screen Ready', key: 'phone_screen', color: 'text-success' },
-              { label: 'Technical Screen', key: 'technical_screen', color: 'text-brand-300' },
-              { label: 'Onsite Ready', key: 'onsite', color: 'text-warning' },
-              { label: 'FAANG Ready', key: 'faang', color: 'text-danger' },
+              { label: 'Phone Screen Ready', key: 'phone_screen', color: 'text-success-fg' },
+              { label: 'Technical Screen', key: 'technical_screen', color: 'text-brand-fg-soft' },
+              { label: 'Onsite Ready', key: 'onsite', color: 'text-warning-fg' },
+              { label: 'FAANG Ready', key: 'faang', color: 'text-danger-fg' },
             ].map(({ label, key, color }) => {
               const weeks = analytics.weeksToThresholds[key]
               return (
                 <div key={key} className="text-center bg-surface-2 rounded-xl p-3">
-                  <p className={cn('text-base font-extrabold font-mono', weeks === 0 ? 'text-success' : color)}>
+                  <p className={cn('text-base font-extrabold font-mono', weeks === 0 ? 'text-success-fg' : color)}>
                     {weeks === 0 ? '✓' : `${weeks}w`}
                   </p>
                   <p className="text-[9px] text-text-disabled mt-0.5 leading-tight">
@@ -417,7 +417,7 @@ function CompanyReadinessGrid({ tierResults, analytics }) {
             })}
           </div>
           {analytics.weeklyVelocity?.avg < 1 && (
-            <p className="text-[11px] text-warning mt-2">
+            <p className="text-[11px] text-warning-fg mt-2">
               ⚠️ At less than 1 solution/week, these estimates assume you increase practice velocity.
             </p>
           )}
@@ -438,10 +438,10 @@ function CriticalGapCard({ criticalGap, criticalScore, analytics }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.08 }}
-      className="bg-danger/5 border border-danger/20 rounded-2xl p-5 mb-6"
+      className="bg-danger-soft border border-danger-line rounded-2xl p-5 mb-6"
     >
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-danger/15 flex items-center
+        <div className="w-10 h-10 rounded-xl bg-danger-soft flex items-center
                         justify-center text-xl flex-shrink-0">
           🚨
         </div>
@@ -450,7 +450,7 @@ function CriticalGapCard({ criticalGap, criticalScore, analytics }) {
             <h3 className="text-sm font-bold text-text-primary">
               Critical Gap: {criticalGap.label}
             </h3>
-            <span className="text-lg font-extrabold font-mono text-danger">
+            <span className="text-lg font-extrabold font-mono text-danger-fg">
               {criticalScore}/100
             </span>
           </div>
@@ -463,7 +463,7 @@ function CriticalGapCard({ criticalGap, criticalScore, analytics }) {
             <div className="bg-surface-1 border border-border-subtle rounded-xl p-3 mb-3">
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-text-tertiary">Solutions with both approaches documented</span>
-                <span className="font-extrabold font-mono text-danger">{optimizationRate}%</span>
+                <span className="font-extrabold font-mono text-danger-fg">{optimizationRate}%</span>
               </div>
               <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
                 <motion.div
@@ -480,7 +480,7 @@ function CriticalGapCard({ criticalGap, criticalScore, analytics }) {
           )}
 
           <div className="flex items-start gap-2">
-            <span className="text-success flex-shrink-0 mt-0.5 font-bold">→</span>
+            <span className="text-success-fg flex-shrink-0 mt-0.5 font-bold">→</span>
             <p className="text-xs font-semibold text-text-primary">
               {criticalGap.actionWhenLow}
             </p>
@@ -501,9 +501,9 @@ function DimensionCards({ dims, communicationFromProxy }) {
         const isHigh = score >= 75
         const isCommProxy = dim.key === 'communication' && communicationFromProxy
 
-        const scoreColor = score >= 75 ? 'text-success'
-          : score >= 50 ? 'text-warning'
-            : 'text-danger'
+        const scoreColor = score >= 75 ? 'text-success-fg'
+          : score >= 50 ? 'text-warning-fg'
+            : 'text-danger-fg'
 
         return (
           <motion.div
@@ -522,8 +522,8 @@ function DimensionCards({ dims, communicationFromProxy }) {
               </div>
               <div className="flex items-center gap-1.5">
                 {dim.weight === 'CRITICAL' && (
-                  <span className="text-[8px] font-bold text-danger bg-danger/10
-                                   border border-danger/20 rounded-full px-1.5 py-px">
+                  <span className="text-[8px] font-bold text-danger-fg bg-danger-soft
+                                   border border-danger-line rounded-full px-1.5 py-px">
                     CRITICAL
                   </span>
                 )}
@@ -552,7 +552,7 @@ function DimensionCards({ dims, communicationFromProxy }) {
             {/* Action */}
             {isLow && (
               <div className="flex items-start gap-1.5 mt-2 pt-2 border-t border-border-subtle">
-                <span className="text-brand-300 flex-shrink-0 text-xs font-bold mt-px">→</span>
+                <span className="text-brand-fg-soft flex-shrink-0 text-xs font-bold mt-px">→</span>
                 <p className="text-[11px] text-text-secondary font-medium leading-relaxed">
                   {dim.actionWhenLow}
                 </p>
@@ -593,7 +593,7 @@ function PatternCoverageCard({ analytics }) {
         </div>
         <span className={cn(
           'text-xl font-extrabold font-mono',
-          coverageRate >= 75 ? 'text-success' : coverageRate >= 50 ? 'text-warning' : 'text-danger'
+          coverageRate >= 75 ? 'text-success-fg' : coverageRate >= 50 ? 'text-warning-fg' : 'text-danger-fg'
         )}>
           {coverageRate}%
         </span>
@@ -648,8 +648,8 @@ function WeeklyActionsCard({ dims, analytics, totalSolutions }) {
       result.push({
         priority: 1,
         icon: '⚡',
-        color: 'border-warning/30 bg-warning/5',
-        labelColor: 'text-warning',
+        color: 'border-warning-line bg-warning-soft',
+        labelColor: 'text-warning-fg',
         label: 'HIGH IMPACT',
         title: `Document brute force → optimized in your next 3 solutions`,
         reason: `Only ${rate}% of your solutions have both approaches. This is what onsites test.`,
@@ -663,8 +663,8 @@ function WeeklyActionsCard({ dims, analytics, totalSolutions }) {
       result.push({
         priority: 2,
         icon: '🔍',
-        color: 'border-brand-400/30 bg-brand-400/5',
-        labelColor: 'text-brand-300',
+        color: 'border-brand-line bg-brand-soft',
+        labelColor: 'text-brand-fg-soft',
         label: 'PATTERN GAP',
         title: `Practice ${topMissing}`,
         reason: `You have ${missingCount} untouched patterns. Broad pattern coverage reduces interview surprises.`,
@@ -677,8 +677,8 @@ function WeeklyActionsCard({ dims, analytics, totalSolutions }) {
       result.push({
         priority: 3,
         icon: '🎯',
-        color: 'border-danger/30 bg-danger/5',
-        labelColor: 'text-danger',
+        color: 'border-danger-line bg-danger-soft',
+        labelColor: 'text-danger-fg',
         label: 'PRESSURE TRAINING',
         title: 'Take 2 timed quizzes this week',
         reason: 'Timed practice is the most direct way to build interview pressure performance.',
@@ -691,8 +691,8 @@ function WeeklyActionsCard({ dims, analytics, totalSolutions }) {
       result.push({
         priority: 4,
         icon: '📚',
-        color: 'border-info/30 bg-info/5',
-        labelColor: 'text-info',
+        color: 'border-info-line bg-info-soft',
+        labelColor: 'text-info-fg',
         label: 'RETENTION RISK',
         title: `Review ${Math.min(overdue, 5)} overdue solutions`,
         reason: `Ebbinghaus forgetting curve: unreviewed knowledge fades ~70% in a week. ${overdue} solutions at risk.`,
@@ -719,8 +719,8 @@ function WeeklyActionsCard({ dims, analytics, totalSolutions }) {
       result.push({
         priority: 6,
         icon: '🚀',
-        color: 'border-success/30 bg-success/5',
-        labelColor: 'text-success',
+        color: 'border-success-line bg-success-soft',
+        labelColor: 'text-success-fg',
         label: 'VELOCITY',
         title: 'Aim for 3 solutions this week',
         reason: `At ${velocity} solutions/week, readiness builds slowly. Consistent volume is what compounds.`,
@@ -791,10 +791,10 @@ function ActivitySummary({ report, analytics }) {
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center mb-5">
         {[
-          { label: 'Solutions', value: report?.totalSolutions || 0, icon: '✅', color: 'text-success' },
-          { label: 'Quizzes', value: report?.quizCount || 0, icon: '🧩', color: 'text-brand-300' },
-          { label: 'Interviews', value: report?.interviewCount || 0, icon: '💬', color: 'text-info' },
-          { label: 'Simulations', value: report?.simCount || 0, icon: '⏱', color: 'text-warning' },
+          { label: 'Solutions', value: report?.totalSolutions || 0, icon: '✅', color: 'text-success-fg' },
+          { label: 'Quizzes', value: report?.quizCount || 0, icon: '🧩', color: 'text-brand-fg-soft' },
+          { label: 'Interviews', value: report?.interviewCount || 0, icon: '💬', color: 'text-info-fg' },
+          { label: 'Simulations', value: report?.simCount || 0, icon: '⏱', color: 'text-warning-fg' },
         ].map((s) => (
           <div key={s.label}>
             <span className="text-xl">{s.icon}</span>
@@ -862,10 +862,10 @@ function CoachingPlanCard({ dims, analytics, totalSolutions }) {
   }
 
   const urgencyColors = {
-    critical: 'text-danger bg-danger/10 border-danger/25',
-    high: 'text-warning bg-warning/10 border-warning/25',
-    medium: 'text-brand-300 bg-brand-400/10 border-brand-400/25',
-    low: 'text-success bg-success/10 border-success/25',
+    critical: 'text-danger-fg bg-danger-soft border-danger-line',
+    high: 'text-warning-fg bg-warning-soft border-warning-line',
+    medium: 'text-brand-fg-soft bg-brand-soft border-brand-line',
+    low: 'text-success-fg bg-success-soft border-success-line',
   }
 
   const focusColors = {
@@ -878,9 +878,9 @@ function CoachingPlanCard({ dims, analytics, totalSolutions }) {
   }
 
   const priorityConfig = {
-    critical: { color: 'text-danger', bg: 'bg-danger/5 border-danger/20' },
-    high: { color: 'text-warning', bg: 'bg-warning/5 border-warning/20' },
-    medium: { color: 'text-brand-300', bg: 'bg-brand-400/5 border-brand-400/20' },
+    critical: { color: 'text-danger-fg', bg: 'bg-danger-soft border-danger-line' },
+    high: { color: 'text-warning-fg', bg: 'bg-warning-soft border-warning-line' },
+    medium: { color: 'text-brand-fg-soft', bg: 'bg-brand-soft border-brand-line' },
   }
 
   return (
@@ -904,7 +904,7 @@ function CoachingPlanCard({ dims, analytics, totalSolutions }) {
             disabled={loading}
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold',
-              'bg-brand-400 text-white hover:bg-brand-400/90 transition-all',
+              'bg-brand-400 text-white hover:bg-brand-soft transition-all',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
@@ -936,7 +936,7 @@ function CoachingPlanCard({ dims, analytics, totalSolutions }) {
       </div>
 
       {error && (
-        <p className="text-xs text-danger mb-3">{error}</p>
+        <p className="text-xs text-danger-fg mb-3">{error}</p>
       )}
 
       {!plan && !loading && (
@@ -995,8 +995,8 @@ function CoachingPlanCard({ dims, analytics, totalSolutions }) {
 
           {/* Key insight */}
           {plan.keyInsight && (
-            <div className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-3.5">
-              <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
+            <div className="bg-brand-soft border border-brand-line rounded-xl p-3.5">
+              <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">
                 Key Insight
               </p>
               <p className="text-xs text-text-secondary leading-relaxed">
@@ -1118,7 +1118,7 @@ function CoachingPlanCard({ dims, analytics, totalSolutions }) {
                     <div key={item.label} className="text-center">
                       <p className={cn(
                         'text-sm font-extrabold font-mono',
-                        item.alert ? 'text-warning' : 'text-text-primary'
+                        item.alert ? 'text-warning-fg' : 'text-text-primary'
                       )}>
                         {item.value}
                       </p>
@@ -1192,7 +1192,7 @@ export default function ReportPage() {
           <button
             onClick={() => navigate('/problems')}
             className="px-6 py-2.5 rounded-xl bg-brand-400 text-white text-sm font-bold
-                       hover:bg-brand-400/90 transition-all"
+                       hover:bg-brand-soft transition-all"
           >
             Go to Problems →
           </button>

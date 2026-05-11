@@ -17,7 +17,7 @@ const BREAKDOWN_CONFIG = [
     label: 'Solution Quality',
     weight: '40%',
     color: 'bg-brand-400',
-    textColor: 'text-brand-300',
+    textColor: 'text-brand-fg-soft',
     icon: '🤖',
     tooltip: 'AI review scores + peer ratings + confidence calibration. The most important signal.',
   },
@@ -26,7 +26,7 @@ const BREAKDOWN_CONFIG = [
     label: 'Difficulty Mix',
     weight: '25%',
     color: 'bg-warning',
-    textColor: 'text-warning',
+    textColor: 'text-warning-fg',
     icon: '⚡',
     tooltip: 'Weighted problem difficulty (Hard×6, Medium×3, Easy×1). Halved if quality is low.',
   },
@@ -35,7 +35,7 @@ const BREAKDOWN_CONFIG = [
     label: 'Consistency',
     weight: '20%',
     color: 'bg-success',
-    textColor: 'text-success',
+    textColor: 'text-success-fg',
     icon: '📅',
     tooltip: 'Streak (40%) + weekly velocity (40%) + total volume (20%).',
   },
@@ -53,7 +53,7 @@ const BREAKDOWN_CONFIG = [
     label: 'Pattern Breadth',
     weight: '5%',
     color: 'bg-info',
-    textColor: 'text-info',
+    textColor: 'text-info-fg',
     icon: '🗺️',
     tooltip: 'Coverage of the 16 canonical interview patterns. Breadth bonus at >8 patterns.',
   },
@@ -92,7 +92,7 @@ function ScoreBreakdown({ breakdown, compositeScore }) {
         <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
           Score Breakdown
         </span>
-        <span className="text-sm font-extrabold font-mono text-brand-300">
+        <span className="text-sm font-extrabold font-mono text-brand-fg-soft">
           {compositeScore}/100
         </span>
       </div>
@@ -146,8 +146,8 @@ function PodiumCard({ entry, position, isCurrentUser }) {
       medal: '🥇',
       height: 'h-36',
       bg: 'bg-gradient-to-b from-brand-400/25 to-brand-400/10',
-      border: 'border-brand-400/40',
-      scoreColor: 'text-brand-300',
+      border: 'border-brand-line',
+      scoreColor: 'text-brand-fg-soft',
       scale: 'scale-105',
     },
     1: {
@@ -186,10 +186,10 @@ function PodiumCard({ entry, position, isCurrentUser }) {
       </div>
       <p className={cn(
         'text-xs font-bold mt-2 text-center truncate max-w-[90px]',
-        isCurrentUser ? 'text-brand-300' : 'text-text-primary'
+        isCurrentUser ? 'text-brand-fg-soft' : 'text-text-primary'
       )}>
         {entry.name}
-        {isCurrentUser && <span className="block text-[9px] text-brand-300/70">(you)</span>}
+        {isCurrentUser && <span className="block text-[9px] text-brand-fg-soft/70">(you)</span>}
       </p>
       <span className="text-lg my-0.5">{c.medal}</span>
 
@@ -281,7 +281,7 @@ function LeaderboardRow({ entry, isCurrentUser, index }) {
         transition={{ delay: index * 0.03 }}
         className={cn(
           'hover:bg-surface-2/50 transition-colors group',
-          isCurrentUser && 'bg-brand-400/5'
+          isCurrentUser && 'bg-brand-soft'
         )}
       >
         {/* Rank */}
@@ -302,12 +302,12 @@ function LeaderboardRow({ entry, isCurrentUser, index }) {
               <p className="text-xs font-bold text-text-primary truncate">
                 {entry.name}
                 {isCurrentUser && (
-                  <span className="text-[9px] text-brand-300 ml-1.5">(you)</span>
+                  <span className="text-[9px] text-brand-fg-soft ml-1.5">(you)</span>
                 )}
               </p>
               <div className="flex items-center gap-2 mt-0.5">
                 {entry.teamRole === 'TEAM_ADMIN' && (
-                  <span className="text-[9px] text-warning font-bold">Admin</span>
+                  <span className="text-[9px] text-warning-fg font-bold">Admin</span>
                 )}
                 {entry.activityStatus === 'INACTIVE' && (
                   <span className="text-[9px] text-text-disabled">Inactive</span>
@@ -326,13 +326,13 @@ function LeaderboardRow({ entry, isCurrentUser, index }) {
             <div className="flex items-center gap-2">
               <span className={cn(
                 'text-sm font-extrabold font-mono',
-                entry.compositeScore >= 70 ? 'text-success'
-                  : entry.compositeScore >= 45 ? 'text-warning'
+                entry.compositeScore >= 70 ? 'text-success-fg'
+                  : entry.compositeScore >= 45 ? 'text-warning-fg'
                     : 'text-text-secondary'
               )}>
                 {entry.compositeScore}
               </span>
-              <span className="text-[9px] text-text-disabled group-hover/score:text-brand-300 transition-colors">
+              <span className="text-[9px] text-text-disabled group-hover/score:text-brand-fg-soft transition-colors">
                 {showBreakdown ? '▲' : '▼'}
               </span>
             </div>
@@ -354,8 +354,8 @@ function LeaderboardRow({ entry, isCurrentUser, index }) {
         <td className="py-3 px-4 text-xs font-mono text-text-secondary">
           <span className={cn(
             'font-bold',
-            entry.streak >= 7 ? 'text-success'
-              : entry.streak >= 3 ? 'text-warning'
+            entry.streak >= 7 ? 'text-success-fg'
+              : entry.streak >= 3 ? 'text-warning-fg'
                 : 'text-text-disabled'
           )}>
             {entry.streak}d
@@ -429,7 +429,7 @@ export default function LeaderboardPage() {
         </p>
         <button
           onClick={() => navigate('/super-admin')}
-          className="text-sm font-bold text-brand-300 hover:text-brand-200"
+          className="text-sm font-bold text-brand-fg-soft hover:text-brand-200"
         >
           Back to Dashboard →
         </button>
@@ -449,7 +449,7 @@ export default function LeaderboardPage() {
         </p>
         <button
           onClick={() => navigate('/team')}
-          className="text-sm font-bold text-brand-300 hover:text-brand-200"
+          className="text-sm font-bold text-brand-fg-soft hover:text-brand-200"
         >
           Manage Teams →
         </button>
@@ -486,7 +486,7 @@ export default function LeaderboardPage() {
           className={cn(
             'text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all',
             showFormula
-              ? 'bg-brand-400/15 border-brand-400/30 text-brand-300'
+              ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
               : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-primary'
           )}
         >
@@ -534,7 +534,7 @@ export default function LeaderboardPage() {
               </div>
               <div className="mt-4 pt-4 border-t border-border-subtle">
                 <p className="text-[11px] text-text-disabled">
-                  <span className="font-bold text-warning">Anti-gaming:</span> Difficulty score is halved if solution quality is below 40/100.
+                  <span className="font-bold text-warning-fg">Anti-gaming:</span> Difficulty score is halved if solution quality is below 40/100.
                   AI review scores cannot be self-reported — they require actual AI analysis.
                   Confidence self-ratings have a maximum 10% influence on quality score.
                 </p>
@@ -551,11 +551,11 @@ export default function LeaderboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className={cn(
             'flex items-center gap-4 p-4 rounded-xl border mb-6 flex-wrap',
-            'bg-brand-400/5 border-brand-400/20'
+            'bg-brand-soft border-brand-line'
           )}
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <span className="text-xl font-extrabold font-mono text-brand-300">
+            <span className="text-xl font-extrabold font-mono text-brand-fg-soft">
               #{currentUserEntry.rank}
             </span>
             <div className="min-w-0">

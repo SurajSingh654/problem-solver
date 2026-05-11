@@ -11,11 +11,11 @@ import api from '@services/api'
 // ── Verdict badge ──────────────────────────────────────
 function VerdictBadge({ verdict }) {
     const config = {
-        'STRONG_HIRE': { color: 'bg-success/15 text-success border-success/30', icon: '🏆', label: 'Strong Hire' },
-        'HIRE': { color: 'bg-success/15 text-success border-success/30', icon: '✅', label: 'Hire' },
-        'LEAN_HIRE': { color: 'bg-brand-400/15 text-brand-300 border-brand-400/30', icon: '🤔', label: 'Lean Hire' },
-        'LEAN_NO_HIRE': { color: 'bg-warning/15 text-warning border-warning/30', icon: '📈', label: 'Lean No Hire' },
-        'NO_HIRE': { color: 'bg-danger/15 text-danger border-danger/30', icon: '💪', label: 'No Hire' },
+        'STRONG_HIRE': { color: 'bg-success-soft text-success-fg border-success-line', icon: '🏆', label: 'Strong Hire' },
+        'HIRE': { color: 'bg-success-soft text-success-fg border-success-line', icon: '✅', label: 'Hire' },
+        'LEAN_HIRE': { color: 'bg-brand-soft text-brand-fg-soft border-brand-line', icon: '🤔', label: 'Lean Hire' },
+        'LEAN_NO_HIRE': { color: 'bg-warning-soft text-warning-fg border-warning-line', icon: '📈', label: 'Lean No Hire' },
+        'NO_HIRE': { color: 'bg-danger-soft text-danger-fg border-danger-line', icon: '💪', label: 'No Hire' },
     }
     const c = config[verdict] || config['LEAN_HIRE'] || { color: 'bg-surface-3 text-text-tertiary border-border-default', icon: '—', label: verdict }
     return (
@@ -62,7 +62,7 @@ function SessionCard({ session, onClick }) {
             onClick={onClick}
             className="w-full flex items-center gap-4 p-4 rounded-xl border
                  bg-surface-1 border-border-default text-left
-                 hover:border-brand-400/30 hover:-translate-y-0.5
+                 hover:border-brand-line hover:-translate-y-0.5
                  hover:shadow-md transition-all duration-200"
         >
             {overallScore ? (
@@ -188,7 +188,7 @@ function SessionDetail({ sessionId, onBack }) {
 
             {/* Debrief summary */}
             {debrief && (
-                <div className="bg-surface-1 border border-brand-400/20 rounded-2xl p-5 mb-6">
+                <div className="bg-surface-1 border border-brand-line rounded-2xl p-5 mb-6">
                     <h3 className="text-sm font-bold text-text-primary mb-4 flex items-center gap-2">
                         <span>📊</span> Debrief
                     </h3>
@@ -199,8 +199,8 @@ function SessionDetail({ sessionId, onBack }) {
                                 <div key={key} className="text-center bg-surface-2 rounded-xl p-2.5">
                                     <div className={cn(
                                         'text-lg font-extrabold font-mono',
-                                        score >= 7 ? 'text-success' :
-                                            score >= 5 ? 'text-warning' : 'text-danger'
+                                        score >= 7 ? 'text-success-fg' :
+                                            score >= 5 ? 'text-warning-fg' : 'text-danger-fg'
                                     )}>
                                         {score}
                                     </div>
@@ -214,21 +214,21 @@ function SessionDetail({ sessionId, onBack }) {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                         {debrief.strengths?.length > 0 && (
-                            <div className="bg-success/5 border border-success/15 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-2">Strengths</p>
+                            <div className="bg-success-soft border border-success-line rounded-xl p-3">
+                                <p className="text-[10px] font-bold text-success-fg uppercase tracking-widest mb-2">Strengths</p>
                                 {debrief.strengths.map((s, i) => (
                                     <p key={i} className="text-xs text-text-secondary mb-1 flex gap-2">
-                                        <span className="text-success flex-shrink-0">→</span> {s}
+                                        <span className="text-success-fg flex-shrink-0">→</span> {s}
                                     </p>
                                 ))}
                             </div>
                         )}
                         {debrief.improvements?.length > 0 && (
-                            <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-2">Improve</p>
+                            <div className="bg-warning-soft border border-warning-line rounded-xl p-3">
+                                <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-2">Improve</p>
                                 {debrief.improvements.map((s, i) => (
                                     <p key={i} className="text-xs text-text-secondary mb-1 flex gap-2">
-                                        <span className="text-warning flex-shrink-0">→</span> {s}
+                                        <span className="text-warning-fg flex-shrink-0">→</span> {s}
                                     </p>
                                 ))}
                             </div>
@@ -236,8 +236,8 @@ function SessionDetail({ sessionId, onBack }) {
                     </div>
 
                     {debrief.summary && (
-                        <div className="bg-brand-400/5 border border-brand-400/15 rounded-xl p-3">
-                            <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">Summary</p>
+                        <div className="bg-brand-soft border border-brand-line rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">Summary</p>
                             <p className="text-xs text-text-secondary leading-relaxed">{debrief.summary}</p>
                         </div>
                     )}
@@ -261,7 +261,7 @@ function SessionDetail({ sessionId, onBack }) {
                                 <div className={cn(
                                     'w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0 mt-1',
                                     isUser
-                                        ? 'bg-brand-400/20 text-brand-300'
+                                        ? 'bg-brand-soft text-brand-fg-soft'
                                         : 'bg-surface-4 text-text-secondary'
                                 )}>
                                     {isUser ? '👤' : '🤖'}
@@ -269,7 +269,7 @@ function SessionDetail({ sessionId, onBack }) {
                                 <div className={cn(
                                     'max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed',
                                     isUser
-                                        ? 'bg-brand-400/10 border border-brand-400/20 text-text-primary rounded-tr-md'
+                                        ? 'bg-brand-soft border border-brand-line text-text-primary rounded-tr-md'
                                         : 'bg-surface-2 border border-border-default text-text-secondary rounded-tl-md'
                                 )}>
                                     {msg.content}
@@ -347,17 +347,17 @@ export default function InterviewHistoryPage() {
                     className="grid grid-cols-3 gap-3 mb-6"
                 >
                     <div className="bg-surface-1 border border-border-default rounded-xl p-4 text-center">
-                        <div className="text-2xl font-extrabold font-mono text-brand-300">{sessions.length}</div>
+                        <div className="text-2xl font-extrabold font-mono text-brand-fg-soft">{sessions.length}</div>
                         <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">Total</div>
                     </div>
                     <div className="bg-surface-1 border border-border-default rounded-xl p-4 text-center">
-                        <div className="text-2xl font-extrabold font-mono text-success">{completed.length}</div>
+                        <div className="text-2xl font-extrabold font-mono text-success-fg">{completed.length}</div>
                         <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">Completed</div>
                     </div>
                     <div className="bg-surface-1 border border-border-default rounded-xl p-4 text-center">
                         <div className={cn(
                             'text-2xl font-extrabold font-mono',
-                            avgScore >= 7 ? 'text-success' : avgScore >= 5 ? 'text-warning' : 'text-danger'
+                            avgScore >= 7 ? 'text-success-fg' : avgScore >= 5 ? 'text-warning-fg' : 'text-danger-fg'
                         )}>
                             {avgScore || '—'}
                         </div>

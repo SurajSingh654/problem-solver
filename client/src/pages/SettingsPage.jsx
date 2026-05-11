@@ -96,7 +96,7 @@ function ChangeEmailSection() {
                 <span className="text-sm font-semibold text-text-primary">{user?.email}</span>
                 {user?.isVerified && (
                     <span className="text-[10px] font-bold px-1.5 py-px rounded-full
-                           bg-success/12 text-success border border-success/25">
+                           bg-success-soft text-success-fg border border-success-line">
                         Verified
                     </span>
                 )}
@@ -127,7 +127,7 @@ function ChangeEmailSection() {
             {step === 'verify' && (
                 <div className="space-y-3">
                     <p className="text-xs text-text-tertiary">
-                        A 6-digit code was sent to <span className="text-brand-300 font-semibold">{newEmail}</span>
+                        A 6-digit code was sent to <span className="text-brand-fg-soft font-semibold">{newEmail}</span>
                     </p>
                     <Input
                         label="Verification Code"
@@ -450,7 +450,7 @@ export default function SettingsPage() {
                             <span className="text-text-tertiary">Email Verified</span>
                             <span className={cn(
                                 'font-semibold',
-                                user?.isVerified ? 'text-success' : 'text-danger'
+                                user?.isVerified ? 'text-success-fg' : 'text-danger-fg'
                             )}>
                                 {user?.isVerified ? 'Yes' : 'No'}
                             </span>

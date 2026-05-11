@@ -106,10 +106,10 @@ function MiniRadar({ dimensions }) {
 
 // ── Readiness tier label ───────────────────────────────
 function getReadinessTier(overall) {
-  if (overall >= 82) return { label: 'FAANG Ready', color: 'text-success', bg: 'bg-success/10 border-success/25' }
-  if (overall >= 70) return { label: 'Onsite Ready', color: 'text-brand-300', bg: 'bg-brand-400/10 border-brand-400/25' }
-  if (overall >= 58) return { label: 'Tech Screen Ready', color: 'text-info', bg: 'bg-info/10 border-info/25' }
-  if (overall >= 45) return { label: 'Phone Screen Ready', color: 'text-warning', bg: 'bg-warning/10 border-warning/25' }
+  if (overall >= 82) return { label: 'FAANG Ready', color: 'text-success-fg', bg: 'bg-success-soft border-success-line' }
+  if (overall >= 70) return { label: 'Onsite Ready', color: 'text-brand-fg-soft', bg: 'bg-brand-soft border-brand-line' }
+  if (overall >= 58) return { label: 'Tech Screen Ready', color: 'text-info-fg', bg: 'bg-info-soft border-info-line' }
+  if (overall >= 45) return { label: 'Phone Screen Ready', color: 'text-warning-fg', bg: 'bg-warning-soft border-warning-line' }
   return { label: 'Building Foundation', color: 'text-text-disabled', bg: 'bg-surface-3 border-border-default' }
 }
 
@@ -183,7 +183,7 @@ function VelocitySparkline({ weekly }) {
           <div key={i}
             className={cn(
               'rounded-sm transition-all',
-              isLatest ? 'bg-brand-400' : 'bg-brand-400/25'
+              isLatest ? 'bg-brand-400' : 'bg-brand-soft'
             )}
             style={{ width: '14px', height: `${barHeight}px` }}
             title={`${val} solved`}
@@ -234,7 +234,7 @@ function QuickAction({ icon, label, desc, to, color, badge, onClick }) {
       className={cn(
         'relative flex flex-col items-start gap-2 p-4 rounded-xl',
         'bg-surface-1 border border-border-default',
-        'hover:border-brand-400/30 hover:bg-surface-2',
+        'hover:border-brand-line hover:bg-surface-2',
         'transition-all duration-150 text-left w-full'
       )}
     >
@@ -243,7 +243,7 @@ function QuickAction({ icon, label, desc, to, color, badge, onClick }) {
         {badge && (
           <span className={cn(
             'text-[9px] font-bold px-1.5 py-px rounded-full border',
-            color || 'bg-brand-400/10 text-brand-300 border-brand-400/25'
+            color || 'bg-brand-soft text-brand-fg-soft border-brand-line'
           )}>
             {badge}
           </span>
@@ -358,7 +358,7 @@ export default function Dashboard() {
       {/* ── Pending team banner ──────────────────────── */}
       {pendingTeam && isPersonalMode && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-          className="bg-warning/5 border border-warning/20 rounded-xl p-4">
+          className="bg-warning-soft border border-warning-line rounded-xl p-4">
           <div className="flex items-center gap-3">
             <span className="text-lg">⏳</span>
             <div className="flex-1">
@@ -370,7 +370,7 @@ export default function Dashboard() {
               </p>
             </div>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full
-                                       bg-warning/10 text-warning border border-warning/20 flex-shrink-0">
+                                       bg-warning-soft text-warning-fg border border-warning-line flex-shrink-0">
               PENDING
             </span>
           </div>
@@ -391,10 +391,10 @@ export default function Dashboard() {
             className={cn(
               'rounded-xl border p-4 flex items-center justify-between gap-4',
               dueCount >= 10
-                ? 'bg-danger/5 border-danger/25'
+                ? 'bg-danger-soft border-danger-line'
                 : dueCount >= 5
-                  ? 'bg-warning/5 border-warning/25'
-                  : 'bg-brand-400/5 border-brand-400/25'
+                  ? 'bg-warning-soft border-warning-line'
+                  : 'bg-brand-soft border-brand-line'
             )}
           >
             <div className="flex items-center gap-3">
@@ -416,8 +416,8 @@ export default function Dashboard() {
               className={cn(
                 'text-xs font-bold px-4 py-2 rounded-lg border flex-shrink-0 transition-all',
                 dueCount >= 10
-                  ? 'bg-danger/10 text-danger border-danger/25 hover:bg-danger/20'
-                  : 'bg-brand-400/10 text-brand-300 border-brand-400/25 hover:bg-brand-400/20'
+                  ? 'bg-danger-soft text-danger-fg border-danger-line hover:bg-danger-soft'
+                  : 'bg-brand-soft text-brand-fg-soft border-brand-line hover:bg-brand-soft'
               )}
             >
               Review Now →
@@ -459,11 +459,11 @@ export default function Dashboard() {
           },
         ].map((card, i) => {
           const colorMap = {
-            brand: { bg: 'bg-brand-400/10', text: 'text-brand-300', bar: 'bg-brand-400' },
-            success: { bg: 'bg-success/10', text: 'text-success', bar: 'bg-success' },
-            warning: { bg: 'bg-warning/10', text: 'text-warning', bar: 'bg-warning' },
-            danger: { bg: 'bg-danger/10', text: 'text-danger', bar: 'bg-danger' },
-            info: { bg: 'bg-info/10', text: 'text-info', bar: 'bg-info' },
+            brand: { bg: 'bg-brand-soft', text: 'text-brand-fg-soft', bar: 'bg-brand-400' },
+            success: { bg: 'bg-success-soft', text: 'text-success-fg', bar: 'bg-success' },
+            warning: { bg: 'bg-warning-soft', text: 'text-warning-fg', bar: 'bg-warning' },
+            danger: { bg: 'bg-danger-soft', text: 'text-danger-fg', bar: 'bg-danger' },
+            info: { bg: 'bg-info-soft', text: 'text-info-fg', bar: 'bg-info' },
           }
           const c = colorMap[card.color] || colorMap.brand
 
@@ -528,7 +528,7 @@ export default function Dashboard() {
               <p className="text-[10px] text-text-disabled uppercase tracking-widest mb-1">
                 Est. weeks to Tech Screen Ready
               </p>
-              <p className="text-lg font-extrabold font-mono text-brand-300">
+              <p className="text-lg font-extrabold font-mono text-brand-fg-soft">
                 {weeksToThresholds.technical_screen}w
                 <span className="text-xs font-normal text-text-disabled ml-1">
                   at current pace
@@ -545,7 +545,7 @@ export default function Dashboard() {
 
           <button
             onClick={() => navigate('/report')}
-            className="text-xs font-bold text-brand-300 hover:text-brand-200 transition-colors
+            className="text-xs font-bold text-brand-fg-soft hover:text-brand-200 transition-colors
                                    flex items-center gap-1 mt-auto"
           >
             Full Intelligence Report
@@ -643,7 +643,7 @@ export default function Dashboard() {
             desc={dueCount > 0 ? `${dueCount} due now` : 'Spaced repetition'}
             to="/review"
             badge={dueCount > 0 ? `${dueCount} due` : undefined}
-            color={dueCount > 0 ? 'bg-danger/10 text-danger border-danger/20' : undefined}
+            color={dueCount > 0 ? 'bg-danger-soft text-danger-fg border-danger-line' : undefined}
           />
         </div>
       </motion.div>
@@ -673,7 +673,7 @@ export default function Dashboard() {
             ))}
           </div>
           {avgWeekly < 3 && (
-            <p className="text-[10px] text-warning mt-2">
+            <p className="text-[10px] text-warning-fg mt-2">
               Aim for 5+ problems/week for meaningful progress
             </p>
           )}
@@ -696,9 +696,9 @@ export default function Dashboard() {
           />
           <div className="flex justify-between mt-2 mb-4">
             {[
-              { label: 'Easy', count: difficultyMap.EASY, color: 'text-success' },
-              { label: 'Medium', count: difficultyMap.MEDIUM, color: 'text-warning' },
-              { label: 'Hard', count: difficultyMap.HARD, color: 'text-danger' },
+              { label: 'Easy', count: difficultyMap.EASY, color: 'text-success-fg' },
+              { label: 'Medium', count: difficultyMap.MEDIUM, color: 'text-warning-fg' },
+              { label: 'Hard', count: difficultyMap.HARD, color: 'text-danger-fg' },
             ].map(d => (
               <div key={d.label} className="text-center">
                 <div className={cn('text-base font-extrabold font-mono', d.color)}>{d.count}</div>
@@ -712,13 +712,13 @@ export default function Dashboard() {
             const hardPct = total > 0 ? difficultyMap.HARD / total : 0
             const medPct = total > 0 ? difficultyMap.MEDIUM / total : 0
             if (hardPct < 0.1 && total > 10) {
-              return <p className="text-[10px] text-warning">Push toward Hard problems — FAANG expects it</p>
+              return <p className="text-[10px] text-warning-fg">Push toward Hard problems — FAANG expects it</p>
             }
             if (medPct < 0.3 && total > 5) {
-              return <p className="text-[10px] text-info">Add more Medium problems for balanced prep</p>
+              return <p className="text-[10px] text-info-fg">Add more Medium problems for balanced prep</p>
             }
             if (hardPct >= 0.25) {
-              return <p className="text-[10px] text-success">Strong difficulty distribution ✓</p>
+              return <p className="text-[10px] text-success-fg">Strong difficulty distribution ✓</p>
             }
             return null
           })()}
@@ -754,7 +754,7 @@ export default function Dashboard() {
               <div className="flex flex-wrap gap-1">
                 {patternCoverage.missing.slice(0, 4).map(p => (
                   <span key={p}
-                    className="text-[9px] text-danger bg-danger/5 border border-danger/15 rounded px-1.5 py-px">
+                    className="text-[9px] text-danger-fg bg-danger-soft border border-danger-line rounded px-1.5 py-px">
                     {p}
                   </span>
                 ))}
@@ -782,13 +782,13 @@ export default function Dashboard() {
             <p className="text-xs font-bold text-text-primary flex items-center gap-2">
               <span>🧠</span> Review Queue
               {dueCount > 0 && (
-                <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">
+                <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">
                   {dueCount} due
                 </span>
               )}
             </p>
             <button onClick={() => navigate('/review')}
-              className="text-[10px] font-bold text-brand-300 hover:text-brand-200 transition-colors">
+              className="text-[10px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors">
               See all →
             </button>
           </div>
@@ -815,7 +815,7 @@ export default function Dashboard() {
               <span>🎯</span> Recommended Next
             </p>
             <button onClick={() => navigate('/problems')}
-              className="text-[10px] font-bold text-brand-300 hover:text-brand-200 transition-colors">
+              className="text-[10px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors">
               All problems →
             </button>
           </div>
@@ -836,7 +836,7 @@ export default function Dashboard() {
               <p className="text-xs font-bold text-text-primary flex items-center gap-2">
                 <span>👥</span> Team Activity
                 {activityData?.meta?.totalInPeriod > 0 && (
-                  <span className="text-[9px] font-bold text-success bg-success/10 border border-success/20 px-1.5 py-px rounded-full">
+                  <span className="text-[9px] font-bold text-success-fg bg-success-soft border border-success-line px-1.5 py-px rounded-full">
                     {activityData.meta.totalInPeriod} this week
                   </span>
                 )}
@@ -848,7 +848,7 @@ export default function Dashboard() {
               )}
             </div>
             <button onClick={() => navigate('/leaderboard')}
-              className="text-[10px] font-bold text-brand-300 hover:text-brand-200 transition-colors">
+              className="text-[10px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors">
               Leaderboard →
             </button>
           </div>
@@ -883,10 +883,10 @@ export default function Dashboard() {
           className={cn(
             'border rounded-xl p-5',
             daysToInterview <= 7
-              ? 'bg-danger/5 border-danger/25'
+              ? 'bg-danger-soft border-danger-line'
               : daysToInterview <= 30
-                ? 'bg-warning/5 border-warning/25'
-                : 'bg-brand-400/5 border-brand-400/20'
+                ? 'bg-warning-soft border-warning-line'
+                : 'bg-brand-soft border-brand-line'
           )}
         >
           <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -899,21 +899,21 @@ export default function Dashboard() {
                 {' '}in{' '}
                 <span className={cn(
                   'font-extrabold font-mono text-lg',
-                  daysToInterview <= 7 ? 'text-danger'
-                    : daysToInterview <= 30 ? 'text-warning'
-                      : 'text-brand-300'
+                  daysToInterview <= 7 ? 'text-danger-fg'
+                    : daysToInterview <= 30 ? 'text-warning-fg'
+                      : 'text-brand-fg-soft'
                 )}>
                   {daysToInterview}
                 </span>
                 {' '}days
               </p>
               {daysToInterview <= 7 && (
-                <p className="text-xs text-danger mt-1">
+                <p className="text-xs text-danger-fg mt-1">
                   Final stretch — focus on review queue and mock interviews
                 </p>
               )}
               {daysToInterview > 7 && daysToInterview <= 30 && (
-                <p className="text-xs text-warning mt-1">
+                <p className="text-xs text-warning-fg mt-1">
                   Under a month — time to accelerate practice velocity
                 </p>
               )}
@@ -924,7 +924,7 @@ export default function Dashboard() {
                 Reviews
               </button>
               <button onClick={() => navigate('/report')}
-                className="text-xs font-bold text-brand-300 hover:text-brand-200 transition-colors px-3 py-1.5 rounded-lg border border-brand-400/25 hover:border-brand-400/40">
+                className="text-xs font-bold text-brand-fg-soft hover:text-brand-200 transition-colors px-3 py-1.5 rounded-lg border border-brand-line hover:border-brand-line">
                 View Readiness →
               </button>
             </div>

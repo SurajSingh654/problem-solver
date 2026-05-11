@@ -31,9 +31,9 @@ function RoleBadge({ globalRole, teamRole }) {
 // ── Activity status badge ──────────────────────────────
 function StatusBadge({ status }) {
     const config = {
-        ACTIVE: 'text-success bg-success/10 border-success/25',
-        INACTIVE: 'text-warning bg-warning/10 border-warning/25',
-        DORMANT: 'text-danger bg-danger/10 border-danger/25',
+        ACTIVE: 'text-success-fg bg-success-soft border-success-line',
+        INACTIVE: 'text-warning-fg bg-warning-soft border-warning-line',
+        DORMANT: 'text-danger-fg bg-danger-soft border-danger-line',
     }
     return (
         <span className={cn(
@@ -57,11 +57,11 @@ function SolutionRow({ solution, index, onClick }) {
             onClick={onClick}
             className="flex items-center gap-3 p-3.5 rounded-xl border
                  bg-surface-2 border-border-default
-                 hover:border-brand-400/30 hover:bg-surface-3
+                 hover:border-brand-line hover:bg-surface-3
                  cursor-pointer transition-all duration-150"
         >
             {/* Solved check */}
-            <div className="w-5 h-5 rounded-full bg-success/15 border border-success/30
+            <div className="w-5 h-5 rounded-full bg-success-soft border border-success-line
                       flex items-center justify-center flex-shrink-0">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                     stroke="#22c55e" strokeWidth="3"
@@ -90,8 +90,8 @@ function SolutionRow({ solution, index, onClick }) {
                         </span>
                     )}
                     {solution.pattern && (
-                        <span className="text-[11px] text-brand-300 bg-brand-400/10
-                             border border-brand-400/15 rounded-full px-2 py-px">
+                        <span className="text-[11px] text-brand-fg-soft bg-brand-soft
+                             border border-brand-line rounded-full px-2 py-px">
                             {solution.pattern}
                         </span>
                     )}
@@ -179,7 +179,7 @@ export default function ProfilePage() {
                    p-6 mb-6 hero-gradient"
             >
                 <div className="absolute top-[-60px] right-[-60px] w-[240px] h-[240px]
-                        rounded-full bg-brand-400/8 blur-[80px] pointer-events-none" />
+                        rounded-full bg-brand-soft blur-[80px] pointer-events-none" />
 
                 <div className="relative z-10 flex items-start gap-5 flex-wrap">
                     <div className="relative">
@@ -191,7 +191,7 @@ export default function ProfilePage() {
                         {profile.streak > 0 && (
                             <div className="absolute -bottom-1 -right-1 bg-surface-2
                               border border-border-strong rounded-full
-                              px-1.5 py-px text-[11px] font-bold text-warning">
+                              px-1.5 py-px text-[11px] font-bold text-warning-fg">
                                 🔥{profile.streak}
                             </div>
                         )}
@@ -225,7 +225,7 @@ export default function ProfilePage() {
                         {/* Target company */}
                         {profile.targetCompany && (
                             <span className="text-[10px] font-semibold text-warning
-                                   bg-warning/10 border border-warning/20
+                                   bg-warning-soft border border-warning-line
                                    rounded-full px-2 py-px">
                                 🏢 {profile.targetCompany}
                             </span>
@@ -288,10 +288,10 @@ export default function ProfilePage() {
                     {/* Stats grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                         {[
-                            { label: 'Solved', value: profile.solutionCount || 0, color: 'text-brand-300' },
-                            { label: 'Streak', value: `${profile.streak || 0} 🔥`, color: 'text-warning' },
-                            { label: 'Sim Sessions', value: profile.simCount || 0, color: 'text-info' },
-                            { label: 'Interviews', value: profile.interviewCount || 0, color: 'text-success' },
+                            { label: 'Solved', value: profile.solutionCount || 0, color: 'text-brand-fg-soft' },
+                            { label: 'Streak', value: `${profile.streak || 0} 🔥`, color: 'text-warning-fg' },
+                            { label: 'Sim Sessions', value: profile.simCount || 0, color: 'text-info-fg' },
+                            { label: 'Interviews', value: profile.interviewCount || 0, color: 'text-success-fg' },
                         ].map((s, i) => (
                             <motion.div
                                 key={s.label}
@@ -323,9 +323,9 @@ export default function ProfilePage() {
                             </h2>
                             <div className="flex items-center gap-4">
                                 {[
-                                    { label: 'Easy', count: easy, color: 'text-success', bar: 'bg-success' },
-                                    { label: 'Medium', count: medium, color: 'text-warning', bar: 'bg-warning' },
-                                    { label: 'Hard', count: hard, color: 'text-danger', bar: 'bg-danger' },
+                                    { label: 'Easy', count: easy, color: 'text-success-fg', bar: 'bg-success' },
+                                    { label: 'Medium', count: medium, color: 'text-warning-fg', bar: 'bg-warning' },
+                                    { label: 'Hard', count: hard, color: 'text-danger-fg', bar: 'bg-danger' },
                                 ].map(d => (
                                     <div key={d.label} className="flex-1 text-center">
                                         <div className={cn('text-2xl font-extrabold font-mono', d.color)}>

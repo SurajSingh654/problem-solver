@@ -32,7 +32,7 @@ function getDifficultyColor(difficulty, category) {
     if (category === 'HR') {
         return HR_STAKES[difficulty]?.color || 'text-text-secondary'
     }
-    const colors = { EASY: 'text-success', MEDIUM: 'text-warning', HARD: 'text-danger' }
+    const colors = { EASY: 'text-success-fg', MEDIUM: 'text-warning-fg', HARD: 'text-danger-fg' }
     return colors[difficulty] || 'text-text-secondary'
 }
 
@@ -58,19 +58,19 @@ function StatsBar({ problems }) {
     return (
         <div className="flex items-center gap-4 flex-wrap text-xs text-text-tertiary">
             <span className="font-semibold text-text-primary">{total} problems</span>
-            <span className="text-success font-semibold">{solved} solved</span>
+            <span className="text-success-fg font-semibold">{solved} solved</span>
             {nonHrProblems.length > 0 && (
                 <>
-                    <span className="text-success">{easy} Easy</span>
-                    <span className="text-warning">{medium} Medium</span>
-                    <span className="text-danger">{hard} Hard</span>
+                    <span className="text-success-fg">{easy} Easy</span>
+                    <span className="text-warning-fg">{medium} Medium</span>
+                    <span className="text-danger-fg">{hard} Hard</span>
                 </>
             )}
             {hrProblems.length > 0 && (
                 <>
-                    {common > 0 && <span className="text-success">{common} Common</span>}
-                    {tricky > 0 && <span className="text-warning">{tricky} Tricky</span>}
-                    {sensitive > 0 && <span className="text-danger">{sensitive} Sensitive</span>}
+                    {common > 0 && <span className="text-success-fg">{common} Common</span>}
+                    {tricky > 0 && <span className="text-warning-fg">{tricky} Tricky</span>}
+                    {sensitive > 0 && <span className="text-danger-fg">{sensitive} Sensitive</span>}
                 </>
             )}
         </div>
@@ -94,15 +94,15 @@ function ProblemListRow({ problem, index }) {
                 'flex items-center gap-4 p-3.5 rounded-xl border cursor-pointer',
                 'transition-all duration-150 hover:-translate-y-px hover:shadow-sm',
                 problem.isSolved
-                    ? 'bg-success/3 border-success/15 hover:border-success/30'
-                    : 'bg-surface-2 border-border-default hover:border-brand-400/30'
+                    ? 'bg-success-soft border-success-line hover:border-success-line'
+                    : 'bg-surface-2 border-border-default hover:border-brand-line'
             )}
         >
             {/* Solved check */}
             <div className={cn(
                 'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0',
                 problem.isSolved
-                    ? 'bg-success/15 border border-success/30'
+                    ? 'bg-success-soft border border-success-line'
                     : 'bg-surface-3 border border-border-default'
             )}>
                 {problem.isSolved && (
@@ -233,19 +233,19 @@ export default function ProblemsPage() {
         {
             id: 'EASY',
             label: isHRFilter ? `${HR_STAKES.EASY.icon} ${HR_STAKES.EASY.label}` : 'Easy',
-            activeClass: 'bg-success/15 border-success/40 text-success',
+            activeClass: 'bg-success-soft border-success-line text-success-fg',
             dot: 'bg-success',
         },
         {
             id: 'MEDIUM',
             label: isHRFilter ? `${HR_STAKES.MEDIUM.icon} ${HR_STAKES.MEDIUM.label}` : 'Medium',
-            activeClass: 'bg-warning/15 border-warning/40 text-warning',
+            activeClass: 'bg-warning-soft border-warning-line text-warning-fg',
             dot: 'bg-warning',
         },
         {
             id: 'HARD',
             label: isHRFilter ? `${HR_STAKES.HARD.icon} ${HR_STAKES.HARD.label}` : 'Hard',
-            activeClass: 'bg-danger/15 border-danger/40 text-danger',
+            activeClass: 'bg-danger-soft border-danger-line text-danger-fg',
             dot: 'bg-danger',
         },
     ]
@@ -421,7 +421,7 @@ export default function ProblemsPage() {
                                 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg',
                                 'text-[11px] font-semibold border transition-all duration-150',
                                 showPinned
-                                    ? 'bg-warning/15 border-warning/40 text-warning'
+                                    ? 'bg-warning-soft border-warning-line text-warning-fg'
                                     : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
                             )}
                         >
@@ -445,7 +445,7 @@ export default function ProblemsPage() {
                                         'inline-flex items-center px-2.5 py-1 rounded-lg',
                                         'text-[11px] font-semibold border transition-all duration-150',
                                         tag === t
-                                            ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
+                                            ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                             : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
                                     )}
                                 >
@@ -463,8 +463,8 @@ export default function ProblemsPage() {
                         <button
                             onClick={clearFilters}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                                       text-xs font-semibold text-danger border border-danger/25
-                                       bg-danger/8 hover:bg-danger/15 transition-all"
+                                       text-xs font-semibold text-danger-fg border border-danger-line
+                                       bg-danger-soft hover:bg-danger-soft transition-all"
                         >
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" strokeWidth="3"

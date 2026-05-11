@@ -58,8 +58,8 @@ function MemberCard({ member, onClick }) {
                 'flex items-center gap-3 p-3 rounded-xl border w-full text-left',
                 'transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm',
                 isInactive
-                    ? 'bg-warning/3 border-warning/20 hover:border-warning/40'
-                    : 'bg-surface-1 border-border-default hover:border-brand-400/30'
+                    ? 'bg-warning-soft border-warning-line hover:border-warning-line'
+                    : 'bg-surface-1 border-border-default hover:border-brand-line'
             )}
         >
             <Avatar name={member.username} color={member.avatarColor} size="sm" />
@@ -69,7 +69,7 @@ function MemberCard({ member, onClick }) {
                         {member.username}
                     </span>
                     {member.streak > 0 && (
-                        <span className="text-[10px] text-warning font-bold">
+                        <span className="text-[10px] text-warning-fg font-bold">
                             🔥{member.streak}
                         </span>
                     )}
@@ -81,7 +81,7 @@ function MemberCard({ member, onClick }) {
                     <span className="text-[10px] text-text-disabled">·</span>
                     <span className={cn(
                         'text-[10px]',
-                        isInactive ? 'text-warning font-semibold' : 'text-text-disabled'
+                        isInactive ? 'text-warning-fg font-semibold' : 'text-text-disabled'
                     )}>
                         {isInactive ? '⚠ ' : ''}{lastActive}
                     </span>
@@ -215,7 +215,7 @@ export default function AdminDashboard() {
                 >
                     {inactiveMembers.length > 0 && (
                         <div className="flex items-center gap-3 p-4 rounded-xl border
-                            border-warning/25 bg-warning/5">
+                            border-warning-line bg-warning-soft">
                             <span className="text-xl flex-shrink-0">⚠️</span>
                             <div className="flex-1">
                                 <p className="text-sm font-bold text-text-primary">
@@ -234,7 +234,7 @@ export default function AdminDashboard() {
 
                     {newMembers.length > 0 && (
                         <div className="flex items-center gap-3 p-4 rounded-xl border
-                            border-info/25 bg-info/5">
+                            border-info-line bg-info-soft">
                             <span className="text-xl flex-shrink-0">🆕</span>
                             <div className="flex-1">
                                 <p className="text-sm font-bold text-text-primary">
@@ -249,7 +249,7 @@ export default function AdminDashboard() {
 
                     {unsolvedProblems.length > 0 && (
                         <div className="flex items-center gap-3 p-4 rounded-xl border
-                            border-brand-400/25 bg-brand-400/5">
+                            border-brand-line bg-brand-soft">
                             <span className="text-xl flex-shrink-0">📋</span>
                             <div className="flex-1">
                                 <p className="text-sm font-bold text-text-primary">
@@ -316,7 +316,7 @@ export default function AdminDashboard() {
                             </h2>
                             <button
                                 onClick={() => navigate('/leaderboard')}
-                                className="text-xs text-brand-300 hover:text-brand-200
+                                className="text-xs text-brand-fg-soft hover:text-brand-200
                            font-semibold transition-colors"
                             >
                                 Leaderboard →
@@ -344,19 +344,19 @@ export default function AdminDashboard() {
                         {[
                             {
                                 icon: '📋', label: 'Problems', to: '/problems',
-                                color: 'hover:border-brand-400/40 hover:bg-brand-400/5'
+                                color: 'hover:border-brand-line hover:bg-brand-soft'
                             },
                             {
                                 icon: '👥', label: 'Members', to: '/admin',
-                                color: 'hover:border-info/40 hover:bg-info/5'
+                                color: 'hover:border-info-line hover:bg-info-soft'
                             },
                             {
                                 icon: '🏆', label: 'Leaderboard', to: '/leaderboard',
-                                color: 'hover:border-warning/40 hover:bg-warning/5'
+                                color: 'hover:border-warning-line hover:bg-warning-soft'
                             },
                             {
                                 icon: '📖', label: 'Docs', to: '/docs/readme',
-                                color: 'hover:border-success/40 hover:bg-success/5'
+                                color: 'hover:border-success-line hover:bg-success-soft'
                             },
                         ].map((link, i) => (
                             <motion.button
@@ -393,7 +393,7 @@ export default function AdminDashboard() {
                             </h2>
                             <button
                                 onClick={() => navigate('/admin')}
-                                className="text-xs text-brand-300 hover:text-brand-200
+                                className="text-xs text-brand-fg-soft hover:text-brand-200
                            font-semibold transition-colors"
                             >
                                 Manage →

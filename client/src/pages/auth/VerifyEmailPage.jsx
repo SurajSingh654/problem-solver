@@ -176,7 +176,7 @@ export default function VerifyEmailPage() {
                             initial={{ scale: 0.5, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ delay: 0.1, type: 'spring', stiffness: 300 }}
-                            className="w-14 h-14 rounded-2xl bg-brand-400/15 border border-brand-400/25
+                            className="w-14 h-14 rounded-2xl bg-brand-soft border border-brand-line
                          flex items-center justify-center text-2xl mx-auto mb-5"
                         >
                             📧
@@ -187,7 +187,7 @@ export default function VerifyEmailPage() {
                         <p className="text-sm text-text-secondary">
                             We sent a 6-digit code to
                         </p>
-                        <p className="text-sm font-semibold text-brand-300 mt-0.5">
+                        <p className="text-sm font-semibold text-brand-fg-soft mt-0.5">
                             {email || 'your email'}
                         </p>
                     </div>
@@ -211,7 +211,7 @@ export default function VerifyEmailPage() {
                                         'bg-surface-3 border-2 rounded-xl outline-none',
                                         'transition-all duration-150',
                                         digit
-                                            ? 'border-brand-400 text-brand-300'
+                                            ? 'border-brand-400 text-brand-fg-soft'
                                             : 'border-border-strong text-text-primary',
                                         'focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20'
                                     )}
@@ -243,7 +243,7 @@ export default function VerifyEmailPage() {
                                     'text-xs font-semibold transition-colors',
                                     cooldown > 0
                                         ? 'text-text-disabled cursor-not-allowed'
-                                        : 'text-brand-300 hover:text-brand-200 cursor-pointer'
+                                        : 'text-brand-fg-soft hover:text-brand-200 cursor-pointer'
                                 )}
                             >
                                 {resending

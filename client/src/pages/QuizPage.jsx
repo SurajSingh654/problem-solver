@@ -39,8 +39,8 @@ function FormattedText({ text }) {
                             if (ip.startsWith('`') && ip.endsWith('`')) {
                                 return (
                                     <code key={j}
-                                        className="bg-brand-400/10 text-brand-300 px-1.5 py-0.5
-                                   rounded text-xs font-mono border border-brand-400/20">
+                                        className="bg-brand-soft text-brand-fg-soft px-1.5 py-0.5
+                                   rounded text-xs font-mono border border-brand-line">
                                         {ip.slice(1, -1)}
                                     </code>
                                 )
@@ -100,7 +100,7 @@ function Scratchpad({ visible }) {
                     className="w-full bg-surface-2 border border-border-subtle rounded-lg
                      text-sm font-mono text-text-secondary placeholder:text-text-disabled
                      px-3 py-2 outline-none resize-y
-                     focus:border-brand-400/40 transition-all"
+                     focus:border-brand-line transition-all"
                 />
             </div>
         </motion.div>
@@ -129,7 +129,7 @@ function QuizTimer({ totalSecs, running, onTimeUp }) {
         <div className={cn(
             'flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono font-bold',
             isLow
-                ? 'bg-danger/10 border-danger/30 text-danger animate-pulse'
+                ? 'bg-danger-soft border-danger-line text-danger-fg animate-pulse'
                 : 'bg-surface-2 border-border-default text-text-primary'
         )}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
@@ -210,7 +210,7 @@ function SetupScreen({ onStart, onRetry }) {
                 className="mb-8"
             >
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-xl bg-brand-400/15 border border-brand-400/25
+                    <div className="w-10 h-10 rounded-xl bg-brand-soft border border-brand-line
                           flex items-center justify-center text-xl flex-shrink-0">
                         🧠
                     </div>
@@ -224,12 +224,12 @@ function SetupScreen({ onStart, onRetry }) {
             </motion.div>
 
             {aiStatus && !aiStatus.enabled && (
-                <div className="bg-warning/8 border border-warning/25 rounded-xl p-4 mb-6
+                <div className="bg-warning-soft border border-warning-line rounded-xl p-4 mb-6
                         flex items-center gap-3">
                     <span className="text-xl">⚠️</span>
                     <p className="text-sm text-text-secondary">
                         AI features are not enabled. Ask your admin to set
-                        <code className="text-brand-300 bg-brand-400/10 px-1.5 rounded text-xs mx-1">
+                        <code className="text-brand-fg-soft bg-brand-soft px-1.5 rounded text-xs mx-1">
                             AI_ENABLED=true
                         </code>
                     </p>
@@ -278,15 +278,15 @@ function SetupScreen({ onStart, onRetry }) {
                                         <div className="text-center">
                                             <span className={cn(
                                                 'text-sm font-extrabold font-mono',
-                                                subjectHistory.avg >= 70 ? 'text-success' :
-                                                    subjectHistory.avg >= 50 ? 'text-warning' : 'text-danger'
+                                                subjectHistory.avg >= 70 ? 'text-success-fg' :
+                                                    subjectHistory.avg >= 50 ? 'text-warning-fg' : 'text-danger-fg'
                                             )}>
                                                 {subjectHistory.avg}%
                                             </span>
                                             <p className="text-[9px] text-text-disabled">avg</p>
                                         </div>
                                         <div className="text-center">
-                                            <span className="text-sm font-extrabold font-mono text-brand-300">
+                                            <span className="text-sm font-extrabold font-mono text-brand-fg-soft">
                                                 {subjectHistory.best}%
                                             </span>
                                             <p className="text-[9px] text-text-disabled">best</p>
@@ -295,9 +295,9 @@ function SetupScreen({ onStart, onRetry }) {
                                             <span className={cn(
                                                 'text-[10px] font-bold px-2 py-0.5 rounded-full',
                                                 subjectHistory.trend === 'improving'
-                                                    ? 'bg-success/12 text-success'
+                                                    ? 'bg-success-soft text-success-fg'
                                                     : subjectHistory.trend === 'declining'
-                                                        ? 'bg-danger/12 text-danger'
+                                                        ? 'bg-danger-soft text-danger-fg'
                                                         : 'bg-surface-3 text-text-disabled'
                                             )}>
                                                 {subjectHistory.trend === 'improving' ? '↑ Improving' :
@@ -323,7 +323,7 @@ function SetupScreen({ onStart, onRetry }) {
                                     'flex items-center gap-1.5 px-2.5 py-1 rounded-lg border',
                                     'text-[11px] font-semibold transition-all',
                                     subject === s.label
-                                        ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
+                                        ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                         : 'bg-surface-2 border-border-default text-text-disabled hover:text-text-tertiary hover:border-border-strong'
                                 )}
                             >
@@ -378,7 +378,7 @@ function SetupScreen({ onStart, onRetry }) {
                                 className={cn(
                                     'flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all',
                                     count === n
-                                        ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
+                                        ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                         : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
                                 )}
                             >
@@ -410,7 +410,7 @@ function SetupScreen({ onStart, onRetry }) {
                                 className={cn(
                                     'flex-1 py-2 rounded-xl border text-xs font-semibold transition-all',
                                     timerMins === t.mins
-                                        ? 'bg-warning/12 border-warning/35 text-warning'
+                                        ? 'bg-warning-soft border-warning-line text-warning-fg'
                                         : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
                                 )}
                             >
@@ -491,16 +491,16 @@ function SetupScreen({ onStart, onRetry }) {
                                 onClick={() => { setSubject(rs.subject); setDifficulty(rs.difficulty) }}
                                 className="flex items-center justify-between p-3 rounded-xl border
                            bg-surface-1 border-border-default
-                           hover:border-brand-400/30 transition-all text-left"
+                           hover:border-brand-line transition-all text-left"
                             >
                                 <span className="text-xs font-semibold text-text-primary truncate">
                                     {rs.subject}
                                 </span>
                                 <span className={cn(
                                     'text-[10px] font-bold px-1.5 py-px rounded-full',
-                                    rs.bestScore >= 80 ? 'bg-success/12 text-success' :
-                                        rs.bestScore >= 60 ? 'bg-warning/12 text-warning' :
-                                            'bg-danger/12 text-danger'
+                                    rs.bestScore >= 80 ? 'bg-success-soft text-success-fg' :
+                                        rs.bestScore >= 60 ? 'bg-warning-soft text-warning-fg' :
+                                            'bg-danger-soft text-danger-fg'
                                 )}>
                                     {rs.bestScore}%
                                 </span>
@@ -587,9 +587,9 @@ function QuizHistory({ onRetry, onPracticeAgain }) {
 
                     // Mastery label
                     const masteryLabel = avg === null ? null
-                        : avg >= 80 ? { label: 'Strong', color: 'text-success bg-success/10 border-success/20' }
-                            : avg >= 60 ? { label: 'Developing', color: 'text-warning bg-warning/10 border-warning/20' }
-                                : { label: 'Needs work', color: 'text-danger bg-danger/10 border-danger/20' }
+                        : avg >= 80 ? { label: 'Strong', color: 'text-success-fg bg-success-soft border-success-line' }
+                            : avg >= 60 ? { label: 'Developing', color: 'text-warning-fg bg-warning-soft border-warning-line' }
+                                : { label: 'Needs work', color: 'text-danger-fg bg-danger-soft border-danger-line' }
 
                     // Last 5 scores for mini sparkline — oldest to newest for left-to-right reading
                     const sparkScores = [...scores].reverse().slice(-5)
@@ -629,8 +629,8 @@ function QuizHistory({ onRetry, onPracticeAgain }) {
                                         <div className="text-center">
                                             <div className={cn(
                                                 'text-base font-extrabold font-mono',
-                                                latest >= 70 ? 'text-success' :
-                                                    latest >= 50 ? 'text-warning' : 'text-danger'
+                                                latest >= 70 ? 'text-success-fg' :
+                                                    latest >= 50 ? 'text-warning-fg' : 'text-danger-fg'
                                             )}>
                                                 {latest}%
                                             </div>
@@ -639,7 +639,7 @@ function QuizHistory({ onRetry, onPracticeAgain }) {
                                     )}
                                     {best !== null && best !== latest && (
                                         <div className="text-center">
-                                            <div className="text-base font-extrabold font-mono text-brand-300">
+                                            <div className="text-base font-extrabold font-mono text-brand-fg-soft">
                                                 {best}%
                                             </div>
                                             <div className="text-[9px] text-text-disabled">best</div>
@@ -648,8 +648,8 @@ function QuizHistory({ onRetry, onPracticeAgain }) {
                                     {trend && (
                                         <span className={cn(
                                             'text-xs font-bold',
-                                            trend === 'up' ? 'text-success' :
-                                                trend === 'down' ? 'text-danger' : 'text-text-disabled'
+                                            trend === 'up' ? 'text-success-fg' :
+                                                trend === 'down' ? 'text-danger-fg' : 'text-text-disabled'
                                         )}>
                                             {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'}
                                         </span>
@@ -693,7 +693,7 @@ function QuizHistory({ onRetry, onPracticeAgain }) {
                                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2
                                                rounded-xl border border-border-default bg-surface-2
                                                text-xs font-semibold text-text-secondary
-                                               hover:border-brand-400/30 hover:text-brand-300 transition-all"
+                                               hover:border-brand-line hover:text-brand-fg-soft transition-all"
                                 >
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" strokeWidth="2.5"
@@ -709,7 +709,7 @@ function QuizHistory({ onRetry, onPracticeAgain }) {
                                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2
                                                rounded-xl border border-border-default bg-surface-2
                                                text-xs font-semibold text-text-secondary
-                                               hover:border-warning/30 hover:text-warning transition-all"
+                                               hover:border-warning-line hover:text-warning-fg transition-all"
                                 >
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" strokeWidth="2.5"
@@ -845,8 +845,8 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                         {quizData.subject}
                     </span>
                     {quizData.isRetry && (
-                        <span className="ml-2 text-[10px] font-bold text-warning bg-warning/10
-                                         border border-warning/20 rounded-full px-1.5 py-px">
+                        <span className="ml-2 text-[10px] font-bold text-warning-fg bg-warning-soft
+                                         border border-warning-line rounded-full px-1.5 py-px">
                             Retry
                         </span>
                     )}
@@ -898,7 +898,7 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                                 isCurrent
                                     ? 'bg-brand-400 border-brand-400 text-white scale-110'
                                     : isAnswered
-                                        ? 'bg-brand-400/15 border-brand-400/30 text-brand-300'
+                                        ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                         : 'bg-surface-2 border-border-default text-text-disabled hover:border-border-strong'
                             )}
                         >
@@ -950,15 +950,15 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                                     'w-full flex items-start gap-3 p-4 rounded-xl border',
                                     'text-left transition-all duration-150',
                                     isSelected
-                                        ? 'bg-brand-400/8 border-brand-400/50'
-                                        : 'bg-surface-2 border-border-default hover:border-brand-400/30 hover:bg-brand-400/3',
+                                        ? 'bg-brand-soft border-brand-line'
+                                        : 'bg-surface-2 border-border-default hover:border-brand-line hover:bg-brand-soft',
                                 )}
                             >
                                 <div className={cn(
                                     'w-7 h-7 rounded-lg flex items-center justify-center',
                                     'text-xs font-bold flex-shrink-0 border mt-0.5',
                                     isSelected
-                                        ? 'bg-brand-400/20 border-brand-400/50 text-brand-300'
+                                        ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                         : 'bg-surface-3 border-border-default text-text-disabled'
                                 )}>
                                     {key}
@@ -979,7 +979,7 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                             'flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5',
                             'rounded-lg border transition-all',
                             showScratch
-                                ? 'bg-brand-400/12 border-brand-400/30 text-brand-300'
+                                ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                 : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
                         )}
                     >
@@ -1086,8 +1086,8 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                 <p className="text-sm text-text-tertiary">
                     {quizData.subject} · {quizData.difficulty}
                     {quizData.isRetry && (
-                        <span className="ml-2 text-[10px] font-bold text-warning bg-warning/10
-                                         border border-warning/20 rounded-full px-1.5 py-px">
+                        <span className="ml-2 text-[10px] font-bold text-warning-fg bg-warning-soft
+                                         border border-warning-line rounded-full px-1.5 py-px">
                             Retry attempt
                         </span>
                     )}
@@ -1103,15 +1103,15 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
             >
                 <div className="grid grid-cols-3 gap-4 mb-5">
                     {[
-                        { label: 'Score', value: `${score}/${total}`, color: 'text-brand-300' },
+                        { label: 'Score', value: `${score}/${total}`, color: 'text-brand-fg-soft' },
                         {
                             label: 'Accuracy', value: `${pct}%`,
-                            color: pct >= 70 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-danger'
+                            color: pct >= 70 ? 'text-success-fg' : pct >= 50 ? 'text-warning-fg' : 'text-danger-fg'
                         },
                         {
                             label: 'Time',
                             value: timeUsed ? `${Math.floor(timeUsed / 60)}m ${timeUsed % 60}s` : '—',
-                            color: 'text-info'
+                            color: 'text-info-fg'
                         },
                     ].map(s => (
                         <div key={s.label} className="text-center">
@@ -1141,7 +1141,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5 mb-6"
+                className="bg-brand-soft border border-brand-line rounded-2xl p-5 mb-6"
             >
                 <div className="flex items-center gap-3 mb-3">
                     <span className="text-xl">🤖</span>
@@ -1167,13 +1167,13 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                         </p>
                         {analysis.weakTopics?.length > 0 && (
                             <div>
-                                <p className="text-xs font-bold text-warning uppercase tracking-widest mb-2">
+                                <p className="text-xs font-bold text-warning-fg uppercase tracking-widest mb-2">
                                     Weak Areas
                                 </p>
                                 <div className="flex flex-wrap gap-1.5">
                                     {analysis.weakTopics.map((t, i) => (
                                         <span key={i}
-                                            className="text-xs bg-warning/10 text-warning border border-warning/25
+                                            className="text-xs bg-warning-soft text-warning-fg border border-warning-line
                                    rounded-full px-2.5 py-0.5 font-medium">
                                             {t}
                                         </span>
@@ -1192,7 +1192,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                             </div>
                         )}
                         {analysis.encouragement && (
-                            <p className="text-sm text-success font-medium italic">
+                            <p className="text-sm text-success-fg font-medium italic">
                                 {analysis.encouragement}
                             </p>
                         )}
@@ -1222,7 +1222,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                                 key={i}
                                 className={cn(
                                     'rounded-xl border overflow-hidden',
-                                    isCorrect ? 'border-success/20 bg-success/3' : 'border-danger/20 bg-danger/3'
+                                    isCorrect ? 'border-success-line bg-success-soft' : 'border-danger-line bg-danger-soft'
                                 )}
                             >
                                 <div className="p-4">
@@ -1230,7 +1230,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                                         <span className={cn(
                                             'w-6 h-6 rounded-full flex items-center justify-center',
                                             'text-xs font-bold flex-shrink-0',
-                                            isCorrect ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
+                                            isCorrect ? 'bg-success-soft text-success-fg' : 'bg-danger-soft text-danger-fg'
                                         )}>
                                             {isCorrect ? '✓' : '✗'}
                                         </span>
@@ -1246,23 +1246,23 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                                                 <div key={key} className={cn(
                                                     'text-xs px-3 py-2 rounded-lg flex items-start gap-2',
                                                     isCorrectOpt
-                                                        ? 'bg-success/10 text-success font-semibold'
+                                                        ? 'bg-success-soft text-success-fg font-semibold'
                                                         : isUserAnswer
-                                                            ? 'bg-danger/10 text-danger line-through'
+                                                            ? 'bg-danger-soft text-danger-fg line-through'
                                                             : 'text-text-tertiary'
                                                 )}>
                                                     <span className="font-bold flex-shrink-0 mt-px">{key}.</span>
                                                     <FormattedText text={value} />
-                                                    {isCorrectOpt && <span className="ml-auto flex-shrink-0 text-success">✓</span>}
-                                                    {isUserAnswer && !isCorrectOpt && <span className="ml-auto flex-shrink-0 text-danger">✗</span>}
+                                                    {isCorrectOpt && <span className="ml-auto flex-shrink-0 text-success-fg">✓</span>}
+                                                    {isUserAnswer && !isCorrectOpt && <span className="ml-auto flex-shrink-0 text-danger-fg">✗</span>}
                                                 </div>
                                             )
                                         })}
                                     </div>
                                     {answer.explanation && (
-                                        <div className="ml-9 mt-3 p-3 bg-info/5 border border-info/15 rounded-lg">
+                                        <div className="ml-9 mt-3 p-3 bg-info-soft border border-info-line rounded-lg">
                                             <p className="text-xs text-text-secondary leading-relaxed">
-                                                <span className="font-bold text-info">💡 </span>
+                                                <span className="font-bold text-info-fg">💡 </span>
                                                 <FormattedText text={answer.explanation} />
                                             </p>
                                         </div>
@@ -1274,7 +1274,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                                                 'text-[10px] font-semibold px-2 py-1 rounded-lg border transition-all',
                                                 'flex items-center gap-1',
                                                 isFlagged
-                                                    ? 'bg-danger/10 border-danger/25 text-danger'
+                                                    ? 'bg-danger-soft border-danger-line text-danger-fg'
                                                     : 'bg-surface-2 border-border-default text-text-disabled hover:text-text-tertiary'
                                             )}
                                         >
@@ -1325,7 +1325,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                             className={cn(
                                 'text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all',
                                 feedback.includes(chip)
-                                    ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
+                                    ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                     : 'bg-surface-2 border-border-default text-text-disabled hover:text-text-tertiary'
                             )}
                         >
@@ -1344,8 +1344,8 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                      focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 mb-3"
                 />
                 {Object.keys(flagged).length > 0 && (
-                    <div className="bg-danger/5 border border-danger/15 rounded-lg p-3 mb-3">
-                        <p className="text-xs font-bold text-danger mb-1">
+                    <div className="bg-danger-soft border border-danger-line rounded-lg p-3 mb-3">
+                        <p className="text-xs font-bold text-danger-fg mb-1">
                             {Object.keys(flagged).length} question(s) flagged
                         </p>
                         <p className="text-[11px] text-text-tertiary">
@@ -1364,7 +1364,7 @@ function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, o
                         Submit Feedback
                     </Button>
                 ) : (
-                    <p className="text-xs text-success font-semibold flex items-center gap-1.5">
+                    <p className="text-xs text-success-fg font-semibold flex items-center gap-1.5">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" strokeWidth="2.5"
                             strokeLinecap="round" strokeLinejoin="round">

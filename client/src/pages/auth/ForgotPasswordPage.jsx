@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
                                 initial={{ scale: 0.5, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 transition={{ delay: 0.1, type: 'spring', stiffness: 300 }}
-                                className="w-14 h-14 rounded-2xl bg-success/15 border border-success/25
+                                className="w-14 h-14 rounded-2xl bg-success-soft border border-success-line
                            flex items-center justify-center text-2xl mx-auto mb-5"
                             >
                                 📧
@@ -59,7 +59,7 @@ export default function ForgotPasswordPage() {
                             <p className="text-sm text-text-secondary mb-1">
                                 We sent a 6-digit reset code to
                             </p>
-                            <p className="text-sm font-semibold text-brand-300">
+                            <p className="text-sm font-semibold text-brand-fg-soft">
                                 {email}
                             </p>
                         </div>
@@ -94,7 +94,7 @@ export default function ForgotPasswordPage() {
                             <div className="text-center mt-3">
                                 <Link
                                     to="/auth/login"
-                                    className="text-xs text-brand-300 font-semibold
+                                    className="text-xs text-brand-fg-soft font-semibold
                              hover:text-brand-200 transition-colors"
                                 >
                                     ← Back to Login
@@ -182,7 +182,7 @@ export default function ForgotPasswordPage() {
                             Remember your password?{' '}
                             <Link
                                 to="/auth/login"
-                                className="text-brand-300 font-semibold hover:text-brand-200
+                                className="text-brand-fg-soft font-semibold hover:text-brand-200
                            transition-colors"
                             >
                                 Sign in

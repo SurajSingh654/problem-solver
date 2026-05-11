@@ -73,7 +73,7 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                             )}
                             {problem.companyTags?.slice(0, 3).map(c => (
                                 <span key={c} className="text-[10px] font-semibold text-warning
-                                   bg-warning/10 border border-warning/20 rounded-full px-2 py-px">
+                                   bg-warning-soft border border-warning-line rounded-full px-2 py-px">
                                     {c}
                                 </span>
                             ))}
@@ -86,7 +86,7 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                                 href={problem.sourceUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-brand-300 hover:text-brand-200 transition-colors
+                                className="text-xs text-brand-fg-soft hover:text-brand-200 transition-colors
                                flex items-center gap-1 mb-2"
                                 onClick={e => e.stopPropagation()}
                             >
@@ -123,7 +123,7 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                             size="sm"
                             onClick={() => onReject(index)}
                             disabled={disabled}
-                            className="text-danger hover:text-danger"
+                            className="text-danger-fg hover:text-danger-fg"
                         >
                             Skip
                         </Button>
@@ -166,8 +166,8 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                                 </div>
                             )}
                             {adminNotesDisplay && (
-                                <div className="bg-warning/5 border border-warning/15 rounded-xl p-3">
-                                    <p className="text-[10px] font-bold text-warning uppercase
+                                <div className="bg-warning-soft border border-warning-line rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-warning-fg uppercase
            tracking-widest mb-1">Teaching Notes</p>
                                     <MarkdownRenderer content={adminNotesDisplay} size="sm"
                                         className="text-text-tertiary" />
@@ -378,7 +378,7 @@ function AIGenerateScreen({ onBack }) {
                 >
                     {/* Header */}
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-xl bg-brand-400/15 border border-brand-400/25
+                        <div className="w-10 h-10 rounded-xl bg-brand-soft border border-brand-line
                           flex items-center justify-center text-xl flex-shrink-0">
                             🤖
                         </div>
@@ -479,9 +479,9 @@ function AIGenerateScreen({ onBack }) {
                                 </p>
                                 <div className="grid grid-cols-3 gap-4">
                                     {[
-                                        { key: 'easy', label: 'Easy', color: 'text-success' },
-                                        { key: 'medium', label: 'Medium', color: 'text-warning' },
-                                        { key: 'hard', label: 'Hard', color: 'text-danger' },
+                                        { key: 'easy', label: 'Easy', color: 'text-success-fg' },
+                                        { key: 'medium', label: 'Medium', color: 'text-warning-fg' },
+                                        { key: 'hard', label: 'Hard', color: 'text-danger-fg' },
                                     ].map(d => (
                                         <div key={d.key} className="text-center">
                                             <label className={cn('text-xs font-bold block mb-2', d.color)}>
@@ -524,11 +524,11 @@ function AIGenerateScreen({ onBack }) {
                                 </div>
                                 <p className={cn(
                                     'text-xs font-bold text-center mt-3 pt-3 border-t border-border-subtle',
-                                    effectiveTotalCustom > 0 ? 'text-brand-300' : 'text-text-disabled'
+                                    effectiveTotalCustom > 0 ? 'text-brand-fg-soft' : 'text-text-disabled'
                                 )}>
                                     Total: {effectiveTotalCustom} problem{effectiveTotalCustom !== 1 ? 's' : ''}
                                     {totalCustom > MAX_PROBLEMS_PER_BATCH && (
-                                        <span className="text-warning ml-1">
+                                        <span className="text-warning-fg ml-1">
                                             (capped at {MAX_PROBLEMS_PER_BATCH})
                                         </span>
                                     )}
@@ -554,7 +554,7 @@ function AIGenerateScreen({ onBack }) {
                                         className={cn(
                                             'flex-1 py-2.5 rounded-xl border text-sm font-bold transition-all',
                                             count === n
-                                                ? 'bg-brand-400/15 border-brand-400/35 text-brand-300'
+                                                ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                                 : 'bg-surface-3 border-border-default text-text-tertiary hover:border-border-strong'
                                         )}
                                     >
@@ -703,7 +703,7 @@ function AIGenerateScreen({ onBack }) {
                     </div>
 
                     {generated.length === 0 ? (
-                        <div className="bg-surface-1 border border-success/25 rounded-2xl p-10 text-center">
+                        <div className="bg-surface-1 border border-success-line rounded-2xl p-10 text-center">
                             <div className="text-4xl mb-3">✅</div>
                             <h3 className="text-base font-bold text-text-primary mb-2">All problems added!</h3>
                             <p className="text-sm text-text-tertiary mb-5">Your team can now start practicing.</p>
@@ -726,7 +726,7 @@ function AIGenerateScreen({ onBack }) {
                                 <motion.div
                                     initial={{ opacity: 0, y: -4 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="bg-warning/5 border border-warning/20 rounded-xl p-3
+                                    className="bg-warning-soft border border-warning-line rounded-xl p-3
                                                flex items-center gap-3"
                                 >
                                     <span className="text-base flex-shrink-0">⚠️</span>

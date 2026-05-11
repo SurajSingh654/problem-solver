@@ -48,9 +48,9 @@ import {
 
 // ── Constants ──────────────────────────────────────────
 const DIFFICULTY_OPTIONS = [
-    { id: 'EASY', label: 'Easy', color: 'bg-success/12 border-success/30 text-success' },
-    { id: 'MEDIUM', label: 'Medium', color: 'bg-warning/12 border-warning/30 text-warning' },
-    { id: 'HARD', label: 'Hard', color: 'bg-danger/12 border-danger/30 text-danger' },
+    { id: 'EASY', label: 'Easy', color: 'bg-success-soft border-success-line text-success-fg' },
+    { id: 'MEDIUM', label: 'Medium', color: 'bg-warning-soft border-warning-line text-warning-fg' },
+    { id: 'HARD', label: 'Hard', color: 'bg-danger-soft border-danger-line text-danger-fg' },
 ]
 
 const SOURCES = ['LEETCODE', 'GFG', 'CODECHEF', 'INTERVIEWBIT', 'HACKERRANK', 'CODEFORCES', 'OTHER']
@@ -189,13 +189,13 @@ function ChipInput({ label, hint, value, onChange, suggestions = [], placeholder
                     {value.map(tag => (
                         <span key={tag}
                             className="flex items-center gap-1 px-2 py-0.5 rounded-lg
-                                       bg-brand-400/15 border border-brand-400/25 text-brand-300
+                                       bg-brand-soft border border-brand-line text-brand-300
                                        text-xs font-semibold">
                             {tag}
                             <button
                                 type="button"
                                 onClick={() => remove(tag)}
-                                className="text-brand-300/60 hover:text-danger transition-colors ml-0.5"
+                                className="text-brand-fg-soft/60 hover:text-danger-fg transition-colors ml-0.5"
                             >
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" strokeWidth="2.5"
@@ -251,15 +251,15 @@ function DeleteConfirmation({ problemTitle, onConfirm, onCancel, isDeleting }) {
         <motion.div
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-danger/5 border border-danger/25 rounded-2xl p-5"
+            className="bg-danger-soft border border-danger-line rounded-2xl p-5"
         >
             <div className="flex items-start gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-danger/15 flex items-center
+                <div className="w-9 h-9 rounded-xl bg-danger-soft flex items-center
                                 justify-center text-lg flex-shrink-0">
                     🗑️
                 </div>
                 <div>
-                    <p className="text-sm font-bold text-danger mb-1">
+                    <p className="text-sm font-bold text-danger-fg mb-1">
                         Delete "{problemTitle}"?
                     </p>
                     <p className="text-xs text-text-tertiary leading-relaxed">
@@ -276,7 +276,7 @@ function DeleteConfirmation({ problemTitle, onConfirm, onCancel, isDeleting }) {
                     value={confirmText}
                     onChange={e => setConfirmText(e.target.value)}
                     placeholder='Type "delete" to confirm'
-                    className="w-full bg-surface-3 border border-danger/30 rounded-xl
+                    className="w-full bg-surface-3 border border-danger-line rounded-xl
                                text-sm text-text-primary placeholder:text-text-tertiary
                                px-3.5 py-2.5 outline-none
                                focus:border-danger focus:ring-2 focus:ring-danger/20"
@@ -292,7 +292,7 @@ function DeleteConfirmation({ problemTitle, onConfirm, onCancel, isDeleting }) {
                     disabled={!matches}
                     loading={isDeleting}
                     onClick={onConfirm}
-                    className="bg-danger hover:bg-danger/90"
+                    className="bg-danger hover:bg-danger-soft"
                 >
                     Delete Problem
                 </Button>
@@ -487,7 +487,7 @@ export default function EditProblemPage() {
                         <motion.span
                             initial={{ opacity: 0, x: 8 }}
                             animate={{ opacity: 1, x: 0 }}
-                            className="text-xs font-semibold text-warning flex items-center gap-1.5"
+                            className="text-xs font-semibold text-warning-fg flex items-center gap-1.5"
                         >
                             <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
                             Unsaved changes
@@ -645,10 +645,10 @@ export default function EditProblemPage() {
                                     ? 'What makes a strong answer:\n• Specific details (names real projects, numbers)\n• Company-specific evidence\n• Authentic, not rehearsed\n\nCommon mistakes:\n• Generic answers ("I love your innovative culture")\n• No specifics\n\nRed flags:\n• Badmouthing previous employers\n• No company research'
                                     : 'Teaching notes for this problem...\n\n1. Expected approach with complexity\n2. Key insight / aha moment\n3. Common mistakes\n4. Edge cases to cover'
                             }
-                            className="w-full bg-warning/3 border border-warning/20 rounded-xl
+                            className="w-full bg-warning-soft border border-warning-line rounded-xl
                                        text-sm text-text-primary placeholder:text-text-tertiary
                                        px-3.5 py-2.5 outline-none resize-y
-                                       focus:border-warning/40 focus:ring-2 focus:ring-warning/15"
+                                       focus:border-warning-line focus:ring-2 focus:ring-warning/15"
                         />
                         <p className="text-[10px] text-text-disabled mt-1.5 flex items-center gap-1">
                             <span>🔒</span>
@@ -707,8 +707,8 @@ export default function EditProblemPage() {
                                                 className={cn(
                                                     'px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all',
                                                     platform === s
-                                                        ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                                        : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
+                                                        ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                                        : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-line'
                                                 )}
                                             >
                                                 {SOURCE_LABELS[s] || s}
@@ -722,7 +722,7 @@ export default function EditProblemPage() {
 
                     {/* Delete zone */}
                     {!showDeleteConfirm ? (
-                        <div className="border border-danger/20 rounded-2xl p-4 flex items-center
+                        <div className="border border-danger-line rounded-2xl p-4 flex items-center
                                         justify-between flex-wrap gap-3">
                             <div>
                                 <p className="text-sm font-bold text-text-primary">Delete Problem</p>
@@ -737,8 +737,8 @@ export default function EditProblemPage() {
                             <button
                                 type="button"
                                 onClick={() => setShowDeleteConfirm(true)}
-                                className="text-xs font-bold text-danger hover:text-danger/80
-                                           border border-danger/25 hover:border-danger/40
+                                className="text-xs font-bold text-danger-fg hover:text-danger-fg/80
+                                           border border-danger-line hover:border-danger-line
                                            px-4 py-2 rounded-xl transition-all"
                             >
                                 Delete Problem
@@ -932,7 +932,7 @@ export default function EditProblemPage() {
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-xs text-text-disabled">Solutions</span>
-                                <span className="text-xs font-bold text-brand-300">
+                                <span className="text-xs font-bold text-brand-fg-soft">
                                     {problem.teamSolutionCount || 0}
                                 </span>
                             </div>
@@ -996,7 +996,7 @@ function ToggleRow({ label, desc, value, onChange, danger }) {
     return (
         <div className="flex items-center justify-between gap-3">
             <div>
-                <p className={cn('text-xs font-semibold', danger && value ? 'text-danger' : 'text-text-primary')}>
+                <p className={cn('text-xs font-semibold', danger && value ? 'text-danger-fg' : 'text-text-primary')}>
                     {label}
                 </p>
                 {desc && <p className="text-[10px] text-text-disabled mt-0.5">{desc}</p>}
@@ -1084,7 +1084,7 @@ function HRFollowUpBuilder({ value = [], onChange }) {
                 onClick={add}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
                            border border-dashed border-border-strong text-text-tertiary
-                           hover:border-brand-400/50 hover:text-brand-300
+                           hover:border-brand-line hover:text-brand-300
                            text-sm font-semibold transition-all duration-150"
             >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -1165,7 +1165,7 @@ function HRFollowUpRow({ fq, index, total, onChange, onRemove, onMove }) {
                 <button
                     type="button"
                     onClick={() => onRemove(index)}
-                    className="text-text-disabled hover:text-danger transition-colors flex-shrink-0"
+                    className="text-text-disabled hover:text-danger-fg transition-colors flex-shrink-0"
                 >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

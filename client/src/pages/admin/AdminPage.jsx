@@ -105,11 +105,11 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleVisibi
                             >
                                 <td className="py-3 px-4 max-w-[260px]">
                                     <div className="flex items-center gap-2">
-                                        {p.isPinned && <span className="text-warning text-sm">📌</span>}
+                                        {p.isPinned && <span className="text-warning-fg text-sm">📌</span>}
                                         <span
                                             onClick={() => onEdit(p.id)}
                                             className="text-sm font-semibold text-text-primary truncate
-                                                       cursor-pointer hover:text-brand-300 transition-colors"
+                                                       cursor-pointer hover:text-brand-fg-soft transition-colors"
                                         >
                                             {p.title}
                                         </span>
@@ -155,7 +155,7 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleVisibi
                                         className={cn(
                                             'text-[10px] font-bold px-2 py-1 rounded-full border transition-all',
                                             !p.isHidden
-                                                ? 'bg-success/10 border-success/25 text-success hover:bg-success/20'
+                                                ? 'bg-success-soft border-success-line text-success-fg hover:bg-success-soft'
                                                 : 'bg-surface-3 border-border-default text-text-disabled hover:border-border-strong'
                                         )}
                                     >
@@ -168,7 +168,7 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleVisibi
                                             onClick={() => onTogglePin(p)}
                                             title={p.isPinned ? 'Unpin' : 'Pin'}
                                             className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
-                                                       text-text-tertiary hover:text-warning"
+                                                       text-text-tertiary hover:text-warning-fg"
                                         >
                                             📌
                                         </button>
@@ -176,15 +176,15 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleVisibi
                                             onClick={() => onEdit(p.id)}
                                             title="Edit"
                                             className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors
-                                                       text-text-tertiary hover:text-brand-300"
+                                                       text-text-tertiary hover:text-brand-fg-soft"
                                         >
                                             ✏️
                                         </button>
                                         <button
                                             onClick={() => onDelete(p)}
                                             title="Delete"
-                                            className="p-1.5 rounded-lg hover:bg-danger/10 transition-colors
-                                                       text-text-tertiary hover:text-danger"
+                                            className="p-1.5 rounded-lg hover:bg-danger-soft transition-colors
+                                                       text-text-tertiary hover:text-danger-fg"
                                         >
                                             🗑️
                                         </button>
@@ -248,7 +248,7 @@ function MembersTable({ members, currentUserId }) {
                                                 </span>
                                                 {isYou && (
                                                     <span className="text-[10px] px-1.5 py-px rounded-full
-                                                         bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                                                         bg-brand-soft text-brand-fg-soft border border-brand-line">
                                                         you
                                                     </span>
                                                 )}
@@ -261,7 +261,7 @@ function MembersTable({ members, currentUserId }) {
                                     <span className={cn(
                                         'text-[10px] font-bold px-2 py-px rounded-full border',
                                         isAdmin
-                                            ? 'bg-warning/12 text-warning border-warning/25'
+                                            ? 'bg-warning-soft text-warning-fg border-warning-line'
                                             : 'bg-surface-3 text-text-secondary border-border-default'
                                     )}>
                                         {isAdmin ? '👑 Admin' : 'Member'}
@@ -270,7 +270,7 @@ function MembersTable({ members, currentUserId }) {
                                 <td className="py-3 px-4">
                                     <span className={cn(
                                         'text-sm font-bold',
-                                        u.streak > 0 ? 'text-warning' : 'text-text-disabled'
+                                        u.streak > 0 ? 'text-warning-fg' : 'text-text-disabled'
                                     )}>
                                         {u.streak > 0 ? `${u.streak} 🔥` : '—'}
                                     </span>
@@ -279,9 +279,9 @@ function MembersTable({ members, currentUserId }) {
                                     <span className={cn(
                                         'text-[10px] font-bold px-2 py-0.5 rounded-full border',
                                         u.activityStatus === 'ACTIVE'
-                                            ? 'bg-success/10 text-success border-success/25'
+                                            ? 'bg-success-soft text-success-fg border-success-line'
                                             : u.activityStatus === 'INACTIVE'
-                                                ? 'bg-warning/10 text-warning border-warning/25'
+                                                ? 'bg-warning-soft text-warning-fg border-warning-line'
                                                 : 'bg-surface-3 text-text-disabled border-border-default'
                                     )}>
                                         {u.activityStatus || 'Unknown'}
@@ -391,19 +391,19 @@ export default function AdminPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
                     <AdminStat icon="📋" label="Problems" value={problems.length}
-                        color="bg-brand-400/10 border-brand-400/20" />
+                        color="bg-brand-soft border-brand-line" />
                 </motion.div>
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
                     <AdminStat icon="👥" label="Members" value={members.length || '—'}
-                        color="bg-info/10 border-info/20" />
+                        color="bg-info-soft border-info-line" />
                 </motion.div>
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                     <AdminStat icon="✅" label="Solutions" value={stats?.totalSolved || 0}
-                        color="bg-success/10 border-success/20" />
+                        color="bg-success-soft border-success-line" />
                 </motion.div>
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
                     <AdminStat icon="📌" label="Pinned" value={problems.filter(p => p.isPinned).length}
-                        color="bg-warning/10 border-warning/20" />
+                        color="bg-warning-soft border-warning-line" />
                 </motion.div>
             </div>
 

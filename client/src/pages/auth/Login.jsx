@@ -19,7 +19,7 @@ const loginSchema = z.object({
 function Particle({ style }) {
     return (
         <motion.div
-            className="absolute rounded-full bg-brand-400/10 pointer-events-none"
+            className="absolute rounded-full bg-brand-soft pointer-events-none"
             animate={{
                 y: [0, -30, 0],
                 opacity: [0.3, 0.7, 0.3],
@@ -101,7 +101,7 @@ export default function Login() {
 
             {/* Background orb */}
             <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-[-200px] right-[-200px] w-[600px] h-[600px] rounded-full bg-brand-400/5 blur-[120px]" />
+                <div className="absolute top-[-200px] right-[-200px] w-[600px] h-[600px] rounded-full bg-brand-soft blur-[120px]" />
                 <div className="absolute bottom-[-200px] left-[-200px] w-[500px] h-[500px] rounded-full bg-blue-500/5 blur-[120px]" />
             </div>
 
@@ -117,7 +117,7 @@ export default function Login() {
             >
 
                 {/* Glow effect behind card */}
-                <div className="absolute inset-0 bg-brand-400/10 rounded-2xl blur-2xl scale-95 -z-10" />
+                <div className="absolute inset-0 bg-brand-soft rounded-2xl blur-2xl scale-95 -z-10" />
 
                 <div className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden shadow-xl">
 
@@ -260,7 +260,7 @@ export default function Login() {
                             Don't have an account?{' '}
                             <Link
                                 to="/auth/register"
-                                className="text-brand-300 font-semibold hover:text-brand-200 transition-colors"
+                                className="text-brand-fg-soft font-semibold hover:text-brand-200 transition-colors"
                             >
                                 Create one
                             </Link>
@@ -279,7 +279,7 @@ export default function Login() {
                     Forgot your password?{' '}
                     <Link
                         to="/auth/forgot-password"
-                        className="text-brand-300 font-semibold hover:text-brand-200 transition-colors"
+                        className="text-brand-fg-soft font-semibold hover:text-brand-200 transition-colors"
                     >
                         Reset it here
                     </Link>

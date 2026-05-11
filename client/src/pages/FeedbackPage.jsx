@@ -17,32 +17,32 @@ const TYPES = [
         label: 'Bug Report',
         icon: '🐛',
         desc: 'Something is broken or not working as expected',
-        color: 'text-danger',
-        bg: 'bg-danger/10 border-danger/30',
+        color: 'text-danger-fg',
+        bg: 'bg-danger-soft border-danger-line',
     },
     {
         id: 'SUGGESTION',
         label: 'Suggestion',
         icon: '💡',
         desc: 'An idea to improve or enhance a feature',
-        color: 'text-warning',
-        bg: 'bg-warning/10 border-warning/30',
+        color: 'text-warning-fg',
+        bg: 'bg-warning-soft border-warning-line',
     },
     {
         id: 'QUESTION',
         label: 'Question',
         icon: '❓',
         desc: 'Something is confusing and you need help',
-        color: 'text-info',
-        bg: 'bg-info/10 border-info/30',
+        color: 'text-info-fg',
+        bg: 'bg-info-soft border-info-line',
     },
 ]
 
 const SEVERITIES = [
-    { id: 'LOW', label: 'Low', desc: 'Minor inconvenience', color: 'text-success', dot: 'bg-success' },
-    { id: 'MEDIUM', label: 'Medium', desc: 'Noticeably affects usage', color: 'text-warning', dot: 'bg-warning' },
+    { id: 'LOW', label: 'Low', desc: 'Minor inconvenience', color: 'text-success-fg', dot: 'bg-success' },
+    { id: 'MEDIUM', label: 'Medium', desc: 'Noticeably affects usage', color: 'text-warning-fg', dot: 'bg-warning' },
     { id: 'HIGH', label: 'High', desc: 'Significantly blocks me', color: 'text-orange-400', dot: 'bg-orange-400' },
-    { id: 'CRITICAL', label: 'Critical', desc: 'Completely broken', color: 'text-danger', dot: 'bg-danger' },
+    { id: 'CRITICAL', label: 'Critical', desc: 'Completely broken', color: 'text-danger-fg', dot: 'bg-danger' },
 ]
 
 const AFFECTED_AREAS = [
@@ -62,10 +62,10 @@ const AFFECTED_AREAS = [
 ]
 
 const STATUS_CONFIG = {
-    OPEN: { label: 'Open', color: 'text-info bg-info/10 border-info/20' },
-    ACKNOWLEDGED: { label: 'Acknowledged', color: 'text-warning bg-warning/10 border-warning/20' },
-    IN_PROGRESS: { label: 'In Progress', color: 'text-brand-300 bg-brand-400/10 border-brand-400/20' },
-    RESOLVED: { label: 'Resolved', color: 'text-success bg-success/10 border-success/20' },
+    OPEN: { label: 'Open', color: 'text-info-fg bg-info-soft border-info-line' },
+    ACKNOWLEDGED: { label: 'Acknowledged', color: 'text-warning-fg bg-warning-soft border-warning-line' },
+    IN_PROGRESS: { label: 'In Progress', color: 'text-brand-fg-soft bg-brand-soft border-brand-line' },
+    RESOLVED: { label: 'Resolved', color: 'text-success-fg bg-success-soft border-success-line' },
     WONT_FIX: { label: "Won't Fix", color: 'text-text-disabled bg-surface-3 border-border-default' },
 }
 
@@ -92,7 +92,7 @@ function SimilarReportsPanel({ similar, onDismiss }) {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="bg-warning/5 border border-warning/25 rounded-2xl p-4"
+            className="bg-warning-soft border border-warning-line rounded-2xl p-4"
         >
             <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-start gap-2.5">
@@ -253,7 +253,7 @@ function AllReports() {
                             className={cn(
                                 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                                 statusFilter === s.id
-                                    ? 'bg-brand-400/15 text-brand-300'
+                                    ? 'bg-brand-soft text-brand-fg-soft'
                                     : 'text-text-tertiary hover:text-text-primary'
                             )}
                         >
@@ -274,7 +274,7 @@ function AllReports() {
                             className={cn(
                                 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                                 typeFilter === t.id
-                                    ? 'bg-brand-400/15 text-brand-300'
+                                    ? 'bg-brand-soft text-brand-fg-soft'
                                     : 'text-text-tertiary hover:text-text-primary'
                             )}
                         >
@@ -337,7 +337,7 @@ function AllReports() {
                                 className={cn(
                                     'bg-surface-2 border rounded-xl p-4 transition-colors',
                                     isSelected
-                                        ? 'border-brand-400/40 bg-brand-400/5'
+                                        ? 'border-brand-line bg-brand-soft'
                                         : 'border-border-default'
                                 )}
                             >
@@ -388,7 +388,7 @@ function AllReports() {
                                         'mt-3 pt-3 border-t border-border-subtle',
                                         isSuperAdmin ? 'ml-12' : 'ml-6'
                                     )}>
-                                        <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
+                                        <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">
                                             Admin Response
                                         </p>
                                         <p className="text-xs text-text-secondary leading-relaxed">
@@ -499,7 +499,7 @@ export default function FeedbackPage() {
                             'flex-1 flex items-center justify-center gap-2 py-2 rounded-lg',
                             'text-xs font-semibold transition-all',
                             activeTab === tab.id
-                                ? 'bg-brand-400/15 text-brand-300'
+                                ? 'bg-brand-soft text-brand-fg-soft'
                                 : 'text-text-tertiary hover:text-text-primary'
                         )}
                     >
@@ -515,7 +515,7 @@ export default function FeedbackPage() {
                         <motion.div
                             initial={{ opacity: 0, y: -8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="bg-success/5 border border-success/20 rounded-2xl p-4
+                            className="bg-success-soft border border-success-line rounded-2xl p-4
                                        flex items-start gap-3"
                         >
                             <span className="text-xl flex-shrink-0">✅</span>
@@ -583,7 +583,7 @@ export default function FeedbackPage() {
                             <div>
                                 <label className="block text-sm font-semibold text-text-primary mb-1.5">
                                     Title
-                                    <span className="ml-1 text-danger text-xs">*</span>
+                                    <span className="ml-1 text-danger-fg text-xs">*</span>
                                 </label>
                                 <input
                                     type="text"
@@ -616,7 +616,7 @@ export default function FeedbackPage() {
                             <div>
                                 <label className="block text-sm font-semibold text-text-primary mb-1.5">
                                     Description
-                                    <span className="ml-1 text-danger text-xs">*</span>
+                                    <span className="ml-1 text-danger-fg text-xs">*</span>
                                 </label>
                                 <textarea
                                     rows={4}
@@ -666,9 +666,9 @@ export default function FeedbackPage() {
                             <motion.div
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="bg-danger/5 border border-danger/15 rounded-2xl p-5 space-y-4"
+                                className="bg-danger-soft border border-danger-line rounded-2xl p-5 space-y-4"
                             >
-                                <p className="text-xs font-bold text-danger uppercase tracking-widest">
+                                <p className="text-xs font-bold text-danger-fg uppercase tracking-widest">
                                     🐛 Bug Details
                                 </p>
                                 <div>

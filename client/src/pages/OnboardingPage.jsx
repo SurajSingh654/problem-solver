@@ -23,24 +23,24 @@ const MODES = [
     icon: '👥',
     title: 'Join a Team',
     desc: 'Enter a join code from your team admin to start practicing with your team.',
-    color: 'border-brand-400/30 hover:border-brand-400/60',
-    glow: 'bg-brand-400/5',
+    color: 'border-brand-line hover:border-brand-line',
+    glow: 'bg-brand-soft',
   },
   {
     id: 'create',
     icon: '🚀',
     title: 'Create a Team',
     desc: 'Start a new team and invite your colleagues. Requires admin approval.',
-    color: 'border-success/30 hover:border-success/60',
-    glow: 'bg-success/5',
+    color: 'border-success-line hover:border-success-line',
+    glow: 'bg-success-soft',
   },
   {
     id: 'individual',
     icon: '🧠',
     title: 'Practice Solo',
     desc: 'Get AI-generated problems tailored to your goals. No team needed.',
-    color: 'border-warning/30 hover:border-warning/60',
-    glow: 'bg-warning/5',
+    color: 'border-warning-line hover:border-warning-line',
+    glow: 'bg-warning-soft',
   },
 ]
 
@@ -204,11 +204,11 @@ export default function OnboardingPage() {
         {/* Error / success */}
         {errorMsg && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="text-xs text-danger mb-4 text-center">{errorMsg}</motion.p>
+            className="text-xs text-danger-fg mb-4 text-center">{errorMsg}</motion.p>
         )}
         {successMsg && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="text-xs text-success mb-4 text-center">{successMsg}</motion.p>
+            className="text-xs text-success-fg mb-4 text-center">{successMsg}</motion.p>
         )}
 
         {/* Submit button */}

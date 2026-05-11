@@ -54,14 +54,14 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
             transition={{ delay: index * 0.05 }}
             className={cn(
                 'rounded-xl border p-4 transition-colors',
-                hasAnswer ? 'bg-success/3 border-success/20' : 'bg-surface-2 border-border-default'
+                hasAnswer ? 'bg-success-soft border-success-line' : 'bg-surface-2 border-border-default'
             )}
         >
             <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-start gap-2.5 flex-1">
                     <span className={cn(
                         'flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5',
-                        hasAnswer ? 'bg-success/15 text-success' : 'bg-surface-3 border border-border-default text-text-disabled'
+                        hasAnswer ? 'bg-success-soft text-success-fg' : 'bg-surface-3 border border-border-default text-text-disabled'
                     )}>
                         {hasAnswer ? '✓' : index + 1}
                     </span>
@@ -82,7 +82,7 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
             {followUp.hint && (
                 <div className="mb-3 ml-7">
                     <button type="button" onClick={() => setShowHint(!showHint)}
-                        className="text-[10px] text-brand-300 hover:text-brand-200 transition-colors flex items-center gap-1">
+                        className="text-[10px] text-brand-fg-soft hover:text-brand-200 transition-colors flex items-center gap-1">
                         💡 {showHint ? 'Hide hint' : 'Show hint'}
                     </button>
                     {showHint && (
@@ -141,8 +141,8 @@ function EditPatternSelector({ value, onChange }) {
                             'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold',
                             'transition-all duration-150 flex items-center justify-between gap-2',
                             value.includes(s)
-                                ? 'bg-brand-400/15 border-brand-400/40 text-brand-300'
-                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-400/30'
+                                ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-line'
                         )}
                     >
                         <span>{s}</span>
@@ -164,7 +164,7 @@ function EditPatternSelector({ value, onChange }) {
                     {value.map(v => (
                         <span key={v}
                             className="flex items-center gap-1 text-[10px] font-bold
-                                       bg-brand-400/15 text-brand-300 border border-brand-400/25
+                                       bg-brand-soft text-brand-fg-soft border border-brand-line
                                        px-2 py-px rounded-full">
                             {v}
                             <button
@@ -226,8 +226,8 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
             label: 'Analyze',
             icon: '🔍',
             sublabel: 'What are they really checking?',
-            color: 'text-danger',
-            activeBg: 'bg-danger/10 border-danger/30',
+            color: 'text-danger-fg',
+            activeBg: 'bg-danger-soft border-danger-line',
             required: true,
         },
         {
@@ -235,8 +235,8 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
             label: 'Answer',
             icon: '💬',
             sublabel: 'Your complete polished response',
-            color: 'text-brand-300',
-            activeBg: 'bg-brand-400/10 border-brand-400/30',
+            color: 'text-brand-fg-soft',
+            activeBg: 'bg-brand-soft border-brand-line',
             required: true,
         },
         {
@@ -244,8 +244,8 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
             label: 'Tailor',
             icon: '🎯',
             sublabel: 'Make it specific to this company',
-            color: 'text-success',
-            activeBg: 'bg-success/10 border-success/30',
+            color: 'text-success-fg',
+            activeBg: 'bg-success-soft border-success-line',
             required: false,
         },
         {
@@ -253,8 +253,8 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
             label: 'Reflect',
             icon: '🪞',
             sublabel: 'Honest self-assessment',
-            color: 'text-warning',
-            activeBg: 'bg-warning/10 border-warning/30',
+            color: 'text-warning-fg',
+            activeBg: 'bg-warning-soft border-warning-line',
             required: false,
         },
     ]
@@ -295,22 +295,22 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
                                     'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border',
                                     'transition-all duration-150 min-w-[72px]',
                                     isActive ? s.activeBg
-                                        : isDone ? 'bg-success/5 border-success/20'
+                                        : isDone ? 'bg-success-soft border-success-line'
                                             : 'bg-surface-3 border-border-default hover:border-border-strong'
                                 )}
                             >
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
                                     {s.required && !isDone && !isActive && (
-                                        <span className="text-danger text-[9px] font-bold">*</span>
+                                        <span className="text-danger-fg text-[9px] font-bold">*</span>
                                     )}
                                     {isDone && !isActive && (
-                                        <span className="text-success text-[9px] font-bold">✓</span>
+                                        <span className="text-success-fg text-[9px] font-bold">✓</span>
                                     )}
                                 </div>
                                 <span className={cn(
                                     'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
-                                    isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled'
+                                    isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled'
                                 )}>
                                     {s.label}
                                 </span>
@@ -335,7 +335,7 @@ function HREditWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionC
                                 {activeSectionConfig.label}
                             </p>
                             {activeSectionConfig.required && (
-                                <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">
+                                <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">
                                     Required
                                 </span>
                             )}
@@ -436,11 +436,11 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
     const fieldConfigs = tkConfig.technicalKnowledgeFields || {}
 
     const sections = [
-        { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: true },
-        { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
-        { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices', color: 'text-danger', activeBg: 'bg-danger/10 border-danger/30', required: false },
-        { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: false },
+        { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true },
+        { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
+        { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: false },
+        { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
@@ -478,14 +478,14 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
                             <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn(
                                     'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                 )}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && <span className="text-danger text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                    {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>
                                     {s.label}
                                 </span>
                             </button>
@@ -502,7 +502,7 @@ function TechnicalKnowledgeEditWorkspace({ tkData, onTkDataChange }) {
                         <div className="flex items-center gap-2">
                             <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
                             {activeSectionConfig.required && (
-                                <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full">Required</span>
+                                <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>
                             )}
                         </div>
                         <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
@@ -561,15 +561,15 @@ function DatabaseEditWorkspace({ dbData, onDbDataChange, problemType, schemaRefe
     const fieldConfigs = dbConfig.databaseFields || {}
 
     const sections = isQueryMode ? [
-        { key: 'queryApproach', label: 'Approach', icon: '🧠', sublabel: 'Schema analysis', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'sqlEditor', label: 'Query', icon: '🗄️', sublabel: 'Your SQL', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: true },
-        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', sublabel: 'Index strategy', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: false },
-        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', sublabel: 'Performance notes', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+        { key: 'queryApproach', label: 'Approach', icon: '🧠', sublabel: 'Schema analysis', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'sqlEditor', label: 'Query', icon: '🗄️', sublabel: 'Your SQL', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: true },
+        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', sublabel: 'Index strategy', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
+        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', sublabel: 'Performance notes', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
     ] : [
-        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', sublabel: 'Table definitions', color: 'text-brand-300', activeBg: 'bg-brand-400/10 border-brand-400/30', required: true },
-        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', sublabel: 'Design choices', color: 'text-success', activeBg: 'bg-success/10 border-success/30', required: false },
-        { key: 'indexDesign', label: 'Indexes', icon: '⚡', sublabel: 'Index design', color: 'text-warning', activeBg: 'bg-warning/10 border-warning/30', required: false },
-        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', sublabel: 'NoSQL trade-offs', color: 'text-info', activeBg: 'bg-info/10 border-info/30', required: false },
+        { key: 'schemaDesign', label: 'Schema', icon: '🗄️', sublabel: 'Table definitions', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', sublabel: 'Design choices', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
+        { key: 'indexDesign', label: 'Indexes', icon: '⚡', sublabel: 'Index design', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
+        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', sublabel: 'NoSQL trade-offs', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
@@ -643,14 +643,14 @@ function DatabaseEditWorkspace({ dbData, onDbDataChange, problemType, schemaRefe
                             <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn(
                                     'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success/5 border-success/20' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                 )}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && <span className="text-danger text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success text-[9px] font-bold">✓</span>}
+                                    {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
+                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success' : 'text-text-disabled')}>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>
                                     {s.label}
                                 </span>
                             </button>
@@ -1051,13 +1051,13 @@ export default function EditSolutionPage() {
                     Back to problem
                 </button>
 
-                <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-6">
+                <div className="bg-brand-soft border border-brand-line rounded-2xl p-6">
                     <div className="flex items-start gap-3 mb-4">
                         <span className="text-3xl flex-shrink-0 mt-1">
                             {isSystemDesign ? '🏗️' : '🔧'}
                         </span>
                         <div>
-                            <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
+                            <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">
                                 Design practice is now in Design Studio
                             </p>
                             <h2 className="text-lg font-extrabold text-text-primary mb-1">{problem.title}</h2>
@@ -1169,7 +1169,7 @@ export default function EditSolutionPage() {
                                     <button key={c.value} type="button" onClick={() => setHrConfidence(c.value)}
                                         className={cn(
                                             'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
-                                            hrConfidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                            hrConfidence === c.value ? 'bg-brand-soft border-brand-line scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                         )}>
                                         <span className="text-2xl">{c.emoji}</span>
                                         <span className={cn('text-[10px] font-bold text-center leading-tight', hrConfidence === c.value ? c.color : 'text-text-tertiary')}>{c.label}</span>
@@ -1189,7 +1189,7 @@ export default function EditSolutionPage() {
                                     <button key={c.value} type="button" onClick={() => setTkConfidence(c.value)}
                                         className={cn(
                                             'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
-                                            tkConfidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                            tkConfidence === c.value ? 'bg-brand-soft border-brand-line scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                         )}>
                                         <span className="text-2xl">{c.emoji}</span>
                                         <span className={cn('text-[10px] font-bold text-center leading-tight', tkConfidence === c.value ? c.color : 'text-text-tertiary')}>{c.label}</span>
@@ -1214,7 +1214,7 @@ export default function EditSolutionPage() {
                                     <button key={c.value} type="button" onClick={() => setDbConfidence(c.value)}
                                         className={cn(
                                             'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
-                                            dbConfidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                            dbConfidence === c.value ? 'bg-brand-soft border-brand-line scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                         )}>
                                         <span className="text-2xl">{c.emoji}</span>
                                         <span className={cn('text-[10px] font-bold text-center leading-tight', dbConfidence === c.value ? c.color : 'text-text-tertiary')}>{c.label}</span>
@@ -1255,9 +1255,9 @@ export default function EditSolutionPage() {
                             <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
                                 <span>🔬</span> Reflection
                             </h3>
-                            <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
+                            <div className="bg-brand-soft border border-brand-line rounded-2xl p-5">
                                 <div className="flex items-start gap-3 mb-3">
-                                    <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center justify-center text-base flex-shrink-0 mt-0.5">💡</div>
+                                    <div className="w-8 h-8 rounded-lg bg-brand-soft flex items-center justify-center text-base flex-shrink-0 mt-0.5">💡</div>
                                     <div>
                                         <h4 className="text-sm font-bold text-text-primary mb-0.5">Key Insight</h4>
                                         <p className="text-xs text-text-tertiary">In one sentence — what makes this problem click?</p>
@@ -1273,7 +1273,7 @@ export default function EditSolutionPage() {
                             </div>
                             <div className="bg-surface-2 border border-border-default rounded-2xl p-5">
                                 <div className="flex items-start gap-3 mb-3">
-                                    <div className="w-8 h-8 rounded-lg bg-info/15 flex items-center justify-center text-base flex-shrink-0 mt-0.5">🗣</div>
+                                    <div className="w-8 h-8 rounded-lg bg-info-soft flex items-center justify-center text-base flex-shrink-0 mt-0.5">🗣</div>
                                     <div>
                                         <h4 className="text-sm font-bold text-text-primary mb-0.5">Explain It Simply</h4>
                                         <p className="text-xs text-text-tertiary">Explain to a non-programmer.</p>
@@ -1288,7 +1288,7 @@ export default function EditSolutionPage() {
                             </div>
                             <div className="bg-surface-2 border border-border-default rounded-2xl p-5">
                                 <div className="flex items-start gap-3 mb-3">
-                                    <div className="w-8 h-8 rounded-lg bg-warning/15 flex items-center justify-center text-base flex-shrink-0 mt-0.5">🌍</div>
+                                    <div className="w-8 h-8 rounded-lg bg-warning-soft flex items-center justify-center text-base flex-shrink-0 mt-0.5">🌍</div>
                                     <div>
                                         <h4 className="text-sm font-bold text-text-primary mb-0.5">Real World Connection</h4>
                                         <p className="text-xs text-text-tertiary">Where does this pattern appear in real systems?</p>
@@ -1311,7 +1311,7 @@ export default function EditSolutionPage() {
                                         <button key={c.value} type="button" onClick={() => updateFormData({ confidence: c.value })}
                                             className={cn(
                                                 'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all duration-150 min-w-[80px]',
-                                                formData.confidence === c.value ? 'bg-brand-400/15 border-brand-400/40 scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
+                                                formData.confidence === c.value ? 'bg-brand-soft border-brand-line scale-105' : 'bg-surface-3 border-border-default hover:border-border-strong'
                                             )}>
                                             <span className="text-2xl">{c.emoji}</span>
                                             <span className={cn('text-[10px] font-bold text-center leading-tight', formData.confidence === c.value ? c.color : 'text-text-tertiary')}>
@@ -1336,8 +1336,8 @@ export default function EditSolutionPage() {
                             <span className={cn(
                                 'text-[9px] font-bold px-1.5 py-px rounded-full border',
                                 answeredCount > 0
-                                    ? 'bg-success/10 text-success border-success/25'
-                                    : 'bg-brand-400/10 text-brand-300 border-brand-400/25'
+                                    ? 'bg-success-soft text-success-fg border-success-line'
+                                    : 'bg-brand-soft text-brand-fg-soft border-brand-line'
                             )}>
                                 {answeredCount > 0 ? `${answeredCount}/${followUpCount} answered` : 'Optional'}
                             </span>
@@ -1365,8 +1365,8 @@ export default function EditSolutionPage() {
                                     <span className="text-text-disabled">Progress</span>
                                     <span className={cn(
                                         'font-semibold',
-                                        answeredCount === followUpCount ? 'text-success'
-                                            : answeredCount > 0 ? 'text-brand-300'
+                                        answeredCount === followUpCount ? 'text-success-fg'
+                                            : answeredCount > 0 ? 'text-brand-fg-soft'
                                                 : 'text-text-disabled'
                                     )}>
                                         {answeredCount}/{followUpCount} answered
