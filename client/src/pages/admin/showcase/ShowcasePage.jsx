@@ -40,8 +40,12 @@ export default function ShowcasePage() {
         )
     }
 
+    // Showcase is a marketing/hero surface — designed exclusively for a dark
+    // aesthetic (text-white, gradient headlines, background orbs). Force the
+    // entire page into dark mode regardless of global theme so light-mode
+    // users still get the intended experience.
     return (
-        <div className="min-h-screen">
+        <div className="force-dark-theme min-h-screen text-text-primary">
             <Section1Hero stats={stats} />
             <Section2Features />
             <Section3AI stats={stats} />

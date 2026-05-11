@@ -83,6 +83,65 @@ html:not(.light) {
   --gradient-hero-end: #16162a;
 }
 
+/* Force-dark scope — apply to any element to render its subtree in dark mode
+   regardless of the user's global theme preference. Useful for marketing /
+   showcase / hero surfaces that are designed exclusively for dark backgrounds
+   (text-white, gradient accents, dark imagery) and would become unreadable
+   in light mode. CSS custom properties inherit top-down from the nearest
+   ancestor where they're set, so applying this class on a wrapper overrides
+   the global html.light values for its subtree without specificity wars. */
+.force-dark-theme {
+  color-scheme: dark;
+  background-color: #09090f;
+
+  --surface-0: #09090f;
+  --surface-1: #111118;
+  --surface-2: #18181f;
+  --surface-3: #202028;
+  --surface-4: #282832;
+  --surface-5: #2f2f3a;
+
+  --text-primary: #eeeef5;
+  --text-secondary: #9999bb;
+  --text-tertiary: #7d7d9c;
+  --text-disabled: #50506a;
+
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.15);
+
+  --fg-link: #aea5fa;
+  --fg-link-hover: #c9c2ff;
+
+  --brand-bg: rgba(124, 111, 247, 0.14);
+  --brand-bg-hover: rgba(124, 111, 247, 0.22);
+  --brand-border: rgba(124, 111, 247, 0.28);
+  --brand-fg: #aea5fa;
+  --brand-fg-on-subtle: #c9c2ff;
+
+  --success-bg: rgba(34, 197, 94, 0.12);
+  --success-border: rgba(34, 197, 94, 0.28);
+  --success-fg: #5fd17f;
+
+  --warning-bg: rgba(234, 179, 8, 0.14);
+  --warning-border: rgba(234, 179, 8, 0.30);
+  --warning-fg: #e8bd3b;
+
+  --danger-bg: rgba(239, 68, 68, 0.12);
+  --danger-border: rgba(239, 68, 68, 0.28);
+  --danger-fg: #f37a7a;
+
+  --info-bg: rgba(59, 130, 246, 0.12);
+  --info-border: rgba(59, 130, 246, 0.28);
+  --info-fg: #6ea8f5;
+
+  --selection-bg: rgba(124, 111, 247, 0.28);
+
+  --gradient-hero-start: #0e0a1e;
+  --gradient-hero-mid: #111118;
+  --gradient-hero-end: #16162a;
+}
+
 html.light {
   color-scheme: light;
 
