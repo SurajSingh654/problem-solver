@@ -38,24 +38,24 @@ const SUGGESTED_NOTES = {
 }
 
 const STATUS_OPTIONS = [
-    { id: 'OPEN', label: 'Open', color: 'text-info bg-info/10 border-info/20' },
-    { id: 'ACKNOWLEDGED', label: 'Acknowledged', color: 'text-warning bg-warning/10 border-warning/20' },
-    { id: 'IN_PROGRESS', label: 'In Progress', color: 'text-brand-300 bg-brand-400/10 border-brand-400/20' },
-    { id: 'RESOLVED', label: 'Resolved', color: 'text-success bg-success/10 border-success/20' },
+    { id: 'OPEN', label: 'Open', color: 'text-info-fg bg-info-soft border-info-line' },
+    { id: 'ACKNOWLEDGED', label: 'Acknowledged', color: 'text-warning-fg bg-warning-soft border-warning-line' },
+    { id: 'IN_PROGRESS', label: 'In Progress', color: 'text-brand-fg-soft bg-brand-soft border-brand-line' },
+    { id: 'RESOLVED', label: 'Resolved', color: 'text-success-fg bg-success-soft border-success-line' },
     { id: 'WONT_FIX', label: "Won't Fix", color: 'text-text-disabled bg-surface-3 border-border-default' },
 ]
 
 const TYPE_CONFIG = {
-    BUG: { icon: '🐛', label: 'Bug', color: 'text-danger' },
-    SUGGESTION: { icon: '💡', label: 'Suggestion', color: 'text-warning' },
-    QUESTION: { icon: '❓', label: 'Question', color: 'text-info' },
+    BUG: { icon: '🐛', label: 'Bug', color: 'text-danger-fg' },
+    SUGGESTION: { icon: '💡', label: 'Suggestion', color: 'text-warning-fg' },
+    QUESTION: { icon: '❓', label: 'Question', color: 'text-info-fg' },
 }
 
 const SEVERITY_CONFIG = {
-    CRITICAL: { label: 'Critical', color: 'text-danger', dot: 'bg-danger' },
+    CRITICAL: { label: 'Critical', color: 'text-danger-fg', dot: 'bg-danger' },
     HIGH: { label: 'High', color: 'text-orange-400', dot: 'bg-orange-400' },
-    MEDIUM: { label: 'Medium', color: 'text-warning', dot: 'bg-warning' },
-    LOW: { label: 'Low', color: 'text-success', dot: 'bg-success' },
+    MEDIUM: { label: 'Medium', color: 'text-warning-fg', dot: 'bg-warning' },
+    LOW: { label: 'Low', color: 'text-success-fg', dot: 'bg-success' },
 }
 
 // ── Summary stats bar ──────────────────────────────────────────
@@ -64,10 +64,10 @@ function SummaryBar({ summary }) {
     return (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             {[
-                { label: 'Open', value: summary.open, color: 'text-info', bg: 'bg-info/5 border-info/20' },
-                { label: 'Acknowledged', value: summary.acknowledged, color: 'text-warning', bg: 'bg-warning/5 border-warning/20' },
-                { label: 'In Progress', value: summary.inProgress, color: 'text-brand-300', bg: 'bg-brand-400/5 border-brand-400/20' },
-                { label: 'Critical', value: summary.critical, color: 'text-danger', bg: 'bg-danger/5 border-danger/20' },
+                { label: 'Open', value: summary.open, color: 'text-info-fg', bg: 'bg-info-soft border-info-line' },
+                { label: 'Acknowledged', value: summary.acknowledged, color: 'text-warning-fg', bg: 'bg-warning-soft border-warning-line' },
+                { label: 'In Progress', value: summary.inProgress, color: 'text-brand-fg-soft', bg: 'bg-brand-soft border-brand-line' },
+                { label: 'Critical', value: summary.critical, color: 'text-danger-fg', bg: 'bg-danger-soft border-danger-line' },
             ].map(s => (
                 <div key={s.label}
                     className={cn('border rounded-xl px-4 py-3 text-center', s.bg)}
@@ -110,9 +110,9 @@ function ReportCard({ report, isSelected, onToggleSelect }) {
             className={cn(
                 'border rounded-xl overflow-hidden transition-all',
                 isSelected
-                    ? 'border-brand-400/40 bg-brand-400/5'
+                    ? 'border-brand-line bg-brand-soft'
                     : report.severity === 'CRITICAL'
-                        ? 'border-danger/30 bg-danger/3'
+                        ? 'border-danger-line bg-danger-soft'
                         : report.severity === 'HIGH'
                             ? 'border-orange-400/20 bg-surface-1'
                             : 'border-border-default bg-surface-1'
@@ -144,7 +144,7 @@ function ReportCard({ report, isSelected, onToggleSelect }) {
                             {report.title}
                         </p>
                         {report.severity === 'CRITICAL' && (
-                            <span className="text-[9px] font-bold text-danger bg-danger/10 border border-danger/20 px-1.5 py-px rounded-full flex-shrink-0">
+                            <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full flex-shrink-0">
                                 CRITICAL
                             </span>
                         )}
@@ -228,7 +228,7 @@ function ReportCard({ report, isSelected, onToggleSelect }) {
                                     <div className="flex items-center gap-2">
                                         {report.adminNote && (
                                             <div>
-                                                <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
+                                                <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-1">
                                                     Your Note
                                                 </p>
                                                 <p className="text-xs text-text-secondary">
@@ -288,7 +288,7 @@ function ReportCard({ report, isSelected, onToggleSelect }) {
                                                             type="button"
                                                             onClick={() => setAdminNote(note)}
                                                             className="text-[10px] text-text-tertiary bg-surface-3 border border-border-subtle
-                                   rounded-lg px-2.5 py-1.5 text-left hover:border-brand-400/30
+                                   rounded-lg px-2.5 py-1.5 text-left hover:border-brand-line
                                    hover:text-text-secondary transition-colors leading-tight max-w-[280px]"
                                                         >
                                                             {note}
@@ -433,7 +433,7 @@ export default function FeedbackInboxPage() {
                             className={cn(
                                 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                                 statusFilter === s.id
-                                    ? 'bg-brand-400/15 text-brand-300'
+                                    ? 'bg-brand-soft text-brand-fg-soft'
                                     : 'text-text-tertiary hover:text-text-primary'
                             )}
                         >
@@ -454,7 +454,7 @@ export default function FeedbackInboxPage() {
                             className={cn(
                                 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                                 typeFilter === t.id
-                                    ? 'bg-brand-400/15 text-brand-300'
+                                    ? 'bg-brand-soft text-brand-fg-soft'
                                     : 'text-text-tertiary hover:text-text-primary'
                             )}
                         >

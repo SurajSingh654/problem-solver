@@ -70,7 +70,7 @@ export default function Section4Compare() {
                             viewport={{ once: true }}
                             transition={{ delay: i * 0.08 }}
                             className="bg-surface-1 border border-border-default rounded-2xl p-6
-                             hover:border-brand-400/20 transition-colors"
+                             hover:border-brand-line transition-colors"
                         >
                             <span className="text-3xl">{diff.icon}</span>
                             <h4 className="text-base font-extrabold text-text-primary mt-3 mb-2">
@@ -96,7 +96,7 @@ export default function Section4Compare() {
                                         <th key={h} className={cn(
                                             'py-3 px-4 text-left text-[10px] font-bold uppercase tracking-widest',
                                             h === 'ProbSolver'
-                                                ? 'text-brand-300 bg-brand-400/5'
+                                                ? 'text-brand-fg-soft bg-brand-soft'
                                                 : 'text-text-disabled'
                                         )}>
                                             {h}
@@ -113,7 +113,7 @@ export default function Section4Compare() {
                                         {row.slice(1).map((cell, j) => (
                                             <td key={j} className={cn(
                                                 'py-2.5 px-4 text-center',
-                                                j === 0 && 'bg-brand-400/3'
+                                                j === 0 && 'bg-brand-soft'
                                             )}>
                                                 {cell === true ? <Check /> :
                                                     cell === false ? <Cross /> :

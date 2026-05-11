@@ -94,7 +94,7 @@ export default function DeployPage() {
                                  border transition-all ${isDone
                                         ? 'bg-success border-success text-black'
                                         : isActive
-                                            ? 'bg-brand-400/15 border-brand-400 text-brand-300'
+                                            ? 'bg-brand-soft border-brand-400 text-brand-fg-soft'
                                             : 'border-border-strong text-text-disabled'
                                     }`}>
                                     {isDone ? '✓' : i + 1}
@@ -121,21 +121,21 @@ export default function DeployPage() {
                     className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                          text-xs font-medium text-text-tertiary
                          hover:bg-surface-3 hover:text-text-primary transition-all">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                     README →
                 </Link>
                 <Link to="/docs/setup"
                     className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                          text-xs font-medium text-text-tertiary
                          hover:bg-surface-3 hover:text-text-primary transition-all">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                     Setup Guide →
                 </Link>
                 <Link to="/"
                     className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                          text-xs font-medium text-text-tertiary
                          hover:bg-surface-3 hover:text-text-primary transition-all">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                     ← Back to App
                 </Link>
             </nav>
@@ -161,7 +161,7 @@ export default function DeployPage() {
                     ].map(t => (
                         <span key={t}
                             className="px-3 py-1 rounded-full text-xs font-semibold border
-                             bg-brand-400/12 text-brand-300 border-brand-400/25">
+                             bg-brand-soft text-brand-fg-soft border-brand-line">
                             {t}
                         </span>
                     ))}
@@ -221,7 +221,7 @@ export default function DeployPage() {
 mkdir -p prisma/migrations/20260402012638_init`}
                         </CodeBlock>
                         <p className="text-xs text-text-tertiary my-2">
-                            Create <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                            Create <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                                 server/prisma/migrations/migration_lock.toml
                             </code>:
                         </p>
@@ -233,8 +233,8 @@ provider = "postgresql"`}
                         </CodeBlock>
                         <Callout type="warning">
                             <strong>Important:</strong> The migration SQL must use{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">TIMESTAMP(3)</code>
-                            {' '}not <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">DATETIME</code>.
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">TIMESTAMP(3)</code>
+                            {' '}not <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">DATETIME</code>.
                             PostgreSQL does not have a DATETIME type — this was our biggest gotcha.
                         </Callout>
                     </StepCard>
@@ -301,7 +301,7 @@ CMD ["serve", "-s", "dist", "-l", "3000"]`}
                         <Callout type="danger">
                             <strong>Do NOT use nginx for the frontend on Railway.</strong> Railway's
                             proxy expects a dynamic port but nginx binds early. Using{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">serve</code>
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">serve</code>
                             {' '}with a hardcoded port 3000 + PORT variable set in Railway works perfectly.
                         </Callout>
                     </StepCard>
@@ -365,12 +365,12 @@ client/dist/
 
                     <Callout type="danger">
                         <strong>Common mistake:</strong> Running{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">git init</code>
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">git init</code>
                         {' '}from the wrong directory commits unrelated projects. Always{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">cd</code>
-                        {' '}into <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">problem-solver/</code>
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">cd</code>
+                        {' '}into <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">problem-solver/</code>
                         {' '}first and verify with{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">pwd</code>
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">pwd</code>
                         {' '}before running git commands.
                     </Callout>
 
@@ -407,10 +407,10 @@ git branch -M main
 git push -u origin main`}
                         </CodeBlock>
                         <Callout type="info">
-                            Verify the GitHub repo root shows <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">client/</code>,{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server/</code>, and{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">.gitignore</code> —
-                            NOT a <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">problem-solver/</code> subfolder.
+                            Verify the GitHub repo root shows <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">client/</code>,{' '}
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server/</code>, and{' '}
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">.gitignore</code> —
+                            NOT a <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">problem-solver/</code> subfolder.
                         </Callout>
                     </StepCard>
 
@@ -439,9 +439,9 @@ git push`}
                         sub="Use GitHub OAuth — makes repo connection seamless">
                         <p className="text-xs text-text-secondary leading-relaxed">
                             Go to{' '}
-                            <a href="https://railway.app" target="_blank" className="text-brand-300 underline">railway.app</a>
+                            <a href="https://railway.app" target="_blank" className="text-brand-fg-soft underline">railway.app</a>
                             {' '}→ <strong>Login with GitHub</strong> → <strong>New Project</strong> →{' '}
-                            <strong>Empty Project</strong> → name it <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">problem-solver</code>.
+                            <strong>Empty Project</strong> → name it <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">problem-solver</code>.
                         </p>
                     </StepCard>
                 </Section>
@@ -460,7 +460,7 @@ git push`}
                         </p>
                         <Callout type="danger">
                             <strong>If PostgreSQL shows this error:</strong>{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                                 ERROR (catatonit:2): failed to exec pid1: No such file or directory
                             </code>
                             {' '}— delete it and add a fresh one. This is a Railway infrastructure glitch,
@@ -478,8 +478,8 @@ git push`}
                         title="Add backend service"
                         sub="Root directory must be set to 'server'">
                         <p className="text-xs text-text-secondary leading-relaxed">
-                            <strong>+ New</strong> → <strong>GitHub Repo</strong> → select <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">problem-solver</code> →
-                            set <strong>Root Directory</strong> to <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server</code> → Deploy.
+                            <strong>+ New</strong> → <strong>GitHub Repo</strong> → select <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">problem-solver</code> →
+                            set <strong>Root Directory</strong> to <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server</code> → Deploy.
                         </p>
                     </StepCard>
 
@@ -506,7 +506,7 @@ git push`}
                         <p className="text-xs text-text-secondary leading-relaxed">
                             Backend service → <strong>Settings</strong> → <strong>Networking</strong> →{' '}
                             <strong>Generate Domain</strong>. Copy the domain — looks like{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                                 web-production-xxxx.up.railway.app
                             </code>.
                         </p>
@@ -529,11 +529,11 @@ git push`}
                         <Callout type="success">
                             You should also see in the Railway logs:
                             <br />
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                                 📦 Database empty — running seed...
                             </code>
                             <br />
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                                 ✅ Seed complete!
                             </code>
                         </Callout>
@@ -552,8 +552,8 @@ git push`}
                         title="Add frontend service"
                         sub="Same repo, different root directory">
                         <p className="text-xs text-text-secondary leading-relaxed">
-                            <strong>+ New</strong> → <strong>GitHub Repo</strong> → select <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">problem-solver</code> →
-                            set <strong>Root Directory</strong> to <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">client</code> → Deploy.
+                            <strong>+ New</strong> → <strong>GitHub Repo</strong> → select <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">problem-solver</code> →
+                            set <strong>Root Directory</strong> to <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">client</code> → Deploy.
                         </p>
                     </StepCard>
 
@@ -693,7 +693,7 @@ Admin login (keep private):
                             <div key={i}
                                 className="bg-surface-2 border border-border-default rounded-xl p-4">
                                 <div className="flex items-start gap-2.5 mb-2">
-                                    <span className="bg-danger/12 text-danger border border-danger/25
+                                    <span className="bg-danger-soft text-danger-fg border border-danger-line
                        rounded px-2 py-0.5 text-[11px] font-extrabold
                        flex-shrink-0 mt-0.5">
                                         ERROR
@@ -727,15 +727,15 @@ Admin login (keep private):
                 </span>
                 <div className="flex gap-4">
                     <Link to="/docs/readme"
-                        className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
+                        className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         README →
                     </Link>
                     <Link to="/docs/setup"
-                        className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
+                        className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         Setup Guide →
                     </Link>
                     <Link to="/"
-                        className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
+                        className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         ← Back to App
                     </Link>
                 </div>

@@ -12,11 +12,11 @@ export default function Section1Hero({ stats }) {
                 {/* Background orbs */}
                 <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute top-[-200px] right-[-150px] w-[600px] h-[600px]
-                          rounded-full bg-brand-400/8 blur-[150px]" />
+                          rounded-full bg-brand-soft blur-[150px]" />
                     <div className="absolute bottom-[-150px] left-[-100px] w-[500px] h-[500px]
                           rounded-full bg-blue-500/6 blur-[120px]" />
                     <div className="absolute top-[40%] left-[50%] w-[300px] h-[300px]
-                          rounded-full bg-success/4 blur-[100px]" />
+                          rounded-full bg-success-soft blur-[100px]" />
                 </div>
 
                 <div className="relative z-10 max-w-[1000px] mx-auto px-8 py-24 sm:py-32">
@@ -24,11 +24,11 @@ export default function Section1Hero({ stats }) {
                     <motion.div
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="inline-flex items-center gap-2 bg-brand-400/10 border border-brand-400/25
+                        className="inline-flex items-center gap-2 bg-brand-soft border border-brand-line
                        rounded-full px-4 py-1.5 mb-8"
                     >
                         <div className="w-2 h-2 rounded-full bg-success animate-pulse-dot" />
-                        <span className="text-xs font-semibold text-brand-300">
+                        <span className="text-xs font-semibold text-brand-fg-soft">
                             AI-Powered Interview Intelligence Platform
                         </span>
                     </motion.div>
@@ -72,7 +72,7 @@ export default function Section1Hero({ stats }) {
                         <button
                             onClick={() => navigate('/auth/register')}
                             className="px-8 py-3.5 rounded-xl bg-brand-400 text-white font-bold text-sm
-                         hover:bg-brand-400/90 transition-all shadow-glow-sm
+                         hover:bg-brand-soft transition-all shadow-glow-sm
                          flex items-center justify-center gap-2"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"

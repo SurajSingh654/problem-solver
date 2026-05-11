@@ -48,7 +48,7 @@ export default function Section5Teams() {
                                 'Admin dashboard with member analytics',
                             ].map((item, i) => (
                                 <div key={i} className="flex items-start gap-2 text-xs text-text-secondary">
-                                    <span className="text-success flex-shrink-0 mt-0.5">✓</span>
+                                    <span className="text-success-fg flex-shrink-0 mt-0.5">✓</span>
                                     <span>{item}</span>
                                 </div>
                             ))}
@@ -79,7 +79,7 @@ export default function Section5Teams() {
                                 'Switch to team mode anytime',
                             ].map((item, i) => (
                                 <div key={i} className="flex items-start gap-2 text-xs text-text-secondary">
-                                    <span className="text-brand-300 flex-shrink-0 mt-0.5">✓</span>
+                                    <span className="text-brand-fg-soft flex-shrink-0 mt-0.5">✓</span>
                                     <span>{item}</span>
                                 </div>
                             ))}
@@ -132,7 +132,7 @@ export default function Section5Teams() {
                                 transition={{ delay: i * 0.08 }}
                                 className="text-center"
                             >
-                                <div className="w-12 h-12 rounded-2xl bg-brand-400/10 border border-brand-400/20
+                                <div className="w-12 h-12 rounded-2xl bg-brand-soft border border-brand-line
                               flex items-center justify-center text-xl mx-auto mb-3">
                                     {item.icon}
                                 </div>
@@ -165,7 +165,7 @@ export default function Section5Teams() {
                             {
                                 role: 'Platform Admin',
                                 badge: '🛡️ Super Admin',
-                                badgeColor: 'bg-danger/10 text-danger border-danger/20',
+                                badgeColor: 'bg-danger-soft text-danger-fg border-danger-line',
                                 items: [
                                     'Approve / reject team creation',
                                     'Monitor all teams and users',
@@ -176,7 +176,7 @@ export default function Section5Teams() {
                             {
                                 role: 'Team Admin',
                                 badge: '👑 Team Admin',
-                                badgeColor: 'bg-warning/10 text-warning border-warning/20',
+                                badgeColor: 'bg-warning-soft text-warning-fg border-warning-line',
                                 items: [
                                     'Create and manage problems',
                                     'AI content generation',
@@ -188,7 +188,7 @@ export default function Section5Teams() {
                             {
                                 role: 'Member',
                                 badge: '👤 Member',
-                                badgeColor: 'bg-brand-400/10 text-brand-300 border-brand-400/20',
+                                badgeColor: 'bg-brand-soft text-brand-fg-soft border-brand-line',
                                 items: [
                                     // UPDATED: 6 → 7
                                     'Solve problems across 7 categories',

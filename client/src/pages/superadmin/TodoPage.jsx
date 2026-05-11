@@ -38,9 +38,9 @@ const ROADMAP_ITEMS = [
         technicalNotes: `Location: client/src/pages/admin/AddProblemPage.jsx — GeneratedProblemCard
 The urlConfidence field is already returned by the AI generation pipeline.
 Add visual indicator next to the source URL link:
-  {problem.urlConfidence === 'high' && <span className="text-[9px] text-success font-bold">✓ URL verified</span>}
-  {problem.urlConfidence === 'medium' && <span className="text-[9px] text-warning font-bold">⚠ URL unverified</span>}
-  {problem.urlConfidence === 'low' && <span className="text-[9px] text-danger font-bold">✗ URL likely wrong — edit before approving</span>}
+  {problem.urlConfidence === 'high' && <span className="text-[9px] text-success-fg font-bold">✓ URL verified</span>}
+  {problem.urlConfidence === 'medium' && <span className="text-[9px] text-warning-fg font-bold">⚠ URL unverified</span>}
+  {problem.urlConfidence === 'low' && <span className="text-[9px] text-danger-fg font-bold">✗ URL likely wrong — edit before approving</span>}
 No server changes needed — data is already there.`,
     },
 
@@ -632,9 +632,9 @@ const PHASE_CONFIG = {
     NOW: {
         label: 'Now',
         sublabel: 'In progress',
-        color: 'border-success text-success',
-        bg: 'bg-success/5',
-        badge: 'bg-success/12 text-success border-success/25',
+        color: 'border-success text-success-fg',
+        bg: 'bg-success-soft',
+        badge: 'bg-success-soft text-success-fg border-success-line',
         dot: 'bg-success',
         borderLeft: 'border-l-success',
         description: 'Currently building or immediately queued',
@@ -643,9 +643,9 @@ const PHASE_CONFIG = {
     NEXT: {
         label: 'Next',
         sublabel: '1-3 months',
-        color: 'border-brand-400 text-brand-300',
-        bg: 'bg-brand-400/5',
-        badge: 'bg-brand-400/12 text-brand-300 border-brand-400/25',
+        color: 'border-brand-400 text-brand-fg-soft',
+        bg: 'bg-brand-soft',
+        badge: 'bg-brand-soft text-brand-fg-soft border-brand-line',
         dot: 'bg-brand-400',
         borderLeft: 'border-l-brand-400',
         description: 'Committed for the next development cycle',
@@ -654,9 +654,9 @@ const PHASE_CONFIG = {
     LATER: {
         label: 'Later',
         sublabel: '3-9 months',
-        color: 'border-warning text-warning',
-        bg: 'bg-warning/5',
-        badge: 'bg-warning/12 text-warning border-warning/25',
+        color: 'border-warning text-warning-fg',
+        bg: 'bg-warning-soft',
+        badge: 'bg-warning-soft text-warning-fg border-warning-line',
         dot: 'bg-warning',
         borderLeft: 'border-l-warning',
         description: 'Planned with clear design and justification',
@@ -665,9 +665,9 @@ const PHASE_CONFIG = {
     SOMEDAY: {
         label: 'Someday',
         sublabel: '9+ months',
-        color: 'border-info text-info',
-        bg: 'bg-info/5',
-        badge: 'bg-info/12 text-info border-info/25',
+        color: 'border-info text-info-fg',
+        bg: 'bg-info-soft',
+        badge: 'bg-info-soft text-info-fg border-info-line',
         dot: 'bg-info',
         borderLeft: 'border-l-info',
         description: 'Validated ideas awaiting the right moment',
@@ -688,26 +688,26 @@ const PHASE_CONFIG = {
 
 const THEME_CONFIG = {
     'Learning Science': { icon: '🧠', color: 'text-purple-400', bg: 'bg-purple-400/10 border-purple-400/25' },
-    'AI Intelligence': { icon: '🤖', color: 'text-brand-300', bg: 'bg-brand-400/10 border-brand-400/25' },
-    'Retention & Engagement': { icon: '🔥', color: 'text-warning', bg: 'bg-warning/10 border-warning/25' },
+    'AI Intelligence': { icon: '🤖', color: 'text-brand-fg-soft', bg: 'bg-brand-soft border-brand-line' },
+    'Retention & Engagement': { icon: '🔥', color: 'text-warning-fg', bg: 'bg-warning-soft border-warning-line' },
     'Admin Experience': { icon: '👑', color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/25' },
-    'Content & Problems': { icon: '📋', color: 'text-info', bg: 'bg-info/10 border-info/25' },
-    'Team & Community': { icon: '👥', color: 'text-success', bg: 'bg-success/10 border-success/25' },
-    'Growth & Onboarding': { icon: '🚀', color: 'text-danger', bg: 'bg-danger/10 border-danger/25' },
+    'Content & Problems': { icon: '📋', color: 'text-info-fg', bg: 'bg-info-soft border-info-line' },
+    'Team & Community': { icon: '👥', color: 'text-success-fg', bg: 'bg-success-soft border-success-line' },
+    'Growth & Onboarding': { icon: '🚀', color: 'text-danger-fg', bg: 'bg-danger-soft border-danger-line' },
     'Infrastructure': { icon: '⚙️', color: 'text-text-secondary', bg: 'bg-surface-3 border-border-default' },
 }
 
 const PRIORITY_CONFIG = {
-    HIGH: { color: 'bg-danger/10 text-danger border-danger/25', dot: 'bg-danger' },
-    MEDIUM: { color: 'bg-warning/10 text-warning border-warning/25', dot: 'bg-warning' },
-    LOW: { color: 'bg-info/10 text-info border-info/25', dot: 'bg-info' },
+    HIGH: { color: 'bg-danger-soft text-danger-fg border-danger-line', dot: 'bg-danger' },
+    MEDIUM: { color: 'bg-warning-soft text-warning-fg border-warning-line', dot: 'bg-warning' },
+    LOW: { color: 'bg-info-soft text-info-fg border-info-line', dot: 'bg-info' },
 }
 
 const EFFORT_CONFIG = {
-    Small: { color: 'bg-success/10 text-success border-success/25', label: 'Small' },
-    Medium: { color: 'bg-brand-400/10 text-brand-300 border-brand-400/25', label: 'Medium' },
-    Large: { color: 'bg-warning/10 text-warning border-warning/25', label: 'Large' },
-    XLarge: { color: 'bg-danger/10 text-danger border-danger/25', label: 'X-Large' },
+    Small: { color: 'bg-success-soft text-success-fg border-success-line', label: 'Small' },
+    Medium: { color: 'bg-brand-soft text-brand-fg-soft border-brand-line', label: 'Medium' },
+    Large: { color: 'bg-warning-soft text-warning-fg border-warning-line', label: 'Large' },
+    XLarge: { color: 'bg-danger-soft text-danger-fg border-danger-line', label: 'X-Large' },
 }
 
 const PHASES_ORDER = ['NOW', 'NEXT', 'LATER', 'SOMEDAY', 'BACKLOG']
@@ -941,7 +941,7 @@ export default function TodoPage() {
                                 className={cn(
                                     'flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all',
                                     viewMode === v.id
-                                        ? 'bg-brand-400/15 text-brand-300'
+                                        ? 'bg-brand-soft text-brand-fg-soft'
                                         : 'text-text-tertiary hover:text-text-primary'
                                 )}>
                                 <span>{v.icon}</span>{v.label}
@@ -982,8 +982,8 @@ export default function TodoPage() {
                 </div>
 
                 {/* Vision statement */}
-                <div className="bg-gradient-to-r from-brand-400/5 to-purple-400/5 border border-brand-400/20 rounded-2xl p-5">
-                    <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-2">
+                <div className="bg-gradient-to-r from-brand-400/5 to-purple-400/5 border border-brand-line rounded-2xl p-5">
+                    <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-2">
                         Platform Vision
                     </p>
                     <p className="text-sm text-text-secondary leading-relaxed">
@@ -992,9 +992,9 @@ export default function TodoPage() {
                         Not just feedback — behavioral science. Not just a product — a preparation intelligence
                         system that knows you, adapts to you, and tells you honestly when you're ready.
                     </p>
-                    <div className="flex items-center gap-4 mt-3 pt-3 border-t border-brand-400/15">
+                    <div className="flex items-center gap-4 mt-3 pt-3 border-t border-brand-line">
                         <div className="text-center">
-                            <div className="text-lg font-extrabold font-mono text-brand-300">{stats.total}</div>
+                            <div className="text-lg font-extrabold font-mono text-brand-fg-soft">{stats.total}</div>
                             <div className="text-[9px] text-text-disabled uppercase tracking-wider">Total items</div>
                         </div>
                         <div className="text-center">
@@ -1002,11 +1002,11 @@ export default function TodoPage() {
                             <div className="text-[9px] text-text-disabled uppercase tracking-wider">Research-backed</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-lg font-extrabold font-mono text-danger">{stats.byPriority.HIGH}</div>
+                            <div className="text-lg font-extrabold font-mono text-danger-fg">{stats.byPriority.HIGH}</div>
                             <div className="text-[9px] text-text-disabled uppercase tracking-wider">High priority</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-lg font-extrabold font-mono text-success">{stats.byPhase.NOW}</div>
+                            <div className="text-lg font-extrabold font-mono text-success-fg">{stats.byPhase.NOW}</div>
                             <div className="text-[9px] text-text-disabled uppercase tracking-wider">In progress</div>
                         </div>
                     </div>
@@ -1079,7 +1079,7 @@ export default function TodoPage() {
                                         className={cn(
                                             'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border',
                                             activePhase === phase
-                                                ? (config ? config.badge : 'bg-brand-400/15 border-brand-400/30 text-brand-300')
+                                                ? (config ? config.badge : 'bg-brand-soft border-brand-line text-brand-fg-soft')
                                                 : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-primary'
                                         )}>
                                         {phase !== 'All' && <span className="mr-1">{PHASE_CONFIG[phase].icon}</span>}
@@ -1100,7 +1100,7 @@ export default function TodoPage() {
                                     className={cn(
                                         'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border',
                                         activeTheme === theme
-                                            ? 'bg-brand-400/15 border-brand-400/30 text-brand-300'
+                                            ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                             : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-primary'
                                     )}>
                                     {theme !== 'All' && <span className="mr-1">{THEME_CONFIG[theme]?.icon}</span>}
@@ -1116,7 +1116,7 @@ export default function TodoPage() {
                                     className={cn(
                                         'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border',
                                         activePriority === p
-                                            ? (p !== 'All' ? PRIORITY_CONFIG[p].color : 'bg-brand-400/15 border-brand-400/30 text-brand-300')
+                                            ? (p !== 'All' ? PRIORITY_CONFIG[p].color : 'bg-brand-soft border-brand-line text-brand-fg-soft')
                                             : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-primary'
                                     )}>
                                     {p === 'All' ? `All (${ROADMAP_ITEMS.length})` : `${p} (${stats.byPriority[p]})`}
@@ -1129,7 +1129,7 @@ export default function TodoPage() {
                             <p className="text-xs text-text-disabled">
                                 Showing {filteredItems.length} of {ROADMAP_ITEMS.length} items
                                 <button onClick={() => { setActivePhase('All'); setActiveTheme('All'); setActivePriority('All'); setSearchQuery('') }}
-                                    className="ml-2 text-danger hover:text-danger/80 transition-colors font-semibold">
+                                    className="ml-2 text-danger-fg hover:text-danger-fg/80 transition-colors font-semibold">
                                     Clear filters
                                 </button>
                             </p>
@@ -1187,8 +1187,8 @@ export default function TodoPage() {
                 <p className="text-xs text-text-tertiary leading-relaxed">
                     <span className="font-bold text-text-secondary">How this roadmap works: </span>
                     Items move left to right through phases as they get prioritized. When an item is completed,
-                    remove it from <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-[11px]">ROADMAP_ITEMS</code> in{' '}
-                    <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-[11px]">TodoPage.jsx</code>.
+                    remove it from <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-[11px]">ROADMAP_ITEMS</code> in{' '}
+                    <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-[11px]">TodoPage.jsx</code>.
                     Items marked 🔬 are grounded in published behavioral science research.
                     The <strong>impact</strong> field describes what users experience — always written from the user perspective,
                     never from a technical perspective.

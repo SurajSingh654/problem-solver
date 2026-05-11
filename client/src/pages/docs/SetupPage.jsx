@@ -110,7 +110,7 @@ export default function SetupPage() {
                               border transition-all ${isDone
                                             ? 'bg-success border-success text-black'
                                             : isActive
-                                                ? 'bg-brand-400/15 border-brand-400 text-brand-300'
+                                                ? 'bg-brand-soft border-brand-400 text-brand-fg-soft'
                                                 : 'border-border-strong text-text-disabled'
                                         }`}
                                 >
@@ -160,14 +160,14 @@ export default function SetupPage() {
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                              text-xs font-medium text-text-tertiary
                              hover:bg-surface-3 hover:text-text-primary transition-all">
-                            <span className="w-1.5 h-1.5 rounded-full bg-success/50" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-success-soft" />
                             README →
                         </Link>
                         <Link to="/"
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                              text-xs font-medium text-text-tertiary
                              hover:bg-surface-3 hover:text-text-primary transition-all">
-                            <span className="w-1.5 h-1.5 rounded-full bg-success/50" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-success-soft" />
                             ← Back to App
                         </Link>
                     </div>
@@ -192,7 +192,7 @@ export default function SetupPage() {
                         <div key={p}
                             className="flex items-center gap-1.5 bg-surface-3 border border-border-strong
                             rounded-full px-3 py-1.5 text-xs font-semibold text-text-secondary">
-                            <span className="text-success text-xs">✓</span>
+                            <span className="text-success-fg text-xs">✓</span>
                             {p}
                         </div>
                     ))}
@@ -321,7 +321,7 @@ cd problem-solver`}
                             Environment Variables
                         </h2>
                     </div>
-                    <SectionDesc>Create <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">.env</code> files. Never committed to Git.</SectionDesc>
+                    <SectionDesc>Create <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">.env</code> files. Never committed to Git.</SectionDesc>
 
                     <StepCard
                         num="3a" numColor="#eab308" numBg="rgba(234,179,8,0.12)"
@@ -333,7 +333,7 @@ cd problem-solver`}
                             {`cp server/.env.example server/.env`}
                         </CodeBlock>
                         <p className="text-xs text-text-tertiary mb-2">
-                            Open <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server/.env</code> and set:
+                            Open <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server/.env</code> and set:
                         </p>
                         <CodeBlock label="server/.env" color="#eab308"
                             copyText={`PORT=5000\nNODE_ENV=development\nDATABASE_URL="file:./prisma/dev.db"\nJWT_SECRET=replace-with-a-very-long-random-string\nJWT_EXPIRES_IN=7d\nADMIN_PASSWORD=your-team-admin-password\nCLIENT_URL=http://localhost:5173`}>
@@ -347,7 +347,7 @@ CLIENT_URL=http://localhost:5173`}
                         </CodeBlock>
                         <Callout type="warning">
                             <strong>JWT_SECRET</strong> must be long and random. Generate one:{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                                 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
                             </code>
                         </Callout>
@@ -414,11 +414,11 @@ Members: alex@example.com / member123`}
                         </CodeBlock>
                         <Callout type="info">
                             Browse the database visually:{' '}
-                            <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                            <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                                 cd server && npx prisma studio
                             </code>
                             {' '}opens Prisma Studio at{' '}
-                            <a href="http://localhost:5555" target="_blank" className="text-brand-300 underline">
+                            <a href="http://localhost:5555" target="_blank" className="text-brand-fg-soft underline">
                                 localhost:5555
                             </a>
                         </Callout>
@@ -460,11 +460,11 @@ Members: alex@example.com / member123`}
                         </CodeBlock>
                         <Callout type="success">
                             Open{' '}
-                            <a href="http://localhost:5173" target="_blank" className="text-brand-300 underline font-semibold">
+                            <a href="http://localhost:5173" target="_blank" className="text-brand-fg-soft underline font-semibold">
                                 http://localhost:5173
                             </a>
                             {' '}— your app is live. API health check:{' '}
-                            <a href="http://localhost:5000/health" target="_blank" className="text-brand-300 underline">
+                            <a href="http://localhost:5000/health" target="_blank" className="text-brand-fg-soft underline">
                                 localhost:5000/health
                             </a>
                         </Callout>
@@ -506,7 +506,7 @@ npm run dev`}
                         <p className="text-xs text-text-secondary mb-2">
                             Go to{' '}
                             <a href="http://localhost:5173/register" target="_blank"
-                                className="text-brand-300 underline">
+                                className="text-brand-fg-soft underline">
                                 localhost:5173/register
                             </a>
                             . Or log in with a seeded account:
@@ -524,12 +524,12 @@ npm run dev`}
                     >
                         <p className="text-xs text-text-secondary mb-2">
                             Go to <strong className="text-text-primary">Settings → Role → Claim Admin</strong>.
-                            Enter the <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">ADMIN_PASSWORD</code>{' '}
-                            from <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server/.env</code>.
+                            Enter the <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">ADMIN_PASSWORD</code>{' '}
+                            from <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server/.env</code>.
                         </p>
                         <Callout type="warning">
                             Only <strong>one person</strong> per team should be Admin.
-                            Share <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">ADMIN_PASSWORD</code> with nobody else.
+                            Share <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">ADMIN_PASSWORD</code> with nobody else.
                         </Callout>
                     </StepCard>
                 </Section>
@@ -581,10 +581,10 @@ npm run dev`}
 
                     <Callout type="info">
                         <strong>Shared server:</strong> One person runs Express, all teammates set{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">VITE_API_URL</code>{' '}
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">VITE_API_URL</code>{' '}
                         to that machine's IP. Or deploy to{' '}
-                        <a href="https://railway.app" target="_blank" className="text-brand-300 underline">Railway</a> or{' '}
-                        <a href="https://render.com" target="_blank" className="text-brand-300 underline">Render</a> free tier.
+                        <a href="https://railway.app" target="_blank" className="text-brand-fg-soft underline">Railway</a> or{' '}
+                        <a href="https://render.com" target="_blank" className="text-brand-fg-soft underline">Render</a> free tier.
                     </Callout>
                 </Section>
 
@@ -633,44 +633,44 @@ npm run dev`}
                     <TroubleItem error="zsh: command not found: npm">
                         Node.js is not installed or not on PATH. Follow Step 1.
                         After installing nvm, close and reopen terminal, then run{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">nvm use 20</code>.
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">nvm use 20</code>.
                     </TroubleItem>
 
                     <TroubleItem error="nvm: command not found (after installing)">
-                        Run <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">source ~/.zshrc</code>{' '}
+                        Run <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">source ~/.zshrc</code>{' '}
                         or close and reopen terminal. The install script adds nvm to your shell config
                         but the current session doesn't see it yet.
                     </TroubleItem>
 
                     <TroubleItem error="EADDRINUSE: address already in use :::5000">
                         A previous server is still running. Kill it:{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                             lsof -ti:5000 | xargs kill -9
                         </code>{' '}
                         then restart with{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">npm run dev</code>.
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">npm run dev</code>.
                     </TroubleItem>
 
                     <TroubleItem error="CORS error or font blocked (file:// protocol)">
                         You opened a file directly in the browser. Always use{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">npm run dev</code>{' '}
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">npm run dev</code>{' '}
                         and access via{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">http://localhost:5173</code>{' '}
-                        — never via <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">file://</code>.
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">http://localhost:5173</code>{' '}
+                        — never via <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">file://</code>.
                     </TroubleItem>
 
                     <TroubleItem error="@import must precede all other statements">
-                        The Google Fonts <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">@import</code>{' '}
+                        The Google Fonts <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">@import</code>{' '}
                         in your CSS was not the very first line. Move it to line 1 of{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                             client/src/styles/index.css
                         </code>.
                     </TroubleItem>
 
                     <TroubleItem error="Environment variable not found: DATABASE_URL">
-                        You haven't created <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server/.env</code>.
+                        You haven't created <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server/.env</code>.
                         Run{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                             cp server/.env.example server/.env
                         </code>{' '}
                         then fill in the values.
@@ -683,9 +683,9 @@ npm run dev`}
 
                     <TroubleItem error="Seed fails: A record with this value already exists">
                         Run{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">npm run db:reset</code>{' '}
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">npm run db:reset</code>{' '}
                         then{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">npm run db:seed</code>{' '}
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">npm run db:seed</code>{' '}
                         again.
                     </TroubleItem>
                 </Section>
@@ -701,7 +701,7 @@ npm run dev`}
                         sub="Frontend, routes, and controllers stay 100% unchanged"
                     >
                         <p className="text-xs text-text-tertiary mb-2">
-                            1. In <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server/prisma/schema.prisma</code> change:
+                            1. In <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server/prisma/schema.prisma</code> change:
                         </p>
                         <CodeBlock label="schema.prisma" color="#eab308"
                             copyText={`datasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}`}>
@@ -711,7 +711,7 @@ npm run dev`}
 }`}
                         </CodeBlock>
                         <p className="text-xs text-text-tertiary my-2">
-                            2. Update <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server/.env</code>:
+                            2. Update <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server/.env</code>:
                         </p>
                         <CodeBlock label="server/.env" color="#eab308"
                             copyText={`DATABASE_URL="postgresql://user:pass@host:5432/probsolver"`}>
@@ -724,9 +724,9 @@ npm run dev`}
                         </CodeBlock>
                         <Callout type="info">
                             Free PostgreSQL:{' '}
-                            <a href="https://neon.tech" target="_blank" className="text-brand-300 underline">neon.tech</a>
+                            <a href="https://neon.tech" target="_blank" className="text-brand-fg-soft underline">neon.tech</a>
                             {' '}(serverless, great for teams) or{' '}
-                            <a href="https://railway.app" target="_blank" className="text-brand-300 underline">railway.app</a>.
+                            <a href="https://railway.app" target="_blank" className="text-brand-fg-soft underline">railway.app</a>.
                             Both have free tiers.
                         </Callout>
                     </StepCard>
@@ -763,11 +763,11 @@ AI_RATE_LIMIT_PER_DAY=20`}
                 </span>
                 <div className="flex gap-4">
                     <Link to="/docs/readme"
-                        className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
+                        className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         README →
                     </Link>
                     <Link to="/"
-                        className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
+                        className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         ← Back to App
                     </Link>
                 </div>

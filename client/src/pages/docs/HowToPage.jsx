@@ -53,8 +53,8 @@ function HowToImage({ file, alt, caption }) {
                             {caption}
                         </div>
                     )}
-                    <code className="text-[10px] font-mono text-brand-300 bg-brand-400/10
-                                     border border-brand-400/20 rounded px-2 py-1 mt-1">
+                    <code className="text-[10px] font-mono text-brand-fg-soft bg-brand-soft
+                                     border border-brand-line rounded px-2 py-1 mt-1">
                         public/docs/how-to/{file}
                     </code>
                 </div>
@@ -69,7 +69,7 @@ function HowToImage({ file, alt, caption }) {
                     type="button"
                     onClick={() => setZoomed(true)}
                     className="block w-full rounded-xl overflow-hidden border border-border-default
-                               bg-surface-0 hover:border-brand-400/40 transition-colors cursor-zoom-in"
+                               bg-surface-0 hover:border-brand-line transition-colors cursor-zoom-in"
                     title="Click to enlarge"
                 >
                     <img
@@ -182,7 +182,7 @@ function PasteBlock({ label, children }) {
 function K({ children }) {
     return (
         <code className="bg-surface-3 border border-border-default rounded
-                         px-1.5 py-0.5 text-[11px] font-mono text-brand-300">
+                         px-1.5 py-0.5 text-[11px] font-mono text-brand-fg-soft">
             {children}
         </code>
     )
@@ -269,13 +269,13 @@ export default function HowToPage() {
                         <Link to="/docs/readme" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                                                            text-xs font-medium text-text-tertiary
                                                            hover:bg-surface-3 hover:text-text-primary transition-all">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                             README →
                         </Link>
                         <Link to="/" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                                                 text-xs font-medium text-text-tertiary
                                                 hover:bg-surface-3 hover:text-text-primary transition-all">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                             ← Back to App
                         </Link>
                     </div>
@@ -1288,7 +1288,7 @@ Single deep-dive — one problem, 45 minutes             — simulation of real 
                 <div>
                     Want to contribute a screenshot? Drop a PNG into{' '}
                     <code className="bg-surface-3 border border-border-default rounded px-1.5 py-0.5
-                                     text-[10px] font-mono text-brand-300">
+                                     text-[10px] font-mono text-brand-fg-soft">
                         client/public/docs/how-to/
                     </code>{' '}
                     matching the filename shown in any placeholder above.

@@ -54,9 +54,9 @@ export default function AllUsersPage() {
         : users
 
     const statusColor = {
-        ACTIVE: 'text-success',
-        INACTIVE: 'text-warning',
-        DORMANT: 'text-danger',
+        ACTIVE: 'text-success-fg',
+        INACTIVE: 'text-warning-fg',
+        DORMANT: 'text-danger-fg',
     }
 
     return (
@@ -104,8 +104,8 @@ export default function AllUsersPage() {
                                 >
                                     <td className="py-3 px-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-7 h-7 rounded-full bg-brand-400/20 flex items-center
-                                                         justify-center text-xs font-bold text-brand-300">
+                                            <div className="w-7 h-7 rounded-full bg-brand-soft flex items-center
+                                                         justify-center text-xs font-bold text-brand-fg-soft">
                                                 {u.name?.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
@@ -118,9 +118,9 @@ export default function AllUsersPage() {
                                         <span className={cn(
                                             'text-[10px] font-bold px-2 py-0.5 rounded-full border',
                                             u.globalRole === 'SUPER_ADMIN'
-                                                ? 'bg-danger/10 text-danger border-danger/25'
+                                                ? 'bg-danger-soft text-danger-fg border-danger-line'
                                                 : u.teamRole === 'TEAM_ADMIN'
-                                                    ? 'bg-warning/10 text-warning border-warning/25'
+                                                    ? 'bg-warning-soft text-warning-fg border-warning-line'
                                                     : 'bg-surface-3 text-text-disabled border-border-default'
                                         )}>
                                             {u.globalRole === 'SUPER_ADMIN' ? '🛡️ Super Admin'
@@ -157,8 +157,8 @@ export default function AllUsersPage() {
                                                 onClick={() => handleDelete(u.id, u.name)}
                                                 disabled={actionLoading === u.id}
                                                 className="text-xs font-bold text-text-disabled
-                                                           hover:text-danger transition-colors
-                                                           px-2 py-1 rounded-lg hover:bg-danger/10"
+                                                           hover:text-danger-fg transition-colors
+                                                           px-2 py-1 rounded-lg hover:bg-danger-soft"
                                             >
                                                 {actionLoading === u.id ? '...' : 'Delete'}
                                             </button>

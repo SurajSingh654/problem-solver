@@ -106,7 +106,7 @@ export default function SuperAdminDashboard() {
                     link.external ? (
                         <a key={link.label} href={link.to} target="_blank" rel="noopener noreferrer"
                             className="bg-surface-1 border border-border-default rounded-xl p-4
-                         hover:border-brand-400/30 transition-all cursor-pointer">
+                         hover:border-brand-line transition-all cursor-pointer">
                             <span className="text-xl">{link.icon}</span>
                             <p className="text-sm font-bold text-text-primary mt-2">{link.label}</p>
                             <p className="text-[10px] text-text-disabled">{link.desc}</p>
@@ -115,7 +115,7 @@ export default function SuperAdminDashboard() {
                         <div key={link.label}
                             onClick={() => navigate(link.to)}
                             className="bg-surface-1 border border-border-default rounded-xl p-4
-                         hover:border-brand-400/30 transition-all cursor-pointer">
+                         hover:border-brand-line transition-all cursor-pointer">
                             <span className="text-xl">{link.icon}</span>
                             <p className="text-sm font-bold text-text-primary mt-2">{link.label}</p>
                             <p className="text-[10px] text-text-disabled">{link.desc}</p>
@@ -128,7 +128,7 @@ export default function SuperAdminDashboard() {
             <h2 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
                 <span>⏳</span> Pending Team Requests
                 {pendingTeams.length > 0 && (
-                    <span className="text-xs bg-warning/15 text-warning px-2 py-0.5 rounded-full font-bold">
+                    <span className="text-xs bg-warning-soft text-warning-fg px-2 py-0.5 rounded-full font-bold">
                         {pendingTeams.length}
                     </span>
                 )}

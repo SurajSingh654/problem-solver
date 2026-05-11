@@ -159,7 +159,7 @@ export default function Section6Technical({ stats }) {
                                 transition={{ delay: i * 0.03 }}
                                 className="flex items-center gap-3 px-3 py-2 rounded-xl bg-surface-2 border border-border-subtle"
                             >
-                                <code className="text-[10px] font-mono font-bold text-brand-300 w-36 flex-shrink-0">
+                                <code className="text-[10px] font-mono font-bold text-brand-fg-soft w-36 flex-shrink-0">
                                     {m.model}
                                 </code>
                                 <span className="text-[10px] text-text-tertiary">{m.desc}</span>
@@ -193,12 +193,12 @@ export default function Section6Technical({ stats }) {
                                 transition={{ delay: i * 0.03 }}
                                 className={cn(
                                     'flex items-center gap-3 px-3 py-2 rounded-xl border',
-                                    api.ws ? 'bg-brand-400/5 border-brand-400/20' : 'bg-surface-2 border-border-subtle'
+                                    api.ws ? 'bg-brand-soft border-brand-line' : 'bg-surface-2 border-border-subtle'
                                 )}
                             >
                                 <code className={cn(
                                     'text-[10px] font-mono font-bold w-40 flex-shrink-0',
-                                    api.ws ? 'text-brand-300' : 'text-success'
+                                    api.ws ? 'text-brand-fg-soft' : 'text-success-fg'
                                 )}>{api.route}</code>
                                 <span className="text-[10px] text-text-tertiary">{api.desc}</span>
                             </motion.div>

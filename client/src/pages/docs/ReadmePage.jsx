@@ -127,21 +127,21 @@ export default function ReadmePage() {
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                              text-xs font-medium text-text-tertiary
                              hover:bg-surface-3 hover:text-text-primary transition-all">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                             How-To Guide →
                         </Link>
                         <Link to="/docs/setup"
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                              text-xs font-medium text-text-tertiary
                              hover:bg-surface-3 hover:text-text-primary transition-all">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                             Setup Guide →
                         </Link>
                         <Link to="/"
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                              text-xs font-medium text-text-tertiary
                              hover:bg-surface-3 hover:text-text-primary transition-all">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                             ← Back to App
                         </Link>
                     </div>
@@ -173,11 +173,11 @@ export default function ReadmePage() {
                     ].map(([color, label]) => (
                         <span key={label}
                             className={`px-3 py-1 rounded-full text-xs font-semibold border
-                    ${color === 'purple' ? 'bg-brand-400/12 text-brand-300 border-brand-400/25' :
+                    ${color === 'purple' ? 'bg-brand-soft text-brand-fg-soft border-brand-line' :
                                     color === 'blue' ? 'bg-blue-500/12 text-blue-400 border-blue-500/25' :
-                                        color === 'green' ? 'bg-success/12 text-success border-success/25' :
-                                            color === 'yellow' ? 'bg-warning/12 text-warning border-warning/25' :
-                                                'bg-danger/12  text-danger  border-danger/25'}`}>
+                                        color === 'green' ? 'bg-success-soft text-success-fg border-success-line' :
+                                            color === 'yellow' ? 'bg-warning-soft text-warning-fg border-warning-line' :
+                                                'bg-danger-soft  text-danger-fg  border-danger-line'}`}>
                             {label}
                         </span>
                     ))}
@@ -219,13 +219,13 @@ export default function ReadmePage() {
                         rows={[
                             ['Team collaboration', <Check />, <Cross />, <Cross />, <Cross />],
                             ["See teammates' solutions", <Check />, <Cross />, <Cross />, <Cross />],
-                            ['Real-world context', <span className="text-success font-semibold text-xs">✓ Admin-curated</span>, <Cross />, <Cross />, 'Partial'],
+                            ['Real-world context', <span className="text-success-fg font-semibold text-xs">✓ Admin-curated</span>, <Cross />, <Cross />, 'Partial'],
                             ['6D intelligence report', <Check />, <Cross />, <Cross />, <Cross />],
                             ['Personalised action plan', <Check />, <Cross />, <Cross />, <Cross />],
                             ['Interview simulation', <Check />, 'Premium', <Cross />, 'Premium'],
                             ['Spaced repetition reviews', <Check />, <Cross />, <Cross />, <Cross />],
-                            ['AI integration (Phase 2)', <span className="text-success font-semibold text-xs">✓ Planned</span>, 'Partial', <Cross />, 'Partial'],
-                            ['Free for teams', <span className="text-success font-semibold text-xs">✓ Self-hosted</span>, 'Freemium', <Check />, 'Paid'],
+                            ['AI integration (Phase 2)', <span className="text-success-fg font-semibold text-xs">✓ Planned</span>, 'Partial', <Cross />, 'Partial'],
+                            ['Free for teams', <span className="text-success-fg font-semibold text-xs">✓ Self-hosted</span>, 'Freemium', <Check />, 'Paid'],
                         ]}
                     />
                 </Section>
@@ -293,7 +293,7 @@ JWT in Authorization header         ← Axios interceptor adds it automatically`
                     </ArchBlock>
                     <Callout type="info">
                         <strong>Key design decision:</strong> Vite proxies all{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">/api</code>{' '}
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">/api</code>{' '}
                         requests to Express in development, eliminating CORS issues entirely.
                     </Callout>
                 </Section>
@@ -389,11 +389,11 @@ D6 Retention= avgRecallScore×0.5 + onTimeRate×0.3 + trend×0.2`}
                     <SectionDesc>AI is built into the data model from day one. Zero refactoring needed to activate it.</SectionDesc>
                     <Callout type="info">
                         AI fields already exist on every model:{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">Solution.aiFeedback</code>,{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">Problem.aiHints</code>,{' '}
-                        <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">User.aiConversations</code>.
-                        Set <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">AI_ENABLED=true</code> and
-                        add <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">OPENAI_API_KEY</code> to activate.
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">Solution.aiFeedback</code>,{' '}
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">Problem.aiHints</code>,{' '}
+                        <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">User.aiConversations</code>.
+                        Set <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">AI_ENABLED=true</code> and
+                        add <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">OPENAI_API_KEY</code> to activate.
                     </Callout>
                     <CardGrid cols={2}>
                         <FeatureCard icon="💡" title="Hint Generation" desc="Progressive hints when a user is stuck, without giving away the solution." />
@@ -426,26 +426,26 @@ D6 Retention= avgRecallScore×0.5 + onTimeRate×0.3 + trend×0.2`}
                 <Section id="api">
                     <SectionTitle icon="🔌">API Endpoints</SectionTitle>
                     <SectionDesc>
-                        All responses: <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">
+                        All responses: <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">
                             {'{"success": true, "data": {...}, "message": "..."}'}
                         </code>
                     </SectionDesc>
                     <Table
                         headers={['Method', 'Endpoint', 'Auth', 'Description']}
                         rows={[
-                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-300 text-xs">/api/auth/register</code>, '—', 'Register new account'],
-                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-300 text-xs">/api/auth/login</code>, '—', 'Login, get JWT token'],
-                            [<span className="text-success font-mono font-bold text-xs">GET</span>, <code className="text-brand-300 text-xs">/api/auth/me</code>, 'JWT', 'Get current user'],
-                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-300 text-xs">/api/auth/admin/claim</code>, 'JWT', 'Claim admin role'],
-                            [<span className="text-success font-mono font-bold text-xs">GET</span>, <code className="text-brand-300 text-xs">/api/problems</code>, 'JWT', 'List all problems'],
-                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-300 text-xs">/api/problems</code>, 'Admin', 'Create problem'],
-                            [<span className="text-warning font-mono font-bold text-xs">PUT</span>, <code className="text-brand-300 text-xs">/api/problems/:id</code>, 'Admin', 'Update problem'],
-                            [<span className="text-danger font-mono font-bold text-xs">DELETE</span>, <code className="text-brand-300 text-xs">/api/problems/:id</code>, 'Admin', 'Delete problem'],
-                            [<span className="text-success font-mono font-bold text-xs">GET</span>, <code className="text-brand-300 text-xs">/api/solutions/problem/:id</code>, 'JWT', 'All solutions for a problem'],
-                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-300 text-xs">/api/solutions</code>, 'JWT', 'Submit solution'],
-                            [<span className="text-warning font-mono font-bold text-xs">PUT</span>, <code className="text-brand-300 text-xs">/api/solutions/:id</code>, 'JWT+Owner', 'Update own solution'],
-                            [<span className="text-success font-mono font-bold text-xs">GET</span>, <code className="text-brand-300 text-xs">/api/stats/leaderboard</code>, 'JWT', 'Ranked leaderboard'],
-                            [<span className="text-success font-mono font-bold text-xs">GET</span>, <code className="text-brand-300 text-xs">/api/stats/report</code>, 'JWT', 'My 6D intelligence report'],
+                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-fg-soft text-xs">/api/auth/register</code>, '—', 'Register new account'],
+                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-fg-soft text-xs">/api/auth/login</code>, '—', 'Login, get JWT token'],
+                            [<span className="text-success-fg font-mono font-bold text-xs">GET</span>, <code className="text-brand-fg-soft text-xs">/api/auth/me</code>, 'JWT', 'Get current user'],
+                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-fg-soft text-xs">/api/auth/admin/claim</code>, 'JWT', 'Claim admin role'],
+                            [<span className="text-success-fg font-mono font-bold text-xs">GET</span>, <code className="text-brand-fg-soft text-xs">/api/problems</code>, 'JWT', 'List all problems'],
+                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-fg-soft text-xs">/api/problems</code>, 'Admin', 'Create problem'],
+                            [<span className="text-warning-fg font-mono font-bold text-xs">PUT</span>, <code className="text-brand-fg-soft text-xs">/api/problems/:id</code>, 'Admin', 'Update problem'],
+                            [<span className="text-danger-fg font-mono font-bold text-xs">DELETE</span>, <code className="text-brand-fg-soft text-xs">/api/problems/:id</code>, 'Admin', 'Delete problem'],
+                            [<span className="text-success-fg font-mono font-bold text-xs">GET</span>, <code className="text-brand-fg-soft text-xs">/api/solutions/problem/:id</code>, 'JWT', 'All solutions for a problem'],
+                            [<span className="text-blue-400 font-mono font-bold text-xs">POST</span>, <code className="text-brand-fg-soft text-xs">/api/solutions</code>, 'JWT', 'Submit solution'],
+                            [<span className="text-warning-fg font-mono font-bold text-xs">PUT</span>, <code className="text-brand-fg-soft text-xs">/api/solutions/:id</code>, 'JWT+Owner', 'Update own solution'],
+                            [<span className="text-success-fg font-mono font-bold text-xs">GET</span>, <code className="text-brand-fg-soft text-xs">/api/stats/leaderboard</code>, 'JWT', 'Ranked leaderboard'],
+                            [<span className="text-success-fg font-mono font-bold text-xs">GET</span>, <code className="text-brand-fg-soft text-xs">/api/stats/report</code>, 'JWT', 'My 6D intelligence report'],
                         ]}
                     />
                 </Section>
@@ -453,7 +453,7 @@ D6 Retention= avgRecallScore×0.5 + onTimeRate×0.3 + trend×0.2`}
                 {/* Schema */}
                 <Section id="schema">
                     <SectionTitle icon="🗂">Database Schema</SectionTitle>
-                    <SectionDesc>Key models. Full schema in <code className="text-brand-300 bg-brand-400/10 px-1 rounded text-xs">server/prisma/schema.prisma</code>.</SectionDesc>
+                    <SectionDesc>Key models. Full schema in <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">server/prisma/schema.prisma</code>.</SectionDesc>
                     <ArchBlock>
                         {`User                         Problem
 ─────────────────────        ──────────────────────────
@@ -490,24 +490,24 @@ reviewDates        JSON array`}
                     <Table
                         headers={['Route', 'Page', 'Auth', 'Status']}
                         rows={[
-                            [<code className="text-brand-300 text-xs">/login</code>, 'Login', 'Public', <Check />],
-                            [<code className="text-brand-300 text-xs">/register</code>, 'Register', 'Public', <Check />],
-                            [<code className="text-brand-300 text-xs">/</code>, 'Dashboard', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/problems</code>, 'Problem List', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/problems/:id</code>, 'Problem Detail', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/problems/:id/submit</code>, 'Submit Solution', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/problems/:id/edit</code>, 'Edit Solution', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/interview</code>, 'Interview Simulation', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/review</code>, 'Review Queue', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/report</code>, 'Intelligence Report', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/leaderboard</code>, 'Leaderboard', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/profile/:username</code>, 'Member Profile', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/settings</code>, 'Settings', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/admin</code>, 'Admin Panel', 'Admin', <Check />],
-                            [<code className="text-brand-300 text-xs">/admin/problems/new</code>, 'Add Problem', 'Admin', <Check />],
-                            [<code className="text-brand-300 text-xs">/admin/problems/:id/edit</code>, 'Edit Problem', 'Admin', <Check />],
-                            [<code className="text-brand-300 text-xs">/docs/readme</code>, 'README', 'JWT', <Check />],
-                            [<code className="text-brand-300 text-xs">/docs/setup</code>, 'Setup Guide', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/login</code>, 'Login', 'Public', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/register</code>, 'Register', 'Public', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/</code>, 'Dashboard', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/problems</code>, 'Problem List', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/problems/:id</code>, 'Problem Detail', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/problems/:id/submit</code>, 'Submit Solution', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/problems/:id/edit</code>, 'Edit Solution', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/interview</code>, 'Interview Simulation', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/review</code>, 'Review Queue', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/report</code>, 'Intelligence Report', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/leaderboard</code>, 'Leaderboard', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/profile/:username</code>, 'Member Profile', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/settings</code>, 'Settings', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/admin</code>, 'Admin Panel', 'Admin', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/admin/problems/new</code>, 'Add Problem', 'Admin', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/admin/problems/:id/edit</code>, 'Edit Problem', 'Admin', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/docs/readme</code>, 'README', 'JWT', <Check />],
+                            [<code className="text-brand-fg-soft text-xs">/docs/setup</code>, 'Setup Guide', 'JWT', <Check />],
                         ]}
                     />
                 </Section>
@@ -600,17 +600,17 @@ reviewDates        JSON array`}
                     <strong className="text-text-secondary">ProbSolver</strong> · Team Edition · v2.0.0
                 </span>
                 <div className="flex gap-4">
-                    <Link to="/docs/setup" className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
+                    <Link to="/docs/setup" className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         Setup Guide →
                     </Link>
                     <Link to="/docs/deploy"
                         className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                  text-xs font-medium text-text-tertiary
                  hover:bg-surface-3 hover:text-text-primary transition-all">
-                        <span className="w-1.5 h-1.5 rounded-full bg-success/50" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-success-soft" />
                         Deploy Guide →
                     </Link>
-                    <Link to="/" className="text-xs text-text-tertiary hover:text-brand-300 transition-colors">
+                    <Link to="/" className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         ← Back to App
                     </Link>
                 </div>

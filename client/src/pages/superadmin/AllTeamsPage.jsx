@@ -120,9 +120,9 @@ export default function AllTeamsPage() {
     }
 
     const statusConfig = {
-        ACTIVE: { color: 'bg-success/10 text-success border-success/25', label: 'Active' },
-        PENDING: { color: 'bg-warning/10 text-warning border-warning/25', label: 'Pending' },
-        REJECTED: { color: 'bg-danger/10 text-danger border-danger/25', label: 'Rejected' },
+        ACTIVE: { color: 'bg-success-soft text-success-fg border-success-line', label: 'Active' },
+        PENDING: { color: 'bg-warning-soft text-warning-fg border-warning-line', label: 'Pending' },
+        REJECTED: { color: 'bg-danger-soft text-danger-fg border-danger-line', label: 'Rejected' },
     }
 
     return (
@@ -212,7 +212,7 @@ export default function AllTeamsPage() {
                                             <Button variant="secondary" size="sm"
                                                 onClick={() => handleDelete(team.id, team.name)}
                                                 disabled={actionLoading === team.id}
-                                                className="text-danger hover:text-danger">
+                                                className="text-danger-fg hover:text-danger-fg">
                                                 Delete
                                             </Button>
                                         )}
@@ -244,8 +244,8 @@ export default function AllTeamsPage() {
                                                                     <div key={m.id}
                                                                         className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
                                                                         <div className="flex items-center gap-3">
-                                                                            <div className="w-7 h-7 rounded-full bg-brand-400/20 flex items-center
-                         justify-center text-xs font-bold text-brand-300">
+                                                                            <div className="w-7 h-7 rounded-full bg-brand-soft flex items-center
+                         justify-center text-xs font-bold text-brand-fg-soft">
                                                                                 {m.name?.charAt(0).toUpperCase()}
                                                                             </div>
                                                                             <div>
@@ -257,7 +257,7 @@ export default function AllTeamsPage() {
                                                                             <span className={cn(
                                                                                 'text-[9px] font-bold px-1.5 py-px rounded-full border',
                                                                                 m.teamRole === 'TEAM_ADMIN'
-                                                                                    ? 'bg-warning/10 text-warning border-warning/20'
+                                                                                    ? 'bg-warning-soft text-warning-fg border-warning-line'
                                                                                     : 'bg-surface-3 text-text-disabled border-border-subtle'
                                                                             )}>
                                                                                 {m.teamRole === 'TEAM_ADMIN' ? 'Admin' : 'Member'}
@@ -273,9 +273,9 @@ export default function AllTeamsPage() {
                                                                                 )}
                                                                                 disabled={actionLoading === m.id}
                                                                                 className="text-[10px] font-bold text-text-disabled
-                           hover:text-brand-300 transition-colors
-                           px-2 py-1 rounded-lg hover:bg-brand-400/10
-                           border border-transparent hover:border-brand-400/20"
+                           hover:text-brand-fg-soft transition-colors
+                           px-2 py-1 rounded-lg hover:bg-brand-soft
+                           border border-transparent hover:border-brand-line"
                                                                             >
                                                                                 {actionLoading === m.id ? '...' :
                                                                                     m.teamRole === 'TEAM_ADMIN' ? 'Demote' : 'Promote'}
@@ -287,9 +287,9 @@ export default function AllTeamsPage() {
                                                         )}
 
                                                         {team.joinCode && (
-                                                            <div className="mt-3 p-3 bg-brand-400/5 border border-brand-400/20 rounded-lg">
+                                                            <div className="mt-3 p-3 bg-brand-soft border border-brand-line rounded-lg">
                                                                 <p className="text-[10px] text-text-disabled uppercase tracking-widest mb-1">Join Code</p>
-                                                                <p className="font-mono text-sm font-bold text-brand-300">{team.joinCode}</p>
+                                                                <p className="font-mono text-sm font-bold text-brand-fg-soft">{team.joinCode}</p>
                                                             </div>
                                                         )}
                                                     </div>

@@ -11,7 +11,7 @@ const ROADMAP = [
         title: 'Complete Interview Intelligence Platform',
         color: 'border-success',
         dotColor: 'bg-success',
-        badge: { text: 'LIVE', color: 'bg-success/12 text-success border-success/25' },
+        badge: { text: 'LIVE', color: 'bg-success-soft text-success-fg border-success-line' },
         items: [
             // UPDATED: 6-category → 7-category, correct names
             '7-category problem system — Coding, System Design, Low-Level Design, Behavioral, Technical Knowledge, Databases, HR',
@@ -32,7 +32,7 @@ const ROADMAP = [
         title: 'Enhanced Experience',
         color: 'border-brand-400',
         dotColor: 'bg-brand-400',
-        badge: { text: 'NEXT', color: 'bg-brand-400/12 text-brand-300 border-brand-400/25' },
+        badge: { text: 'NEXT', color: 'bg-brand-soft text-brand-fg-soft border-brand-line' },
         items: [
             'AI Problem Library — seed teams with 50+ problems in 30 seconds',
             'Voice-based mock interviews (Whisper STT + TTS)',
@@ -48,7 +48,7 @@ const ROADMAP = [
         title: 'Advanced Intelligence',
         color: 'border-warning',
         dotColor: 'bg-warning',
-        badge: { text: 'PLANNED', color: 'bg-warning/12 text-warning border-warning/25' },
+        badge: { text: 'PLANNED', color: 'bg-warning-soft text-warning-fg border-warning-line' },
         items: [
             'Fine-tuned scoring model — instant quality assessment without API calls',
             'Cross-category pattern connections',

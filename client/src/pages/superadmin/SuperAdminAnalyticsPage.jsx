@@ -54,9 +54,9 @@ function HealthRing({ score }) {
 // ── Trend badge ────────────────────────────────────────
 function TrendBadge({ trend }) {
     const config = {
-        growing: { label: 'Growing', color: 'bg-success/12 text-success border-success/25', icon: '↑' },
-        stable: { label: 'Stable', color: 'bg-info/12 text-info border-info/25', icon: '→' },
-        declining: { label: 'Declining', color: 'bg-danger/12 text-danger border-danger/25', icon: '↓' },
+        growing: { label: 'Growing', color: 'bg-success-soft text-success-fg border-success-line', icon: '↑' },
+        stable: { label: 'Stable', color: 'bg-info-soft text-info-fg border-info-line', icon: '→' },
+        declining: { label: 'Declining', color: 'bg-danger-soft text-danger-fg border-danger-line', icon: '↓' },
     }
     const c = config[trend] || config.stable
     return (
@@ -75,7 +75,7 @@ function GrowthValue({ value, suffix = '%' }) {
     return (
         <span className={cn(
             'text-sm font-extrabold font-mono',
-            value > 0 ? 'text-success' : value < 0 ? 'text-danger' : 'text-text-primary'
+            value > 0 ? 'text-success-fg' : value < 0 ? 'text-danger-fg' : 'text-text-primary'
         )}>
             {formatted}{suffix}
         </span>
@@ -133,10 +133,10 @@ function FunnelStep({ label, value, total, index }) {
 // ── Insight card ───────────────────────────────────────
 function InsightCard({ insight, index }) {
     const typeConfig = {
-        positive: { icon: '✅', border: 'border-success/20', bg: 'bg-success/3' },
-        warning: { icon: '⚠️', border: 'border-warning/20', bg: 'bg-warning/3' },
-        critical: { icon: '🚨', border: 'border-danger/20', bg: 'bg-danger/3' },
-        opportunity: { icon: '💡', border: 'border-brand-400/20', bg: 'bg-brand-400/3' },
+        positive: { icon: '✅', border: 'border-success-line', bg: 'bg-success-soft' },
+        warning: { icon: '⚠️', border: 'border-warning-line', bg: 'bg-warning-soft' },
+        critical: { icon: '🚨', border: 'border-danger-line', bg: 'bg-danger-soft' },
+        opportunity: { icon: '💡', border: 'border-brand-line', bg: 'bg-brand-soft' },
     }
     const c = typeConfig[insight.type] || typeConfig.opportunity
     return (
@@ -152,7 +152,7 @@ function InsightCard({ insight, index }) {
                     <h4 className="text-sm font-bold text-text-primary mb-0.5">{insight.title}</h4>
                     <p className="text-xs text-text-tertiary leading-relaxed mb-2">{insight.detail}</p>
                     {insight.action && (
-                        <p className="text-xs font-semibold text-brand-300">→ {insight.action}</p>
+                        <p className="text-xs font-semibold text-brand-fg-soft">→ {insight.action}</p>
                     )}
                 </div>
             </div>
@@ -163,14 +163,14 @@ function InsightCard({ insight, index }) {
 // ── Recommendation card ────────────────────────────────
 function RecommendationCard({ rec, index }) {
     const priorityColor = {
-        1: 'border-danger/25 bg-danger/3',
-        2: 'border-warning/25 bg-warning/3',
-        3: 'border-info/25 bg-info/3',
+        1: 'border-danger-line bg-danger-soft',
+        2: 'border-warning-line bg-warning-soft',
+        3: 'border-info-line bg-info-soft',
     }
     const effortBadge = {
-        low: 'bg-success/12 text-success border-success/25',
-        medium: 'bg-warning/12 text-warning border-warning/25',
-        high: 'bg-danger/12 text-danger border-danger/25',
+        low: 'bg-success-soft text-success-fg border-success-line',
+        medium: 'bg-warning-soft text-warning-fg border-warning-line',
+        high: 'bg-danger-soft text-danger-fg border-danger-line',
     }
     return (
         <motion.div
@@ -190,7 +190,7 @@ function RecommendationCard({ rec, index }) {
             </div>
             <p className="text-xs text-text-tertiary leading-relaxed mb-1">{rec.reason}</p>
             {rec.impact && (
-                <p className="text-xs text-success font-semibold">Expected: {rec.impact}</p>
+                <p className="text-xs text-success-fg font-semibold">Expected: {rec.impact}</p>
             )}
         </motion.div>
     )
@@ -199,9 +199,9 @@ function RecommendationCard({ rec, index }) {
 // ── Risk card ──────────────────────────────────────────
 function RiskCard({ risk, index }) {
     const severityConfig = {
-        high: { icon: '🔴', border: 'border-danger/25 bg-danger/3' },
-        medium: { icon: '🟡', border: 'border-warning/25 bg-warning/3' },
-        low: { icon: '🟢', border: 'border-success/25 bg-success/3' },
+        high: { icon: '🔴', border: 'border-danger-line bg-danger-soft' },
+        medium: { icon: '🟡', border: 'border-warning-line bg-warning-soft' },
+        low: { icon: '🟢', border: 'border-success-line bg-success-soft' },
     }
     const c = severityConfig[risk.severity] || severityConfig.medium
     return (
@@ -216,7 +216,7 @@ function RiskCard({ risk, index }) {
                 <div>
                     <h4 className="text-sm font-bold text-text-primary mb-0.5">{risk.title}</h4>
                     <p className="text-xs text-text-tertiary leading-relaxed mb-1">{risk.detail}</p>
-                    <p className="text-xs text-brand-300 font-semibold">Mitigation: {risk.mitigation}</p>
+                    <p className="text-xs text-brand-fg-soft font-semibold">Mitigation: {risk.mitigation}</p>
                 </div>
             </div>
         </motion.div>
@@ -226,9 +226,9 @@ function RiskCard({ risk, index }) {
 // ── Operational action card ────────────────────────────
 function ActionCard({ action, index }) {
     const urgencyConfig = {
-        immediate: { label: 'NOW', color: 'bg-danger/12 text-danger border-danger/25' },
-        this_week: { label: 'This Week', color: 'bg-warning/12 text-warning border-warning/25' },
-        this_month: { label: 'This Month', color: 'bg-info/12 text-info border-info/25' },
+        immediate: { label: 'NOW', color: 'bg-danger-soft text-danger-fg border-danger-line' },
+        this_week: { label: 'This Week', color: 'bg-warning-soft text-warning-fg border-warning-line' },
+        this_month: { label: 'This Month', color: 'bg-info-soft text-info-fg border-info-line' },
     }
     const c = urgencyConfig[action.urgency] || urgencyConfig.this_week
     return (
@@ -344,7 +344,7 @@ export default function SuperAdminAnalyticsPage() {
                                 className={cn(
                                     'px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
                                     period === d
-                                        ? 'bg-danger/15 text-danger'
+                                        ? 'bg-danger-soft text-danger-fg'
                                         : 'text-text-tertiary hover:text-text-primary'
                                 )}
                             >
@@ -380,7 +380,7 @@ export default function SuperAdminAnalyticsPage() {
                     className="mb-6"
                 >
                     {/* Executive summary + health score */}
-                    <div className="bg-surface-1 border border-danger/20 rounded-2xl p-6 mb-4">
+                    <div className="bg-surface-1 border border-danger-line rounded-2xl p-6 mb-4">
                         <div className="flex items-start gap-5 flex-wrap">
                             <HealthRing score={analysis.healthScore || 50} />
                             <div className="flex-1 min-w-0">
@@ -389,7 +389,7 @@ export default function SuperAdminAnalyticsPage() {
                                         Executive Summary
                                     </h2>
                                     <span className="text-[9px] font-bold px-2 py-0.5 rounded-full
-                                           bg-danger/12 text-danger border border-danger/25">
+                                           bg-danger-soft text-danger-fg border border-danger-line">
                                         AI Generated
                                     </span>
                                     {analysis.generatedAt && (
@@ -484,17 +484,17 @@ export default function SuperAdminAnalyticsPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
                         <MetricCard icon="👥" value={m.overview.totalUsers} label="Total Users"
                             sub={m.engagement.newUsers > 0 ? `+${m.engagement.newUsers} new` : undefined}
-                            color="text-brand-300" />
+                            color="text-brand-fg-soft" />
                         <MetricCard icon="🟢" value={m.overview.activeUsers} label="Active"
-                            color="text-success" />
+                            color="text-success-fg" />
                         <MetricCard icon="🏢" value={m.overview.totalTeams} label="Teams"
-                            color="text-info" />
+                            color="text-info-fg" />
                         <MetricCard icon="📋" value={m.overview.totalProblems} label="Problems"
-                            color="text-warning" />
+                            color="text-warning-fg" />
                         <MetricCard icon="✅" value={m.overview.totalSolutions} label="Solutions"
-                            color="text-success" />
+                            color="text-success-fg" />
                         <MetricCard icon="🤖" value={m.overview.totalAICalls} label="AI Calls"
-                            color="text-brand-300" />
+                            color="text-brand-fg-soft" />
                     </div>
 
                     {/* Growth indicators */}
@@ -554,12 +554,12 @@ export default function SuperAdminAnalyticsPage() {
                             {(m.funnel.unverified > 0 || m.funnel.stuckInOnboarding?.length > 0) && (
                                 <div className="mt-4 pt-4 border-t border-border-default space-y-2">
                                     {m.funnel.unverified > 0 && (
-                                        <p className="text-xs text-warning">
+                                        <p className="text-xs text-warning-fg">
                                             ⚠️ {m.funnel.unverified} users registered but never verified email
                                         </p>
                                     )}
                                     {m.funnel.stuckInOnboarding?.length > 0 && (
-                                        <p className="text-xs text-warning">
+                                        <p className="text-xs text-warning-fg">
                                             ⚠️ {m.funnel.stuckInOnboarding.length} users stuck in onboarding (&gt;3 days)
                                         </p>
                                     )}
@@ -634,19 +634,19 @@ export default function SuperAdminAnalyticsPage() {
                             </h3>
                             <div className="grid grid-cols-3 gap-3 mb-4">
                                 <div className="text-center bg-surface-2 rounded-xl p-3">
-                                    <div className="text-lg font-extrabold font-mono text-success">
+                                    <div className="text-lg font-extrabold font-mono text-success-fg">
                                         {m.overview.activeUsers}
                                     </div>
                                     <p className="text-[9px] text-text-disabled uppercase">Active</p>
                                 </div>
                                 <div className="text-center bg-surface-2 rounded-xl p-3">
-                                    <div className="text-lg font-extrabold font-mono text-warning">
+                                    <div className="text-lg font-extrabold font-mono text-warning-fg">
                                         {m.overview.inactiveUsers}
                                     </div>
                                     <p className="text-[9px] text-text-disabled uppercase">Inactive</p>
                                 </div>
                                 <div className="text-center bg-surface-2 rounded-xl p-3">
-                                    <div className="text-lg font-extrabold font-mono text-danger">
+                                    <div className="text-lg font-extrabold font-mono text-danger-fg">
                                         {m.overview.dormantUsers}
                                     </div>
                                     <p className="text-[9px] text-text-disabled uppercase">Dormant</p>
@@ -671,13 +671,13 @@ export default function SuperAdminAnalyticsPage() {
                             </h3>
                             <div className="grid grid-cols-3 gap-3 mb-4">
                                 <div className="text-center bg-surface-2 rounded-xl p-3">
-                                    <div className="text-lg font-extrabold font-mono text-success">
+                                    <div className="text-lg font-extrabold font-mono text-success-fg">
                                         {m.teams.active}
                                     </div>
                                     <p className="text-[9px] text-text-disabled uppercase">Active</p>
                                 </div>
                                 <div className="text-center bg-surface-2 rounded-xl p-3">
-                                    <div className="text-lg font-extrabold font-mono text-warning">
+                                    <div className="text-lg font-extrabold font-mono text-warning-fg">
                                         {m.teams.pending}
                                     </div>
                                     <p className="text-[9px] text-text-disabled uppercase">Pending</p>
@@ -692,13 +692,13 @@ export default function SuperAdminAnalyticsPage() {
                             {/* Pending approvals */}
                             {m.teams.pendingApprovals?.length > 0 && (
                                 <div className="mb-3">
-                                    <p className="text-xs font-bold text-warning mb-2">
+                                    <p className="text-xs font-bold text-warning-fg mb-2">
                                         ⏳ Pending Approvals
                                     </p>
                                     <div className="space-y-1.5">
                                         {m.teams.pendingApprovals.map((t, i) => (
                                             <div key={i} className="flex items-center justify-between text-xs
-                                                  bg-warning/5 rounded-lg p-2 border border-warning/15">
+                                                  bg-warning-soft rounded-lg p-2 border border-warning-line">
                                                 <span className="font-semibold text-text-primary">{t.name}</span>
                                                 <span className="text-text-disabled">
                                                     {t.daysPending}d waiting
@@ -711,13 +711,13 @@ export default function SuperAdminAnalyticsPage() {
                             {/* At-risk teams */}
                             {m.teams.atRisk?.length > 0 && (
                                 <div>
-                                    <p className="text-xs font-bold text-danger mb-2">
+                                    <p className="text-xs font-bold text-danger-fg mb-2">
                                         🚨 At-Risk Teams (no activity in {period}d)
                                     </p>
                                     <div className="space-y-1.5">
                                         {m.teams.atRisk.map((t, i) => (
                                             <div key={i} className="flex items-center justify-between text-xs
-                                                  bg-danger/5 rounded-lg p-2 border border-danger/15">
+                                                  bg-danger-soft rounded-lg p-2 border border-danger-line">
                                                 <span className="font-semibold text-text-primary">{t.name}</span>
                                                 <span className="text-text-disabled">
                                                     {t.members} members · {t.problems} problems
@@ -792,7 +792,7 @@ export default function SuperAdminAnalyticsPage() {
                             <div className="border-t border-border-default pt-4">
                                 <div className="flex items-center justify-between text-xs mb-2">
                                     <span className="text-text-tertiary">Total AI Calls</span>
-                                    <span className="font-bold font-mono text-brand-300">
+                                    <span className="font-bold font-mono text-brand-fg-soft">
                                         {m.aiUsage.totalCalls}
                                     </span>
                                 </div>
@@ -804,7 +804,7 @@ export default function SuperAdminAnalyticsPage() {
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
                                     <span className="text-text-tertiary">Est. Cost (gpt-4o-mini)</span>
-                                    <span className="font-bold font-mono text-warning">
+                                    <span className="font-bold font-mono text-warning-fg">
                                         ${m.aiUsage.estimatedCost}
                                     </span>
                                 </div>
@@ -834,7 +834,7 @@ export default function SuperAdminAnalyticsPage() {
                                         {item.label}
                                     </p>
                                     {item.new > 0 && (
-                                        <p className="text-[10px] text-success mt-0.5">+{item.new} new</p>
+                                        <p className="text-[10px] text-success-fg mt-0.5">+{item.new} new</p>
                                     )}
                                 </div>
                             ))}

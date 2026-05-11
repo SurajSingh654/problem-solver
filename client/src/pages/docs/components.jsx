@@ -117,8 +117,8 @@ export function Table({ headers, rows }) {
 }
 
 // ── Check / cross ──────────────────────────────────────
-export const Check = () => <span className="text-success font-bold">✓</span>
-export const Cross = () => <span className="text-danger  font-bold">✗</span>
+export const Check = () => <span className="text-success-fg font-bold">✓</span>
+export const Cross = () => <span className="text-danger-fg  font-bold">✗</span>
 
 // ── Code block ─────────────────────────────────────────
 export function CodeBlock({ label, color = '#22c55e', children, copyText }) {
@@ -163,9 +163,9 @@ export function CodeBlock({ label, color = '#22c55e', children, copyText }) {
 export function Callout({ type = 'info', children }) {
     const styles = {
         info: { bg: 'bg-blue-500/8', border: 'border-l-blue-500', icon: 'ℹ️' },
-        success: { bg: 'bg-success/8', border: 'border-l-success', icon: '✅' },
-        warning: { bg: 'bg-warning/8', border: 'border-l-warning', icon: '⚠️' },
-        danger: { bg: 'bg-danger/8', border: 'border-l-danger', icon: '🚨' },
+        success: { bg: 'bg-success-soft', border: 'border-l-success', icon: '✅' },
+        warning: { bg: 'bg-warning-soft', border: 'border-l-warning', icon: '⚠️' },
+        danger: { bg: 'bg-danger-soft', border: 'border-l-danger', icon: '🚨' },
     }
     const s = styles[type]
     return (
@@ -255,7 +255,7 @@ export function TroubleItem({ error, children }) {
     return (
         <div className="bg-surface-2 border border-border-default rounded-xl p-4 mb-2.5">
             <div className="flex items-start gap-2.5 mb-2.5">
-                <span className="bg-danger/12 text-danger border border-danger/25
+                <span className="bg-danger-soft text-danger-fg border border-danger-line
                          rounded px-2 py-0.5 text-[11px] font-extrabold
                          flex-shrink-0 mt-0.5">
                     {error ? 'ERROR' : 'WARN'}
@@ -306,7 +306,7 @@ export function ScriptItem({ cmd, desc, dir }) {
     return (
         <div className="flex items-center gap-4 bg-surface-2 border border-border-default
                     rounded-lg px-4 py-2.5 hover:border-border-strong transition-colors">
-            <code className="font-mono text-xs text-success min-w-[180px] flex-shrink-0">
+            <code className="font-mono text-xs text-success-fg min-w-[180px] flex-shrink-0">
                 {cmd}
             </code>
             <span className="text-xs text-text-tertiary flex-1">{desc}</span>
@@ -328,13 +328,13 @@ export function SbLink({ href, active, onClick, children }) {
                 'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium',
                 'transition-all cursor-pointer',
                 active
-                    ? 'bg-brand-400/12 text-brand-300 border border-brand-400/22'
+                    ? 'bg-brand-soft text-brand-fg-soft border border-brand-line'
                     : 'text-text-tertiary hover:bg-surface-3 hover:text-text-primary'
             )}
         >
             <span className={cn(
                 'w-1.5 h-1.5 rounded-full flex-shrink-0',
-                active ? 'bg-brand-400' : 'bg-brand-400/40'
+                active ? 'bg-brand-400' : 'bg-brand-soft'
             )} />
             {children}
         </a>

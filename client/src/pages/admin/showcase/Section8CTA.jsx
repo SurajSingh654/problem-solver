@@ -10,9 +10,9 @@ export default function Section8CTA() {
             <div className="relative overflow-hidden hero-gradient">
                 <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute top-[-100px] left-[20%] w-[400px] h-[400px]
-                          rounded-full bg-brand-400/8 blur-[120px]" />
+                          rounded-full bg-brand-soft blur-[120px]" />
                     <div className="absolute bottom-[-100px] right-[10%] w-[300px] h-[300px]
-                          rounded-full bg-success/5 blur-[100px]" />
+                          rounded-full bg-success-soft blur-[100px]" />
                 </div>
 
                 <div className="relative z-10 max-w-[800px] mx-auto px-8 py-24 text-center">
@@ -46,7 +46,7 @@ export default function Section8CTA() {
                         <button
                             onClick={() => navigate('/auth/register')}
                             className="px-10 py-4 rounded-xl bg-brand-400 text-white font-bold text-base
-                         hover:bg-brand-400/90 transition-all shadow-glow-sm
+                         hover:bg-brand-soft transition-all shadow-glow-sm
                          flex items-center gap-2"
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"

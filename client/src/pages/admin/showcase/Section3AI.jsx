@@ -27,28 +27,28 @@ export default function Section3AI({ stats }) {
                             title: 'Embeddings',
                             desc: 'Every solution converted to 1536-dimension vectors. Meaning is captured, not just keywords.',
                             icon: '📐',
-                            color: 'border-brand-400/25 bg-brand-400/5',
+                            color: 'border-brand-line bg-brand-soft',
                         },
                         {
                             num: '02',
                             title: 'RAG Retrieval',
                             desc: 'Before any AI call, we search for teammate solutions, admin notes, and problem context.',
                             icon: '🔍',
-                            color: 'border-success/25 bg-success/5',
+                            color: 'border-success-line bg-success-soft',
                         },
                         {
                             num: '03',
                             title: 'Function Calling',
                             desc: 'AI autonomously looks up your profile, searches teammates, saves notes, and manages time.',
                             icon: '🔧',
-                            color: 'border-warning/25 bg-warning/5',
+                            color: 'border-warning-line bg-warning-soft',
                         },
                         {
                             num: '04',
                             title: 'Validation',
                             desc: 'Every response validated against schemas. No broken outputs, no parsing errors. Consistent every time.',
                             icon: '✅',
-                            color: 'border-info/25 bg-info/5',
+                            color: 'border-info-line bg-info-soft',
                         },
                     ].map((layer, i) => (
                         <motion.div
@@ -85,23 +85,23 @@ export default function Section3AI({ stats }) {
                         The same solution reviewed by a generic AI vs our RAG-enhanced pipeline.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="bg-danger/5 border border-danger/15 rounded-xl p-5">
+                        <div className="bg-danger-soft border border-danger-line rounded-xl p-5">
                             <div className="flex items-center gap-2 mb-3">
                                 <span className="text-sm">❌</span>
-                                <span className="text-xs font-bold text-danger">Generic AI</span>
+                                <span className="text-xs font-bold text-danger-fg">Generic AI</span>
                             </div>
                             <p className="text-sm text-text-tertiary leading-relaxed italic">
                                 "Your approach is reasonable. Consider optimizing the time complexity.
                                 The code is clean but could be improved. Think about edge cases."
                             </p>
-                            <p className="text-[10px] text-text-disabled mt-3 border-t border-danger/10 pt-3">
+                            <p className="text-[10px] text-text-disabled mt-3 border-t border-danger-line pt-3">
                                 Vague. Could apply to literally any solution. Zero team context.
                             </p>
                         </div>
-                        <div className="bg-success/5 border border-success/15 rounded-xl p-5">
+                        <div className="bg-success-soft border border-success-line rounded-xl p-5">
                             <div className="flex items-center gap-2 mb-3">
                                 <span className="text-sm">✅</span>
-                                <span className="text-xs font-bold text-success">ProbSolver AI (RAG)</span>
+                                <span className="text-xs font-bold text-success-fg">ProbSolver AI (RAG)</span>
                             </div>
                             <p className="text-sm text-text-tertiary leading-relaxed italic">
                                 "Your O(n²) nested loop works but your teammate Alex solved this in O(n) using
@@ -109,7 +109,7 @@ export default function Section3AI({ stats }) {
                                 Your Feynman explanation is strong but missing the real-world connection
                                 that 2 other teammates mentioned."
                             </p>
-                            <p className="text-[10px] text-text-disabled mt-3 border-t border-success/10 pt-3">
+                            <p className="text-[10px] text-text-disabled mt-3 border-t border-success-line pt-3">
                                 Specific. Comparative. Names teammates. Checks admin expectations.
                             </p>
                         </div>
@@ -142,9 +142,9 @@ export default function Section3AI({ stats }) {
                         initial={{ opacity: 0, y: 12 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-6"
+                        className="bg-brand-soft border border-brand-line rounded-2xl p-6"
                     >
-                        <h3 className="text-xs font-bold text-brand-300 uppercase tracking-widest mb-4">
+                        <h3 className="text-xs font-bold text-brand-fg-soft uppercase tracking-widest mb-4">
                             AI Activity — Live
                         </h3>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -156,7 +156,7 @@ export default function Section3AI({ stats }) {
                             ].map((s, i) => (
                                 <div key={s.label} className="text-center">
                                     <span className="text-xl">{s.icon}</span>
-                                    <div className="text-xl font-extrabold font-mono text-brand-300 mt-1">
+                                    <div className="text-xl font-extrabold font-mono text-brand-fg-soft mt-1">
                                         {s.value}
                                     </div>
                                     <div className="text-[10px] text-text-disabled uppercase tracking-wider mt-0.5">

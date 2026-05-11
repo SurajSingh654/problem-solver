@@ -40,11 +40,11 @@ export function Section({ id, children, className }) {
 // ── Section eyebrow badge ──────────────────────────────
 export function SectionBadge({ label, color = 'brand' }) {
     const colors = {
-        brand: 'bg-brand-400/10 border-brand-400/25 text-brand-300',
-        success: 'bg-success/10 border-success/25 text-success',
-        warning: 'bg-warning/10 border-warning/25 text-warning',
-        danger: 'bg-danger/10 border-danger/25 text-danger',
-        info: 'bg-info/10 border-info/25 text-info',
+        brand: 'bg-brand-soft border-brand-line text-brand-fg-soft',
+        success: 'bg-success-soft border-success-line text-success-fg',
+        warning: 'bg-warning-soft border-warning-line text-warning-fg',
+        danger: 'bg-danger-soft border-danger-line text-danger-fg',
+        info: 'bg-info-soft border-info-line text-info-fg',
     }
 
     return (
@@ -106,7 +106,7 @@ export function FeatureCard({ icon, title, desc, tag, color, delay = 0, onClick 
             className={cn(
                 'group relative bg-surface-1 border border-border-default rounded-2xl p-6',
                 'transition-all duration-300',
-                'hover:-translate-y-1 hover:shadow-lg hover:border-brand-400/30',
+                'hover:-translate-y-1 hover:shadow-lg hover:border-brand-line',
                 onClick && 'cursor-pointer'
             )}
         >
@@ -114,7 +114,7 @@ export function FeatureCard({ icon, title, desc, tag, color, delay = 0, onClick 
                 <div className={cn(
                     'w-12 h-12 rounded-xl flex items-center justify-center text-2xl',
                     'flex-shrink-0 border transition-colors',
-                    color || 'bg-brand-400/10 border-brand-400/25'
+                    color || 'bg-brand-soft border-brand-line'
                 )}>
                     {icon}
                 </div>
@@ -123,7 +123,7 @@ export function FeatureCard({ icon, title, desc, tag, color, delay = 0, onClick 
                         <h3 className="text-sm font-bold text-text-primary">{title}</h3>
                         {tag && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                               bg-brand-400/15 text-brand-300 border border-brand-400/25">
+                               bg-brand-soft text-brand-fg-soft border border-brand-line">
                                 {tag}
                             </span>
                         )}
@@ -152,7 +152,7 @@ export function PainPoint({ icon, title, desc, delay = 0 }) {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ delay, duration: 0.4 }}
-            className="flex items-start gap-4 p-4 rounded-xl bg-danger/5 border border-danger/15"
+            className="flex items-start gap-4 p-4 rounded-xl bg-danger-soft border border-danger-line"
         >
             <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
             <div>
@@ -255,11 +255,11 @@ export function TimelinePhase({ phase, index }) {
 // ── Tech stack item ────────────────────────────────────
 export function TechItem({ name, desc, badge, badgeColor = 'brand', delay = 0, direction = 'left' }) {
     const badgeColors = {
-        brand: 'bg-brand-400/10 text-brand-300 border-brand-400/20',
-        success: 'bg-success/10 text-success border-success/20',
-        warning: 'bg-warning/10 text-warning border-warning/20',
-        info: 'bg-info/10 text-info border-info/20',
-        danger: 'bg-danger/10 text-danger border-danger/20',
+        brand: 'bg-brand-soft text-brand-fg-soft border-brand-line',
+        success: 'bg-success-soft text-success-fg border-success-line',
+        warning: 'bg-warning-soft text-warning-fg border-warning-line',
+        info: 'bg-info-soft text-info-fg border-info-line',
+        danger: 'bg-danger-soft text-danger-fg border-danger-line',
     }
 
     return (
@@ -305,7 +305,7 @@ export function DiagramBlock({ children, border = 'border-border-default' }) {
 
 // ── Comparison table check/cross ───────────────────────
 export function Check() {
-    return <span className="text-success font-bold text-sm">✓</span>
+    return <span className="text-success-fg font-bold text-sm">✓</span>
 }
 
 export function Cross() {
@@ -365,9 +365,9 @@ export function DimensionCard({ num, name, color, desc, signals, delay = 0 }) {
 // ── AI feature status item ─────────────────────────────
 export function AIFeatureItem({ icon, name, desc, status = 'Live', delay = 0 }) {
     const statusColors = {
-        'Live': 'bg-success/10 text-success border-success/20',
-        'Beta': 'bg-warning/10 text-warning border-warning/20',
-        'Planned': 'bg-info/10 text-info border-info/20',
+        'Live': 'bg-success-soft text-success-fg border-success-line',
+        'Beta': 'bg-warning-soft text-warning-fg border-warning-line',
+        'Planned': 'bg-info-soft text-info-fg border-info-line',
     }
 
     return (

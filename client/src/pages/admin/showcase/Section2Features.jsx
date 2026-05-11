@@ -11,7 +11,7 @@ const CAPABILITIES = [
         subtitle: '7 Interview Categories',
         desc: 'Coding, System Design, Low-Level Design, Behavioral, Technical Knowledge, Databases, HR — each with a dedicated workspace, category-specific AI review, and progressive follow-up questions.',
         color: 'from-brand-400/20 to-brand-400/5',
-        border: 'border-brand-400/20 hover:border-brand-400/40',
+        border: 'border-brand-line hover:border-brand-line',
         to: '/problems',
         highlights: ['Dedicated workspaces', 'AI-generated content', 'Follow-up questions'],
     },
@@ -21,7 +21,7 @@ const CAPABILITIES = [
         subtitle: 'GPT-4o + WebSocket Streaming',
         desc: 'Real-time conversation with a GPT-4o powered interviewer. 8 interview culture styles (Google, Amazon, Startup, Trading firm...). Split-screen workspace with code editor and diagram canvas. Structured debrief with hire/no-hire verdict.',
         color: 'from-info/20 to-info/5',
-        border: 'border-info/20 hover:border-info/40',
+        border: 'border-info-line hover:border-info-line',
         to: '/mock-interview',
         highlights: ['8 interview styles', 'Real-time streaming', 'Hire/No-Hire debrief'],
     },
@@ -31,7 +31,7 @@ const CAPABILITIES = [
         subtitle: 'Any Subject, Any Difficulty',
         desc: 'Type "TCP/IP", "React Hooks", "Physics", or literally anything — AI generates MCQ questions instantly. Timer, scratchpad, question flagging, and post-quiz AI analysis that identifies your weak areas.',
         color: 'from-warning/20 to-warning/5',
-        border: 'border-warning/20 hover:border-warning/40',
+        border: 'border-warning-line hover:border-warning-line',
         to: '/quizzes',
         highlights: ['Any subject imaginable', 'Post-quiz AI analysis', 'Weak area identification'],
     },
@@ -41,7 +41,7 @@ const CAPABILITIES = [
         subtitle: 'Science-Backed Review Queue',
         desc: 'Forget once, forget forever. Our spaced repetition system schedules reviews at 1, 3, 7, 14, and 30 days. Your confidence rating adapts the schedule — low confidence means you review sooner.',
         color: 'from-success/20 to-success/5',
-        border: 'border-success/20 hover:border-success/40',
+        border: 'border-success-line hover:border-success-line',
         to: '/review',
         highlights: ['Adaptive scheduling', 'Confidence-based', 'Progress tracking'],
     },
@@ -51,7 +51,7 @@ const CAPABILITIES = [
         subtitle: 'Measure Real Readiness',
         desc: 'Not "problems solved" — real readiness. 6 dimensions computed from your actual behavior: Pattern Recognition, Solution Depth, Communication, Optimization, Pressure Performance, Knowledge Retention.',
         color: 'from-brand-400/20 to-purple-400/5',
-        border: 'border-brand-400/20 hover:border-brand-400/40',
+        border: 'border-brand-line hover:border-brand-line',
         to: '/report',
         highlights: ['6 computed dimensions', 'No gaming possible', 'AI weekly coaching plan'],
     },
@@ -61,7 +61,7 @@ const CAPABILITIES = [
         subtitle: 'Learn Together, Grow Together',
         desc: 'See how teammates solve the same problem. Rate each other\'s explanations. Compete on the leaderboard. Your AI reviews compare your work with teammates — "Your colleague Alex used O(n), compare with your O(n²)."',
         color: 'from-danger/20 to-danger/5',
-        border: 'border-danger/20 hover:border-danger/40',
+        border: 'border-danger-line hover:border-danger-line',
         to: '/leaderboard',
         highlights: ['Peer solution viewing', 'Clarity ratings', 'Team leaderboard'],
     },
@@ -75,24 +75,24 @@ const WORKSPACE_HIGHLIGHTS = [
         category: 'Behavioral',
         headline: 'STAR Workspace',
         desc: 'Forces the metacognitive step first — name the competency being tested before writing your story. Five structured STAR sections with per-section depth indicators.',
-        color: 'text-success',
-        bg: 'bg-success/5 border-success/20',
+        color: 'text-success-fg',
+        bg: 'bg-success-soft border-success-line',
     },
     {
         icon: '🧠',
         category: 'Technical Knowledge',
         headline: 'Mechanism-First Workspace',
         desc: '7 subject domains (OS, Networking, DB Internals, DSA Theory, Distributed Systems, AI/ML, Data Engineering). Forces mechanism-level explanation, not textbook definitions.',
-        color: 'text-warning',
-        bg: 'bg-warning/5 border-warning/20',
+        color: 'text-warning-fg',
+        bg: 'bg-warning-soft border-warning-line',
     },
     {
         icon: '🗄️',
         category: 'Databases',
         headline: 'In-House SQL Editor',
         desc: 'Write and submit SQL queries directly in ProbSolver — no external redirects. Two modes: Query Problems (schema reference + Monaco SQL editor) and Schema Design (structured table modeling).',
-        color: 'text-brand-300',
-        bg: 'bg-brand-400/5 border-brand-400/20',
+        color: 'text-brand-fg-soft',
+        bg: 'bg-brand-soft border-brand-line',
     },
 ]
 
@@ -151,7 +151,7 @@ export default function Section2Features() {
                                 ))}
                             </div>
                             <div className="absolute top-6 right-6 text-text-disabled
-                              group-hover:text-brand-300 transition-colors">
+                              group-hover:text-brand-fg-soft transition-colors">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" strokeWidth="2"
                                     strokeLinecap="round" strokeLinejoin="round">
