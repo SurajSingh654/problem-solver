@@ -66,6 +66,7 @@ const ShowcasePage = lazy(() => import('@pages/admin/showcase/ShowcasePage'))
 const ReadmePage = lazy(() => import('@pages/docs/ReadmePage'))
 const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
 const DeployPage = lazy(() => import('@pages/docs/DeployPage'))
+const HowToPage = lazy(() => import('@pages/docs/HowToPage'))
 const ProblemsPage = lazy(() => import('@pages/problems/ProblemsPage'))
 const ProblemDetailPage = lazy(() => import('@pages/problems/ProblemDetailPage'))
 const SubmitSolutionPage = lazy(() => import('@pages/problems/SubmitSolutionPage'))
@@ -264,6 +265,7 @@ export default function App() {
             <Route path="docs/readme" element={<Lazy><ReadmePage /></Lazy>} />
             <Route path="docs/setup" element={<Lazy><SetupPage /></Lazy>} />
             <Route path="docs/deploy" element={<Lazy><DeployPage /></Lazy>} />
+            <Route path="docs/how-to" element={<Lazy><HowToPage /></Lazy>} />
           </Route>
           {/* ============================================================ */}
           {/* CATCH-ALL — Redirect unknown routes to home                 */}

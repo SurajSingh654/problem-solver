@@ -61,6 +61,7 @@ export default function Sidebar() {
             { to: '/interview-history', icon: '📜', label: 'Interview History' },
             { to: '/report', icon: '📈', label: 'Intelligence Report' },
             { to: '/feedback', icon: '🐛', label: 'Feedback & Issues' },
+            { to: '/docs/how-to', icon: '📘', label: 'How-To Guide' },
         ]
 
         // Leaderboard only in team mode (not personal)

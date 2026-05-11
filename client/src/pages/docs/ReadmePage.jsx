@@ -123,6 +123,13 @@ export default function ReadmePage() {
                         Links
                     </div>
                     <div className="space-y-0.5">
+                        <Link to="/docs/how-to"
+                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
+                             text-xs font-medium text-text-tertiary
+                             hover:bg-surface-3 hover:text-text-primary transition-all">
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-400/40" />
+                            How-To Guide →
+                        </Link>
                         <Link to="/docs/setup"
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                              text-xs font-medium text-text-tertiary
