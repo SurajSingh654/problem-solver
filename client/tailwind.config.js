@@ -25,12 +25,12 @@ export default {
         "border-subtle": "var(--border-subtle)",
         "border-default": "var(--border-default)",
         "border-strong": "var(--border-strong)",
-        // Brand — stays fixed
+        // Brand — stays fixed (identity)
         "brand-300": "#9d93f9",
         "brand-400": "#7c6ff7",
         "brand-500": "#6358d4",
         "brand-600": "#4e44b0",
-        // Semantic — stays fixed
+        // Semantic — raw saturated hues (identity colors)
         success: "#22c55e",
         warning: "#eab308",
         danger: "#ef4444",
@@ -39,6 +39,51 @@ export default {
         easy: "#22c55e",
         medium: "#eab308",
         hard: "#ef4444",
+
+        // ── Theme-aware semantic utilities ───────────────
+        // Use these when you need color that renders correctly
+        // in BOTH light and dark mode. The raw `success`/`warning`/
+        // etc. tokens above stay saturated and fail WCAG on light
+        // surfaces — these variants are tuned per theme.
+        //
+        // Pattern:
+        //   text-*-fg     → readable foreground on app/neutral bg
+        //   bg-*-soft     → subtle tinted background (pills, callouts)
+        //   border-*-line → subtle tinted border (matching the bg-*-soft)
+        //
+        // Example (replaces `bg-success/10 text-success border-success/20`):
+        //   bg-success-soft text-success-fg border-success-line
+
+        // Link (theme-aware inline link color)
+        link: "var(--fg-link)",
+        "link-hover": "var(--fg-link-hover)",
+
+        // Brand variants
+        "brand-fg": "var(--brand-fg)",
+        "brand-fg-soft": "var(--brand-fg-on-subtle)",
+        "brand-soft": "var(--brand-bg)",
+        "brand-soft-hover": "var(--brand-bg-hover)",
+        "brand-line": "var(--brand-border)",
+
+        // Success
+        "success-fg": "var(--success-fg)",
+        "success-soft": "var(--success-bg)",
+        "success-line": "var(--success-border)",
+
+        // Warning
+        "warning-fg": "var(--warning-fg)",
+        "warning-soft": "var(--warning-bg)",
+        "warning-line": "var(--warning-border)",
+
+        // Danger
+        "danger-fg": "var(--danger-fg)",
+        "danger-soft": "var(--danger-bg)",
+        "danger-line": "var(--danger-border)",
+
+        // Info
+        "info-fg": "var(--info-fg)",
+        "info-soft": "var(--info-bg)",
+        "info-line": "var(--info-border)",
       },
       borderRadius: {
         sm: "4px",

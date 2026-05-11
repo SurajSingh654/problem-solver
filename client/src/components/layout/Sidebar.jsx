@@ -105,11 +105,11 @@ export default function Sidebar() {
             {isSuperAdmin && (
                 <div className="px-3 py-3 border-b border-border-default">
                     <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl
-                                   bg-danger/5 border border-danger/20">
+                                   bg-danger-soft border border-danger-line">
                         <span className="text-lg">🛡️</span>
                         <div className="flex-1 text-left min-w-0">
                             <p className="text-xs font-bold text-text-primary">Platform Admin</p>
-                            <p className="text-[10px] text-danger">Super Administrator</p>
+                            <p className="text-[10px] text-danger-fg">Super Administrator</p>
                         </div>
                     </div>
                 </div>
@@ -223,8 +223,8 @@ export default function Sidebar() {
                                 'flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors',
                                 isActive
                                     ? isSuperAdmin
-                                        ? 'bg-danger/10 text-danger font-bold'
-                                        : 'bg-brand-400/10 text-brand-300 font-bold'
+                                        ? 'bg-danger-soft text-danger-fg font-bold'
+                                        : 'bg-brand-soft text-brand-fg-soft font-bold'
                                     : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
                             )}
                         >
@@ -249,7 +249,7 @@ export default function Sidebar() {
                                 className={({ isActive }) => cn(
                                     'flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors',
                                     isActive
-                                        ? 'bg-warning/10 text-warning font-bold'
+                                        ? 'bg-warning-soft text-warning-fg font-bold'
                                         : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
                                 )}
                             >
@@ -268,8 +268,8 @@ export default function Sidebar() {
                     className="flex items-center gap-3 px-3 py-2 rounded-xl
      hover:bg-surface-2 transition-colors"
                 >
-                    <div className="w-7 h-7 rounded-full bg-brand-400/20 flex items-center
-                         justify-center text-xs font-bold text-brand-300">
+                    <div className="w-7 h-7 rounded-full bg-brand-soft flex items-center
+                         justify-center text-xs font-bold text-brand-fg-soft">
                         {user.name?.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">

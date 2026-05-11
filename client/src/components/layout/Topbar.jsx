@@ -125,7 +125,7 @@ function ProfileDropdown({ user, onClose }) {
                 <button
                     onClick={() => { logout(); onClose() }}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg
-                     text-sm text-danger hover:bg-danger/8 transition-colors text-left"
+                     text-sm text-danger-fg hover:bg-danger-soft transition-colors text-left"
                 >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" strokeWidth="2"
@@ -240,7 +240,7 @@ export function Topbar() {
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                       bg-warning/10 border border-warning/25 text-warning
+                       bg-warning-soft border border-warning-line text-warning-fg
                        text-xs font-semibold"
                     >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
@@ -264,9 +264,9 @@ export function Topbar() {
                                 'hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl',
                                 'text-xs font-semibold border transition-all',
                                 isActive
-                                    ? 'bg-brand-400/15 border-brand-400/30 text-brand-300'
+                                    ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
                                     : 'bg-surface-2 border-border-default text-text-tertiary',
-                                'hover:text-brand-300 hover:border-brand-400/40 hover:bg-brand-400/10'
+                                'hover:text-brand-fg-soft hover:border-brand-line hover:bg-brand-soft'
                             )}
                         >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -288,9 +288,9 @@ export function Topbar() {
                                 'hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl',
                                 'text-xs font-semibold border transition-all',
                                 isActive
-                                    ? 'bg-success/15 border-success/30 text-success'
+                                    ? 'bg-success-soft border-success-line text-success-fg'
                                     : 'bg-surface-2 border-border-default text-text-tertiary',
-                                'hover:text-success hover:border-success/40 hover:bg-success/10'
+                                'hover:text-success-fg hover:border-success-line hover:bg-success-soft'
                             )}
                         >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"

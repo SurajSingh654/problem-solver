@@ -238,7 +238,7 @@ export function CodeEditor({
                                             'px-2 py-1 rounded-md text-[11px] font-semibold',
                                             'transition-all duration-100 whitespace-nowrap',
                                             language === key
-                                                ? 'bg-brand-400/20 text-brand-300 border border-brand-400/30'
+                                                ? 'bg-brand-soft text-brand-fg-soft border border-brand-line'
                                                 : 'text-text-disabled hover:text-text-tertiary border border-transparent'
                                         )}
                                     >
@@ -278,7 +278,7 @@ export function CodeEditor({
                                     strokeLinecap="round" strokeLinejoin="round">
                                     <polyline points="20 6 9 17 4 12" />
                                 </svg>
-                                <span className="text-success font-semibold">Copied</span>
+                                <span className="text-success-fg font-semibold">Copied</span>
                             </>
                         ) : (
                             <>

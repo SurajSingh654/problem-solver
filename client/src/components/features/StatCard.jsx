@@ -11,12 +11,14 @@ export function StatCard({
   index   = 0,
   onClick,
 }) {
+  // Bg + text use theme-aware tokens so the icon chip reads in both modes.
+  // Bar stripes stay saturated — decorative accents where contrast doesn't matter.
   const colors = {
-    brand  : { bg: 'bg-brand-400/10',  text: 'text-brand-300',  bar: 'bg-brand-400'  },
-    success: { bg: 'bg-success/10',    text: 'text-success',    bar: 'bg-success'    },
-    warning: { bg: 'bg-warning/10',    text: 'text-warning',    bar: 'bg-warning'    },
-    danger : { bg: 'bg-danger/10',     text: 'text-danger',     bar: 'bg-danger'     },
-    info   : { bg: 'bg-info/10',       text: 'text-info',       bar: 'bg-info'       },
+    brand  : { bg: 'bg-brand-soft',   text: 'text-brand-fg-soft', bar: 'bg-brand-400' },
+    success: { bg: 'bg-success-soft', text: 'text-success-fg',    bar: 'bg-success'   },
+    warning: { bg: 'bg-warning-soft', text: 'text-warning-fg',    bar: 'bg-warning'   },
+    danger : { bg: 'bg-danger-soft',  text: 'text-danger-fg',     bar: 'bg-danger'    },
+    info   : { bg: 'bg-info-soft',    text: 'text-info-fg',       bar: 'bg-info'      },
   }
 
   const c = colors[color] || colors.brand

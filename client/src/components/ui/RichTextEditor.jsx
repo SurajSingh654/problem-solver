@@ -15,7 +15,7 @@ function ToolbarBtn({ onClick, active, title, children }) {
                 'w-7 h-7 flex items-center justify-center rounded-md',
                 'text-xs transition-all duration-100',
                 active
-                    ? 'bg-brand-400/20 text-brand-300'
+                    ? 'bg-brand-soft text-brand-fg-soft'
                     : 'text-text-tertiary hover:text-text-primary hover:bg-surface-4'
             )}
         >

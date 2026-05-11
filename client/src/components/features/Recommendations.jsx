@@ -9,11 +9,11 @@ import { PROBLEM_CATEGORIES } from '@utils/constants'
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
 const TYPE_CONFIG = {
-    company: { icon: '🏢', color: 'text-warning', label: 'Target Company' },
-    pattern_gap: { icon: '🧩', color: 'text-brand-300', label: 'New Pattern' },
-    low_confidence: { icon: '🔁', color: 'text-danger', label: 'Re-solve' },
-    similar: { icon: '🔍', color: 'text-info', label: 'Similar' },
-    category_gap: { icon: '📚', color: 'text-success', label: 'New Category' },
+    company: { icon: '🏢', color: 'text-warning-fg', label: 'Target Company' },
+    pattern_gap: { icon: '🧩', color: 'text-brand-fg-soft', label: 'New Pattern' },
+    low_confidence: { icon: '🔁', color: 'text-danger-fg', label: 'Re-solve' },
+    similar: { icon: '🔍', color: 'text-info-fg', label: 'Similar' },
+    category_gap: { icon: '📚', color: 'text-success-fg', label: 'New Category' },
 }
 
 export function Recommendations({ limit = 5, compact = false }) {
@@ -67,11 +67,11 @@ export function Recommendations({ limit = 5, compact = false }) {
                         <div className={cn(
                             'w-9 h-9 rounded-xl flex items-center justify-center',
                             'text-base flex-shrink-0 border',
-                            rec.type === 'company' ? 'bg-warning/10 border-warning/25' :
-                                rec.type === 'pattern_gap' ? 'bg-brand-400/10 border-brand-400/25' :
-                                    rec.type === 'low_confidence' ? 'bg-danger/10 border-danger/25' :
-                                        rec.type === 'similar' ? 'bg-info/10 border-info/25' :
-                                            'bg-success/10 border-success/25'
+                            rec.type === 'company' ? 'bg-warning-soft border-warning-line' :
+                                rec.type === 'pattern_gap' ? 'bg-brand-soft border-brand-line' :
+                                    rec.type === 'low_confidence' ? 'bg-danger-soft border-danger-line' :
+                                        rec.type === 'similar' ? 'bg-info-soft border-info-line' :
+                                            'bg-success-soft border-success-line'
                         )}>
                             {typeConfig.icon}
                         </div>

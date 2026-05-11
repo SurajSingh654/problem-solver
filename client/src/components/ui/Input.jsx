@@ -24,7 +24,7 @@ export const Input = forwardRef(function Input({
             {label && (
                 <label className="text-sm font-semibold text-text-primary flex items-center gap-1">
                     {label}
-                    {required && <span className="text-danger text-xs">*</span>}
+                    {required && <span className="text-danger-fg text-xs">*</span>}
                 </label>
             )}
 
@@ -103,7 +103,7 @@ export const Input = forwardRef(function Input({
 
             {/* Error */}
             {error && (
-                <p className="text-xs text-danger flex items-center gap-1 animate-fade-in-up">
+                <p className="text-xs text-danger-fg flex items-center gap-1 animate-fade-in-up">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" strokeWidth="2.5"
                         strokeLinecap="round" strokeLinejoin="round">

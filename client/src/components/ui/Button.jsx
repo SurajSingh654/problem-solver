@@ -1,11 +1,14 @@
 import { cn } from '@utils/cn'
 
+// primary uses saturated brand on both themes (white text on brand bg passes WCAG).
+// danger uses theme-aware *-soft/*-fg tokens so the text stays readable on light bg.
+// outline's hover text switches to theme-aware link color for light-mode readability.
 const variants = {
   primary:   'bg-brand-400 hover:bg-brand-500 text-white shadow-glow-sm hover:-translate-y-px active:scale-[0.97]',
   secondary: 'bg-surface-3 hover:bg-surface-4 text-text-primary border border-border-default hover:border-brand-400 active:scale-[0.97]',
   ghost:     'hover:bg-surface-3 text-text-secondary hover:text-text-primary active:scale-[0.97]',
-  danger:    'bg-danger/10 hover:bg-danger/20 text-danger border border-danger/25 hover:border-danger active:scale-[0.97]',
-  outline:   'border border-border-strong hover:border-brand-400 text-text-primary hover:text-brand-300 active:scale-[0.97]',
+  danger:    'bg-danger-soft hover:bg-danger/20 text-danger-fg border border-danger-line hover:border-danger active:scale-[0.97]',
+  outline:   'border border-border-strong hover:border-brand-400 text-text-primary hover:text-link active:scale-[0.97]',
 }
 
 const sizes = {

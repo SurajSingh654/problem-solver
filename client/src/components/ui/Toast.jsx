@@ -40,11 +40,13 @@ const icons = {
     ),
 }
 
+// Bars stay saturated (small decorative stripe — identity color).
+// Icons use theme-aware *-soft/*-fg so they read in both modes.
 const styles = {
-    success: { bar: 'bg-success', icon: 'bg-success/15 text-success' },
-    error: { bar: 'bg-danger', icon: 'bg-danger/15  text-danger' },
-    warning: { bar: 'bg-warning', icon: 'bg-warning/15 text-warning' },
-    info: { bar: 'bg-brand-400', icon: 'bg-brand-400/15 text-brand-300' },
+    success: { bar: 'bg-success',   icon: 'bg-success-soft text-success-fg' },
+    error:   { bar: 'bg-danger',    icon: 'bg-danger-soft  text-danger-fg'  },
+    warning: { bar: 'bg-warning',   icon: 'bg-warning-soft text-warning-fg' },
+    info:    { bar: 'bg-brand-400', icon: 'bg-brand-soft   text-brand-fg-soft' },
 }
 
 function ToastItem({ toast }) {

@@ -1,15 +1,19 @@
 import { cn } from '@utils/cn'
 
+// Theme-aware variants — use the semantic *-soft / *-fg / *-line tokens
+// so pills render correctly in both light and dark mode.
+// (The raw `text-success` / `bg-success/12` pattern fails WCAG in light mode
+// because #22c55e only reaches 2.5:1 on white.)
 const variants = {
-  brand  : 'bg-brand-400/12 text-brand-300 border-brand-400/25',
-  success: 'bg-success/12  text-success  border-success/25',
-  warning: 'bg-warning/12  text-warning  border-warning/25',
-  danger : 'bg-danger/12   text-danger   border-danger/25',
-  info   : 'bg-info/12     text-info     border-info/25',
-  gray   : 'bg-surface-3   text-text-secondary border-border-default',
-  easy   : 'bg-success/12  text-success  border-success/25',
-  medium : 'bg-warning/12  text-warning  border-warning/25',
-  hard   : 'bg-danger/12   text-danger   border-danger/25',
+  brand  : 'bg-brand-soft   text-brand-fg-soft border-brand-line',
+  success: 'bg-success-soft text-success-fg    border-success-line',
+  warning: 'bg-warning-soft text-warning-fg    border-warning-line',
+  danger : 'bg-danger-soft  text-danger-fg     border-danger-line',
+  info   : 'bg-info-soft    text-info-fg       border-info-line',
+  gray   : 'bg-surface-3    text-text-secondary border-border-default',
+  easy   : 'bg-success-soft text-success-fg    border-success-line',
+  medium : 'bg-warning-soft text-warning-fg    border-warning-line',
+  hard   : 'bg-danger-soft  text-danger-fg     border-danger-line',
 }
 
 const sizes = {

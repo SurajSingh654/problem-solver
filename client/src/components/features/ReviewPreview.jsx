@@ -56,7 +56,7 @@ export function ReviewPreview({ solutions = [], loading }) {
   if (!due.length) {
     return (
       <div className="flex flex-col items-center gap-3 py-8 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-success/10 border border-success/25
+        <div className="w-12 h-12 rounded-2xl bg-success-soft border border-success-line
                         flex items-center justify-center text-xl">
           ✅
         </div>
@@ -84,10 +84,10 @@ export function ReviewPreview({ solutions = [], loading }) {
             onClick={() => navigate('/review')}
             className="flex items-center gap-3 p-3 rounded-xl
                        bg-surface-2 border border-border-default
-                       hover:border-warning/40 hover:bg-surface-3
+                       hover:border-warning-line hover:bg-surface-3
                        cursor-pointer transition-all group"
           >
-            <div className="w-8 h-8 rounded-lg bg-warning/10 border border-warning/25
+            <div className="w-8 h-8 rounded-lg bg-warning-soft border border-warning-line
                             flex items-center justify-center flex-shrink-0 text-sm">
               🧠
             </div>
@@ -107,7 +107,7 @@ export function ReviewPreview({ solutions = [], loading }) {
                 {dueInfo && (
                   <span className={cn(
                     'text-[11px] font-semibold font-mono',
-                    dueInfo.urgent ? 'text-warning' : 'text-text-tertiary'
+                    dueInfo.urgent ? 'text-warning-fg' : 'text-text-tertiary'
                   )}>
                     {dueInfo.label}
                   </span>
@@ -124,7 +124,7 @@ export function ReviewPreview({ solutions = [], loading }) {
           size="sm"
           fullWidth
           onClick={() => navigate('/review')}
-          className="mt-2 text-warning hover:bg-warning/8"
+          className="mt-2 text-warning-fg hover:bg-warning-soft"
         >
           Start Review Session →
         </Button>

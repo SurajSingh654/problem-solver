@@ -82,14 +82,14 @@ export function ChipInput({
                             exit={{ opacity: 0, scale: 0.8 }}
                             transition={{ duration: 0.12 }}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg
-                         bg-brand-400/15 border border-brand-400/30
-                         text-xs font-semibold text-brand-300"
+                         bg-brand-soft border border-brand-line
+                         text-xs font-semibold text-brand-fg-soft"
                         >
                             {chip}
                             <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); remove(chip) }}
-                                className="hover:text-danger transition-colors ml-0.5"
+                                className="hover:text-danger-fg transition-colors ml-0.5"
                             >
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor" strokeWidth="3"

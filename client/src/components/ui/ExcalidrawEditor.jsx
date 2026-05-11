@@ -118,7 +118,7 @@ export function ExcalidrawEditor({ onChange, initialData, theme, viewModeEnabled
                             })
                             .catch(() => setLoadError(true))
                     }}
-                    className="text-brand-400 hover:text-brand-300 underline"
+                    className="text-link hover:text-link-hover underline"
                 >
                     Retry
                 </button>

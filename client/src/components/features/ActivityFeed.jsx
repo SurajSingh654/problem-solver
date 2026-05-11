@@ -67,7 +67,7 @@ export function ActivityFeed({ activities = [], loading }) {
                 {activity.username}
               </span>
               {' '}solved{' '}
-              <span className="font-semibold text-brand-300 truncate">
+              <span className="font-semibold text-brand-fg-soft truncate">
                 {activity.problemTitle}
               </span>
             </p>

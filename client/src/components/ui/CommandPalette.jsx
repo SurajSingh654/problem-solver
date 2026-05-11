@@ -288,7 +288,7 @@ export function CommandPalette() {
                                 'w-full flex items-center gap-3 px-4 py-2.5',
                                 'text-sm transition-colors text-left',
                                 isSelected
-                                  ? 'bg-brand-400/12 text-brand-300'
+                                  ? 'bg-brand-soft text-brand-fg-soft'
                                   : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'
                               )}
                             >
@@ -339,7 +339,7 @@ export function CommandPalette() {
                                 'w-full flex items-center gap-3 px-4 py-2.5',
                                 'text-sm transition-colors text-left',
                                 isSelected
-                                  ? 'bg-brand-400/12 text-brand-300'
+                                  ? 'bg-brand-soft text-brand-fg-soft'
                                   : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'
                               )}
                             >
@@ -348,7 +348,7 @@ export function CommandPalette() {
                                 'w-7 h-7 flex-shrink-0 flex items-center justify-center',
                                 'rounded-lg text-base',
                                 problem.isSolved
-                                  ? 'bg-success/15'
+                                  ? 'bg-success-soft'
                                   : 'bg-surface-3'
                               )}>
                                 {problem.isSolved ? (
