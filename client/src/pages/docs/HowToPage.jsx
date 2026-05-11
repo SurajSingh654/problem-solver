@@ -14,6 +14,106 @@ import {
     StepCard, Callout, ArchBlock, SbLink,
 } from './components'
 
+// ── Screenshot base path ────────────────────────────────────────────
+// Screenshots go in client/public/docs/how-to/ and are referenced here by
+// filename only. The public folder is served at site root, so a file named
+// `ds-sd-00-create-session.png` is reachable at
+// /docs/how-to/ds-sd-00-create-session.png. If a file is missing the image
+// component shows a labeled placeholder with the expected filename so
+// contributors know exactly what to drop in.
+const SCREENSHOT_BASE = '/docs/how-to'
+
+// ── Image with graceful placeholder + lightbox zoom ─────────────────
+function HowToImage({ file, alt, caption }) {
+    const [errored, setErrored] = useState(false)
+    const [zoomed, setZoomed] = useState(false)
+    const src = `${SCREENSHOT_BASE}/${file}`
+
+    // ESC closes lightbox
+    useEffect(() => {
+        if (!zoomed) return
+        const onKey = (e) => { if (e.key === 'Escape') setZoomed(false) }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [zoomed])
+
+    if (errored) {
+        // Placeholder frame — still useful context for the reader while the
+        // screenshot is pending. Shows the exact filename contributors need.
+        return (
+            <figure className="my-3 border-2 border-dashed border-border-default
+                               rounded-xl bg-surface-0 overflow-hidden">
+                <div className="flex flex-col items-center justify-center p-8 gap-2 min-h-[160px]">
+                    <div className="text-2xl opacity-40">🖼️</div>
+                    <div className="text-[11px] font-bold text-text-disabled uppercase tracking-widest">
+                        Screenshot placeholder
+                    </div>
+                    {caption && (
+                        <div className="text-xs text-text-tertiary text-center max-w-md">
+                            {caption}
+                        </div>
+                    )}
+                    <code className="text-[10px] font-mono text-brand-300 bg-brand-400/10
+                                     border border-brand-400/20 rounded px-2 py-1 mt-1">
+                        public/docs/how-to/{file}
+                    </code>
+                </div>
+            </figure>
+        )
+    }
+
+    return (
+        <>
+            <figure className="my-3 group">
+                <button
+                    type="button"
+                    onClick={() => setZoomed(true)}
+                    className="block w-full rounded-xl overflow-hidden border border-border-default
+                               bg-surface-0 hover:border-brand-400/40 transition-colors cursor-zoom-in"
+                    title="Click to enlarge"
+                >
+                    <img
+                        src={src}
+                        alt={alt}
+                        loading="lazy"
+                        onError={() => setErrored(true)}
+                        className="w-full h-auto block"
+                    />
+                </button>
+                {caption && (
+                    <figcaption className="text-[11px] text-text-tertiary text-center mt-1.5 italic">
+                        {caption}
+                    </figcaption>
+                )}
+            </figure>
+            {zoomed && (
+                <div
+                    onClick={() => setZoomed(false)}
+                    className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm
+                               flex items-center justify-center p-6 cursor-zoom-out
+                               animate-in fade-in duration-150"
+                >
+                    <img
+                        src={src}
+                        alt={alt}
+                        className="max-w-full max-h-full rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    <button
+                        onClick={() => setZoomed(false)}
+                        className="absolute top-4 right-4 w-10 h-10 rounded-full
+                                   bg-surface-2 border border-border-default text-text-primary
+                                   hover:bg-surface-3 transition-colors"
+                        aria-label="Close"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+        </>
+    )
+}
+
 // ── Sidebar sections ───────────────────────────────────
 const NAV = [
     {
@@ -257,6 +357,11 @@ export default function HowToPage() {
                         Excalidraw canvas on top and a phase editor below. Seven phases are laid out as dots
                         in the top bar: Requirements → Estimation → API → Data Model → Architecture → Deep Dive → Trade-offs.
                     </p>
+                    <HowToImage
+                        file="ds-sd-00-create-session.png"
+                        alt="Create session screen showing design type picker, title input, and difficulty buttons"
+                        caption="Create-session screen with System Design selected"
+                    />
                 </StepCard>
 
                 <StepCard num="1" {...BRAND} title="Requirements 📋" sub="What must the system do, at what scale">
@@ -277,10 +382,20 @@ Non-functional:
 - Read latency: p99 < 50ms
 - Availability: 99.9% (redirects can't go down)
 - Consistency: eventual for analytics, strong for redirect mapping`}</PasteBlock>
+                    <HowToImage
+                        file="ds-sd-01-workspace.png"
+                        alt="Design workspace — top bar with phase dots, Excalidraw canvas, bottom phase editor"
+                        caption="Full workspace layout: phase dots (top), Excalidraw canvas, resizable phase editor with AI coach bar"
+                    />
                     <Callout type="info">
                         Try the <strong>🤖 AI Coach → Am I on track?</strong> button now. It should quote your text
                         back and name one missing thing (e.g. &ldquo;rate limiting&rdquo; or &ldquo;URL validation&rdquo;).
                     </Callout>
+                    <HowToImage
+                        file="ds-sd-01-ai-coach.png"
+                        alt="AI coach response panel with verdict pill, specific strength, and specific gap sections"
+                        caption="AI coach Validate response — verdict pill + Strength + Gap sections"
+                    />
                 </StepCard>
 
                 <StepCard num="2" {...BRAND} title="Capacity Estimation 🔢" sub="Back-of-envelope math that anchors later decisions">
@@ -342,6 +457,11 @@ Cassandra/ClickHouse for click_events (append-only, massive volume).`}</PasteBlo
                         Draw on the <strong>Excalidraw canvas</strong> (top half of workspace): Client → CDN →
                         Load Balancer → API Server → Redis → Postgres, plus Kafka + Worker + ClickHouse for click events.
                     </p>
+                    <HowToImage
+                        file="ds-sd-05-canvas.png"
+                        alt="Excalidraw canvas with URL shortener architecture: boxes for Client, CDN, LB, API, Redis, Postgres, Kafka, Worker, ClickHouse connected by arrows"
+                        caption="Architecture drawn on the Excalidraw canvas"
+                    />
                     <p className="text-xs text-text-secondary leading-relaxed mb-2">
                         The AI <strong>can&apos;t see the diagram</strong>. Two panels below translate it for the AI —
                         both are critical:
@@ -353,6 +473,11 @@ Postgres — Source of truth for url mappings (RDS Postgres 15)
 Kafka — Async click event stream (MSK)
 ClickWorker — Consumes click events → analytics (Node.js consumer)
 ClickHouse — Analytics storage`}</PasteBlock>
+                    <HowToImage
+                        file="ds-sd-05-annotations.png"
+                        alt="Expanded Component Annotations panel showing component name, purpose, technology, and notes fields"
+                        caption="🧩 Component Annotations panel expanded"
+                    />
                     <PasteBlock label="🔀 Data Flow (open the panel)">{`Redirect (read path):
 Client → CDN (5 min edge cache) → LB → API → Redis (90% hit) → redirect
   cache miss → API → Postgres → populate Redis → redirect
@@ -361,6 +486,11 @@ Client → CDN (5 min edge cache) → LB → API → Redis (90% hit) → redirec
 Shorten (write path):
 Client → LB → API → validate → generate 7-char code (base62 of snowflake)
   → INSERT Postgres → populate Redis → return shortUrl`}</PasteBlock>
+                    <HowToImage
+                        file="ds-sd-05-data-flow.png"
+                        alt="Expanded Data Flow panel with read-path and write-path traced through the components"
+                        caption="🔀 Data Flow panel expanded — AI uses this text, not the diagram"
+                    />
                 </StepCard>
 
                 <StepCard num="6" {...BRAND} title="Deep Dive 🔬" sub="Pick 2–3 components, go deep">
@@ -399,6 +529,11 @@ What breaks first at 10x (400K RPS read):
                         For each scenario: write how your architecture handles it → <strong>Save Response</strong> →{' '}
                         <strong>🤖 Evaluate</strong>. Aim for PASS on at least 4/6.
                     </p>
+                    <HowToImage
+                        file="ds-sd-08-scenarios.png"
+                        alt="Scenarios view with progress bar, scenario cards showing PASS/PARTIAL/FAIL verdicts, missed-points lists"
+                        caption="Scenarios view — evaluated cards show verdict, missed points, suggestions"
+                    />
                 </StepCard>
 
                 <StepCard num="9" {...SUCCESS} title="Scale Analysis + Flow Simulation" sub="Stress-test the design">
@@ -416,6 +551,16 @@ What breaks first at 10x (400K RPS read):
 4. API → Redis        (2ms)
 5. API → Client       (1ms)
 Total: 29ms · Bottleneck: CDN → ALB`}</PasteBlock>
+                    <HowToImage
+                        file="ds-sd-09-scale.png"
+                        alt="Scale Analysis view — four color-coded cards for 1x / 10x / 100x / Failure-at-scale with textareas"
+                        caption="Scale Analysis — four scale levels with guided prompts"
+                    />
+                    <HowToImage
+                        file="ds-sd-09-flows.png"
+                        alt="Flow Simulation view with a saved flow card showing hops, total latency, and bottleneck"
+                        caption="Flow Simulation — saved flows on top, builder for new flow below"
+                    />
                 </StepCard>
 
                 <StepCard num="10" {...SUCCESS} title="Get Final Evaluation" sub="GPT-4o scored review across 10 dimensions">
@@ -429,6 +574,11 @@ Total: 29ms · Bottleneck: CDN → ALB`}</PasteBlock>
                         <li>Strengths / Critical Gaps / Improvements cards</li>
                         <li>Industry comparison, time analysis, next-step recommendations</li>
                     </ul>
+                    <HowToImage
+                        file="ds-sd-10-evaluation.png"
+                        alt="Final evaluation page — overall score banner, ten dimension bars, strengths/gaps/improvements cards, industry comparison, time analysis, next steps"
+                        caption="Final evaluation — scored dimensions, strengths, gaps, improvements, industry comparison"
+                    />
                     <Callout type="success">
                         Expect overall 6.5–8.5 depending on depth. Session is marked <K>COMPLETED</K> and
                         becomes read-only. Re-open it anytime from the session list.
@@ -452,6 +602,11 @@ Total: 29ms · Bottleneck: CDN → ALB`}</PasteBlock>
                         <K>MEDIUM</K>. You get six phases instead of seven: Requirements → Entities → Hierarchy →
                         Patterns → Methods → SOLID.
                     </p>
+                    <HowToImage
+                        file="ds-lld-00-create-session.png"
+                        alt="Create-session screen with Low-Level Design type selected"
+                        caption="Create-session screen with LLD selected — placeholder suggests classic LLD titles"
+                    />
                 </StepCard>
 
                 <StepCard num="1" {...BRAND} title="Requirements 📋">
@@ -596,6 +751,11 @@ Exit: Scanner reads ticket → ParkingLot.exit(ticket, payment)
                         LLD evaluation scores different dimensions: entityIdentification, hierarchyCorrectness,
                         patternApplication, solidCompliance, implementationQuality, extensibilityScore, edgeCaseAwareness.
                     </p>
+                    <HowToImage
+                        file="ds-lld-08-evaluation.png"
+                        alt="LLD final evaluation page with OOP-specific dimensions (Entities, Hierarchy, Patterns, SOLID, Implementation, Extensibility, Edge Cases)"
+                        caption="LLD evaluation — note the OOP-specific dimension labels"
+                    />
                 </StepCard>
 
                 <Callout type="info">
@@ -620,6 +780,11 @@ Exit: Scanner reads ticket → ParkingLot.exit(ticket, payment)
                         You&apos;ll see the problem statement, follow-up questions, and (if admin added them) real-world
                         context + use cases.
                     </p>
+                    <HowToImage
+                        file="solve-01-list.png"
+                        alt="Problems list page with filter chips for category/difficulty/pattern and problem rows"
+                        caption="Problems list with filters applied"
+                    />
                 </StepCard>
 
                 <StepCard num="2" {...BRAND} title="Click Submit Solution" sub="Problem detail → Submit Solution button">
@@ -643,6 +808,11 @@ Exit: Scanner reads ticket → ParkingLot.exit(ticket, payment)
                 </StepCard>
 
                 <StepCard num="4" {...BRAND} title="Write your solution" sub="Code + structured explanation">
+                    <HowToImage
+                        file="solve-04-workspace.png"
+                        alt="Submission workspace with Monaco code editor on one side and structured explanation fields (Approach, Brute Force, Optimized, Key Insight, Feynman Explanation, Real-World Connection) on the other"
+                        caption="CODING submission workspace — code editor + structured explanation fields"
+                    />
                     <p className="text-xs text-text-secondary leading-relaxed mb-2">
                         Fill the workspace. For CODING:
                     </p>
@@ -683,6 +853,11 @@ Real-World Connection: where this pattern shows up in production`}</PasteBlock>
                         and a readiness verdict. The solution gets a spaced-repetition review date
                         (SM-2 algorithm) based on your confidence rating.
                     </p>
+                    <HowToImage
+                        file="solve-06-review.png"
+                        alt="Solution review page with five dimension scores, strengths, gaps, improvement, complexity check, interview tip"
+                        caption="AI review result — five dimensions, next review date from SM-2"
+                    />
                 </StepCard>
 
                 <StepCard num="7" {...INFO} title="Find it later" sub="Review Queue + Profile → Solutions">
@@ -776,6 +951,11 @@ SQL                  — Query or schema-design problems`}</PasteBlock>
                 </StepCard>
 
                 <StepCard num="4" {...BRAND} title="Generate → Preview" sub="~10–30s depending on count">
+                    <HowToImage
+                        file="add-ai-04-preview.png"
+                        alt="AI-generated problem preview cards with Approve/Reject buttons and expandable teaching notes"
+                        caption="Generated problem previews — approve or reject individually"
+                    />
                     <p className="text-xs text-text-secondary leading-relaxed mb-2">
                         Each generated problem appears as a card with:
                     </p>
@@ -895,11 +1075,21 @@ Context:     "I'm preparing for an L5 systems interview at a FAANG."
                 </StepCard>
 
                 <StepCard num="3" {...BRAND} title="Click Generate Quiz" sub="~5–15s to generate">
+                    <HowToImage
+                        file="quiz-02-setup.png"
+                        alt="Quiz setup screen — subject input, difficulty buttons, question count slider, optional context field"
+                        caption="Quiz setup — subject, difficulty, count, optional context"
+                    />
                     <p className="text-xs text-text-secondary leading-relaxed">
                         Each question has 4 options, all plausible (wrong ones are common misconceptions,
                         not obviously wrong). Code snippets render in syntax-highlighted blocks; math uses
                         Big-O notation.
                     </p>
+                    <HowToImage
+                        file="quiz-04-question.png"
+                        alt="Quiz question card with code block, four options, timer, and scratchpad side panel"
+                        caption="Quiz question view — timer + scratchpad for working through code problems"
+                    />
                 </StepCard>
 
                 <StepCard num="4" {...BRAND} title="Take the quiz" sub="Timer runs, scratchpad available">
@@ -921,6 +1111,11 @@ Context:     "I'm preparing for an L5 systems interview at a FAANG."
                         <li>2–3 study recommendations</li>
                         <li>Encouragement line</li>
                     </ul>
+                    <HowToImage
+                        file="quiz-05-results.png"
+                        alt="Quiz results page with score, per-question review with explanations for each option, weak topics, study recommendations"
+                        caption="Quiz results — score + per-question explanations + AI analysis"
+                    />
                 </StepCard>
 
                 <StepCard num="6" {...INFO} title="Flag bad questions" sub="Improves future generations">
@@ -946,6 +1141,11 @@ Context:     "I'm preparing for an L5 systems interview at a FAANG."
                         Setup screen asks for interview style, type, and mode. Takes ~30s to configure,
                         then the interview starts in real time.
                     </p>
+                    <HowToImage
+                        file="mock-02-setup.png"
+                        alt="Mock interview setup screen with style cards, interview type tiles, target company field, mode selector (text/voice)"
+                        caption="Mock interview setup — style + type + target company + mode"
+                    />
                 </StepCard>
 
                 <StepCard num="2" {...BRAND} title="Pick an interview style">
@@ -982,6 +1182,11 @@ Single deep-dive — one problem, 45 minutes             — simulation of real 
                         <li>Offers hints if you&apos;re stuck (ask explicitly: &ldquo;Can I have a hint?&rdquo;)</li>
                         <li>Ends with a debrief — what went well, what to improve</li>
                     </ul>
+                    <HowToImage
+                        file="mock-05-chat.png"
+                        alt="Mock interview chat view with interviewer messages on left, candidate responses on right, phase indicator, and mode toggle"
+                        caption="Live interview — WebSocket-driven chat with phase indicator"
+                    />
                 </StepCard>
 
                 <StepCard num="6" {...INFO} title="Review the transcript later" sub="Sidebar → Interview History">
@@ -1006,6 +1211,11 @@ Single deep-dive — one problem, 45 minutes             — simulation of real 
                         Two tabs: <strong>Submit</strong> (file a new report) and <strong>All Reports</strong>{' '}
                         (browse your and others&apos; reports, filter by status/type).
                     </p>
+                    <HowToImage
+                        file="feedback-01-form.png"
+                        alt="Feedback form with type picker, severity selector, title + description inputs, similar-reports panel above"
+                        caption="Feedback form — type, severity, title, description, optional page URL"
+                    />
                 </StepCard>
 
                 <StepCard num="2" {...BRAND} title="Pick a type">
@@ -1049,9 +1259,19 @@ Single deep-dive — one problem, 45 minutes             — simulation of real 
             </Section>
 
             {/* Footer */}
-            <div className="mt-16 mb-8 text-center text-xs text-text-disabled">
-                Found something unclear? File a Content-type report from the Feedback page —
-                this guide gets updated when patterns emerge.
+            <div className="mt-16 mb-8 text-center text-xs text-text-disabled space-y-1">
+                <div>
+                    Found something unclear? File a Content-type report from the Feedback page —
+                    this guide gets updated when patterns emerge.
+                </div>
+                <div>
+                    Want to contribute a screenshot? Drop a PNG into{' '}
+                    <code className="bg-surface-3 border border-border-default rounded px-1.5 py-0.5
+                                     text-[10px] font-mono text-brand-300">
+                        client/public/docs/how-to/
+                    </code>{' '}
+                    matching the filename shown in any placeholder above.
+                </div>
             </div>
         </DocsLayout>
     )
