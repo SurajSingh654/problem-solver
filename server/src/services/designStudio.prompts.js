@@ -387,9 +387,15 @@ export function designStudioFinalEvalPrompt({
 }) {
   const isSD = designType === "SYSTEM_DESIGN";
 
+  // Truncate per-phase to keep the full eval prompt within GPT-4o context
+  // even when users write 50K-char phases (the zod max). 2000 chars × ~10
+  // phases ≈ 20K chars ≈ 5K tokens, well under budget.
   const phasesSummary = Object.entries(phases)
     .filter(([, v]) => v && v.trim().length > 10)
-    .map(([key, val]) => `[${key}]:\n${val}`)
+    .map(([key, val]) => {
+      const trimmed = val.length > 2000 ? `${val.substring(0, 2000)}…[truncated ${val.length - 2000} chars]` : val;
+      return `[${key}]:\n${trimmed}`;
+    })
     .join("\n\n---\n\n");
 
   const annotationsSummary = (componentAnnotations || [])

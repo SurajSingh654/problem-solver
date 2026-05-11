@@ -416,7 +416,7 @@ export async function askAICoach(req, res) {
       phase: phaseId,
       mode,
       userQuery: userQuery || null,
-      aiResponse: aiResponse.response || aiResponse.message || "",
+      aiResponse: aiResponse.response || "",
       guidingQuestions: aiResponse.guidingQuestions || [],
       conceptExplanation: aiResponse.conceptExplanation || null,
       timestamp: new Date().toISOString(),

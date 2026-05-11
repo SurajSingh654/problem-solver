@@ -1101,7 +1101,7 @@ model DesignSession {
   // JSON object with keys matching phase IDs.
   // For SYSTEM_DESIGN:
   //   { requirements, capacityEstimation, apiDesign, dataModel,
-  //     architectureNotes, deepDive, tradeoffs }
+  //     architecture, deepDive, tradeoffs }
   // For LOW_LEVEL_DESIGN:
   //   { requirements, entities, classHierarchy, designPatterns,
   //     methodSignatures, solidAnalysis }
