@@ -57,9 +57,17 @@ function formatTime(seconds) {
 // SESSION LIST VIEW
 // ══════════════════════════════════════════════════════════════════════════
 function SessionListView({ onSelectSession, onCreateNew }) {
-    const { data, isLoading } = useDesignSessions()
+    const [designTypeFilter, setDesignTypeFilter] = useState('ALL')
+    const [statusFilter, setStatusFilter] = useState('ALL')
+
+    const queryParams = {}
+    if (designTypeFilter !== 'ALL') queryParams.designType = designTypeFilter
+    if (statusFilter !== 'ALL') queryParams.status = statusFilter
+
+    const { data, isLoading } = useDesignSessions(queryParams)
     const deleteSession = useDeleteDesignSession()
     const sessions = data?.sessions || []
+    const hasActiveFilter = designTypeFilter !== 'ALL' || statusFilter !== 'ALL'
 
     const statusConfig = {
         IN_PROGRESS: { label: 'In Progress', color: 'text-brand-300 bg-brand-400/10 border-brand-400/20' },
@@ -68,13 +76,57 @@ function SessionListView({ onSelectSession, onCreateNew }) {
         ABANDONED: { label: 'Abandoned', color: 'text-text-disabled bg-surface-3 border-border-default' },
     }
 
-    if (isLoading) {
-        return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-    }
+    const designTypeOptions = [
+        { id: 'ALL', label: 'All' },
+        { id: 'SYSTEM_DESIGN', label: '🏗️ SD' },
+        { id: 'LOW_LEVEL_DESIGN', label: '🔧 LLD' },
+    ]
+    const statusOptions = [
+        { id: 'ALL', label: 'All' },
+        { id: 'IN_PROGRESS', label: 'In Progress' },
+        { id: 'VALIDATING', label: 'Validating' },
+        { id: 'COMPLETED', label: 'Completed' },
+    ]
+
+    const FilterGroup = ({ options, value, onChange }) => (
+        <div className="inline-flex rounded-lg border border-border-default bg-surface-2 p-0.5">
+            {options.map(opt => (
+                <button
+                    key={opt.id}
+                    onClick={() => onChange(opt.id)}
+                    className={cn(
+                        'text-[10px] font-bold px-2.5 py-1 rounded-md transition-all',
+                        value === opt.id
+                            ? 'bg-brand-400 text-white'
+                            : 'text-text-tertiary hover:text-text-primary'
+                    )}
+                >
+                    {opt.label}
+                </button>
+            ))}
+        </div>
+    )
 
     return (
         <div className="space-y-4">
-            {sessions.length === 0 ? (
+            {/* Filters */}
+            <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mr-1">Filter</span>
+                <FilterGroup options={designTypeOptions} value={designTypeFilter} onChange={setDesignTypeFilter} />
+                <FilterGroup options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+                {hasActiveFilter && (
+                    <button
+                        onClick={() => { setDesignTypeFilter('ALL'); setStatusFilter('ALL') }}
+                        className="text-[10px] font-semibold text-text-tertiary hover:text-text-primary px-2 py-1 transition-colors"
+                    >
+                        Clear
+                    </button>
+                )}
+            </div>
+
+            {isLoading ? (
+                <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+            ) : sessions.length === 0 ? (
                 <div className="bg-surface-1 border border-border-default rounded-2xl p-10 text-center">
                     <div className="text-4xl mb-3">🏗️</div>
                     <p className="text-sm font-semibold text-text-primary mb-1">No design sessions yet</p>
@@ -197,6 +249,55 @@ function CreateSessionScreen({ onCreated, onBack }) {
                     Start Design Session
                 </Button>
             </div>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DATA FLOW DESCRIPTION PANEL
+// ══════════════════════════════════════════════════════════════════════════
+// AI cannot see the visual diagram. It reads componentAnnotations + this
+// dataFlowDescription to understand architecture. Without a value here, every
+// AI prompt loses that context.
+function DataFlowPanel({ value, onChange, isCollapsed, onToggle }) {
+    const preview = (value || '').trim().slice(0, 60)
+    return (
+        <div className="border-t border-border-default">
+            <button onClick={onToggle} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-surface-2/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm">🔀</span>
+                    <span className="text-xs font-bold text-text-primary">Data Flow</span>
+                    {!!preview && (
+                        <span className="text-[10px] text-text-disabled truncate max-w-[280px]">
+                            — {preview}{(value || '').length > 60 ? '…' : ''}
+                        </span>
+                    )}
+                    {!preview && (
+                        <span className="text-[10px] text-text-disabled italic">empty · AI can&apos;t trace your architecture without this</span>
+                    )}
+                </div>
+                <motion.div animate={{ rotate: isCollapsed ? 0 : 180 }} transition={{ duration: 0.2 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+                </motion.div>
+            </button>
+            <AnimatePresence>
+                {!isCollapsed && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="px-4 pb-3 space-y-2">
+                            <p className="text-[10px] text-text-disabled">
+                                Describe how data flows through your architecture. Example: &ldquo;Client → LB → Chat Service → Kafka → Worker → Cassandra. Reads go Client → LB → Chat Service → Redis (hit) or Cassandra (miss).&rdquo;
+                            </p>
+                            <textarea
+                                rows={4}
+                                value={value || ''}
+                                onChange={e => onChange(e.target.value)}
+                                placeholder="Walk a request through your components, step by step. Mention where caching, async queues, and failure handling kick in."
+                                className="w-full bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-3 py-2 outline-none resize-y leading-relaxed focus:border-brand-400/40 focus:ring-2 focus:ring-brand-400/20"
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }
@@ -947,16 +1048,25 @@ function DesignWorkspace({ sessionId, onBack }) {
     const [panelHeight, setPanelHeight] = useState(35)
     const [elapsedTime, setElapsedTime] = useState(0)
     const [annotationsCollapsed, setAnnotationsCollapsed] = useState(true)
-    const [workspaceMode, setWorkspaceMode] = useState('design') // 'design' | 'scenarios' | 'scale'
+    const [dataFlowCollapsed, setDataFlowCollapsed] = useState(true)
+    const [workspaceMode, setWorkspaceMode] = useState('design') // 'design' | 'scenarios' | 'scale' | 'evaluation'
 
     const debounceRef = useRef(null)
     const diagramDebounceRef = useRef(null)
     const annotationsDebounceRef = useRef(null)
+    const dataFlowDebounceRef = useRef(null)
     const timerRef = useRef(null)
     const dragRef = useRef(null)
     const elapsedTimeRef = useRef(0)
     const diagramDataRef = useRef(null)
     const dataFlowRef = useRef('')
+    const annotationsRef = useRef([])
+    // Per-phase time tracking — we record the elapsedTime at which the user
+    // entered the current phase, and accumulate deltas into phaseTimingsRef
+    // on every phase switch. This feeds the "time allocation" analysis in
+    // the final evaluation prompt.
+    const phaseEnterTimeRef = useRef(0)
+    const phaseTimingsRef = useRef({})
     // Tracks whether we've already picked an initial workspace mode for this session.
     // Without this, every background refetch would snap the user back to a server-chosen view.
     const initializedRef = useRef(false)
@@ -966,8 +1076,9 @@ function DesignWorkspace({ sessionId, onBack }) {
 
     // Load session data. Seed all text/state from the server response on every
     // change (the auto-save hooks are one-way: client → server). The initial
-    // workspace-mode pick only runs once per session so refetches don't snap
-    // the user out of whatever view they navigated to.
+    // workspace-mode pick, active-phase pick, and phase-timings seed only run
+    // once per session so refetches don't snap the user out of whatever view
+    // they navigated to, and in-flight phase-time deltas aren't double-counted.
     useEffect(() => {
         if (!session) return
         setPhaseContent(session.phases || {})
@@ -975,9 +1086,19 @@ function DesignWorkspace({ sessionId, onBack }) {
         setAnnotations(session.componentAnnotations || [])
         setDataFlow(session.dataFlowDescription || '')
         setElapsedTime(session.totalTimeSpent || 0)
+        // Always keep the ref in sync so a new save picks up prior server state,
+        // but don't reset the "current phase started at" each refetch.
+        phaseTimingsRef.current = session.phaseTimings || {}
 
         if (!initializedRef.current) {
             initializedRef.current = true
+            // Seed activePhase from server so users resume where they left off.
+            const startIdx = Math.min(
+                Math.max(0, session.currentPhase || 0),
+                (session.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES).length - 1,
+            )
+            setActivePhaseIdx(startIdx)
+            phaseEnterTimeRef.current = session.totalTimeSpent || 0
             if (session.status === 'COMPLETED' && session.evaluation) {
                 setWorkspaceMode('evaluation')
             } else if (session.status === 'VALIDATING' && session.scenarios?.length > 0) {
@@ -989,11 +1110,13 @@ function DesignWorkspace({ sessionId, onBack }) {
         }
     }, [session])
 
-    // Mirror elapsedTime / diagramData / dataFlow into refs so long-lived
-    // intervals and debounced callbacks read fresh values without re-subscribing.
+    // Mirror elapsedTime / diagramData / dataFlow / annotations into refs so
+    // long-lived intervals and debounced callbacks read fresh values without
+    // re-subscribing.
     useEffect(() => { elapsedTimeRef.current = elapsedTime }, [elapsedTime])
     useEffect(() => { diagramDataRef.current = diagramData }, [diagramData])
     useEffect(() => { dataFlowRef.current = dataFlow }, [dataFlow])
+    useEffect(() => { annotationsRef.current = annotations }, [annotations])
 
     // Timer — stop when session is terminal so completed sessions don't keep accumulating
     useEffect(() => {
@@ -1002,13 +1125,19 @@ function DesignWorkspace({ sessionId, onBack }) {
         return () => clearInterval(timerRef.current)
     }, [session?.status])
 
-    // Save timing every 30s — reads elapsedTime from a ref, so the interval
-    // is created once per session and not torn down on every tick.
+    // Save timing every 30s — reads elapsedTime / phaseTimings from refs, so
+    // the interval is created once per session and not torn down on every tick.
+    // phaseTimings is sent too so a tab-close / crash doesn't lose the running
+    // delta for the currently-active phase.
     useEffect(() => {
         if (!sessionId) return
         const interval = setInterval(() => {
             if (elapsedTimeRef.current > 0) {
-                updateTiming.mutate({ sessionId, totalTimeSpent: elapsedTimeRef.current })
+                updateTiming.mutate({
+                    sessionId,
+                    totalTimeSpent: elapsedTimeRef.current,
+                    phaseTimings: phaseTimingsRef.current,
+                })
             }
         }, 30000)
         return () => clearInterval(interval)
@@ -1045,6 +1174,42 @@ function DesignWorkspace({ sessionId, onBack }) {
         }, 1500)
     }
 
+    function handleDataFlowChange(newDataFlow) {
+        setDataFlow(newDataFlow)
+        if (dataFlowDebounceRef.current) clearTimeout(dataFlowDebounceRef.current)
+        dataFlowDebounceRef.current = setTimeout(() => {
+            saveDiagram.mutate({
+                sessionId,
+                diagramData: diagramDataRef.current,
+                componentAnnotations: annotationsRef.current,
+                dataFlowDescription: newDataFlow,
+            })
+        }, 1500)
+    }
+
+    // Single entry point for changing the active phase. Accumulates time spent
+    // on the phase being left, persists currentPhase + phaseTimings to the
+    // server, clears the AI response panel.
+    function handlePhaseSwitch(newIdx) {
+        const prevPhaseId = phases[activePhaseIdx]?.id
+        if (prevPhaseId) {
+            const delta = Math.max(0, elapsedTimeRef.current - phaseEnterTimeRef.current)
+            if (delta > 0) {
+                const prev = phaseTimingsRef.current[prevPhaseId] || 0
+                phaseTimingsRef.current = { ...phaseTimingsRef.current, [prevPhaseId]: prev + delta }
+            }
+        }
+        phaseEnterTimeRef.current = elapsedTimeRef.current
+        setActivePhaseIdx(newIdx)
+        setAiResponse(null)
+        updateTiming.mutate({
+            sessionId,
+            totalTimeSpent: elapsedTimeRef.current,
+            phaseTimings: phaseTimingsRef.current,
+            currentPhase: newIdx,
+        })
+    }
+
     function handleDragStart(e) {
         e.preventDefault()
         dragRef.current = { startY: e.clientY, startHeight: panelHeight }
@@ -1065,14 +1230,37 @@ function DesignWorkspace({ sessionId, onBack }) {
         } catch { /* handled */ }
     }
 
+    // Accumulate the in-flight delta for the currently-active phase into
+    // phaseTimingsRef so the exit save includes it. Idempotent — resets
+    // phaseEnterTimeRef to the current elapsed so a repeat call is a no-op.
+    function accumulateCurrentPhaseTime() {
+        const currentPhaseId = phases[activePhaseIdx]?.id
+        if (!currentPhaseId) return
+        const delta = Math.max(0, elapsedTimeRef.current - phaseEnterTimeRef.current)
+        if (delta > 0) {
+            const prev = phaseTimingsRef.current[currentPhaseId] || 0
+            phaseTimingsRef.current = { ...phaseTimingsRef.current, [currentPhaseId]: prev + delta }
+            phaseEnterTimeRef.current = elapsedTimeRef.current
+        }
+    }
+
     async function handlePauseExit() {
         // Flush any pending debounced saves before leaving. Auto-save keeps
         // status at IN_PROGRESS so the session resumes exactly as left.
         if (debounceRef.current) clearTimeout(debounceRef.current)
         if (diagramDebounceRef.current) clearTimeout(diagramDebounceRef.current)
         if (annotationsDebounceRef.current) clearTimeout(annotationsDebounceRef.current)
+        if (dataFlowDebounceRef.current) clearTimeout(dataFlowDebounceRef.current)
+        accumulateCurrentPhaseTime()
         if (elapsedTimeRef.current > 0) {
-            try { await updateTiming.mutateAsync({ sessionId, totalTimeSpent: elapsedTimeRef.current }) } catch { /* ignore */ }
+            try {
+                await updateTiming.mutateAsync({
+                    sessionId,
+                    totalTimeSpent: elapsedTimeRef.current,
+                    phaseTimings: phaseTimingsRef.current,
+                    currentPhase: activePhaseIdx,
+                })
+            } catch { /* ignore */ }
         }
         onBack()
     }
@@ -1082,8 +1270,16 @@ function DesignWorkspace({ sessionId, onBack }) {
         // For the evaluation-backed completion path, they use "Validate Design" → "Get Final Evaluation".
         if (!window.confirm('Mark this design session as complete? You will no longer be able to edit it.')) return
         try {
+            accumulateCurrentPhaseTime()
             if (elapsedTimeRef.current > 0) {
-                try { await updateTiming.mutateAsync({ sessionId, totalTimeSpent: elapsedTimeRef.current }) } catch { /* ignore */ }
+                try {
+                    await updateTiming.mutateAsync({
+                        sessionId,
+                        totalTimeSpent: elapsedTimeRef.current,
+                        phaseTimings: phaseTimingsRef.current,
+                        currentPhase: activePhaseIdx,
+                    })
+                } catch { /* ignore */ }
             }
             await updateSessionStatus.mutateAsync({ sessionId, status: 'COMPLETED' })
             onBack()
@@ -1234,7 +1430,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                         const hasContent = (phaseContent[phase.id] || '').trim().length > 20
                         const isActive = idx === activePhaseIdx
                         return (
-                            <button key={phase.id} onClick={() => { setActivePhaseIdx(idx); setAiResponse(null) }} title={phase.label}
+                            <button key={phase.id} onClick={() => handlePhaseSwitch(idx)} title={phase.label}
                                 className={cn('w-7 h-7 rounded-full flex items-center justify-center text-xs transition-all',
                                     isActive ? 'bg-brand-400 text-white scale-110' : hasContent ? 'bg-success/20 text-success border border-success/30' : 'bg-surface-3 text-text-disabled border border-border-default hover:border-brand-400/30')}>
                                 {phase.icon}
@@ -1297,12 +1493,12 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] text-text-disabled">{activePhaseIdx + 1} / {phases.length}</span>
                         {activePhaseIdx > 0 && (
-                            <button onClick={() => { setActivePhaseIdx(activePhaseIdx - 1); setAiResponse(null) }} className="text-text-tertiary hover:text-text-primary p-1">
+                            <button onClick={() => handlePhaseSwitch(activePhaseIdx - 1)} className="text-text-tertiary hover:text-text-primary p-1">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
                             </button>
                         )}
                         {activePhaseIdx < phases.length - 1 && (
-                            <button onClick={() => { setActivePhaseIdx(activePhaseIdx + 1); setAiResponse(null) }} className="text-text-tertiary hover:text-text-primary p-1">
+                            <button onClick={() => handlePhaseSwitch(activePhaseIdx + 1)} className="text-text-tertiary hover:text-text-primary p-1">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
                             </button>
                         )}
@@ -1319,6 +1515,9 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <AIResponsePanel response={aiResponse} onDismiss={() => setAiResponse(null)} />
                     <AICoachingBar sessionId={sessionId} phaseId={activePhase.id} onResponse={setAiResponse} />
                 </div>
+
+                <DataFlowPanel value={dataFlow} onChange={handleDataFlowChange}
+                    isCollapsed={dataFlowCollapsed} onToggle={() => setDataFlowCollapsed(v => !v)} />
 
                 <ComponentAnnotationsPanel annotations={annotations} onChange={handleAnnotationsChange}
                     isCollapsed={annotationsCollapsed} onToggle={() => setAnnotationsCollapsed(v => !v)} />

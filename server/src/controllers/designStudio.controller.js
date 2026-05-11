@@ -296,7 +296,7 @@ export async function updateTiming(req, res) {
   try {
     const { sessionId } = req.params;
     const userId = req.user.id;
-    const { totalTimeSpent, phaseTimings } = req.body;
+    const { totalTimeSpent, phaseTimings, currentPhase } = req.body;
 
     const session = await prisma.designSession.findUnique({
       where: { id: sessionId },
@@ -308,6 +308,7 @@ export async function updateTiming(req, res) {
 
     const data = { totalTimeSpent };
     if (phaseTimings) data.phaseTimings = phaseTimings;
+    if (typeof currentPhase === "number") data.currentPhase = currentPhase;
 
     await prisma.designSession.update({
       where: { id: sessionId },

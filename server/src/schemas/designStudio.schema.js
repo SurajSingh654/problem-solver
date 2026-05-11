@@ -118,9 +118,13 @@ export const saveScaleAnalysisSchema = z.object({
 });
 
 // ── Update session timing ────────────────────────────────
+// Accepts optional currentPhase so the client can persist the user's
+// position without a dedicated endpoint — same semantics as periodic
+// metadata save.
 export const updateTimingSchema = z.object({
   totalTimeSpent: z.number().min(0).max(86400), // max 24 hours
   phaseTimings: z.record(z.string(), z.number().min(0).max(86400)).optional(),
+  currentPhase: z.number().int().min(0).max(50).optional(),
 });
 
 // ── Update session status ────────────────────────────────

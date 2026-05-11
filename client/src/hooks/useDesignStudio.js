@@ -98,8 +98,12 @@ export function useSaveDiagram() {
 // ── Update timing ─────────────────────────────────────────
 export function useUpdateTiming() {
   return useMutation({
-    mutationFn: ({ sessionId, totalTimeSpent, phaseTimings }) =>
-      designStudioApi.updateTiming(sessionId, { totalTimeSpent, phaseTimings }),
+    mutationFn: ({ sessionId, totalTimeSpent, phaseTimings, currentPhase }) => {
+      const body = { totalTimeSpent };
+      if (phaseTimings) body.phaseTimings = phaseTimings;
+      if (typeof currentPhase === "number") body.currentPhase = currentPhase;
+      return designStudioApi.updateTiming(sessionId, body);
+    },
     onError: (err) => {
       console.error("[DesignStudio] Timing update failed:", err.message);
     },
