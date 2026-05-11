@@ -26,11 +26,13 @@ export function useCreateDesignSession() {
 }
 
 // ── List user's design sessions ───────────────────────────
-export function useDesignSessions(params = {}) {
+export function useDesignSessions(params = {}, options = {}) {
+  const { enabled = true } = options;
   return useQuery({
     queryKey: QUERY_KEYS.SESSIONS(params),
     queryFn: () => designStudioApi.list(params).then((r) => r.data.data),
     staleTime: 1000 * 60,
+    enabled,
   });
 }
 

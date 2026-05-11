@@ -5,6 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useProblem } from '@hooks/useProblems'
 import { useProblemSolutions } from '@hooks/useSolutions'
+import { useDesignSessions } from '@hooks/useDesignStudio'
 import useAuthStore from '@store/useAuthStore'
 import { SolutionCard } from '@components/features/solutions/SolutionCard'
 import { Badge } from '@components/ui/Badge'
@@ -605,6 +606,16 @@ export default function ProblemDetailPage() {
 
     const { data: problem, isLoading, isError } = useProblem(problemId)
     const { data: solutionsData } = useProblemSolutions(problemId)
+    // Only fetch DS sessions for SD/LLD; other categories don't use Design Studio.
+    const isDesignCategory =
+        problem?.category === 'SYSTEM_DESIGN' || problem?.category === 'LOW_LEVEL_DESIGN'
+    const { data: designSessionsData } = useDesignSessions(
+        { problemId },
+        { enabled: isDesignCategory },
+    )
+    const designSessions = isDesignCategory
+        ? (designSessionsData?.sessions || []).slice(0, 5)
+        : []
 
     if (isLoading) return <PageSpinner />
     if (isError || !problem) {
@@ -1249,6 +1260,80 @@ export default function ProblemDetailPage() {
                         </div>
                     </motion.div>
                 )}
+
+            {/* My Design Sessions — only renders for SD/LLD when user has 1+ sessions */}
+            {isDesignCategory && designSessions.length > 0 && (
+                <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="mb-8"
+                >
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+                            <span>🏗️</span>
+                            My Design Sessions
+                            <Badge variant="brand" size="xs">{designSessions.length}</Badge>
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={() => navigate(`/design-studio?problemId=${problemId}`)}
+                            className="text-[11px] font-bold text-brand-300 hover:text-brand-200 transition-colors"
+                        >
+                            Start new →
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {designSessions.map((s) => {
+                            const statusStyles = {
+                                IN_PROGRESS: 'text-brand-300 bg-brand-400/10 border-brand-400/20',
+                                VALIDATING: 'text-warning bg-warning/10 border-warning/20',
+                                COMPLETED: 'text-success bg-success/10 border-success/20',
+                                ABANDONED: 'text-text-disabled bg-surface-3 border-border-default',
+                            }
+                            const statusLabel = {
+                                IN_PROGRESS: 'In Progress',
+                                VALIDATING: 'Validating',
+                                COMPLETED: 'Completed',
+                                ABANDONED: 'Abandoned',
+                            }
+                            return (
+                                <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => navigate(`/design-studio?problemId=${problemId}`)}
+                                    className="w-full bg-surface-1 border border-border-default rounded-xl p-3
+                                               hover:border-brand-400/30 transition-all
+                                               flex items-center justify-between gap-3 text-left"
+                                >
+                                    <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
+                                        <span className={cn(
+                                            'text-[10px] font-bold px-2 py-px rounded-full border flex-shrink-0',
+                                            statusStyles[s.status] || statusStyles.IN_PROGRESS,
+                                        )}>
+                                            {statusLabel[s.status] || s.status}
+                                        </span>
+                                        <span className="text-[10px] text-text-disabled flex-shrink-0 font-mono">
+                                            {Math.floor((s.totalTimeSpent || 0) / 60)}:{String((s.totalTimeSpent || 0) % 60).padStart(2, '0')} spent
+                                        </span>
+                                        {s.evaluationScore != null && (
+                                            <span className="text-xs font-bold text-brand-300 flex-shrink-0">
+                                                {s.evaluationScore}/10
+                                            </span>
+                                        )}
+                                        <span className="text-[10px] text-text-disabled">
+                                            {formatShortDate(s.createdAt)}
+                                        </span>
+                                    </div>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-disabled flex-shrink-0">
+                                        <polyline points="9 18 15 12 9 6" />
+                                    </svg>
+                                </button>
+                            )
+                        })}
+                    </div>
+                </motion.div>
+            )}
 
             {/* Solutions / Answers section */}
             <motion.div

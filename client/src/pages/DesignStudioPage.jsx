@@ -1533,6 +1533,7 @@ function EvaluationResultsView({ session }) {
 // MAIN DESIGN WORKSPACE (updated with validate mode)
 // ══════════════════════════════════════════════════════════════════════════
 function DesignWorkspace({ sessionId, onBack }) {
+    const navigate = useNavigate()
     const { data: session, isLoading, refetch } = useDesignSession(sessionId)
     const savePhase = useSavePhase()
     const saveDiagram = useSaveDiagram()
@@ -1823,6 +1824,22 @@ function DesignWorkspace({ sessionId, onBack }) {
 
     const hasEvaluation = !!session.evaluation
 
+    // Shared "View Problem" nav — rendered in each workspace-mode top bar
+    // when this session is linked to a Problem record. Compact button,
+    // same visual weight as other nav buttons.
+    const viewProblemButton = session.problemId ? (
+        <button
+            type="button"
+            onClick={() => navigate(`/problems/${session.problemId}`)}
+            title="View the source problem"
+            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border
+                       text-text-tertiary bg-surface-3 border-border-default
+                       hover:border-brand-400/30 transition-all"
+        >
+            📋 Problem
+        </button>
+    ) : null
+
     // ── SCENARIO TESTING VIEW ────────────────────────────
     if (workspaceMode === 'scenarios') {
         return (
@@ -1839,6 +1856,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {viewProblemButton}
                         <button onClick={() => setWorkspaceMode('design')}
                             className={cn('text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all',
                                 'text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30')}>
@@ -1888,6 +1906,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {viewProblemButton}
                         <button onClick={() => setWorkspaceMode('scenarios')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
                             ← Back to Scenarios
@@ -1926,6 +1945,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {viewProblemButton}
                         <button onClick={() => setWorkspaceMode('design')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
                             ← Back to Design
@@ -1970,6 +1990,7 @@ function DesignWorkspace({ sessionId, onBack }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {viewProblemButton}
                         {session.scenarios?.length > 0 && (
                             <button onClick={() => setWorkspaceMode('scenarios')}
                                 className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
@@ -2042,6 +2063,11 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <Button variant="ghost" size="sm" onClick={handlePauseExit} loading={updateTiming.isPending}>
                         Pause &amp; Exit
                     </Button>
+                    {session.problemId && (
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/problems/${session.problemId}`)}>
+                            📋 Problem
+                        </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => setWorkspaceMode('flow')}>
                         Flows
                     </Button>

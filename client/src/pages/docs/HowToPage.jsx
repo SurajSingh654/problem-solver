@@ -350,12 +350,23 @@ export default function HowToPage() {
                     if you actually write the content.
                 </SectionDesc>
 
-                <StepCard num="0" {...BRAND} title="Create the session" sub="Sidebar → Design Studio → + New Session">
+                <Callout type="info">
+                    <strong>Two ways in:</strong>
+                    <ul className="mt-2 space-y-1 list-disc pl-4">
+                        <li><strong>From a team-curated problem</strong> (recommended): open an SD problem from <K>Problems</K>, click <strong>🏗️ Practice in Design Studio</strong>. Title + difficulty are prefilled; admin notes flow into AI coaching; past attempts appear above the start button.</li>
+                        <li><strong>Freeform</strong>: sidebar <K>Design Studio</K> → <strong>+ New Session</strong>. Pick your own title. No Problem record, so no admin notes or attempt tracking.</li>
+                    </ul>
+                </Callout>
+
+                <StepCard num="0" {...BRAND} title="Create the session" sub="Problem page → Practice in Design Studio (or sidebar freeform)">
                     <p className="text-xs text-text-secondary leading-relaxed">
-                        Pick <strong>🏗️ System Design</strong>, title <K>Design URL Shortener</K>, difficulty <K>MEDIUM</K>,
-                        click <strong>Start Design Session</strong>. You land in the design workspace with
-                        Excalidraw canvas on top and a phase editor below. Seven phases are laid out as dots
-                        in the top bar: Requirements → Estimation → API → Data Model → Architecture → Deep Dive → Trade-offs.
+                        <strong>From a problem:</strong> click <strong>🏗️ Practice in Design Studio</strong> on any SD problem — you land in a hub showing the problem context + your past attempts + a <strong>Start Practice Session</strong> button. One click and you&apos;re in the workspace.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed mt-2">
+                        <strong>Freeform:</strong> pick <strong>🏗️ System Design</strong>, title <K>Design URL Shortener</K>, difficulty <K>MEDIUM</K>, click <strong>Start Design Session</strong>.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed mt-2">
+                        Either way you land in the same workspace: Excalidraw canvas on top, phase editor below. Seven phases are dots in the top bar: Requirements → Estimation → API → Data Model → Architecture → Deep Dive → Trade-offs.
                     </p>
                     <HowToImage
                         file="ds-sd-00-create-session.png"
@@ -596,11 +607,15 @@ Total: 29ms · Bottleneck: CDN → ALB`}</PasteBlock>
                     composition, Strategy pattern, SRP, and OOP thinking.
                 </SectionDesc>
 
-                <StepCard num="0" {...BRAND} title="Create the session" sub="+ New Session → Low-Level Design">
+                <StepCard num="0" {...BRAND} title="Create the session" sub="Same two entry points as System Design">
                     <p className="text-xs text-text-secondary leading-relaxed">
-                        Pick <strong>🔧 Low-Level Design</strong>, title <K>Design Parking Lot</K>, difficulty{' '}
-                        <K>MEDIUM</K>. You get six phases instead of seven: Requirements → Entities → Hierarchy →
-                        Patterns → Methods → SOLID.
+                        <strong>From a problem:</strong> open an LLD problem from Problems → click <strong>🔧 Practice in Design Studio</strong>. Hub shows past attempts + <strong>Start Practice Session</strong>.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed mt-2">
+                        <strong>Freeform:</strong> sidebar <K>Design Studio</K> → <strong>+ New Session</strong> → <strong>🔧 Low-Level Design</strong>, title <K>Design Parking Lot</K>, difficulty <K>MEDIUM</K>.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed mt-2">
+                        Six phases instead of seven: Requirements → Entities → Hierarchy → Patterns → Methods → SOLID.
                     </p>
                     <HowToImage
                         file="ds-lld-00-create-session.png"
@@ -770,9 +785,15 @@ Exit: Scanner reads ticket → ParkingLot.exit(ticket, payment)
             <Section id="solve">
                 <SectionTitle icon="📝">Solve a Problem</SectionTitle>
                 <SectionDesc>
-                    Example: solving a CODING problem end-to-end. The flow is similar for SYSTEM_DESIGN,
-                    LLD, BEHAVIORAL, CS_FUNDAMENTALS, HR, and SQL — the workspace adapts per category.
+                    Example: solving a CODING problem end-to-end. The flow is similar for BEHAVIORAL,
+                    CS_FUNDAMENTALS, HR, and SQL — the workspace adapts per category.
                 </SectionDesc>
+
+                <Callout type="info">
+                    <strong>System Design and Low-Level Design:</strong> these categories route to Design Studio
+                    instead of the Submit Solution workspace. On any SD or LLD problem the primary CTA is{' '}
+                    <strong>🏗️/🔧 Practice in Design Studio</strong> — see the Design Studio sections above for the full flow.
+                </Callout>
 
                 <StepCard num="1" {...BRAND} title="Find a problem" sub="Sidebar → Problems">
                     <p className="text-xs text-text-secondary leading-relaxed">
