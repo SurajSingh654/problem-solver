@@ -21,6 +21,7 @@ import {
     useSubmitScenarioResponse,
     useEvaluateScenario,
     useSaveScaleAnalysis,
+    useSaveFlowSimulation,
     useRequestEvaluation,
     useUpdateSessionStatus,
 } from '@hooks/useDesignStudio'
@@ -66,6 +67,7 @@ function SessionListView({ onSelectSession, onCreateNew }) {
 
     const { data, isLoading } = useDesignSessions(queryParams)
     const deleteSession = useDeleteDesignSession()
+    const updateSessionStatus = useUpdateSessionStatus()
     const sessions = data?.sessions || []
     const hasActiveFilter = designTypeFilter !== 'ALL' || statusFilter !== 'ALL'
 
@@ -86,6 +88,7 @@ function SessionListView({ onSelectSession, onCreateNew }) {
         { id: 'IN_PROGRESS', label: 'In Progress' },
         { id: 'VALIDATING', label: 'Validating' },
         { id: 'COMPLETED', label: 'Completed' },
+        { id: 'ABANDONED', label: 'Abandoned' },
     ]
 
     const FilterGroup = ({ options, value, onChange }) => (
@@ -166,14 +169,33 @@ function SessionListView({ onSelectSession, onCreateNew }) {
                                             </div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); if (confirm('Delete this session?')) deleteSession.mutate(session.id) }}
-                                        className="text-text-disabled hover:text-danger transition-colors p-1 flex-shrink-0"
-                                    >
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-2 14H7L5 6" />
-                                        </svg>
-                                    </button>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        {(session.status === 'IN_PROGRESS' || session.status === 'VALIDATING') && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    if (window.confirm('Abandon this session? It will be marked abandoned and become read-only. Use the Abandoned filter to find it later.')) {
+                                                        updateSessionStatus.mutate({ sessionId: session.id, status: 'ABANDONED' })
+                                                    }
+                                                }}
+                                                title="Abandon session"
+                                                className="text-text-disabled hover:text-warning transition-colors p-1"
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this session? This cannot be undone.')) deleteSession.mutate(session.id) }}
+                                            title="Delete session"
+                                            className="text-text-disabled hover:text-danger transition-colors p-1"
+                                        >
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-2 14H7L5 6" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                             </motion.div>
                         )
@@ -799,6 +821,253 @@ function ScaleAnalysisView({ session, sessionId }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// CHUNK 2.5: FLOW SIMULATION UI
+// ══════════════════════════════════════════════════════════════════════════
+// Users define named request flows (e.g. "Send message", "Fetch feed") as an
+// ordered sequence of hops with per-hop latency. Server computes totalLatency
+// and bottleneck. Final-eval prompt reads flowSimulation[] to grade scale &
+// resilience reasoning.
+function FlowSimulationView({ session, sessionId }) {
+    const saveFlow = useSaveFlowSimulation()
+    const existingFlows = session.flowSimulation || []
+
+    const emptyHop = () => ({ from: '', to: '', latencyMs: '', payload: '', failureHandling: '' })
+    const [flowName, setFlowName] = useState('')
+    const [hops, setHops] = useState([emptyHop()])
+
+    function updateHop(i, field, value) {
+        setHops(prev => prev.map((h, idx) => idx === i ? { ...h, [field]: value } : h))
+    }
+    function addHop() {
+        if (hops.length >= 20) { toast.error('Max 20 hops per flow'); return }
+        setHops(prev => [...prev, emptyHop()])
+    }
+    function removeHop(i) {
+        if (hops.length <= 1) return
+        setHops(prev => prev.filter((_, idx) => idx !== i))
+    }
+
+    async function handleSave() {
+        const trimmedName = flowName.trim()
+        if (!trimmedName) { toast.error('Flow name is required'); return }
+        const cleanedHops = hops
+            .filter(h => h.from.trim() || h.to.trim())
+            .map(h => ({
+                from: h.from.trim(),
+                to: h.to.trim(),
+                latencyMs: h.latencyMs === '' ? 0 : Math.max(0, parseInt(h.latencyMs, 10) || 0),
+                payload: h.payload.trim(),
+                failureHandling: h.failureHandling.trim(),
+            }))
+            .filter(h => h.from && h.to)
+        if (cleanedHops.length === 0) { toast.error('Add at least one hop with From and To filled in'); return }
+
+        try {
+            await saveFlow.mutateAsync({ sessionId, flowName: trimmedName, hops: cleanedHops })
+            setFlowName('')
+            setHops([emptyHop()])
+        } catch { /* toast handled by hook */ }
+    }
+
+    return (
+        <div className="p-6 max-w-[900px] mx-auto space-y-6 pb-16">
+            {/* ── Header ─────────────────────────────────────────────────── */}
+            <div>
+                <h2 className="text-lg font-extrabold text-text-primary flex items-center gap-2">
+                    <span>🔀</span> Flow Simulation
+                </h2>
+                <p className="text-xs text-text-tertiary mt-1">
+                    Trace a request end-to-end through your architecture. Name the flow, list the hops, and annotate
+                    per-hop latency and failure behaviour. The final evaluation uses these to grade scale + resilience reasoning.
+                </p>
+            </div>
+
+            {/* ── Existing flows ─────────────────────────────────────────── */}
+            {existingFlows.length > 0 && (
+                <section>
+                    <h3 className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-3">
+                        Saved Flows ({existingFlows.length})
+                    </h3>
+                    <div className="space-y-3">
+                        {existingFlows.map((flow, i) => (
+                            <motion.div
+                                key={flow.id || i}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.04 }}
+                                className="bg-surface-1 border border-border-default rounded-2xl p-4"
+                            >
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-text-primary truncate">{flow.flowName}</p>
+                                        <div className="flex items-center gap-3 mt-1 flex-wrap text-[10px]">
+                                            <span className="text-text-disabled">
+                                                {flow.hops?.length || 0} hop{flow.hops?.length === 1 ? '' : 's'}
+                                            </span>
+                                            <span className="font-mono text-brand-300 font-bold">
+                                                {flow.totalLatency ?? 0}ms total
+                                            </span>
+                                            {flow.bottleneck && (
+                                                <span className="text-warning font-semibold">
+                                                    Bottleneck: {flow.bottleneck}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    {(flow.hops || []).map((h, j) => (
+                                        <div key={j} className="flex items-center gap-2 text-xs">
+                                            <span className="text-text-tertiary font-mono text-[10px] w-4 text-right flex-shrink-0">
+                                                {j + 1}.
+                                            </span>
+                                            <span className="text-text-primary font-semibold truncate">{h.from}</span>
+                                            <span className="text-text-disabled flex-shrink-0">→</span>
+                                            <span className="text-text-primary font-semibold truncate">{h.to}</span>
+                                            {h.latencyMs > 0 && (
+                                                <span className="text-[10px] font-mono text-text-tertiary bg-surface-3 border border-border-subtle rounded px-1.5 py-px flex-shrink-0">
+                                                    {h.latencyMs}ms
+                                                </span>
+                                            )}
+                                            {h.payload && (
+                                                <span className="text-[10px] text-text-tertiary italic truncate hidden md:inline">
+                                                    {h.payload}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {/* ── New flow builder ───────────────────────────────────────── */}
+            <section className="bg-surface-1 border border-border-default rounded-2xl p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                    <span className="text-base">➕</span>
+                    <h3 className="text-xs font-bold text-text-primary uppercase tracking-widest">New Flow</h3>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Flow name</label>
+                    <input
+                        type="text"
+                        value={flowName}
+                        onChange={e => setFlowName(e.target.value)}
+                        placeholder="e.g. Send message, Fetch feed, Upload video"
+                        maxLength={100}
+                        className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                    />
+                </div>
+
+                <div>
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-semibold text-text-secondary">
+                            Hops ({hops.length}/20)
+                        </label>
+                        <button
+                            type="button"
+                            onClick={addHop}
+                            disabled={hops.length >= 20}
+                            className="text-[10px] font-bold text-brand-300 px-2.5 py-1 bg-brand-400/10 border border-brand-400/20 rounded-lg hover:bg-brand-400/20 transition-colors disabled:opacity-40"
+                        >
+                            + Add Hop
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {hops.map((hop, i) => (
+                            <div key={i} className="bg-surface-2 border border-border-subtle rounded-xl p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
+                                        Hop {i + 1}
+                                    </span>
+                                    {hops.length > 1 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => removeHop(i)}
+                                            className="text-text-disabled hover:text-danger text-[10px] transition-colors"
+                                        >
+                                            ✕ Remove
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_100px] gap-2">
+                                    <input
+                                        type="text"
+                                        value={hop.from}
+                                        onChange={e => updateHop(i, 'from', e.target.value)}
+                                        placeholder="From (e.g. Client)"
+                                        maxLength={100}
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={hop.to}
+                                        onChange={e => updateHop(i, 'to', e.target.value)}
+                                        placeholder="To (e.g. Load Balancer)"
+                                        maxLength={100}
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                    />
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="60000"
+                                        value={hop.latencyMs}
+                                        onChange={e => updateHop(i, 'latencyMs', e.target.value)}
+                                        placeholder="ms"
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40 font-mono"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <input
+                                        type="text"
+                                        value={hop.payload}
+                                        onChange={e => updateHop(i, 'payload', e.target.value)}
+                                        placeholder="Payload (e.g. { userId, messageText })"
+                                        maxLength={500}
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={hop.failureHandling}
+                                        onChange={e => updateHop(i, 'failureHandling', e.target.value)}
+                                        placeholder="Failure handling (e.g. retry w/ backoff, DLQ)"
+                                        maxLength={500}
+                                        className="bg-surface-3 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-disabled px-2.5 py-2 outline-none focus:border-brand-400/40"
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setFlowName(''); setHops([emptyHop()]) }}
+                        disabled={saveFlow.isPending || (!flowName && hops.every(h => !h.from && !h.to))}
+                    >
+                        Clear
+                    </Button>
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        loading={saveFlow.isPending}
+                        onClick={handleSave}
+                        disabled={!flowName.trim()}
+                    >
+                        Save Flow
+                    </Button>
+                </div>
+            </section>
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // CHUNK 3: FINAL EVALUATION RESULTS VIEW
 // ══════════════════════════════════════════════════════════════════════════
 const SD_DIMENSION_LABELS = {
@@ -1049,7 +1318,7 @@ function DesignWorkspace({ sessionId, onBack }) {
     const [elapsedTime, setElapsedTime] = useState(0)
     const [annotationsCollapsed, setAnnotationsCollapsed] = useState(true)
     const [dataFlowCollapsed, setDataFlowCollapsed] = useState(true)
-    const [workspaceMode, setWorkspaceMode] = useState('design') // 'design' | 'scenarios' | 'scale' | 'evaluation'
+    const [workspaceMode, setWorkspaceMode] = useState('design') // 'design' | 'scenarios' | 'scale' | 'flow' | 'evaluation'
 
     const debounceRef = useRef(null)
     const diagramDebounceRef = useRef(null)
@@ -1074,41 +1343,62 @@ function DesignWorkspace({ sessionId, onBack }) {
     const phases = session?.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES
     const activePhase = phases[activePhaseIdx]
 
-    // Load session data. Seed all text/state from the server response on every
-    // change (the auto-save hooks are one-way: client → server). The initial
-    // workspace-mode pick, active-phase pick, and phase-timings seed only run
-    // once per session so refetches don't snap the user out of whatever view
-    // they navigated to, and in-flight phase-time deltas aren't double-counted.
+    // Seed local editable state from the server ONCE, on first session load.
+    // Subsequent session refetches (triggered by mutations) must NOT overwrite
+    // local state or we'll clobber in-flight keystrokes / diagram edits that
+    // the user made after the last debounced save began. Server-generated
+    // fields (scenarios, evaluation) are read directly from the session prop
+    // by the relevant views — no local mirror needed.
     useEffect(() => {
-        if (!session) return
+        if (!session || initializedRef.current) return
+        initializedRef.current = true
         setPhaseContent(session.phases || {})
         setDiagramData(session.diagramData || null)
         setAnnotations(session.componentAnnotations || [])
         setDataFlow(session.dataFlowDescription || '')
         setElapsedTime(session.totalTimeSpent || 0)
-        // Always keep the ref in sync so a new save picks up prior server state,
-        // but don't reset the "current phase started at" each refetch.
         phaseTimingsRef.current = session.phaseTimings || {}
-
-        if (!initializedRef.current) {
-            initializedRef.current = true
-            // Seed activePhase from server so users resume where they left off.
-            const startIdx = Math.min(
-                Math.max(0, session.currentPhase || 0),
-                (session.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES).length - 1,
-            )
-            setActivePhaseIdx(startIdx)
-            phaseEnterTimeRef.current = session.totalTimeSpent || 0
-            if (session.status === 'COMPLETED' && session.evaluation) {
-                setWorkspaceMode('evaluation')
-            } else if (session.status === 'VALIDATING' && session.scenarios?.length > 0) {
-                setWorkspaceMode('scenarios')
-            } else if (session.status === 'COMPLETED') {
-                // Completed without evaluation — show scenarios if any, else design view
-                setWorkspaceMode(session.scenarios?.length > 0 ? 'scenarios' : 'design')
-            }
+        // Seed activePhase from server so users resume where they left off.
+        const startIdx = Math.min(
+            Math.max(0, session.currentPhase || 0),
+            (session.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES).length - 1,
+        )
+        setActivePhaseIdx(startIdx)
+        phaseEnterTimeRef.current = session.totalTimeSpent || 0
+        if (session.status === 'COMPLETED' && session.evaluation) {
+            setWorkspaceMode('evaluation')
+        } else if (session.status === 'VALIDATING' && session.scenarios?.length > 0) {
+            setWorkspaceMode('scenarios')
+        } else if (session.status === 'COMPLETED') {
+            // Completed without evaluation — show scenarios if any, else design view
+            setWorkspaceMode(session.scenarios?.length > 0 ? 'scenarios' : 'design')
         }
     }, [session])
+
+    // beforeunload guard — warn the user if they try to close the tab while
+    // a debounce is still pending or a mutation is in flight. The modern
+    // browser behaviour is to show a generic confirmation; the returnValue
+    // string is mostly ignored but required for compatibility.
+    useEffect(() => {
+        const handler = (e) => {
+            const pendingDebounce =
+                debounceRef.current ||
+                diagramDebounceRef.current ||
+                annotationsDebounceRef.current ||
+                dataFlowDebounceRef.current
+            const pendingMutation =
+                savePhase.isPending ||
+                saveDiagram.isPending ||
+                updateTiming.isPending
+            if (pendingDebounce || pendingMutation) {
+                e.preventDefault()
+                e.returnValue = ''
+                return ''
+            }
+        }
+        window.addEventListener('beforeunload', handler)
+        return () => window.removeEventListener('beforeunload', handler)
+    }, [savePhase.isPending, saveDiagram.isPending, updateTiming.isPending])
 
     // Mirror elapsedTime / diagramData / dataFlow / annotations into refs so
     // long-lived intervals and debounced callbacks read fresh values without
@@ -1315,6 +1605,10 @@ function DesignWorkspace({ sessionId, onBack }) {
                                 'text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30')}>
                             ← Back to Design
                         </button>
+                        <button onClick={() => setWorkspaceMode('flow')}
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                            Flow Simulation →
+                        </button>
                         <button onClick={() => setWorkspaceMode('scale')}
                             className={cn('text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all',
                                 'text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20')}>
@@ -1358,6 +1652,10 @@ function DesignWorkspace({ sessionId, onBack }) {
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
                             ← Back to Scenarios
                         </button>
+                        <button onClick={() => setWorkspaceMode('flow')}
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                            Flow Simulation →
+                        </button>
                         {hasEvaluation && (
                             <button onClick={() => setWorkspaceMode('evaluation')}
                                 className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success bg-success/10 border-success/20 hover:bg-success/20 transition-all">
@@ -1368,6 +1666,50 @@ function DesignWorkspace({ sessionId, onBack }) {
                 </div>
                 <div className="flex-1 overflow-y-auto">
                     <ScaleAnalysisView session={session} sessionId={sessionId} />
+                </div>
+            </div>
+        )
+    }
+
+    // ── FLOW SIMULATION VIEW ─────────────────────────────
+    if (workspaceMode === 'flow') {
+        return (
+            <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <button onClick={onBack} className="text-text-tertiary hover:text-text-primary transition-colors">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+                        </button>
+                        <div>
+                            <h2 className="text-sm font-bold text-text-primary">{session.title}</h2>
+                            <p className="text-[10px] text-text-disabled">Flow Simulation</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setWorkspaceMode('design')}
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                            ← Back to Design
+                        </button>
+                        {session.scenarios?.length > 0 && (
+                            <button onClick={() => setWorkspaceMode('scenarios')}
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                                Scenarios →
+                            </button>
+                        )}
+                        <button onClick={() => setWorkspaceMode('scale')}
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20 transition-all">
+                            Scale Analysis →
+                        </button>
+                        {hasEvaluation && (
+                            <button onClick={() => setWorkspaceMode('evaluation')}
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success bg-success/10 border-success/20 hover:bg-success/20 transition-all">
+                                View Evaluation →
+                            </button>
+                        )}
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    <FlowSimulationView session={session} sessionId={sessionId} />
                 </div>
             </div>
         )
@@ -1394,6 +1736,10 @@ function DesignWorkspace({ sessionId, onBack }) {
                                 ← Scenarios
                             </button>
                         )}
+                        <button onClick={() => setWorkspaceMode('flow')}
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                            Flows
+                        </button>
                         <button onClick={() => setWorkspaceMode('design')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
                             View Design
@@ -1445,6 +1791,9 @@ function DesignWorkspace({ sessionId, onBack }) {
                     <span className={cn('w-2 h-2 rounded-full', savePhase.isPending || saveDiagram.isPending ? 'bg-warning animate-pulse' : 'bg-success')} />
                     <Button variant="ghost" size="sm" onClick={handlePauseExit} loading={updateTiming.isPending}>
                         Pause &amp; Exit
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setWorkspaceMode('flow')}>
+                        Flows
                     </Button>
                     {session.status !== 'COMPLETED' && (
                         <Button variant="secondary" size="sm" onClick={handleCompleteDesign} loading={updateSessionStatus.isPending}>
