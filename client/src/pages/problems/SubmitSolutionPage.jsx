@@ -1399,6 +1399,65 @@ export default function SubmitSolutionPage() {
         )
     }
 
+    // SD/LLD practice moved to Design Studio (richer phase-based flow with
+    // AI coaching, scenarios, and scored evaluation). Show a migration banner
+    // instead of the old single-shot workspace for these categories.
+    if (isSystemDesign || isLowLevelDesign) {
+        return (
+            <div className="p-6 max-w-[600px] mx-auto">
+                <button type="button" onClick={() => navigate(`/problems/${problemId}`)}
+                    className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-text-primary transition-colors mb-6">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+                    </svg>
+                    Back to problem
+                </button>
+
+                <div className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-6">
+                    <div className="flex items-start gap-3 mb-4">
+                        <span className="text-3xl flex-shrink-0 mt-1">
+                            {isSystemDesign ? '🏗️' : '🔧'}
+                        </span>
+                        <div>
+                            <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">
+                                This problem now uses Design Studio
+                            </p>
+                            <h2 className="text-lg font-extrabold text-text-primary mb-1">{problem.title}</h2>
+                            <p className="text-xs text-text-tertiary leading-relaxed">
+                                {isSystemDesign ? 'System design' : 'Low-level design'} practice moved from a single-shot submission
+                                to a richer phase-based workspace with AI coaching at every step, scenario-based validation, scale
+                                analysis, flow simulation, and a scored evaluation across 10 dimensions.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="bg-surface-1 border border-border-default rounded-xl p-4 mb-4">
+                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+                            What you get instead
+                        </p>
+                        <ul className="text-xs text-text-secondary space-y-1.5">
+                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>AI coach at every phase (Validate / Guide / Teach)</li>
+                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>AI-generated scenarios tailored to YOUR design</li>
+                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Scale analysis (1x / 10x / 100x / failure)</li>
+                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Flow simulation with latency tracing</li>
+                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Comprehensive scored evaluation (GPT-4o, 10 dimensions)</li>
+                            <li className="flex items-start gap-2"><span className="text-success flex-shrink-0">✓</span>Multiple attempts tracked per problem</li>
+                        </ul>
+                    </div>
+
+                    <Button
+                        variant="primary"
+                        size="lg"
+                        fullWidth
+                        onClick={() => navigate(`/design-studio?problemId=${problemId}`)}
+                    >
+                        Open in Design Studio →
+                    </Button>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="p-6 max-w-[800px] mx-auto">
             {/* Back — Bug fix: correct navigate syntax */}

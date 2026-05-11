@@ -33,12 +33,219 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { aiComplete } from "../services/ai.service.js";
+import { initialSM2State } from "../utils/sm2.js";
 import {
   designStudioCoachingPrompt,
   designStudioScenarioPrompt,
   designStudioScenarioEvalPrompt,
   designStudioFinalEvalPrompt,
 } from "../services/designStudio.prompts.js";
+
+// ── Bridge helpers for Design Studio → Solution record ────────────────
+//
+// When a DS session completes with a final evaluation and is linked to a
+// Problem, we auto-upsert a Solution record so the standard Review Queue,
+// SM-2 spaced repetition, and team-level stats pipelines keep working for
+// SD/LLD problems. Without this bridge, migrating SD/LLD practice from the
+// single-shot SubmitSolutionPage to Design Studio would lose those features.
+
+// Map DS overallScore (0-10 float) into the 1-5 confidence scale that
+// drives initial SM-2 state. High DS score implies strong recall.
+function scoreToConfidence(overallScore) {
+  if (typeof overallScore !== "number") return 3;
+  if (overallScore >= 8.5) return 5;
+  if (overallScore >= 7) return 4;
+  if (overallScore >= 5) return 3;
+  if (overallScore >= 3) return 2;
+  return 1;
+}
+
+// Bucket totalTimeSpent (seconds) into the enum that Solution.timeTaken uses.
+function secondsToTimeBucket(totalSeconds) {
+  const minutes = Math.round((totalSeconds || 0) / 60);
+  if (minutes < 15) return "UNDER_15";
+  if (minutes < 30) return "MINS_15_30";
+  if (minutes < 60) return "MINS_30_60";
+  if (minutes < 120) return "HOURS_1_2";
+  return "OVER_2_HOURS";
+}
+
+// Infer solveMethod from AI coach usage. DS coaches the user mid-task so
+// any AI interactions count as "HINTS" in the Submit Solution taxonomy.
+function inferSolveMethod(aiInteractions) {
+  if (!Array.isArray(aiInteractions) || aiInteractions.length === 0) {
+    return "COLD";
+  }
+  return "HINTS";
+}
+
+// Extract the dominant design pattern from the LLD designPatterns phase
+// content. Looks for well-known pattern names; returns the first match or
+// null. Used to populate Solution.pattern for pattern-baseline tracking.
+const LLD_PATTERNS = [
+  "Singleton",
+  "Factory",
+  "Abstract Factory",
+  "Builder",
+  "Prototype",
+  "Adapter",
+  "Decorator",
+  "Facade",
+  "Proxy",
+  "Composite",
+  "Bridge",
+  "Flyweight",
+  "Observer",
+  "Strategy",
+  "Command",
+  "State",
+  "Iterator",
+  "Template Method",
+  "Visitor",
+  "Chain of Responsibility",
+  "Mediator",
+  "Memento",
+];
+function extractDominantPattern(text) {
+  if (!text || typeof text !== "string") return null;
+  const lower = text.toLowerCase();
+  for (const p of LLD_PATTERNS) {
+    if (lower.includes(p.toLowerCase())) return p;
+  }
+  return null;
+}
+
+// Build the Solution payload from a DS session + its final evaluation.
+// Field mapping is intentionally conservative — we put structured phase
+// content into categorySpecificData (the canonical home) and populate the
+// legacy approach/keyInsight/feynmanExplanation fields for backward-compat
+// with code paths that still read those.
+function buildSolutionPayloadFromSession(session, evaluation) {
+  const phases = session.phases || {};
+  const isSD = session.designType === "SYSTEM_DESIGN";
+  const overallScore =
+    typeof evaluation?.overallScore === "number"
+      ? evaluation.overallScore
+      : null;
+  const confidence = scoreToConfidence(overallScore);
+  const timeTaken = secondsToTimeBucket(session.totalTimeSpent);
+  const solveMethod = inferSolveMethod(session.aiInteractions);
+
+  const base = {
+    confidence,
+    aiFeedback: {
+      ...(evaluation || {}),
+      // Meta field so downstream consumers can tell this review came from
+      // a Design Studio session (different rubric from solution.review).
+      source: "design_studio",
+      designSessionId: session.id,
+      solveMethod,
+      timeTaken,
+    },
+  };
+
+  if (isSD) {
+    return {
+      ...base,
+      approach: phases.requirements || null,
+      bruteForce: phases.capacityEstimation || null,
+      optimizedApproach: phases.architecture || null,
+      keyInsight: phases.tradeoffs || null,
+      feynmanExplanation:
+        session.dataFlowDescription || phases.deepDive || null,
+      realWorldConnection: phases.apiDesign || null,
+      pattern: null, // SD has no single "pattern" axis
+      categorySpecificData: {
+        functionalRequirements: phases.requirements || "",
+        nonFunctionalRequirements: phases.requirements || "",
+        capacityEstimation: phases.capacityEstimation || "",
+        apiDesign: phases.apiDesign || "",
+        schemaDesign: phases.dataModel || "",
+        architecture: phases.architecture || "",
+        architectureNotes: phases.deepDive || "",
+        tradeoffReasoning: phases.tradeoffs || "",
+        failureModes: phases.deepDive || phases.tradeoffs || "",
+        dataFlowDescription: session.dataFlowDescription || "",
+        diagramData: session.diagramData || null,
+        componentAnnotations: session.componentAnnotations || [],
+      },
+    };
+  }
+
+  // LLD
+  const pattern = extractDominantPattern(phases.designPatterns);
+  return {
+    ...base,
+    approach: phases.requirements || null,
+    bruteForce: phases.entities || null,
+    optimizedApproach: phases.classHierarchy || null,
+    keyInsight: phases.designPatterns || null,
+    feynmanExplanation: phases.solidAnalysis || null,
+    realWorldConnection: null,
+    code: phases.methodSignatures || null,
+    pattern,
+    categorySpecificData: {
+      entities: phases.entities || "",
+      classHierarchy: phases.classHierarchy || "",
+      designPattern: phases.designPatterns || "",
+      solidAnalysis: phases.solidAnalysis || "",
+      extensibilityAnalysis: "",
+      implementationCode: phases.methodSignatures || "",
+      dataFlowDescription: session.dataFlowDescription || "",
+      diagramData: session.diagramData || null,
+      componentAnnotations: session.componentAnnotations || [],
+    },
+  };
+}
+
+// Upsert a Solution for a completed DS session. Safe to call multiple times:
+// a second eval on the same session updates the existing Solution rather
+// than creating a duplicate (unique constraint: userId+problemId+teamId).
+// Errors are logged but not rethrown — the DS eval response is the primary
+// user-visible result; a bridge failure shouldn't fail that path.
+async function bridgeDesignSessionToSolution(session, evaluation) {
+  if (!session?.problemId || !session?.teamId) return; // freeform or no-team session
+
+  try {
+    const payload = buildSolutionPayloadFromSession(session, evaluation);
+    const existing = await prisma.solution.findUnique({
+      where: {
+        userId_problemId_teamId: {
+          userId: session.userId,
+          problemId: session.problemId,
+          teamId: session.teamId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      // Preserve SM-2 history on a re-evaluation; only refresh content + AI feedback.
+      await prisma.solution.update({
+        where: { id: existing.id },
+        data: payload,
+      });
+    } else {
+      // Seed SM-2 from the inferred confidence (first review always in 1 day).
+      const sm2 = initialSM2State(payload.confidence);
+      await prisma.solution.create({
+        data: {
+          ...payload,
+          userId: session.userId,
+          problemId: session.problemId,
+          teamId: session.teamId,
+          sm2EasinessFactor: sm2.easinessFactor,
+          sm2Interval: sm2.interval,
+          sm2Repetitions: sm2.repetitions,
+          nextReviewDate: sm2.nextReviewDate,
+          reviewCount: 0,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("Design Studio → Solution bridge failed:", err);
+  }
+}
 
 // ============================================================================
 // CREATE SESSION
@@ -104,11 +311,12 @@ export async function createSession(req, res) {
 export async function listSessions(req, res) {
   try {
     const userId = req.user.id;
-    const { designType, status, page = 1, limit = 20 } = req.query;
+    const { designType, status, problemId, page = 1, limit = 20 } = req.query;
 
     const where = { userId };
     if (designType) where.designType = designType;
     if (status) where.status = status;
+    if (problemId) where.problemId = problemId;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
@@ -367,7 +575,13 @@ export async function askAICoach(req, res) {
       where: { id: sessionId },
       include: {
         problem: {
-          select: { id: true, title: true, description: true, category: true },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            category: true,
+            adminNotes: true,
+          },
         },
       },
     });
@@ -394,6 +608,7 @@ export async function askAICoach(req, res) {
       title: session.title,
       difficulty: session.difficulty,
       problemDescription: session.problem?.description || "",
+      adminNotes: session.problem?.adminNotes || "",
       currentPhaseContent,
       allPhases: phases,
       componentAnnotations: annotations,
@@ -827,6 +1042,12 @@ export async function requestFinalEvaluation(req, res) {
         completedAt: new Date(),
       },
     });
+
+    // Bridge: if this session is linked to a Problem, upsert a Solution
+    // record so Review Queue, SM-2 spaced repetition, and team stats keep
+    // working for SD/LLD practice. Non-blocking — bridge failures are
+    // logged but don't affect the eval response.
+    await bridgeDesignSessionToSolution(session, aiResponse);
 
     return success(res, { evaluation: aiResponse });
   } catch (err) {

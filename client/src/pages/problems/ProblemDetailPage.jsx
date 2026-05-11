@@ -38,14 +38,25 @@ function getCategoryIcon(category) {
 // ── Category-specific submit button label ──────────────
 function getSubmitLabel(category) {
     const labels = {
-        SYSTEM_DESIGN: 'Submit My Design',
-        LOW_LEVEL_DESIGN: 'Submit My Design',
+        SYSTEM_DESIGN: '🏗️ Practice in Design Studio',
+        LOW_LEVEL_DESIGN: '🔧 Practice in Design Studio',
         BEHAVIORAL: 'Submit My Response',
         CS_FUNDAMENTALS: 'Submit My Explanation',
         HR: 'Submit My Answer',
         SQL: 'Submit Solution',
     }
     return labels[category] || 'Submit Solution'
+}
+
+// ── Route users to the right practice environment per category ────────
+// SD/LLD now practice in Design Studio (richer phase-based flow with AI
+// coaching, scenarios, scale analysis, flow simulation, scored evaluation).
+// Other categories use the single-shot Submit Solution flow.
+function getPracticePath(category, problemId) {
+    if (category === 'SYSTEM_DESIGN' || category === 'LOW_LEVEL_DESIGN') {
+        return `/design-studio?problemId=${problemId}`
+    }
+    return `/problems/${problemId}/submit`
 }
 
 function InfoChip({ label, value, color }) {
@@ -846,7 +857,7 @@ export default function ProblemDetailPage() {
                         <Button
                             variant="primary"
                             size="md"
-                            onClick={() => navigate(`/problems/${problemId}/submit`)}
+                            onClick={() => navigate(getPracticePath(category, problemId))}
                         >
                             {getSubmitLabel(category)}
                         </Button>
@@ -998,7 +1009,7 @@ export default function ProblemDetailPage() {
                                 </p>
                                 {/* FIX 1: navigate call corrected */}
                                 <button
-                                    onClick={() => navigate(`/problems/${problemId}/submit`)}
+                                    onClick={() => navigate(getPracticePath(category, problemId))}
                                     className="mt-3 text-xs font-bold text-brand-300 hover:text-brand-200
                                                transition-colors flex items-center gap-1"
                                 >
@@ -1223,7 +1234,7 @@ export default function ProblemDetailPage() {
                                 </p>
                                 {/* FIX 1: navigate call corrected */}
                                 <button
-                                    onClick={() => navigate(`/problems/${problemId}/submit`)}
+                                    onClick={() => navigate(getPracticePath(category, problemId))}
                                     className="mt-3 text-xs font-bold text-brand-300 hover:text-brand-200
                                                transition-colors flex items-center gap-1"
                                 >
@@ -1274,7 +1285,7 @@ export default function ProblemDetailPage() {
                         <Button
                             variant="primary"
                             size="sm"
-                            onClick={() => navigate(`/problems/${problemId}/submit`)}
+                            onClick={() => navigate(getPracticePath(category, problemId))}
                         >
                             {getSubmitLabel(category)}
                         </Button>
