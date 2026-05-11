@@ -308,16 +308,48 @@ function AICoachingBar({ sessionId, phaseId, onResponse }) {
 
 function AIResponsePanel({ response, onDismiss }) {
     if (!response) return null
+
+    const verdictConfig = {
+        on_track: { label: 'On Track', color: 'text-success bg-success/10 border-success/20' },
+        strong: { label: 'Strong', color: 'text-success bg-success/10 border-success/20' },
+        needs_work: { label: 'Needs Work', color: 'text-warning bg-warning/10 border-warning/20' },
+    }
+    const verdictInfo = response.verdict ? verdictConfig[response.verdict] : null
+
     return (
         <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
             className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4 mt-3">
             <div className="flex items-start justify-between gap-3 mb-2">
-                <span className="text-xs font-bold text-brand-300">🤖 AI Coach</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-brand-300">🤖 AI Coach</span>
+                    {verdictInfo && (
+                        <span className={cn('text-[10px] font-bold px-2 py-px rounded-full border', verdictInfo.color)}>
+                            {verdictInfo.label}
+                        </span>
+                    )}
+                </div>
                 <button onClick={onDismiss} className="text-text-disabled hover:text-text-primary">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </button>
             </div>
+
             {response.response && <p className="text-xs text-text-secondary leading-relaxed mb-2">{response.response}</p>}
+
+            {/* validate mode */}
+            {response.specificStrength && (
+                <div className="mt-2 pt-2 border-t border-brand-400/10">
+                    <p className="text-[10px] font-bold text-success uppercase tracking-widest mb-1">Strength</p>
+                    <p className="text-xs text-text-secondary leading-relaxed">{response.specificStrength}</p>
+                </div>
+            )}
+            {response.specificGap && (
+                <div className="mt-2">
+                    <p className="text-[10px] font-bold text-warning uppercase tracking-widest mb-1">Gap</p>
+                    <p className="text-xs text-text-secondary leading-relaxed">{response.specificGap}</p>
+                </div>
+            )}
+
+            {/* guide mode */}
             {response.guidingQuestions?.length > 0 && (
                 <div className="space-y-1.5 mt-2">
                     {response.guidingQuestions.map((q, i) => (
@@ -325,8 +357,21 @@ function AIResponsePanel({ response, onDismiss }) {
                     ))}
                 </div>
             )}
+            {response.thinkAbout && (
+                <p className="text-[11px] text-text-tertiary leading-relaxed mt-2 pt-2 border-t border-brand-400/10 italic">
+                    Think about: {response.thinkAbout}
+                </p>
+            )}
+
+            {/* teach mode */}
             {response.conceptExplanation && <p className="text-xs text-text-secondary leading-relaxed mt-2 pt-2 border-t border-brand-400/10">{response.conceptExplanation}</p>}
             {response.exampleInContext && <p className="text-[11px] text-text-tertiary leading-relaxed mt-2 italic">In your design: {response.exampleInContext}</p>}
+            {response.relatedDecision && (
+                <div className="mt-2 pt-2 border-t border-brand-400/10">
+                    <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-1">This helps you decide</p>
+                    <p className="text-xs text-text-secondary leading-relaxed">{response.relatedDecision}</p>
+                </div>
+            )}
         </motion.div>
     )
 }
@@ -334,7 +379,7 @@ function AIResponsePanel({ response, onDismiss }) {
 // ══════════════════════════════════════════════════════════════════════════
 // CHUNK 2: SCENARIO TESTING UI
 // ══════════════════════════════════════════════════════════════════════════
-function ScenarioTestingView({ session, sessionId }) {
+function ScenarioTestingView({ session, sessionId, onEvaluationReady }) {
     const submitResponse = useSubmitScenarioResponse()
     const evaluateScenario = useEvaluateScenario()
     const requestEvaluation = useRequestEvaluation()
@@ -372,6 +417,7 @@ function ScenarioTestingView({ session, sessionId }) {
     async function handleRequestFinalEval() {
         try {
             await requestEvaluation.mutateAsync(sessionId)
+            onEvaluationReady?.()
         } catch { /* handled */ }
     }
 
@@ -652,6 +698,236 @@ function ScaleAnalysisView({ session, sessionId }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// CHUNK 3: FINAL EVALUATION RESULTS VIEW
+// ══════════════════════════════════════════════════════════════════════════
+const SD_DIMENSION_LABELS = {
+    requirementsCompleteness: { label: 'Requirements', icon: '📋' },
+    estimationSoundness: { label: 'Estimation', icon: '🔢' },
+    apiDesignQuality: { label: 'API Design', icon: '🔌' },
+    dataModelCorrectness: { label: 'Data Model', icon: '🗄️' },
+    architectureCoherence: { label: 'Architecture', icon: '🏗️' },
+    deepDiveDepth: { label: 'Deep Dive', icon: '🔬' },
+    tradeoffAwareness: { label: 'Trade-offs', icon: '⚖️' },
+    scenarioResilience: { label: 'Resilience', icon: '🛡️' },
+    scaleReadiness: { label: 'Scale', icon: '📈' },
+    communicationClarity: { label: 'Clarity', icon: '💬' },
+}
+
+const LLD_DIMENSION_LABELS = {
+    requirementsCompleteness: { label: 'Requirements', icon: '📋' },
+    entityIdentification: { label: 'Entities', icon: '📦' },
+    hierarchyCorrectness: { label: 'Hierarchy', icon: '🗂️' },
+    patternApplication: { label: 'Patterns', icon: '🧩' },
+    solidCompliance: { label: 'SOLID', icon: '🏛️' },
+    implementationQuality: { label: 'Implementation', icon: '💻' },
+    extensibilityScore: { label: 'Extensibility', icon: '🔧' },
+    scenarioResilience: { label: 'Resilience', icon: '🛡️' },
+    edgeCaseAwareness: { label: 'Edge Cases', icon: '⚠️' },
+    communicationClarity: { label: 'Clarity', icon: '💬' },
+}
+
+function scoreColor(score) {
+    if (score >= 8) return { text: 'text-success', bar: 'bg-success', bg: 'bg-success/10', border: 'border-success/20' }
+    if (score >= 6) return { text: 'text-brand-300', bar: 'bg-brand-400', bg: 'bg-brand-400/10', border: 'border-brand-400/20' }
+    if (score >= 4) return { text: 'text-warning', bar: 'bg-warning', bg: 'bg-warning/10', border: 'border-warning/20' }
+    return { text: 'text-danger', bar: 'bg-danger', bg: 'bg-danger/10', border: 'border-danger/20' }
+}
+
+function DimensionBar({ label, icon, score, index }) {
+    const pct = Math.max(0, Math.min(100, (score / 10) * 100))
+    const c = scoreColor(score)
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.04 }}
+            className="bg-surface-1 border border-border-default rounded-xl p-3"
+        >
+            <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm">{icon}</span>
+                    <span className="text-xs font-semibold text-text-primary">{label}</span>
+                </div>
+                <span className={cn('text-sm font-extrabold font-mono', c.text)}>
+                    {typeof score === 'number' ? score.toFixed(1) : '—'}
+                    <span className="text-text-disabled text-[10px] font-normal ml-0.5">/ 10</span>
+                </span>
+            </div>
+            <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${pct}%` }}
+                    transition={{ delay: index * 0.04 + 0.1, duration: 0.6 }}
+                    className={cn('h-full rounded-full', c.bar)}
+                />
+            </div>
+        </motion.div>
+    )
+}
+
+function BulletCard({ title, items, color, icon }) {
+    const colorMap = {
+        success: { text: 'text-success', bg: 'bg-success/5', border: 'border-success/20', dot: 'text-success' },
+        danger: { text: 'text-danger', bg: 'bg-danger/5', border: 'border-danger/20', dot: 'text-danger' },
+        brand: { text: 'text-brand-300', bg: 'bg-brand-400/5', border: 'border-brand-400/20', dot: 'text-brand-300' },
+    }
+    const c = colorMap[color] || colorMap.brand
+    const list = Array.isArray(items) ? items : []
+    return (
+        <div className={cn('border rounded-2xl p-4', c.bg, c.border)}>
+            <div className="flex items-center gap-2 mb-3">
+                <span className="text-base">{icon}</span>
+                <h3 className={cn('text-xs font-bold uppercase tracking-widest', c.text)}>{title}</h3>
+                <span className="text-[10px] text-text-disabled ml-auto">{list.length}</span>
+            </div>
+            {list.length === 0 ? (
+                <p className="text-xs text-text-disabled italic">None identified.</p>
+            ) : (
+                <ul className="space-y-2">
+                    {list.map((item, i) => (
+                        <li key={i} className="text-xs text-text-secondary leading-relaxed flex items-start gap-2">
+                            <span className={cn('flex-shrink-0 mt-0.5', c.dot)}>•</span>
+                            <span>{item}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    )
+}
+
+function EvaluationResultsView({ session }) {
+    const ev = session?.evaluation
+    if (!ev || typeof ev !== 'object') {
+        return (
+            <div className="p-6 max-w-[700px] mx-auto">
+                <div className="bg-surface-1 border border-border-default rounded-2xl p-10 text-center">
+                    <div className="text-4xl mb-3">📊</div>
+                    <p className="text-sm font-semibold text-text-primary mb-1">Evaluation not available</p>
+                    <p className="text-xs text-text-tertiary">
+                        This session was completed without running the AI evaluation.
+                        Future sessions: complete validation scenarios, then click &ldquo;Get Final Evaluation&rdquo; to generate a scored report.
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
+    const isSD = session.designType === 'SYSTEM_DESIGN'
+    const labelMap = isSD ? SD_DIMENSION_LABELS : LLD_DIMENSION_LABELS
+    const dimensionKeys = Object.keys(labelMap)
+    const dimensionEntries = dimensionKeys.map(k => ({
+        key: k,
+        label: labelMap[k].label,
+        icon: labelMap[k].icon,
+        score: typeof ev.dimensions?.[k] === 'number' ? ev.dimensions[k] : null,
+    }))
+    const overall = typeof ev.overallScore === 'number' ? ev.overallScore : null
+    const overallColor = overall !== null ? scoreColor(overall) : null
+
+    return (
+        <div className="p-6 max-w-[900px] mx-auto space-y-6 pb-16">
+            {/* ── Overall score banner ────────────────────────────────────── */}
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                    'border rounded-2xl p-6 flex items-center gap-6',
+                    overallColor ? cn(overallColor.bg, overallColor.border) : 'bg-surface-1 border-border-default'
+                )}
+            >
+                <div className="flex-shrink-0 flex flex-col items-center">
+                    <div className={cn('text-5xl font-extrabold font-mono leading-none', overallColor?.text || 'text-text-primary')}>
+                        {overall !== null ? overall.toFixed(1) : '—'}
+                    </div>
+                    <div className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mt-1">Overall / 10</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-lg">{isSD ? '🏗️' : '🔧'}</span>
+                        <h2 className="text-lg font-extrabold text-text-primary truncate">{session.title}</h2>
+                        <span className="text-[10px] font-bold text-text-disabled bg-surface-3 border border-border-subtle rounded-full px-2 py-px">
+                            {session.difficulty}
+                        </span>
+                    </div>
+                    {ev.readinessVerdict && (
+                        <p className="text-xs text-text-secondary leading-relaxed mt-1">
+                            <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mr-1.5">Readiness:</span>
+                            {ev.readinessVerdict}
+                        </p>
+                    )}
+                </div>
+            </motion.div>
+
+            {/* ── Dimension scores ─────────────────────────────────────────── */}
+            <section>
+                <h3 className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-3">Dimension Scores</h3>
+                <div className="grid md:grid-cols-2 gap-2.5">
+                    {dimensionEntries.map((d, i) => (
+                        <DimensionBar key={d.key} label={d.label} icon={d.icon} score={d.score ?? 0} index={i} />
+                    ))}
+                </div>
+            </section>
+
+            {/* ── Strengths / Gaps / Improvements ──────────────────────────── */}
+            <section>
+                <h3 className="text-xs font-bold text-text-disabled uppercase tracking-widest mb-3">Review</h3>
+                <div className="grid md:grid-cols-3 gap-3">
+                    <BulletCard title="Strengths" color="success" icon="✅" items={ev.strengths} />
+                    <BulletCard title="Critical Gaps" color="danger" icon="⚠️" items={ev.criticalGaps} />
+                    <BulletCard title="Improvements" color="brand" icon="🔧" items={ev.improvements} />
+                </div>
+            </section>
+
+            {/* ── Industry Comparison ──────────────────────────────────────── */}
+            {ev.industryComparison && (
+                <section className="bg-surface-1 border border-border-default rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-base">🏢</span>
+                        <h3 className="text-xs font-bold text-text-primary uppercase tracking-widest">Industry Comparison</h3>
+                    </div>
+                    <p className="text-sm text-text-secondary leading-relaxed">{ev.industryComparison}</p>
+                </section>
+            )}
+
+            {/* ── Time Analysis ────────────────────────────────────────────── */}
+            {ev.timeAnalysis && (
+                <section className="bg-surface-1 border border-border-default rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-base">⏱️</span>
+                        <h3 className="text-xs font-bold text-text-primary uppercase tracking-widest">Time Analysis</h3>
+                        <span className="text-[10px] text-text-disabled ml-auto">
+                            {formatTime(session.totalTimeSpent || 0)} total
+                        </span>
+                    </div>
+                    <p className="text-sm text-text-secondary leading-relaxed">{ev.timeAnalysis}</p>
+                </section>
+            )}
+
+            {/* ── Suggested Next Steps ─────────────────────────────────────── */}
+            {Array.isArray(ev.suggestedNextSteps) && ev.suggestedNextSteps.length > 0 && (
+                <section className="bg-brand-400/5 border border-brand-400/20 rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                        <span className="text-base">🚀</span>
+                        <h3 className="text-xs font-bold text-brand-300 uppercase tracking-widest">Next Steps</h3>
+                    </div>
+                    <ol className="space-y-2">
+                        {ev.suggestedNextSteps.map((step, i) => (
+                            <li key={i} className="text-sm text-text-secondary leading-relaxed flex items-start gap-3">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-brand-400/20 text-brand-300 text-[10px] font-bold flex items-center justify-center mt-0.5">
+                                    {i + 1}
+                                </span>
+                                <span>{step}</span>
+                            </li>
+                        ))}
+                    </ol>
+                </section>
+            )}
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // MAIN DESIGN WORKSPACE (updated with validate mode)
 // ══════════════════════════════════════════════════════════════════════════
 function DesignWorkspace({ sessionId, onBack }) {
@@ -660,6 +936,7 @@ function DesignWorkspace({ sessionId, onBack }) {
     const saveDiagram = useSaveDiagram()
     const updateTiming = useUpdateTiming()
     const generateScenarios = useGenerateScenarios()
+    const updateSessionStatus = useUpdateSessionStatus()
 
     const [activePhaseIdx, setActivePhaseIdx] = useState(0)
     const [phaseContent, setPhaseContent] = useState({})
@@ -674,43 +951,69 @@ function DesignWorkspace({ sessionId, onBack }) {
 
     const debounceRef = useRef(null)
     const diagramDebounceRef = useRef(null)
+    const annotationsDebounceRef = useRef(null)
     const timerRef = useRef(null)
     const dragRef = useRef(null)
+    const elapsedTimeRef = useRef(0)
+    const diagramDataRef = useRef(null)
+    const dataFlowRef = useRef('')
+    // Tracks whether we've already picked an initial workspace mode for this session.
+    // Without this, every background refetch would snap the user back to a server-chosen view.
+    const initializedRef = useRef(false)
 
     const phases = session?.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES
     const activePhase = phases[activePhaseIdx]
 
-    // Load session data
+    // Load session data. Seed all text/state from the server response on every
+    // change (the auto-save hooks are one-way: client → server). The initial
+    // workspace-mode pick only runs once per session so refetches don't snap
+    // the user out of whatever view they navigated to.
     useEffect(() => {
-        if (session) {
-            setPhaseContent(session.phases || {})
-            setDiagramData(session.diagramData || null)
-            setAnnotations(session.componentAnnotations || [])
-            setDataFlow(session.dataFlowDescription || '')
-            setElapsedTime(session.totalTimeSpent || 0)
-            // Auto-switch to scenarios view if session is in VALIDATING status
-            if (session.status === 'VALIDATING' && session.scenarios?.length > 0) {
+        if (!session) return
+        setPhaseContent(session.phases || {})
+        setDiagramData(session.diagramData || null)
+        setAnnotations(session.componentAnnotations || [])
+        setDataFlow(session.dataFlowDescription || '')
+        setElapsedTime(session.totalTimeSpent || 0)
+
+        if (!initializedRef.current) {
+            initializedRef.current = true
+            if (session.status === 'COMPLETED' && session.evaluation) {
+                setWorkspaceMode('evaluation')
+            } else if (session.status === 'VALIDATING' && session.scenarios?.length > 0) {
                 setWorkspaceMode('scenarios')
-            }
-            if (session.status === 'COMPLETED') {
-                setWorkspaceMode('scenarios')
+            } else if (session.status === 'COMPLETED') {
+                // Completed without evaluation — show scenarios if any, else design view
+                setWorkspaceMode(session.scenarios?.length > 0 ? 'scenarios' : 'design')
             }
         }
     }, [session])
 
-    // Timer
+    // Mirror elapsedTime / diagramData / dataFlow into refs so long-lived
+    // intervals and debounced callbacks read fresh values without re-subscribing.
+    useEffect(() => { elapsedTimeRef.current = elapsedTime }, [elapsedTime])
+    useEffect(() => { diagramDataRef.current = diagramData }, [diagramData])
+    useEffect(() => { dataFlowRef.current = dataFlow }, [dataFlow])
+
+    // Timer — stop when session is terminal so completed sessions don't keep accumulating
     useEffect(() => {
+        if (session?.status === 'COMPLETED' || session?.status === 'ABANDONED') return
         timerRef.current = setInterval(() => setElapsedTime(prev => prev + 1), 1000)
         return () => clearInterval(timerRef.current)
-    }, [])
+    }, [session?.status])
 
-    // Save timing every 30s
+    // Save timing every 30s — reads elapsedTime from a ref, so the interval
+    // is created once per session and not torn down on every tick.
     useEffect(() => {
+        if (!sessionId) return
         const interval = setInterval(() => {
-            if (sessionId && elapsedTime > 0) updateTiming.mutate({ sessionId, totalTimeSpent: elapsedTime })
+            if (elapsedTimeRef.current > 0) {
+                updateTiming.mutate({ sessionId, totalTimeSpent: elapsedTimeRef.current })
+            }
         }, 30000)
         return () => clearInterval(interval)
-    }, [sessionId, elapsedTime])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionId])
 
     function handlePhaseChange(value) {
         const newContent = { ...phaseContent, [activePhase.id]: value }
@@ -731,7 +1034,15 @@ function DesignWorkspace({ sessionId, onBack }) {
 
     function handleAnnotationsChange(newAnnotations) {
         setAnnotations(newAnnotations)
-        saveDiagram.mutate({ sessionId, diagramData, componentAnnotations: newAnnotations, dataFlowDescription: dataFlow })
+        if (annotationsDebounceRef.current) clearTimeout(annotationsDebounceRef.current)
+        annotationsDebounceRef.current = setTimeout(() => {
+            saveDiagram.mutate({
+                sessionId,
+                diagramData: diagramDataRef.current,
+                componentAnnotations: newAnnotations,
+                dataFlowDescription: dataFlowRef.current,
+            })
+        }, 1500)
     }
 
     function handleDragStart(e) {
@@ -754,11 +1065,38 @@ function DesignWorkspace({ sessionId, onBack }) {
         } catch { /* handled */ }
     }
 
+    async function handlePauseExit() {
+        // Flush any pending debounced saves before leaving. Auto-save keeps
+        // status at IN_PROGRESS so the session resumes exactly as left.
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        if (diagramDebounceRef.current) clearTimeout(diagramDebounceRef.current)
+        if (annotationsDebounceRef.current) clearTimeout(annotationsDebounceRef.current)
+        if (elapsedTimeRef.current > 0) {
+            try { await updateTiming.mutateAsync({ sessionId, totalTimeSpent: elapsedTimeRef.current }) } catch { /* ignore */ }
+        }
+        onBack()
+    }
+
+    async function handleCompleteDesign() {
+        // Terminal transition — user chooses to finish without running AI eval.
+        // For the evaluation-backed completion path, they use "Validate Design" → "Get Final Evaluation".
+        if (!window.confirm('Mark this design session as complete? You will no longer be able to edit it.')) return
+        try {
+            if (elapsedTimeRef.current > 0) {
+                try { await updateTiming.mutateAsync({ sessionId, totalTimeSpent: elapsedTimeRef.current }) } catch { /* ignore */ }
+            }
+            await updateSessionStatus.mutateAsync({ sessionId, status: 'COMPLETED' })
+            onBack()
+        } catch { /* handled by hook */ }
+    }
+
     if (isLoading) return <div className="flex items-center justify-center h-[60vh]"><Spinner size="lg" /></div>
     if (!session) return <div className="flex flex-col items-center justify-center h-[60vh] gap-4"><p className="text-text-secondary">Session not found.</p><Button variant="secondary" onClick={onBack}>Back</Button></div>
 
     const filledPhases = Object.values(phaseContent).filter(v => v && v.trim().length > 30).length
     const canValidate = filledPhases >= 3
+
+    const hasEvaluation = !!session.evaluation
 
     // ── SCENARIO TESTING VIEW ────────────────────────────
     if (workspaceMode === 'scenarios') {
@@ -786,10 +1124,20 @@ function DesignWorkspace({ sessionId, onBack }) {
                                 'text-brand-300 bg-brand-400/10 border-brand-400/20 hover:bg-brand-400/20')}>
                             Scale Analysis →
                         </button>
+                        {hasEvaluation && (
+                            <button onClick={() => setWorkspaceMode('evaluation')}
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success bg-success/10 border-success/20 hover:bg-success/20 transition-all">
+                                View Evaluation →
+                            </button>
+                        )}
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                    <ScenarioTestingView session={session} sessionId={sessionId} />
+                    <ScenarioTestingView
+                        session={session}
+                        sessionId={sessionId}
+                        onEvaluationReady={() => setWorkspaceMode('evaluation')}
+                    />
                 </div>
             </div>
         )
@@ -814,10 +1162,50 @@ function DesignWorkspace({ sessionId, onBack }) {
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
                             ← Back to Scenarios
                         </button>
+                        {hasEvaluation && (
+                            <button onClick={() => setWorkspaceMode('evaluation')}
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success bg-success/10 border-success/20 hover:bg-success/20 transition-all">
+                                View Evaluation →
+                            </button>
+                        )}
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                     <ScaleAnalysisView session={session} sessionId={sessionId} />
+                </div>
+            </div>
+        )
+    }
+
+    // ── EVALUATION RESULTS VIEW ──────────────────────────
+    if (workspaceMode === 'evaluation') {
+        return (
+            <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <button onClick={onBack} className="text-text-tertiary hover:text-text-primary transition-colors">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+                        </button>
+                        <div>
+                            <h2 className="text-sm font-bold text-text-primary">{session.title}</h2>
+                            <p className="text-[10px] text-text-disabled">Final Evaluation</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {session.scenarios?.length > 0 && (
+                            <button onClick={() => setWorkspaceMode('scenarios')}
+                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                                ← Scenarios
+                            </button>
+                        )}
+                        <button onClick={() => setWorkspaceMode('design')}
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-400/30 transition-all">
+                            View Design
+                        </button>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    <EvaluationResultsView session={session} />
                 </div>
             </div>
         )
@@ -856,9 +1244,17 @@ function DesignWorkspace({ sessionId, onBack }) {
                 </div>
 
                 {/* Timer + Actions */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                     <span className="text-xs font-mono text-text-disabled">{formatTime(elapsedTime)}</span>
                     <span className={cn('w-2 h-2 rounded-full', savePhase.isPending || saveDiagram.isPending ? 'bg-warning animate-pulse' : 'bg-success')} />
+                    <Button variant="ghost" size="sm" onClick={handlePauseExit} loading={updateTiming.isPending}>
+                        Pause &amp; Exit
+                    </Button>
+                    {session.status !== 'COMPLETED' && (
+                        <Button variant="secondary" size="sm" onClick={handleCompleteDesign} loading={updateSessionStatus.isPending}>
+                            Complete Design
+                        </Button>
+                    )}
                     {canValidate && session.status === 'IN_PROGRESS' && (
                         <Button variant="primary" size="sm" loading={generateScenarios.isPending} onClick={handleStartValidation}>
                             Validate Design →
@@ -867,6 +1263,11 @@ function DesignWorkspace({ sessionId, onBack }) {
                     {session.status === 'VALIDATING' && (
                         <Button variant="secondary" size="sm" onClick={() => setWorkspaceMode('scenarios')}>
                             View Scenarios →
+                        </Button>
+                    )}
+                    {hasEvaluation && (
+                        <Button variant="secondary" size="sm" onClick={() => setWorkspaceMode('evaluation')}>
+                            View Evaluation →
                         </Button>
                     )}
                 </div>
