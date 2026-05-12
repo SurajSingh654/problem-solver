@@ -1,30 +1,35 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { useAICoach } from '@hooks/useDesignStudio'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
+import {
+    useCoachingHistory,
+    interactionPreview,
+    interactionTimeLabel,
+} from '../../hooks/useCoachingHistory'
 
 // ══════════════════════════════════════════════════════════════════════════
-// AI COACH SECTION — rail variant
+// AI COACH SECTION — rail variant, Coach + History tabs
 // ══════════════════════════════════════════════════════════════════════════
-// Replaces the old hidden-below-the-fold AICoachingBar + AIResponsePanel
-// pair. In the new right-rail layout this section is pinned at the top of
-// the rail and is ALWAYS visible — the single most important discovery fix
-// of the rebuild.
+// The right-rail home for everything AI-coach related. Two tabs:
 //
-// Structure (top to bottom):
-//   1. Section header (labeled clearly so users know what this is)
-//   2. Three mode buttons, full-width stacked: Validate / Stuck / Teach
-//   3. Teach free-text input (appears only when Teach is clicked)
-//   4. AI response area — scrollable, dismissible. Shows an empty-state
-//      prompt when nothing has been asked yet so the feature is
-//      self-documenting.
+//   • Coach — the default. Ask buttons + currently-pinned response.
+//   • History — the persisted aiInteractions log, filterable by phase.
+//     Clicking "Show in Coach" on a history row pins that past response
+//     back into the Coach tab (with a "from HH:MM" subtitle) so users
+//     can compare against their current work. Retrieval practice needs
+//     users to re-engage with feedback, not lose it on dismiss.
+//
+// The persisted history is capped server-side at 50 entries per session.
 // ══════════════════════════════════════════════════════════════════════════
 export default function AICoachSection({
     sessionId,
     phaseId,
+    phases = [],
+    aiInteractions = [],
     response,
     onResponse,
     onDismiss,
@@ -33,6 +38,20 @@ export default function AICoachSection({
     const askCoach = useAICoach()
     const [teachQuery, setTeachQuery] = useState('')
     const [showTeachInput, setShowTeachInput] = useState(false)
+    const [tab, setTab] = useState('coach') // 'coach' | 'history'
+    // 'current' = filter to phaseId, 'all' = show every interaction
+    const [historyFilter, setHistoryFilter] = useState('current')
+
+    const phaseById = useMemo(() => {
+        const m = {}
+        for (const p of phases) m[p.id] = p
+        return m
+    }, [phases])
+
+    const { items: historyItems, total: historyTotal, countsByPhase } = useCoachingHistory(
+        aiInteractions,
+        { phaseFilter: historyFilter === 'current' ? phaseId : null },
+    )
 
     async function handleAsk(mode) {
         if (mode === 'teach' && !teachQuery.trim()) {
@@ -56,6 +75,18 @@ export default function AICoachSection({
         }
     }
 
+    function handlePinFromHistory(item) {
+        const base = item.response || {
+            // Fallback for legacy entries that pre-date the `response`
+            // field — reconstruct enough to render in the same slots.
+            response: item.aiResponse,
+            guidingQuestions: item.guidingQuestions,
+            conceptExplanation: item.conceptExplanation,
+        }
+        onResponse({ ...base, __pinnedAt: item.timestamp })
+        setTab('coach')
+    }
+
     const verdictConfig = {
         on_track: { label: 'On Track', color: 'text-success-fg bg-success-soft border-success-line' },
         strong: { label: 'Strong', color: 'text-success-fg bg-success-soft border-success-line' },
@@ -65,18 +96,90 @@ export default function AICoachSection({
 
     return (
         <section className="flex flex-col min-h-0">
-            {/* ── Section header ───────────────────────────────────────── */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border-default bg-surface-2/40">
-                <div className="flex items-center gap-2">
+            {/* ── Section header + tabs ─────────────────────────────── */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-2/40 gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="text-base">🤖</span>
-                    <h3 className="text-xs font-bold text-text-primary uppercase tracking-widest">
+                    <h3 className="text-[10px] font-bold text-text-primary uppercase tracking-widest">
                         AI Coach
                     </h3>
                 </div>
-                {askCoach.isPending && <Spinner size="sm" />}
+                <div className="inline-flex rounded-lg border border-border-default bg-surface-3 p-0.5">
+                    <button
+                        type="button"
+                        onClick={() => setTab('coach')}
+                        className={cn(
+                            'text-[10px] font-bold px-2 py-1 rounded-md transition-all',
+                            tab === 'coach'
+                                ? 'bg-brand-400 text-white'
+                                : 'text-text-tertiary hover:text-text-primary'
+                        )}
+                    >
+                        Coach
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setTab('history')}
+                        className={cn(
+                            'text-[10px] font-bold px-2 py-1 rounded-md transition-all',
+                            tab === 'history'
+                                ? 'bg-brand-400 text-white'
+                                : 'text-text-tertiary hover:text-text-primary'
+                        )}
+                    >
+                        History
+                        {historyTotal > 0 && (
+                            <span className="ml-1 opacity-80">({historyTotal})</span>
+                        )}
+                    </button>
+                </div>
+                {tab === 'coach' && askCoach.isPending && <Spinner size="sm" />}
             </div>
 
-            {/* ── Button stack (full-width, vertical) ──────────────────── */}
+            {tab === 'coach' ? (
+                <CoachTab
+                    isReadOnly={isReadOnly}
+                    askCoach={askCoach}
+                    response={response}
+                    verdictInfo={verdictInfo}
+                    teachQuery={teachQuery}
+                    setTeachQuery={setTeachQuery}
+                    showTeachInput={showTeachInput}
+                    setShowTeachInput={setShowTeachInput}
+                    handleAsk={handleAsk}
+                    onDismiss={onDismiss}
+                />
+            ) : (
+                <HistoryTab
+                    items={historyItems}
+                    total={historyTotal}
+                    historyFilter={historyFilter}
+                    setHistoryFilter={setHistoryFilter}
+                    currentPhaseCount={countsByPhase[phaseId] || 0}
+                    phaseById={phaseById}
+                    onPin={handlePinFromHistory}
+                />
+            )}
+        </section>
+    )
+}
+
+// ── Coach tab ────────────────────────────────────────────────────────
+function CoachTab({
+    isReadOnly,
+    askCoach,
+    response,
+    verdictInfo,
+    teachQuery,
+    setTeachQuery,
+    showTeachInput,
+    setShowTeachInput,
+    handleAsk,
+    onDismiss,
+}) {
+    return (
+        <>
+            {/* Button stack */}
             {!isReadOnly && (
                 <div className="p-3 space-y-2 border-b border-border-subtle">
                     <button
@@ -111,12 +214,7 @@ export default function AICoachSection({
                         type="button"
                         onClick={() => setShowTeachInput((v) => !v)}
                         disabled={askCoach.isPending}
-                        className={cn(
-                            'w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 text-left',
-                            showTeachInput
-                                ? 'bg-info-soft border-info-line text-info-fg'
-                                : 'bg-info-soft border-info-line text-info-fg hover:bg-info-soft'
-                        )}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border bg-info-soft border-info-line text-info-fg hover:bg-info-soft transition-colors disabled:opacity-50 text-left"
                     >
                         <span className="text-sm">📚</span>
                         <div className="flex-1 min-w-0">
@@ -156,7 +254,7 @@ export default function AICoachSection({
                 </div>
             )}
 
-            {/* ── Response area (scrollable) ───────────────────────────── */}
+            {/* Response area */}
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
                 {!response ? (
                     <div className="text-center py-6 px-2">
@@ -173,48 +271,43 @@ export default function AICoachSection({
                         animate={{ opacity: 1, y: 0 }}
                         className="space-y-3"
                     >
-                        {/* Verdict pill + dismiss */}
                         <div className="flex items-start justify-between gap-2">
-                            {verdictInfo ? (
-                                <span
-                                    className={cn(
-                                        'text-[10px] font-bold px-2 py-px rounded-full border',
-                                        verdictInfo.color
-                                    )}
-                                >
-                                    {verdictInfo.label}
-                                </span>
-                            ) : (
-                                <span />
-                            )}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {verdictInfo && (
+                                    <span
+                                        className={cn(
+                                            'text-[10px] font-bold px-2 py-px rounded-full border',
+                                            verdictInfo.color
+                                        )}
+                                    >
+                                        {verdictInfo.label}
+                                    </span>
+                                )}
+                                {response.__pinnedAt && (
+                                    <span className="text-[9px] text-text-disabled italic">
+                                        📌 from {new Date(response.__pinnedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                )}
+                            </div>
                             <button
                                 type="button"
                                 onClick={onDismiss}
                                 className="text-text-disabled hover:text-text-primary flex-shrink-0"
                                 aria-label="Dismiss AI response"
                             >
-                                <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <line x1="18" y1="6" x2="6" y2="18" />
                                     <line x1="6" y1="6" x2="18" y2="18" />
                                 </svg>
                             </button>
                         </div>
 
-                        {/* Main response text */}
                         {response.response && (
                             <p className="text-xs text-text-secondary leading-relaxed">
                                 {response.response}
                             </p>
                         )}
 
-                        {/* validate mode */}
                         {response.specificStrength && (
                             <div className="bg-success-soft border border-success-line rounded-lg p-2.5">
                                 <p className="text-[10px] font-bold text-success-fg uppercase tracking-widest mb-1">
@@ -236,7 +329,6 @@ export default function AICoachSection({
                             </div>
                         )}
 
-                        {/* guide mode */}
                         {response.guidingQuestions?.length > 0 && (
                             <div className="space-y-1.5">
                                 {response.guidingQuestions.map((q, i) => (
@@ -244,9 +336,7 @@ export default function AICoachSection({
                                         key={i}
                                         className="text-xs text-text-secondary flex items-start gap-2 leading-relaxed"
                                     >
-                                        <span className="text-brand-fg-soft flex-shrink-0 font-bold">
-                                            →
-                                        </span>
+                                        <span className="text-brand-fg-soft flex-shrink-0 font-bold">→</span>
                                         {q}
                                     </p>
                                 ))}
@@ -258,7 +348,6 @@ export default function AICoachSection({
                             </p>
                         )}
 
-                        {/* teach mode */}
                         {response.conceptExplanation && (
                             <div className="bg-info-soft border border-info-line rounded-lg p-2.5">
                                 <p className="text-xs text-text-secondary leading-relaxed">
@@ -284,6 +373,147 @@ export default function AICoachSection({
                     </motion.div>
                 )}
             </div>
-        </section>
+        </>
+    )
+}
+
+// ── History tab ──────────────────────────────────────────────────────
+const MODE_META = {
+    validate: { label: 'Validate', color: 'text-success-fg bg-success-soft border-success-line' },
+    guide: { label: 'Guide', color: 'text-warning-fg bg-warning-soft border-warning-line' },
+    teach: { label: 'Teach', color: 'text-info-fg bg-info-soft border-info-line' },
+}
+
+function HistoryTab({ items, total, historyFilter, setHistoryFilter, currentPhaseCount, phaseById, onPin }) {
+    const [expandedId, setExpandedId] = useState(null)
+    return (
+        <>
+            {/* Filter chip row */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle">
+                <button
+                    type="button"
+                    onClick={() => setHistoryFilter('current')}
+                    className={cn(
+                        'text-[10px] font-bold px-2 py-1 rounded-md border transition-colors',
+                        historyFilter === 'current'
+                            ? 'bg-brand-soft text-brand-fg-soft border-brand-line'
+                            : 'bg-surface-3 text-text-tertiary border-border-default hover:border-brand-line',
+                    )}
+                >
+                    This phase
+                    {currentPhaseCount > 0 && (
+                        <span className="ml-1 opacity-80">({currentPhaseCount})</span>
+                    )}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setHistoryFilter('all')}
+                    className={cn(
+                        'text-[10px] font-bold px-2 py-1 rounded-md border transition-colors',
+                        historyFilter === 'all'
+                            ? 'bg-brand-soft text-brand-fg-soft border-brand-line'
+                            : 'bg-surface-3 text-text-tertiary border-border-default hover:border-brand-line',
+                    )}
+                >
+                    All phases
+                    {total > 0 && <span className="ml-1 opacity-80">({total})</span>}
+                </button>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-2">
+                {items.length === 0 ? (
+                    <div className="text-center py-6 px-2">
+                        <div className="text-2xl mb-2 opacity-60">📜</div>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">
+                            {historyFilter === 'current'
+                                ? 'No coach interactions on this phase yet.'
+                                : 'No coach interactions yet.'}
+                        </p>
+                    </div>
+                ) : (
+                    <ul className="space-y-1.5">
+                        {items.map((item, idx) => {
+                            const id = `${item.timestamp || ''}-${idx}`
+                            const isOpen = expandedId === id
+                            const modeInfo = MODE_META[item.mode] || { label: item.mode || '?', color: 'text-text-tertiary bg-surface-3 border-border-default' }
+                            const phaseLabel = phaseById[item.phase]?.label || item.phase || '—'
+                            return (
+                                <li key={id} className="bg-surface-2 border border-border-subtle rounded-lg overflow-hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => setExpandedId(isOpen ? null : id)}
+                                        className="w-full text-left px-2.5 py-2 hover:bg-surface-3/60 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                            <span className={cn('text-[9px] font-bold px-1.5 py-px rounded-full border', modeInfo.color)}>
+                                                {modeInfo.label}
+                                            </span>
+                                            <span className="text-[9px] text-text-disabled">
+                                                {phaseLabel}
+                                            </span>
+                                            <span className="text-[9px] text-text-disabled ml-auto font-mono">
+                                                {interactionTimeLabel(item)}
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-text-secondary leading-snug line-clamp-2">
+                                            {interactionPreview(item)}
+                                        </p>
+                                    </button>
+
+                                    <AnimatePresence>
+                                        {isOpen && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="overflow-hidden border-t border-border-subtle bg-surface-1"
+                                            >
+                                                <div className="p-2.5 space-y-2">
+                                                    {item.userQuery && (
+                                                        <div>
+                                                            <p className="text-[9px] font-bold text-text-disabled uppercase tracking-widest mb-0.5">
+                                                                You asked
+                                                            </p>
+                                                            <p className="text-[11px] text-text-secondary italic leading-snug">
+                                                                {item.userQuery}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {(item.aiResponse || item.response?.response) && (
+                                                        <p className="text-[11px] text-text-secondary leading-snug">
+                                                            {item.aiResponse || item.response?.response}
+                                                        </p>
+                                                    )}
+                                                    {(item.guidingQuestions?.length || item.response?.guidingQuestions?.length) > 0 && (
+                                                        <div className="space-y-1">
+                                                            {(item.guidingQuestions || item.response?.guidingQuestions || []).map((q, j) => (
+                                                                <p key={j} className="text-[11px] text-text-secondary flex items-start gap-1.5">
+                                                                    <span className="text-brand-fg-soft flex-shrink-0 font-bold">→</span>
+                                                                    {q}
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <div className="pt-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => onPin(item)}
+                                                            className="text-[10px] font-bold text-brand-fg-soft bg-brand-soft border border-brand-line rounded-md px-2 py-1 hover:bg-brand-soft transition-colors"
+                                                        >
+                                                            📌 Show in Coach
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                )}
+            </div>
+        </>
     )
 }

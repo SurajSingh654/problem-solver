@@ -739,7 +739,11 @@ export async function askAICoach(req, res) {
       jsonMode: true,
     });
 
-    // Log the interaction
+    // Log the interaction. We now store the FULL `aiResponse` object (not
+    // just extracted fields) so the client-side history drawer can
+    // re-pin a previous response and render it identically to the first
+    // time. `aiResponse` stays as a legacy top-level string for anything
+    // still reading that path (inferSolveMethod etc.).
     const interaction = {
       phase: phaseId,
       mode,
@@ -747,13 +751,17 @@ export async function askAICoach(req, res) {
       aiResponse: aiResponse.response || "",
       guidingQuestions: aiResponse.guidingQuestions || [],
       conceptExplanation: aiResponse.conceptExplanation || null,
+      response: aiResponse,
       timestamp: new Date().toISOString(),
     };
 
+    // Cap at 50 entries — unbounded JSON growth would blow out the
+    // session row over time. 50 is generous for a single session;
+    // older entries fall off the tail.
     const updatedInteractions = [
       ...(session.aiInteractions || []),
       interaction,
-    ];
+    ].slice(-50);
 
     await prisma.designSession.update({
       where: { id: sessionId },

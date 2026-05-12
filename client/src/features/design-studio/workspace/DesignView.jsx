@@ -210,6 +210,8 @@ export default function DesignView({
                         <AICoachSection
                             sessionId={sessionId}
                             phaseId={activePhase.id}
+                            phases={phases}
+                            aiInteractions={session.aiInteractions || []}
                             response={aiResponse}
                             onResponse={setAiResponse}
                             onDismiss={() => setAiResponse(null)}
