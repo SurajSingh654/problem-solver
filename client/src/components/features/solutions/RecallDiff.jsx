@@ -9,11 +9,10 @@
 // recalled something not in the notes), words they forgot show in red
 // (in notes but not in recall).
 //
-// Uses diffWordsWithSpace from `diff` (already a transitive dep via
-// tiptap/prosemirror). Case-insensitive comparison, punctuation ignored
-// for the match check but preserved in the rendered output — so "O(n)"
-// in recall still matches "O(n)" in notes, but "hash" vs "hashing"
-// correctly diverges at word granularity.
+// Uses diffWordsWithSpace from `diff`. Case-insensitive comparison,
+// punctuation ignored for the match check but preserved in the rendered
+// output — so "O(n)" in recall still matches "O(n)" in notes, but
+// "hash" vs "hashing" correctly diverges at word granularity.
 // ============================================================================
 
 import { diffWordsWithSpace } from 'diff'

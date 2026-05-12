@@ -25,6 +25,7 @@
     "axios": "^1.7.7",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "diff": "^5.2.0",
     "framer-motion": "^11.11.1",
     "highlight.js": "^11.10.0",
     "lucide-react": "^0.454.0",
@@ -50,5 +51,9 @@
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "vite": "^5.4.9"
+  },
+  "overrides": {
+    "nanoid": "^3.3.8",
+    "dompurify": "^3.3.4"
   }
 }
