@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
@@ -16,9 +16,11 @@ import ScenarioTestingView from './ScenarioTestingView'
 import ScaleAnalysisView from './ScaleAnalysisView'
 import FlowSimulationView from './FlowSimulationView'
 import EvaluationResultsView from './EvaluationResultsView'
+import SessionErrorView from '../views/SessionErrorView'
 import { SD_PHASES, LLD_PHASES } from '../constants/phases'
 import { useSaveCoordinator } from '../hooks/useSaveCoordinator'
 import { usePhaseTimer } from '../hooks/usePhaseTimer'
+import { getSessionPhase, resolveView, defaultViewFor, isTerminal } from '../state/sessionPhase'
 
 // 30-second heartbeat for long-idle sessions so totalTimeSpent stays fresh
 // even when the user is thinking in a single phase without touching the
@@ -31,7 +33,7 @@ const HEARTBEAT_MS = 30_000
 // ══════════════════════════════════════════════════════════════════════════
 export default function DesignWorkspace({ sessionId, onBack }) {
     const navigate = useNavigate()
-    const { data: session, isLoading, refetch } = useDesignSession(sessionId)
+    const { data: session, isLoading, isError, error: fetchError, refetch } = useDesignSession(sessionId)
 
     const savePhase = useSavePhase()
     const saveDiagram = useSaveDiagram()
@@ -58,7 +60,11 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     const [panelHeight, setPanelHeight] = useState(35)
     const [annotationsCollapsed, setAnnotationsCollapsed] = useState(true)
     const [dataFlowCollapsed, setDataFlowCollapsed] = useState(true)
-    const [workspaceMode, setWorkspaceMode] = useState('design') // 'design' | 'scenarios' | 'scale' | 'flow' | 'evaluation'
+    // View lives in the URL (?view=design|scenarios|scale|flow|evaluation)
+    // so deep-links and browser back/forward work. Gating is done via
+    // the sessionPhase reducer — requests for views not allowed in the
+    // current phase fall back to the phase's default.
+    const [searchParams, setSearchParams] = useSearchParams()
 
     const dragRef = useRef(null)
     const initializedRef = useRef(false)
@@ -76,7 +82,28 @@ export default function DesignWorkspace({ sessionId, onBack }) {
 
     const phases = session?.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES
     const activePhase = phases[activePhaseIdx]
-    const isReadOnly = session?.status === 'COMPLETED' || session?.status === 'ABANDONED'
+
+    // Lifecycle phase + workspace view are derived from the server
+    // session (phase) + URL (view). Single source of truth; no local
+    // workspaceMode state to drift out of sync.
+    const sessionPhase = useMemo(() => getSessionPhase(session), [session])
+    const requestedView = searchParams.get('view')
+    const view = resolveView(sessionPhase, requestedView)
+    const setView = useCallback((nextView) => {
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            // Omit the param when the target matches the phase default to
+            // keep URLs clean.
+            if (nextView === defaultViewFor(sessionPhase)) {
+                next.delete('view')
+            } else {
+                next.set('view', nextView)
+            }
+            return next
+        }, { replace: true })
+    }, [setSearchParams, sessionPhase])
+
+    const isReadOnly = isTerminal(sessionPhase)
 
     // Phase timer owns elapsedTime + phaseTimings. Hooks up AFTER phases
     // are derived so it knows what phaseId to attribute time to.
@@ -112,13 +139,8 @@ export default function DesignWorkspace({ sessionId, onBack }) {
         setActivePhaseId(
             (session.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES)[startIdx]?.id ?? null,
         )
-        if (session.status === 'COMPLETED' && session.evaluation) {
-            setWorkspaceMode('evaluation')
-        } else if (session.status === 'VALIDATING' && session.scenarios?.length > 0) {
-            setWorkspaceMode('scenarios')
-        } else if (session.status === 'COMPLETED') {
-            setWorkspaceMode(session.scenarios?.length > 0 ? 'scenarios' : 'design')
-        }
+        // Workspace view is derived via `resolveView(sessionPhase, ?view)`
+        // — no local seeding needed. Refetches no longer clobber the view.
     }, [session, setActivePhaseId])
 
     // beforeunload guard — warn the user if anything is pending. The
@@ -222,7 +244,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
             await coordinator.flushAll()
             await generateScenarios.mutateAsync(sessionId)
             await refetch()
-            setWorkspaceMode('scenarios')
+            setView('scenarios')
         } catch { /* handled */ }
     }
 
@@ -250,6 +272,10 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     }
 
     if (isLoading) return <div className="flex items-center justify-center h-[60vh]"><Spinner size="lg" /></div>
+    // Fetch error branch — replaces the old infinite-spinner behaviour on
+    // 401/403/404/network failure. SessionErrorView picks a user-friendly
+    // title + hint from the status code; retry where meaningful.
+    if (isError) return <SessionErrorView error={fetchError} onRetry={() => refetch()} onBack={onBack} />
     if (!session) return <div className="flex flex-col items-center justify-center h-[60vh] gap-4"><p className="text-text-secondary">Session not found.</p><Button variant="secondary" onClick={onBack}>Back</Button></div>
 
     const filledPhases = Object.values(phaseContent).filter(v => v && v.trim().length > 30).length
@@ -280,7 +306,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     ) : null
 
     // ── SCENARIO TESTING VIEW ────────────────────────────
-    if (workspaceMode === 'scenarios') {
+    if (view === 'scenarios') {
         return (
             <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
@@ -295,22 +321,22 @@ export default function DesignWorkspace({ sessionId, onBack }) {
                     </div>
                     <div className="flex items-center gap-2">
                         {viewProblemButton}
-                        <button onClick={() => setWorkspaceMode('design')}
+                        <button onClick={() => setView('design')}
                             className={cn('text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all',
                                 'text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line')}>
                             ← Back to Design
                         </button>
-                        <button onClick={() => setWorkspaceMode('flow')}
+                        <button onClick={() => setView('flow')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                             Flow Simulation →
                         </button>
-                        <button onClick={() => setWorkspaceMode('scale')}
+                        <button onClick={() => setView('scale')}
                             className={cn('text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all',
                                 'text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft')}>
                             Scale Analysis →
                         </button>
                         {hasEvaluation && (
-                            <button onClick={() => setWorkspaceMode('evaluation')}
+                            <button onClick={() => setView('evaluation')}
                                 className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success-fg bg-success-soft border-success-line hover:bg-success-soft transition-all">
                                 View Evaluation →
                             </button>
@@ -322,7 +348,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
                         session={session}
                         sessionId={sessionId}
                         isReadOnly={isReadOnly}
-                        onEvaluationReady={() => setWorkspaceMode('evaluation')}
+                        onEvaluationReady={() => setView('evaluation')}
                     />
                 </div>
             </div>
@@ -330,7 +356,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     }
 
     // ── SCALE ANALYSIS VIEW ──────────────────────────────
-    if (workspaceMode === 'scale') {
+    if (view === 'scale') {
         return (
             <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
@@ -345,16 +371,16 @@ export default function DesignWorkspace({ sessionId, onBack }) {
                     </div>
                     <div className="flex items-center gap-2">
                         {viewProblemButton}
-                        <button onClick={() => setWorkspaceMode('scenarios')}
+                        <button onClick={() => setView('scenarios')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             ← Back to Scenarios
                         </button>
-                        <button onClick={() => setWorkspaceMode('flow')}
+                        <button onClick={() => setView('flow')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                             Flow Simulation →
                         </button>
                         {hasEvaluation && (
-                            <button onClick={() => setWorkspaceMode('evaluation')}
+                            <button onClick={() => setView('evaluation')}
                                 className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success-fg bg-success-soft border-success-line hover:bg-success-soft transition-all">
                                 View Evaluation →
                             </button>
@@ -369,7 +395,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     }
 
     // ── FLOW SIMULATION VIEW ─────────────────────────────
-    if (workspaceMode === 'flow') {
+    if (view === 'flow') {
         return (
             <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
@@ -384,22 +410,22 @@ export default function DesignWorkspace({ sessionId, onBack }) {
                     </div>
                     <div className="flex items-center gap-2">
                         {viewProblemButton}
-                        <button onClick={() => setWorkspaceMode('design')}
+                        <button onClick={() => setView('design')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             ← Back to Design
                         </button>
                         {session.scenarios?.length > 0 && (
-                            <button onClick={() => setWorkspaceMode('scenarios')}
+                            <button onClick={() => setView('scenarios')}
                                 className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                                 Scenarios →
                             </button>
                         )}
-                        <button onClick={() => setWorkspaceMode('scale')}
+                        <button onClick={() => setView('scale')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-brand-fg-soft bg-brand-soft border-brand-line hover:bg-brand-soft transition-all">
                             Scale Analysis →
                         </button>
                         {hasEvaluation && (
-                            <button onClick={() => setWorkspaceMode('evaluation')}
+                            <button onClick={() => setView('evaluation')}
                                 className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-success-fg bg-success-soft border-success-line hover:bg-success-soft transition-all">
                                 View Evaluation →
                             </button>
@@ -414,7 +440,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     }
 
     // ── EVALUATION RESULTS VIEW ──────────────────────────
-    if (workspaceMode === 'evaluation') {
+    if (view === 'evaluation') {
         return (
             <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
@@ -430,16 +456,16 @@ export default function DesignWorkspace({ sessionId, onBack }) {
                     <div className="flex items-center gap-2">
                         {viewProblemButton}
                         {session.scenarios?.length > 0 && (
-                            <button onClick={() => setWorkspaceMode('scenarios')}
+                            <button onClick={() => setView('scenarios')}
                                 className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                                 ← Scenarios
                             </button>
                         )}
-                        <button onClick={() => setWorkspaceMode('flow')}
+                        <button onClick={() => setView('flow')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             Flows
                         </button>
-                        <button onClick={() => setWorkspaceMode('design')}
+                        <button onClick={() => setView('design')}
                             className="text-[10px] font-bold px-3 py-1.5 rounded-lg border text-text-tertiary bg-surface-3 border-border-default hover:border-brand-line transition-all">
                             View Design
                         </button>
@@ -485,7 +511,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
             onPauseExit={handlePauseExit}
             onCompleteDesign={handleCompleteDesign}
             onStartValidation={handleStartValidation}
-            onSwitchMode={setWorkspaceMode}
+            onSwitchMode={setView}
             savePhase={savePhaseShim}
             saveDiagram={saveDiagramShim}
             updateTiming={updateTimingShim}

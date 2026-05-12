@@ -41,6 +41,31 @@ import {
   designStudioFinalEvalPrompt,
 } from "../services/designStudio.prompts.js";
 
+// ── Lifecycle state machine ──────────────────────────────────────────
+//
+// Server-authoritative transitions. Invalid transitions return 409 so
+// the client can show a "session modified elsewhere — refresh" banner
+// instead of silently overwriting a terminal state. The allowed graph:
+//
+//   IN_PROGRESS → VALIDATING | COMPLETED | ABANDONED
+//   VALIDATING  → IN_PROGRESS | COMPLETED | ABANDONED
+//   COMPLETED   → (terminal — no outgoing transitions)
+//   ABANDONED   → (terminal — no outgoing transitions)
+//
+// The reducer on the client mirrors this so UI views never render a
+// phase the server wouldn't accept.
+const ALLOWED_TRANSITIONS = {
+  IN_PROGRESS: new Set(["VALIDATING", "COMPLETED", "ABANDONED"]),
+  VALIDATING: new Set(["IN_PROGRESS", "COMPLETED", "ABANDONED"]),
+  COMPLETED: new Set(), // terminal
+  ABANDONED: new Set(), // terminal
+};
+
+function isValidTransition(from, to) {
+  const set = ALLOWED_TRANSITIONS[from];
+  return !!set && set.has(to);
+}
+
 // ── Bridge helpers for Design Studio → Solution record ────────────────
 //
 // When a DS session completes with a final evaluation and is linked to a
@@ -619,6 +644,22 @@ export async function updateStatus(req, res) {
     if (!session) return error(res, "Session not found.", 404);
     if (session.userId !== userId) return error(res, "Not authorized.", 403);
 
+    // Reject illegal transitions. Client maps 409 to a "session changed
+    // elsewhere" banner and stops auto-saving — prevents overwriting a
+    // terminal state from a stale tab.
+    if (session.status === status) {
+      // No-op: idempotent. Return current state so client can reconcile.
+      return success(res, { message: "Status unchanged.", status });
+    }
+    if (!isValidTransition(session.status, status)) {
+      return error(
+        res,
+        `Cannot transition from ${session.status} to ${status}.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
     const data = { status };
     if (status === "COMPLETED") data.completedAt = new Date();
 
@@ -749,6 +790,16 @@ export async function generateScenarios(req, res) {
     if (!session) return error(res, "Session not found.", 404);
     if (session.userId !== userId) return error(res, "Not authorized.", 403);
 
+    // Don't let a terminal session regenerate scenarios.
+    if (session.status === "COMPLETED" || session.status === "ABANDONED") {
+      return error(
+        res,
+        `Cannot generate scenarios on a ${session.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
     const phases = session.phases || {};
     const annotations = session.componentAnnotations || [];
     const dataFlow = session.dataFlowDescription || "";
@@ -797,14 +848,35 @@ export async function generateScenarios(req, res) {
       status: "pending",
     }));
 
-    // Update session status to VALIDATING and store scenarios
-    await prisma.designSession.update({
-      where: { id: sessionId },
-      data: {
-        scenarios,
-        status: "VALIDATING",
-      },
-    });
+    // Persist scenarios + transition status to VALIDATING atomically.
+    // The pre-check above reads status outside the tx; if the user
+    // abandoned/completed the session during the LLM call we detect it
+    // here and roll back rather than reviving a terminal session.
+    try {
+      await prisma.$transaction(async (tx) => {
+        const fresh = await tx.designSession.findUnique({
+          where: { id: sessionId },
+          select: { status: true },
+        });
+        if (!fresh) throw Object.assign(new Error("Session gone"), { code: "GONE" });
+        if (!isValidTransition(fresh.status, "VALIDATING") && fresh.status !== "VALIDATING") {
+          throw Object.assign(
+            new Error(`Cannot transition from ${fresh.status} to VALIDATING.`),
+            { code: "INVALID_TRANSITION" },
+          );
+        }
+        await tx.designSession.update({
+          where: { id: sessionId },
+          data: { scenarios, status: "VALIDATING" },
+        });
+      });
+    } catch (txErr) {
+      if (txErr.code === "GONE") return error(res, "Session not found.", 404);
+      if (txErr.code === "INVALID_TRANSITION") {
+        return error(res, txErr.message, 409, "INVALID_TRANSITION");
+      }
+      throw txErr;
+    }
 
     return success(res, { scenarios });
   } catch (err) {
@@ -1070,13 +1142,34 @@ export async function requestFinalEvaluation(req, res) {
     if (!session) return error(res, "Session not found.", 404);
     if (session.userId !== userId) return error(res, "Not authorized.", 403);
 
-    // Require at least VALIDATING status
+    // Terminal states cannot be re-evaluated.
+    if (session.status === "COMPLETED" || session.status === "ABANDONED") {
+      return error(
+        res,
+        `Cannot evaluate a ${session.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
     if (session.status === "IN_PROGRESS") {
       return error(
         res,
         "Complete the design phases and generate scenarios before requesting evaluation.",
         400,
         "NOT_READY_FOR_EVALUATION",
+      );
+    }
+    // Require at least one evaluated scenario so the eval has grounded
+    // evidence to score. Prevents the "COMPLETED with eval but no
+    // scenarios actually judged" drift the old code allowed.
+    const scenarios = Array.isArray(session.scenarios) ? session.scenarios : [];
+    const hasEvaluatedScenario = scenarios.some((s) => s?.status === "evaluated");
+    if (!hasEvaluatedScenario) {
+      return error(
+        res,
+        "Evaluate at least one scenario before requesting final evaluation.",
+        400,
+        "NO_EVALUATED_SCENARIOS",
       );
     }
 

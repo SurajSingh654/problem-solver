@@ -130,7 +130,15 @@ export function useUpdateSessionStatus() {
         queryKey: QUERY_KEYS.SESSION(sessionId),
       });
     },
-    onError: (err) => {
+    onError: (err, { sessionId }) => {
+      // 409 INVALID_TRANSITION = session was changed elsewhere (another
+      // tab, another device, or an out-of-order request). Refresh local
+      // state from the server and tell the user what happened.
+      if (err?.response?.status === 409) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SESSION(sessionId) });
+        toast.error("This session was changed elsewhere — refreshed with the latest.");
+        return;
+      }
       toast.error(
         err?.response?.data?.error?.message || "Failed to update status.",
       );
@@ -166,7 +174,12 @@ export function useGenerateScenarios() {
       });
       toast.success("Scenarios generated — test your design!");
     },
-    onError: (err) => {
+    onError: (err, sessionId) => {
+      if (err?.response?.status === 409) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SESSION(sessionId) });
+        toast.error("This session was changed elsewhere — refreshed with the latest.");
+        return;
+      }
       const message = err?.response?.data?.error?.message || "";
       if (message.includes("at least 3")) {
         toast.error(
@@ -301,8 +314,18 @@ export function useRequestEvaluation() {
       });
       toast.success("Evaluation complete — review your results!");
     },
-    onError: (err) => {
+    onError: (err, sessionId) => {
+      if (err?.response?.status === 409) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SESSION(sessionId) });
+        toast.error("This session was changed elsewhere — refreshed with the latest.");
+        return;
+      }
+      const code = err?.response?.data?.error?.code;
       const message = err?.response?.data?.error?.message || "";
+      if (code === "NO_EVALUATED_SCENARIOS") {
+        toast.error("Evaluate at least one scenario before requesting final evaluation.");
+        return;
+      }
       if (message.includes("rate") || message.includes("limit")) {
         toast.error("AI rate limit reached. Wait a moment and try again.");
       } else if (
