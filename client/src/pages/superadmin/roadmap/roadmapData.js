@@ -384,15 +384,16 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'recall-diff-on-reveal',
-        phase: 'LATER',
+        phase: 'DONE',
+        shippedAt: '2026-05-12',
         theme: 'Learning Science',
         priority: 'MEDIUM',
         effort: 'Medium',
-        title: 'Character-Level Recall Diff on Reveal',
-        impact: 'During review, after the user types their recall and clicks Reveal, they see a side-by-side diff between what they typed and what they originally wrote — highlighting exactly what they forgot.',
-        description: 'Today Reveal shows both as separate columns. Add a diff mode using the `diff` npm package (already a transitive dep) that highlights added/removed words, so the forgetting is visible at a glance.',
-        why: 'The gap between recall and original is the actual learning signal; visualizing it sharpens the feedback. Attempt-history already does this for submissions — same pattern applies here.',
-        technicalNotes: 'Reuse AttemptDiff components from Commit 1. ReviewQueuePage reveal phase: toggle between "Side-by-side" and "Diff" view.',
+        title: 'Word-Level Recall Diff on Reveal',
+        impact: 'After typing a recall and clicking Reveal, members can toggle a Diff view that colors every word: green for what they recalled, red for what they missed, yellow for what they invented. Coverage percentage quantifies the gap.',
+        description: 'New RecallDiff component uses diffWordsWithSpace (case-insensitive) to compare the recall text against a concat of stored fields (patterns, keyInsight, complexity, optimizedApproach, feynmanExplanation). Stats strip shows recalled/missed/invented word counts and a coverage %.',
+        why: 'The gap between recall and original IS the learning signal (Karpicke & Roediger 2008). Plain side-by-side makes the user hunt for the gap; a diff surfaces it instantly.',
+        technicalNotes: 'Toggle (Side-by-side / Diff) on the reveal phase in ReviewQueuePage. Diff view disabled when recall text is empty. AI recall-questions panel renders in both views.',
     },
 
     {

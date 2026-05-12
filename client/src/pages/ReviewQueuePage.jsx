@@ -11,6 +11,7 @@ import { formatRelativeDate, formatShortDate } from '@utils/formatters'
 import { CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
 import { RecallAnalyticsPanel } from '@components/features/charts/RecallAnalyticsPanel'
 import { ForgettingCurve } from '@components/features/charts/ForgettingCurve'
+import { RecallDiff } from '@components/features/solutions/RecallDiff'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -118,6 +119,11 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const [timerExpired, setTimerExpired] = useState(false)
     const [aiQuestions, setAiQuestions] = useState(null)
     const [showAiHints, setShowAiHints] = useState(false)
+    // 'side-by-side' (default, legacy view) vs 'diff' (word-level recall
+    // vs stored-notes comparison). The diff view surfaces the gap that
+    // is literally the learning signal for retrieval practice, but users
+    // who just want to re-read their notes can keep the default.
+    const [revealView, setRevealView] = useState('side-by-side')
     const textareaRef = useRef(null)
 
     // Focus textarea on recall phase mount
@@ -315,6 +321,46 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                             ════════════════════════════════════════ */}
                         {phase === 'reveal' && (
                             <div className="p-5 space-y-4">
+                                {/* View toggle: side-by-side vs diff.
+                                    Diff is disabled if there's no recall text
+                                    to compare (nothing to diff against). */}
+                                <div className="flex items-center gap-1 bg-surface-2 border border-border-default rounded-lg p-1 w-fit">
+                                    <button
+                                        type="button"
+                                        onClick={() => setRevealView('side-by-side')}
+                                        className={cn(
+                                            'text-[11px] font-semibold px-3 py-1 rounded-md transition-colors',
+                                            revealView === 'side-by-side'
+                                                ? 'bg-surface-4 text-text-primary'
+                                                : 'text-text-tertiary hover:text-text-primary',
+                                        )}
+                                    >
+                                        Side-by-side
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRevealView('diff')}
+                                        disabled={!recallText.trim()}
+                                        className={cn(
+                                            'text-[11px] font-semibold px-3 py-1 rounded-md transition-colors',
+                                            revealView === 'diff'
+                                                ? 'bg-surface-4 text-text-primary'
+                                                : 'text-text-tertiary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed',
+                                        )}
+                                        title={
+                                            recallText.trim()
+                                                ? 'Word-level diff — see exactly what you forgot'
+                                                : 'Type a recall next time to unlock the diff view'
+                                        }
+                                    >
+                                        Diff
+                                    </button>
+                                </div>
+
+                                {revealView === 'diff' ? (
+                                    <RecallDiff recallText={recallText} solution={solution} />
+                                ) : (
+                                <>
                                 {/* Comparison grid */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {/* What you recalled */}
@@ -386,8 +432,10 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         )}
                                     </div>
                                 </div>
+                                </>
+                                )}
 
-                                {/* AI Recall Questions */}
+                                {/* AI Recall Questions — shown in both views */}
                                 {reviewHints.isPending && (
                                     <div className="flex items-center gap-2 text-xs text-text-disabled py-2">
                                         <div className="w-3 h-3 rounded-full border-2 border-brand-400 border-t-transparent animate-spin" />
