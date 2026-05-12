@@ -17,6 +17,28 @@ export function use6DReport() {
   });
 }
 
+// AI-generated readiness verdict — independent query so /report scores
+// render immediately and the verdict card loads progressively. Server
+// caches via VerdictLog (5 min TTL on identical evidence), so calling
+// this hook on every report page load is cheap after the first hit.
+export function useReadinessVerdict() {
+  const { teamQueryKey } = useTeamContext();
+  return useQuery({
+    queryKey: [...teamQueryKey, "report", "verdict"],
+    queryFn: async () => {
+      const res = await api.get("/stats/verdict");
+      return res.data.data;
+    },
+    // Match server's cache window. Refetching sooner just hits the
+    // cached VerdictLog, so 5 min is the natural floor.
+    staleTime: 1000 * 60 * 5,
+    // Don't retry the LLM call — server fallback already guarantees
+    // a well-formed response, so a "failure" here is a real error
+    // (auth, network) that a retry won't fix.
+    retry: 0,
+  });
+}
+
 export function usePersonalStats() {
   const { teamQueryKey } = useTeamContext();
   return useQuery({

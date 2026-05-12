@@ -1597,3 +1597,234 @@ RESPOND WITH EXACT JSON:
 
   return { system, user: userParts.join("\n") };
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// READINESS VERDICT — grounded, anti-hallucination assessment
+// ══════════════════════════════════════════════════════════════════════
+//
+// Turns the structured 6D evidence block into a short, calibrated
+// interview-readiness verdict. The central constraint is that a verdict
+// claiming "ready" the user has NOT earned is the failure mode — a user
+// who sees "Ready for FAANG" and fails a FAANG loop is the outcome we
+// are engineering against.
+//
+// The prompt is structured in three layers:
+//   1. Role + stakes — frame the task
+//   2. Seven hard rules — each one, if violated, invalidates the output.
+//      Enforced server-side by validateVerdict() in stats.controller.js;
+//      the prompt states them so the model stays clean and the validator
+//      rarely has to reject.
+//   3. Output schema — a JSON object the client renders directly
+//
+// Chain-of-thought scaffold forces the model to think through activation
+// status, sample sizes, and tier-claim validity BEFORE emitting JSON.
+//
+// References:
+//   - Anthropic prompting best practices (explicit rules, examples, CoT)
+//   - OpenAI cookbook "Techniques to improve reliability"
+export function readinessVerdictPrompt(evidence) {
+  const system = `You are a calibrated interview-readiness assessor. Your job is to produce a JSON verdict from the structured 6D evidence block below.
+
+THE STAKES: users who see a "ready" verdict they have not earned will fail real interviews. Under-claim when uncertain. Over-claiming is the failure mode you are engineered against.
+
+HARD RULES — any violation invalidates your output:
+
+1. You may NOT cite any dimension where status = "inactive". Those dimensions have no measurement — treating them as evidence is hallucination.
+
+2. For any claim about a dimension with n < 5, you MUST use tentative language ("early signal", "tentative", "small sample", "emerging") — never "strong", "confirmed", "proven", "solid".
+
+3. If reportCoverage.pct < 50, your headline MUST acknowledge the profile is partial (use one of: "building", "partial", "still", "starting", "early"). Do NOT issue tier-readiness claims for partial profiles.
+
+4. "strengths" and "gaps" are each CAPPED AT 2 items. Pick the strongest evidence, not the nicest-sounding phrasing. If only 1 item qualifies, return 1. If 0 qualify, return an empty array — do not invent.
+
+5. Every "strengths" and "gaps" item MUST include an evidence field quoting a specific number from the input (e.g. "score=68 over n=12 solutions", "overdue reviews=7"). Claims without numbers are rejected.
+
+6. You may NOT reference other users, "industry averages", "most candidates", or any data not present in the evidence block.
+
+7. readinessNote MUST use the tier name from evidence.nearestTier.name or evidence.nextTier.name — do not invent new tier labels.
+
+Before emitting JSON, think step-by-step in a <thinking> block:
+  1. Which dimensions are active? List them with (key, score, n).
+  2. For each active dim, is n ≥ 5? If not, mark tentative.
+  3. Strongest strength candidate = highest score AND highest n. Drop if n < 3 or score < 50.
+  4. Highest-impact gap = lowest score among active HIGH/CRITICAL-weight dims. Drop if score ≥ 65.
+  5. Can a tier claim be made? (reportCoverage.pct ≥ 50 AND nearestTier.ready)
+  6. Compose headline and notes.
+
+OUTPUT — a single JSON object (no prose around it) matching:
+{
+  "headline": "string, one sentence, ≤ 160 chars",
+  "strengths": [
+    { "claim": "string", "evidence": "string citing numbers", "confidence": "high" | "tentative" }
+  ],
+  "gaps": [
+    { "claim": "string", "evidence": "string citing numbers", "action": "one concrete next step" }
+  ],
+  "readinessNote": "string — tier claim or partial-profile statement",
+  "dataQualityNote": "string — one sentence on coverage"
+}`;
+
+  const user = [
+    "<evidence>",
+    JSON.stringify(evidence, null, 2),
+    "</evidence>",
+    "",
+    "Emit the <thinking> block first, then the JSON object. Output the JSON last; do NOT repeat the thinking inside the JSON.",
+  ].join("\n");
+
+  return { system, user };
+}
+
+// Three calibration examples covering the edge cases the validator
+// enforces: (a) zero-data → forced partial headline, empty arrays;
+// (b) mid-data, 3 dims active with n<5 → tentative qualifier; (c)
+// high-data, 6 dims active, n≥5 on all → confirmed strength + tier claim.
+//
+// Injected as chat-format messages between system and user turns.
+export const READINESS_VERDICT_FEWSHOT = [
+  {
+    role: "user",
+    content: [
+      "<evidence>",
+      JSON.stringify(
+        {
+          user: { categoryMix: { CODING: 1.0 }, totalSolutions: 1, totalReviews: 0, totalSuccessfulReviews: 0 },
+          dimensions: [
+            { key: "patternRecognition", status: "inactive", score: null, n: 1, ci: null, activationMessage: "Claim patterns on 2 more solutions and get at least 1 AI review to validate" },
+            { key: "solutionDepth", status: "inactive", score: null, n: 1, ci: null, activationMessage: "Add reflective content to 2 more solutions" },
+            { key: "communication", status: "inactive", score: null, n: 0, ci: null, activationMessage: "Get 2 more peer clarity ratings or 2 more AI reviews" },
+            { key: "optimization", status: "inactive", score: null, n: 1, ci: null, activationMessage: "Submit 2 more CODING solutions to measure optimization" },
+            { key: "pressurePerformance", status: "inactive", score: null, n: 0, ci: null, activationMessage: "Complete 1 mock interview or 3 quizzes" },
+            { key: "retention", status: "inactive", score: null, n: 0, ci: null, activationMessage: "Review 3 problems across 2+ solutions to unlock retention tracking" },
+          ],
+          overall: null,
+          reportCoverage: { active: 0, total: 6, pct: 0 },
+          nearestTier: null,
+          nextTier: { name: "Junior / Startup", threshold: 35, gap: 35 },
+          recentFlags: { wrongPattern: 0, overconfidence: 0, incomplete: 0 },
+        },
+        null,
+        2,
+      ),
+      "</evidence>",
+    ].join("\n"),
+  },
+  {
+    role: "assistant",
+    content: `<thinking>
+1. Active dims: none. All 6 are inactive with activationMessage.
+2. n ≥ 5 check: n/a — no active dims.
+3. Strongest strength: none qualify (no active dims).
+4. Gap: no active dims to measure against — cannot claim a gap.
+5. Tier claim: reportCoverage.pct = 0, cannot claim readiness.
+6. Headline must use partial-profile language.
+</thinking>
+{
+  "headline": "Your readiness profile is still being built — no dimensions have enough data yet to produce scores.",
+  "strengths": [],
+  "gaps": [],
+  "readinessNote": "Profile too sparse to assess tier readiness. Continue submitting solutions and requesting AI reviews to unlock the first dimensions.",
+  "dataQualityNote": "0 of 6 dimensions currently active; all require additional evidence before scores will appear."
+}`,
+  },
+  {
+    role: "user",
+    content: [
+      "<evidence>",
+      JSON.stringify(
+        {
+          user: { categoryMix: { CODING: 0.8, HR: 0.2 }, totalSolutions: 5, totalReviews: 2, totalSuccessfulReviews: 1 },
+          dimensions: [
+            { key: "patternRecognition", status: "active", score: 58, n: 4, ci: [35, 80], basis: ["patterns_claimed: 4", "ai_reviews: 2"] },
+            { key: "solutionDepth", status: "active", score: 62, n: 3, ci: [40, 84], basis: ["reflective_solutions: 3"] },
+            { key: "communication", status: "inactive", score: null, n: 0, ci: null, activationMessage: "Get 2 more peer clarity ratings or 2 more AI reviews" },
+            { key: "optimization", status: "active", score: 42, n: 4, ci: [22, 62], basis: ["coding_solutions: 4", "both_approaches: 1"] },
+            { key: "pressurePerformance", status: "inactive", score: null, n: 0, ci: null, activationMessage: "Complete 1 mock interview or 3 quizzes" },
+            { key: "retention", status: "inactive", score: null, n: 1, ci: null, activationMessage: "Need 2 more successful reviews across 2+ solutions" },
+          ],
+          overall: { score: 54, ci: [39, 69] },
+          reportCoverage: { active: 3, total: 6, pct: 50 },
+          nearestTier: { name: "Junior / Startup", threshold: 35, ready: true },
+          nextTier: { name: "Mid-tier / Growth", threshold: 50, gap: 0 },
+          recentFlags: { wrongPattern: 0, overconfidence: 0, incomplete: 0 },
+        },
+        null,
+        2,
+      ),
+      "</evidence>",
+    ].join("\n"),
+  },
+  {
+    role: "assistant",
+    content: `<thinking>
+1. Active dims: patternRecognition (score=58, n=4), solutionDepth (score=62, n=3), optimization (score=42, n=4).
+2. n ≥ 5 check: none meet it — all claims must use tentative language.
+3. Strongest strength candidate: solutionDepth score=62 n=3. Passes score ≥ 50 and n ≥ 3. Tentative — n < 5.
+4. Highest-impact gap: optimization score=42 — lowest among HIGH/CRITICAL dims. Qualifies (< 65).
+5. Tier claim: coverage = 50%, so partial-claim hedge language required. nearestTier ready, but mention carefully.
+6. Headline must mark partial since every active dim has n < 5.
+</thinking>
+{
+  "headline": "Early profile — 3 of 6 dimensions active, all with small samples. Treat scores as tentative signals.",
+  "strengths": [
+    { "claim": "Solution Depth shows early promise", "evidence": "score=62 over n=3 reflective solutions", "confidence": "tentative" }
+  ],
+  "gaps": [
+    { "claim": "Optimization is the weakest active dimension", "evidence": "score=42 over n=4 coding solutions, only 1 with both approaches", "action": "Document brute-force AND optimized approaches in the next 3 coding solutions" }
+  ],
+  "readinessNote": "Meets the Junior / Startup threshold on volume but n < 5 on every active dimension — the profile is not yet reliable enough to claim tier readiness with confidence.",
+  "dataQualityNote": "3 of 6 dimensions active at 50% coverage; sample sizes are small (n=3–4), so scores carry wide confidence intervals."
+}`,
+  },
+  {
+    role: "user",
+    content: [
+      "<evidence>",
+      JSON.stringify(
+        {
+          user: { categoryMix: { CODING: 0.7, HR: 0.2, BEHAVIORAL: 0.1 }, totalSolutions: 22, totalReviews: 14, totalSuccessfulReviews: 9 },
+          dimensions: [
+            { key: "patternRecognition", status: "active", score: 74, n: 18, ci: [62, 86], basis: ["patterns_claimed: 18", "unique_patterns: 11", "ai_reviews: 12"] },
+            { key: "solutionDepth", status: "active", score: 71, n: 15, ci: [58, 84], basis: ["reflective_solutions: 15"] },
+            { key: "communication", status: "active", score: 68, n: 8, ci: [52, 84], basis: ["peer_ratings: 8", "ai_explanation_scores: 12"] },
+            { key: "optimization", status: "active", score: 65, n: 14, ci: [50, 80], basis: ["coding_solutions: 14", "both_approaches: 9"] },
+            { key: "pressurePerformance", status: "active", score: 61, n: 6, ci: [44, 78], basis: ["sims: 2", "interviews_scored: 1", "quizzes: 3"] },
+            { key: "retention", status: "active", score: 58, n: 9, ci: [44, 72], basis: ["successful_reviews: 9", "distinct_solutions: 6"] },
+          ],
+          overall: { score: 67, ci: [57, 77] },
+          reportCoverage: { active: 6, total: 6, pct: 100 },
+          nearestTier: { name: "Tier 2 Tech", threshold: 65, ready: true },
+          nextTier: { name: "FAANG / Top Tier", threshold: 80, gap: 13 },
+          recentFlags: { wrongPattern: 1, overconfidence: 2, incomplete: 0 },
+        },
+        null,
+        2,
+      ),
+      "</evidence>",
+    ].join("\n"),
+  },
+  {
+    role: "assistant",
+    content: `<thinking>
+1. Active dims: all 6. Scores: 74, 71, 68, 65, 61, 58.
+2. n ≥ 5: all qualify (18, 15, 8, 14, 6, 9). All claims can be "high" confidence.
+3. Strongest strength: patternRecognition score=74 n=18. High confidence.
+4. Highest-impact gap: retention score=58 — lowest. Below 65, qualifies.
+5. Tier claim: coverage 100%, nearestTier.ready = true for Tier 2 Tech. FAANG gap = 13.
+6. Headline can state tier readiness confidently.
+</thinking>
+{
+  "headline": "Ready to apply to Tier 2 Tech companies — six active dimensions, consistent scores in the mid-60s to mid-70s.",
+  "strengths": [
+    { "claim": "Pattern recognition is a strong signal", "evidence": "score=74 over n=18 solutions covering 11 unique patterns", "confidence": "high" },
+    { "claim": "Solution depth shows reliable reflective practice", "evidence": "score=71 over n=15 reflective solutions", "confidence": "high" }
+  ],
+  "gaps": [
+    { "claim": "Retention lags the rest of the profile", "evidence": "score=58 over n=9 successful reviews across 6 distinct solutions", "action": "Clear overdue reviews weekly to raise the retention floor before FAANG loops" },
+    { "claim": "Optimization sits at the Tier 2 threshold", "evidence": "score=65 over n=14 coding solutions, only 9 with both approaches", "action": "Push optimization rate past 80% to clear the FAANG bar" }
+  ],
+  "readinessNote": "Meets Tier 2 Tech requirements. FAANG / Top Tier threshold is 13 overall points away — retention and optimization are the two dimensions to lift.",
+  "dataQualityNote": "6 of 6 dimensions active with n ≥ 5 on every one; confidence intervals are tight enough to support tier claims."
+}`,
+  },
+];

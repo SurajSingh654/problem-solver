@@ -62,6 +62,10 @@ function incrementRateLimit(userId) {
 }
 
 // ── Core completion function ───────────────────────────
+// `fewShotMessages`, when provided, is an array of {role, content} pairs
+// that get injected between the system prompt and the final user prompt.
+// Used by the readiness-verdict controller to ship calibration examples
+// that anchor the model's output style (structured anti-hallucination).
 export async function aiComplete({
   systemPrompt,
   userPrompt,
@@ -70,6 +74,7 @@ export async function aiComplete({
   temperature = 0.7,
   maxTokens = 2000,
   jsonMode = true,
+  fewShotMessages = [],
 }) {
   const rateCheck = checkRateLimit(userId);
   if (!rateCheck.allowed) {
@@ -80,7 +85,7 @@ export async function aiComplete({
   }
 
   console.log(
-    `[AI] Request: model=${model}, maxTokens=${maxTokens}, jsonMode=${jsonMode}`,
+    `[AI] Request: model=${model}, maxTokens=${maxTokens}, jsonMode=${jsonMode}, fewShot=${fewShotMessages.length}`,
   );
   console.log(`[AI] System prompt length: ${systemPrompt.length} chars`);
   console.log(`[AI] User prompt length: ${userPrompt.length} chars`);
@@ -95,6 +100,7 @@ export async function aiComplete({
       response_format: jsonMode ? { type: "json_object" } : undefined,
       messages: [
         { role: "system", content: systemPrompt },
+        ...fewShotMessages,
         { role: "user", content: userPrompt },
       ],
     });

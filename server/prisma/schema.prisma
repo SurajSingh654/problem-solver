@@ -97,7 +97,6 @@ enum ProblemSource {
   AI_GENERATED
 }
 
-
 /// The 7 interview categories — covers every round type in modern SWE hiring
 /// LOW_LEVEL_DESIGN added in migration 20260801000000_add_lld_category
 enum ProblemCategory {
@@ -148,59 +147,54 @@ enum CompetitionStatus {
   CANCELLED
 }
 
+/// Feedback report type — what kind of report is this
+enum FeedbackType {
+  BUG
+  SUGGESTION
+  QUESTION
+}
 
-  /// Feedback report type — what kind of report is this
-  enum FeedbackType {
-    BUG
-    SUGGESTION
-    QUESTION
-  }
+/// Feedback lifecycle status — admin tracks resolution
+enum FeedbackStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  WONT_FIX
+}
 
-  /// Feedback lifecycle status — admin tracks resolution
-  enum FeedbackStatus {
-    OPEN
-    ACKNOWLEDGED
-    IN_PROGRESS
-    RESOLVED
-    WONT_FIX
-  }
+/// Bug severity — helps admin prioritize triage
+enum FeedbackSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
 
-  /// Bug severity — helps admin prioritize triage
-  enum FeedbackSeverity {
-    LOW
-    MEDIUM
-    HIGH
-    CRITICAL
-  }
+/// Skill assessment session lifecycle
+enum SkillAssessmentStatus {
+  IN_PROGRESS
+  PASSED
+  FAILED
+  ABANDONED
+}
 
+/// Dreyfus & Dreyfus (1980) skill acquisition model — 5 levels
+/// Each level has a specific behavioural definition, not an arbitrary tier.
+/// NOVICE:     0-25  — recognizes concept but cannot apply independently
+/// DEVELOPING: 26-50 — can apply with prompting, needs frequent review
+/// PROFICIENT: 51-75 — applies reliably in standard contexts
+/// EXPERT:     76-90 — applies flexibly in novel contexts
+/// MASTERY:    91-100 — explains, teaches, and adapts under pressure
+enum SkillProficiencyLevel {
+  NOVICE
+  DEVELOPING
+  PROFICIENT
+  EXPERT
+  MASTERY
+}
 
-  /// Skill assessment session lifecycle
-  enum SkillAssessmentStatus {
-    IN_PROGRESS
-    PASSED
-    FAILED
-    ABANDONED
-  }
-
-  /// Dreyfus & Dreyfus (1980) skill acquisition model — 5 levels
-  /// Each level has a specific behavioural definition, not an arbitrary tier.
-  /// NOVICE:     0-25  — recognizes concept but cannot apply independently
-  /// DEVELOPING: 26-50 — can apply with prompting, needs frequent review
-  /// PROFICIENT: 51-75 — applies reliably in standard contexts
-  /// EXPERT:     76-90 — applies flexibly in novel contexts
-  /// MASTERY:    91-100 — explains, teaches, and adapts under pressure
-  enum SkillProficiencyLevel {
-    NOVICE
-    DEVELOPING
-    PROFICIENT
-    EXPERT
-    MASTERY
-  }
-
-
-
-
-  /// Design Studio session type — HLD or LLD
+/// Design Studio session type — HLD or LLD
 enum DesignType {
   SYSTEM_DESIGN
   LOW_LEVEL_DESIGN
@@ -213,7 +207,6 @@ enum DesignSessionStatus {
   COMPLETED
   ABANDONED
 }
-
 
 // ============================================================================
 // USER
@@ -283,10 +276,9 @@ model User {
   //         targetCompanyStyle: "google", patterns: [...] }
   aiProblemConfig Json?
 
-  feedbackReports  FeedbackReport[]
+  feedbackReports FeedbackReport[]
 
-
-  designSessions   DesignSession[]
+  designSessions DesignSession[]
 
   // ── Soft delete ────────────────────────────────────
   deletedAt DateTime?
@@ -306,12 +298,10 @@ model User {
   interviewSessions   InterviewSession[]
   memberships         TeamMembership[]
 
-
-
   skillProfiles    SkillProfile[]
   skillAssessments SkillAssessment[]
 
-  verdictLogs      VerdictLog[]
+  verdictLogs VerdictLog[]
 
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
@@ -370,10 +360,9 @@ model Team {
   aiProblemsEnabled Boolean @default(true)
   aiProblemConfig   Json?
 
-  feedbackReports  FeedbackReport[]
+  feedbackReports FeedbackReport[]
 
-
-  designSessions   DesignSession[]
+  designSessions DesignSession[]
 
   // ── Soft delete ────────────────────────────────────
   deletedAt DateTime?
@@ -494,7 +483,6 @@ model TeamMembership {
 
   // ── Constraints ────────────────────────────────────
   @@unique([userId, teamId])
-
   // ── Indexes ────────────────────────────────────────
   // "All active teams this user belongs to" — for sidebar switcher
   @@index([userId, isActive])
@@ -523,7 +511,7 @@ model Problem {
   categoryData Json?
 
   // ── Context & metadata ─────────────────────────────
-  tags             String[]  @default([])
+  tags             String[] @default([])
   realWorldContext String?
   useCases         String?
   adminNotes       String?
@@ -564,10 +552,9 @@ model Problem {
   // since you solved it."
   version Int @default(1)
 
-
   assessmentResponses AssessmentResponse[]
-  
-  designSessions   DesignSession[]
+
+  designSessions DesignSession[]
 
   // ── Vector embedding ───────────────────────────────
   // Column + HNSW index created via raw SQL migration:
@@ -600,10 +587,9 @@ model Problem {
   @@index([teamId, source, isPublished])
   // HNSW vector index — registered to prevent drift detection
   @@index([embedding], map: "idx_problems_embedding_hnsw")
-  @@map("problems")
-
   // Assessment pool queries
   @@index([isAssessmentOnly, category])
+  @@map("problems")
 }
 
 // ============================================================================
@@ -670,7 +656,7 @@ model SolutionFollowUpAnswer {
 
   // ── AI evaluation ──────────────────────────────────
   // Set after reviewSolution is called — null until then
-  aiScore    Int?    // 1-10
+  aiScore    Int? // 1-10
   aiFeedback String? // One sentence feedback on this specific answer
 
   // ── Timestamps ─────────────────────────────────────
@@ -680,7 +666,6 @@ model SolutionFollowUpAnswer {
   // ── Constraints ────────────────────────────────────
   // One answer per follow-up per solution
   @@unique([solutionId, followUpQuestionId])
-
   // ── Indexes ────────────────────────────────────────
   @@index([solutionId])
   // "All answers to this follow-up question" — for team analytics
@@ -778,7 +763,6 @@ model Solution {
   // user up and warrant extra attention. Convention from Anki.
   lapseCount        Int       @default(0)
 
-
   // ── Category-specific submission data ──────────────
   // Stores structured fields that vary by problem category.
   // For SYSTEM_DESIGN: { functionalRequirements, nonFunctionalRequirements,
@@ -811,7 +795,6 @@ model Solution {
   // ── Constraints ────────────────────────────────────
   // One solution per user per problem per team
   @@unique([userId, problemId, teamId])
-
   // ── Indexes ────────────────────────────────────────
   // THE critical query: "all solutions for this problem in this team"
   @@index([teamId, problemId])
@@ -843,8 +826,8 @@ model Solution {
 /// A ReviewAttempt is "I tried to remember what I wrote"; a SolutionAttempt
 /// is "here is what I actually wrote this time."
 enum AttemptTrigger {
-  SUBMIT       // initial Solution.create via submitSolution
-  EDIT         // Solution.update via updateSolution
+  SUBMIT // initial Solution.create via submitSolution
+  EDIT // Solution.update via updateSolution
   DESIGN_BRIDGE // DesignSession → Solution upsert
 }
 
@@ -923,8 +906,8 @@ model ReviewAttempt {
   recallText String?
 
   // ── Outcome ────────────────────────────────────────
-  confidence Int     // 1-5, user-reported
-  quality    Int     // 0-5, SM-2 quality derived from confidence
+  confidence Int // 1-5, user-reported
+  quality    Int // 0-5, SM-2 quality derived from confidence
   recalled   Boolean // quality >= 3
 
   // ── Timing ─────────────────────────────────────────
@@ -933,6 +916,57 @@ model ReviewAttempt {
   // Most-recent-first lookup for generateReviewHints + recall history UI
   @@index([solutionId, createdAt(sort: Desc)])
   @@map("review_attempts")
+}
+
+// ============================================================================
+// VERDICT LOG
+// ============================================================================
+
+/// Audit record for every AI-generated readiness verdict.
+///
+/// Serves three purposes:
+///   1. **5-minute cache** — hash of input evidence. If a matching log
+///      exists within the window, we return its verdictJson instead of
+///      re-calling the LLM (cost + latency control).
+///   2. **Validation audit** — usedFallback=true marks verdicts where the
+///      LLM violated one of the 7 hard rules and we returned a
+///      deterministic template instead. Watching this rate tells us
+///      whether the prompt is holding.
+///   3. **Calibration ground truth** — interviewOutcome fields stay null
+///      until the interview-pipeline-tracker feature lands; then back-fill
+///      lets us plot "what we claimed" vs "what actually happened" and
+///      re-tune thresholds against real outcomes. See plan section "L4".
+model VerdictLog {
+  id String @id @default(cuid())
+
+  // ── Ownership (team-scoped) ────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // ── Cache key ──────────────────────────────────────
+  // Stable hash of the structured evidence block. (userId, teamId,
+  // inputHash) within 5 min → cache hit.
+  inputHash String
+
+  // ── Payload ────────────────────────────────────────
+  inputPayload Json // exact evidence sent to the LLM
+  verdictJson  Json // structured verdict (post-validation)
+  usedFallback Boolean @default(false)
+
+  // ── Calibration (future) ───────────────────────────
+  interviewOutcome String? // 'passed' | 'failed'
+  interviewCompany String?
+  interviewDate    DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Hot path: "latest verdict for this user/team" → dashboard badge
+  @@index([userId, teamId, createdAt(sort: Desc)])
+  // Cache lookup by input hash
+  @@index([userId, teamId, inputHash])
+  @@map("verdict_logs")
 }
 
 // ============================================================================
@@ -965,7 +999,6 @@ model ClarityRating {
   // ── Constraints ────────────────────────────────────
   // One rating per user per solution
   @@unique([raterId, solutionId])
-
   // ── Indexes ────────────────────────────────────────
   // Aggregate ratings for a solution
   @@index([solutionId])
@@ -1142,8 +1175,6 @@ model InterviewMessage {
   @@map("interview_messages")
 }
 
-
-
 // ============================================================================
 // DESIGN SESSION (Design Studio — Practice + Validate + Evaluate)
 // ============================================================================
@@ -1220,7 +1251,7 @@ model DesignSession {
   // ── Session configuration ──────────────────────────
   designType DesignType
   difficulty Difficulty @default(MEDIUM)
-  title      String     // User-facing title: problem title or custom name
+  title      String // User-facing title: problem title or custom name
 
   // ── Session lifecycle ──────────────────────────────
   status DesignSessionStatus @default(IN_PROGRESS)
@@ -1327,11 +1358,8 @@ model DesignSession {
   @@index([status, createdAt])
   // Filter by design type
   @@index([userId, designType, createdAt(sort: Desc)])
-
   @@map("design_sessions")
 }
-
-
 
 // ============================================================================
 // COMPETITION (FUTURE — Schema placeholder)
@@ -1415,8 +1443,6 @@ model PlatformAnalysis {
   @@map("platform_analyses")
 }
 
-
-
 // ============================================================================
 // FEEDBACK REPORT
 // ============================================================================
@@ -1440,7 +1466,7 @@ model PlatformAnalysis {
 ///    Email is fire-and-forget (failure does not fail the submission).
 ///    Member always gets confirmation that their report was received.
 model FeedbackReport {
-  id          String           @id @default(cuid())
+  id String @id @default(cuid())
 
   // ── Report content ─────────────────────────────────
   type        FeedbackType     @default(BUG)
@@ -1449,239 +1475,231 @@ model FeedbackReport {
   severity    FeedbackSeverity @default(MEDIUM)
 
   // ── Context ────────────────────────────────────────
-  affectedArea      String?
-  stepsToReproduce  String?
+  affectedArea     String?
+  stepsToReproduce String?
 
   // ── Status tracking ────────────────────────────────
-  status      FeedbackStatus   @default(OPEN)
-  adminNote   String?
+  status    FeedbackStatus @default(OPEN)
+  adminNote String?
 
   // ── Submitter ──────────────────────────────────────
-  userId      String
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // ── Team context (nullable) ────────────────────────
-  teamId      String?
-  team        Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   // ── Timestamps ─────────────────────────────────────
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  resolvedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
 
   // ── Indexes ────────────────────────────────────────
   @@index([status, createdAt(sort: Desc)], map: "idx_feedback_status_created")
   @@index([userId, createdAt(sort: Desc)], map: "idx_feedback_user")
   @@index([teamId, createdAt(sort: Desc)], map: "idx_feedback_team")
-
   @@map("feedback_reports")
 }
 
+// ============================================================================
+// SKILL PROFILE
+// ============================================================================
+/// Computed skill proficiency per user per skill.
+///
+/// DESIGN DECISIONS:
+///
+/// 1. Not team-scoped. Skills belong to the person, not the team context.
+///    A user who demonstrates Dynamic Programming in one team has that skill
+///    everywhere. This is architecturally different from Solutions.
+///
+/// 2. skillId is a string constant from skillTaxonomy.js, not a FK to a
+///    Skill table. The taxonomy is static code — storing it in the DB adds
+///    operational overhead with no query benefit.
+///
+/// 3. rawScore and decayedScore are stored separately.
+///    rawScore = evidence-weighted proficiency before time decay.
+///    decayedScore = what gets displayed to the user.
+///    Storing both enables "you had 78 but it decayed to 61" messaging.
+///
+/// 4. isVerified = true only when a formal blind assessment was passed
+///    with all three gates simultaneously (accuracy >= 80%, time within
+///    1.5x expert benchmark, explanation quality >= 7/10).
+///    This is the "definitely has this skill" claim.
+///
+/// Recomputed on:
+///   - Solution submission with AI review
+///   - Quiz completion
+///   - Mock interview debrief
+///   - Spaced repetition review
+model SkillProfile {
+  id String @id @default(cuid())
 
+  // ── User (not team-scoped) ─────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // ── Skill identity ─────────────────────────────────
+  // String constant from skillTaxonomy.js
+  skillId       String
+  skillCategory String
 
-  // ============================================================================
-  // SKILL PROFILE
-  // ============================================================================
-  /// Computed skill proficiency per user per skill.
-  ///
-  /// DESIGN DECISIONS:
-  ///
-  /// 1. Not team-scoped. Skills belong to the person, not the team context.
-  ///    A user who demonstrates Dynamic Programming in one team has that skill
-  ///    everywhere. This is architecturally different from Solutions.
-  ///
-  /// 2. skillId is a string constant from skillTaxonomy.js, not a FK to a
-  ///    Skill table. The taxonomy is static code — storing it in the DB adds
-  ///    operational overhead with no query benefit.
-  ///
-  /// 3. rawScore and decayedScore are stored separately.
-  ///    rawScore = evidence-weighted proficiency before time decay.
-  ///    decayedScore = what gets displayed to the user.
-  ///    Storing both enables "you had 78 but it decayed to 61" messaging.
-  ///
-  /// 4. isVerified = true only when a formal blind assessment was passed
-  ///    with all three gates simultaneously (accuracy >= 80%, time within
-  ///    1.5x expert benchmark, explanation quality >= 7/10).
-  ///    This is the "definitely has this skill" claim.
-  ///
-  /// Recomputed on:
-  ///   - Solution submission with AI review
-  ///   - Quiz completion
-  ///   - Mock interview debrief
-  ///   - Spaced repetition review
-  model SkillProfile {
-    id            String @id @default(cuid())
+  // ── Scores ─────────────────────────────────────────
+  // Raw: evidence-weighted before Ebbinghaus decay
+  // Decayed: rawScore × e^(-daysSinceEvidence / (stability × 10))
+  rawScore     Float @default(0)
+  decayedScore Float @default(0)
 
-    // ── User (not team-scoped) ─────────────────────────
-    userId        String
-    user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // ── Dreyfus proficiency level ──────────────────────
+  proficiencyLevel SkillProficiencyLevel @default(NOVICE)
 
-    // ── Skill identity ─────────────────────────────────
-    // String constant from skillTaxonomy.js
-    skillId       String
-    skillCategory String
+  // ── Evidence quality ───────────────────────────────
+  // Low evidenceCount = low confidence in the score
+  evidenceCount Int @default(0)
 
-    // ── Scores ─────────────────────────────────────────
-    // Raw: evidence-weighted before Ebbinghaus decay
-    // Decayed: rawScore × e^(-daysSinceEvidence / (stability × 10))
-    rawScore      Float  @default(0)
-    decayedScore  Float  @default(0)
+  // ── Verification ───────────────────────────────────
+  // isVerified = true only when blind assessment passed (all 3 gates)
+  isVerified         Boolean @default(false)
+  verifiedConfidence String? // 'HIGH' | 'MEDIUM'
 
-    // ── Dreyfus proficiency level ──────────────────────
-    proficiencyLevel SkillProficiencyLevel @default(NOVICE)
+  // ── Recency tracking ───────────────────────────────
+  lastEvidenceAt DateTime?
 
-    // ── Evidence quality ───────────────────────────────
-    // Low evidenceCount = low confidence in the score
-    evidenceCount Int @default(0)
+  // ── Trajectory ─────────────────────────────────────
+  // Computed from last 5 evidence points
+  trend String? // 'improving' | 'stable' | 'declining'
 
-    // ── Verification ───────────────────────────────────
-    // isVerified = true only when blind assessment passed (all 3 gates)
-    isVerified          Boolean  @default(false)
-    verifiedConfidence  String?  // 'HIGH' | 'MEDIUM'
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    // ── Recency tracking ───────────────────────────────
-    lastEvidenceAt DateTime?
+  // ── Constraints ────────────────────────────────────
+  @@unique([userId, skillId])
+  // ── Indexes ────────────────────────────────────────
+  @@index([userId])
+  @@index([userId, skillCategory])
+  @@index([userId, isVerified])
+  @@index([userId, decayedScore(sort: Desc)])
+  @@map("skill_profiles")
+}
 
-    // ── Trajectory ─────────────────────────────────────
-    // Computed from last 5 evidence points
-    trend String?  // 'improving' | 'stable' | 'declining'
+// ============================================================================
+// SKILL ASSESSMENT
+// ============================================================================
+/// A formal skill assessment session.
+///
+/// Three simultaneous pass gates — ALL must pass for PASSED status:
+///   Gate 1: accuracy >= 80% on application problems
+///   Gate 2: time within 1.5x expert benchmark
+///   Gate 3: explanation quality >= 7/10 from AI review
+///
+/// Scientific basis for the 3-gate requirement:
+///   Accuracy alone measures procedural knowledge.
+///   Time gate measures fluency (Bloom, 1968 — automaticity required for transfer).
+///   Explanation gate measures conceptual understanding (Karpicke & Blunt, 2011).
+///   All three together measure what an interview actually demands.
+///
+/// attemptNumber determines verifiedConfidence on pass:
+///   Attempt 1 → HIGH confidence
+///   Attempt 2+ → MEDIUM confidence
+model SkillAssessment {
+  id String @id @default(cuid())
 
-    // ── Timestamps ─────────────────────────────────────
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  // ── User ───────────────────────────────────────────
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    // ── Constraints ────────────────────────────────────
-    @@unique([userId, skillId])
+  // ── Skill being assessed ───────────────────────────
+  skillId       String
+  skillCategory String
 
-    // ── Indexes ────────────────────────────────────────
-    @@index([userId])
-    @@index([userId, skillCategory])
-    @@index([userId, isVerified])
-    @@index([userId, decayedScore(sort: Desc)])
+  // ── Session lifecycle ──────────────────────────────
+  status        SkillAssessmentStatus @default(IN_PROGRESS)
+  attemptNumber Int                   @default(1)
 
-    @@map("skill_profiles")
-  }
+  // ── Gate 1: Accuracy (>= 80% required) ────────────
+  accuracyScore  Float?
+  accuracyPassed Boolean @default(false)
 
-  // ============================================================================
-  // SKILL ASSESSMENT
-  // ============================================================================
-  /// A formal skill assessment session.
-  ///
-  /// Three simultaneous pass gates — ALL must pass for PASSED status:
-  ///   Gate 1: accuracy >= 80% on application problems
-  ///   Gate 2: time within 1.5x expert benchmark
-  ///   Gate 3: explanation quality >= 7/10 from AI review
-  ///
-  /// Scientific basis for the 3-gate requirement:
-  ///   Accuracy alone measures procedural knowledge.
-  ///   Time gate measures fluency (Bloom, 1968 — automaticity required for transfer).
-  ///   Explanation gate measures conceptual understanding (Karpicke & Blunt, 2011).
-  ///   All three together measure what an interview actually demands.
-  ///
-  /// attemptNumber determines verifiedConfidence on pass:
-  ///   Attempt 1 → HIGH confidence
-  ///   Attempt 2+ → MEDIUM confidence
-  model SkillAssessment {
-    id            String @id @default(cuid())
+  // ── Gate 2: Time (within 1.5x expert benchmark) ───
+  timeScore     Int? // actual seconds taken
+  timeBenchmark Int? // expert benchmark seconds
+  timePassed    Boolean @default(false)
 
-    // ── User ───────────────────────────────────────────
-    userId        String
-    user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // ── Gate 3: Explanation quality (>= 7/10) ─────────
+  explanationScore  Float?
+  explanationPassed Boolean @default(false)
 
-    // ── Skill being assessed ───────────────────────────
-    skillId       String
-    skillCategory String
+  // ── Overall ────────────────────────────────────────
+  overallScore Float?
+  aiFeedback   String?
 
-    // ── Session lifecycle ──────────────────────────────
-    status        SkillAssessmentStatus @default(IN_PROGRESS)
-    attemptNumber Int                   @default(1)
+  // ── Timing ─────────────────────────────────────────
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  timeSpentSeconds Int?
 
-    // ── Gate 1: Accuracy (>= 80% required) ────────────
-    accuracyScore  Float?
-    accuracyPassed Boolean @default(false)
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    // ── Gate 2: Time (within 1.5x expert benchmark) ───
-    timeScore      Int?    // actual seconds taken
-    timeBenchmark  Int?    // expert benchmark seconds
-    timePassed     Boolean @default(false)
+  // ── Relations ──────────────────────────────────────
+  responses AssessmentResponse[]
 
-    // ── Gate 3: Explanation quality (>= 7/10) ─────────
-    explanationScore  Float?
-    explanationPassed Boolean @default(false)
+  // ── Indexes ────────────────────────────────────────
+  @@index([userId])
+  @@index([userId, skillId])
+  @@index([userId, status])
+  @@map("skill_assessments")
+}
 
-    // ── Overall ────────────────────────────────────────
-    overallScore Float?
-    aiFeedback   String?
+// ============================================================================
+// ASSESSMENT RESPONSE
+// ============================================================================
+/// A single problem response within a skill assessment session.
+///
+/// Deliberately separate from the Solution model.
+/// Assessment responses are:
+///   - Isolated from the practice pool
+///   - Never shown as "teammate solutions"
+///   - Not indexed for RAG retrieval
+///   - Evaluated against assessment-specific criteria
+model AssessmentResponse {
+  id String @id @default(cuid())
 
-    // ── Timing ─────────────────────────────────────────
-    startedAt       DateTime  @default(now())
-    completedAt     DateTime?
-    timeSpentSeconds Int?
+  // ── Assessment reference ───────────────────────────
+  assessmentId String
+  assessment   SkillAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
-    // ── Timestamps ─────────────────────────────────────
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  // ── Problem reference ──────────────────────────────
+  // Only problems with isAssessmentOnly=true should appear here
+  problemId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Restrict)
 
-    // ── Relations ──────────────────────────────────────
-    responses AssessmentResponse[]
+  // ── Question type ──────────────────────────────────
+  // 'recognition'  = MCQ identifying correct approach
+  // 'application'  = write code solving the problem
+  // 'explanation'  = explain mechanism, trade-offs, real-world usage
+  questionType String
 
-    // ── Indexes ────────────────────────────────────────
-    @@index([userId])
-    @@index([userId, skillId])
-    @@index([userId, status])
+  // ── Response content ───────────────────────────────
+  answer String?
 
-    @@map("skill_assessments")
-  }
+  // ── Evaluation ─────────────────────────────────────
+  isPassed   Boolean @default(false)
+  aiScore    Float?
+  aiFeedback String?
 
-  // ============================================================================
-  // ASSESSMENT RESPONSE
-  // ============================================================================
-  /// A single problem response within a skill assessment session.
-  ///
-  /// Deliberately separate from the Solution model.
-  /// Assessment responses are:
-  ///   - Isolated from the practice pool
-  ///   - Never shown as "teammate solutions"
-  ///   - Not indexed for RAG retrieval
-  ///   - Evaluated against assessment-specific criteria
-  model AssessmentResponse {
-    id           String @id @default(cuid())
+  // ── Timing ─────────────────────────────────────────
+  timeSpentSeconds Int?
 
-    // ── Assessment reference ───────────────────────────
-    assessmentId String
-    assessment   SkillAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
 
-    // ── Problem reference ──────────────────────────────
-    // Only problems with isAssessmentOnly=true should appear here
-    problemId    String
-    problem      Problem @relation(fields: [problemId], references: [id], onDelete: Restrict)
-
-    // ── Question type ──────────────────────────────────
-    // 'recognition'  = MCQ identifying correct approach
-    // 'application'  = write code solving the problem
-    // 'explanation'  = explain mechanism, trade-offs, real-world usage
-    questionType String
-
-    // ── Response content ───────────────────────────────
-    answer       String?
-
-    // ── Evaluation ─────────────────────────────────────
-    isPassed     Boolean @default(false)
-    aiScore      Float?
-    aiFeedback   String?
-
-    // ── Timing ─────────────────────────────────────────
-    timeSpentSeconds Int?
-
-    // ── Timestamps ─────────────────────────────────────
-    createdAt DateTime @default(now())
-
-    // ── Indexes ────────────────────────────────────────
-    @@index([assessmentId])
-
-    @@map("assessment_responses")
-  }
+  // ── Indexes ────────────────────────────────────────
+  @@index([assessmentId])
+  @@map("assessment_responses")
+}
 
 // ============================================================================
 // COMPETITION ENTRY (FUTURE)
@@ -1699,7 +1717,7 @@ model CompetitionEntry {
   userId String
 
   // ── Results ────────────────────────────────────────
-  score       Int       @default(0)
+  score       Int   @default(0)
   rank        Int?
   submissions Json?
 
@@ -1712,7 +1730,6 @@ model CompetitionEntry {
 
   // ── Constraints ────────────────────────────────────
   @@unique([userId, competitionId])
-
   // ── Indexes ────────────────────────────────────────
   @@index([competitionId, score(sort: Desc)])
   @@map("competition_entries")

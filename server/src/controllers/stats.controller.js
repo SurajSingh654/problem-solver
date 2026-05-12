@@ -17,6 +17,12 @@ import {
   READINESS_TIERS,
   classifyReadiness,
 } from "../utils/readinessTiers.js";
+import crypto from "node:crypto";
+import { aiComplete } from "../services/ai.service.js";
+import {
+  readinessVerdictPrompt,
+  READINESS_VERDICT_FEWSHOT,
+} from "../services/ai.prompts.js";
 
 function stripHtml(html) {
   if (!html) return "";
@@ -2252,5 +2258,444 @@ export async function getTeamActivity(req, res) {
   } catch (err) {
     console.error("Team activity error:", err);
     return error(res, "Failed to fetch team activity.", 500);
+  }
+}
+
+// ============================================================================
+// READINESS VERDICT (AI, grounded, audited)
+// ============================================================================
+//
+// Flow:
+//   1. Build the same 6D evidence the client sees on /report.
+//   2. Hash the evidence → cache key.
+//   3. If a VerdictLog exists for (userId, teamId, inputHash) within the
+//      last 5 minutes, return its verdictJson. No LLM call.
+//   4. Otherwise:
+//      a. Call OPENAI_MODEL_PREMIUM with system prompt + few-shot.
+//      b. Extract JSON from the response (text may include a
+//         <thinking> scaffold before the JSON object).
+//      c. Run validateVerdict — 5 hard-rule checks. On any failure,
+//         log the violations and substitute the deterministic template.
+//      d. Store VerdictLog (inputHash, inputPayload, verdictJson,
+//         usedFallback) and return.
+//
+// The verdict is NEVER generated in-line with /stats/report — the
+// endpoints are decoupled so scores render immediately while the
+// verdict card loads progressively in the client.
+// ============================================================================
+
+const VERDICT_CACHE_TTL_MS = 5 * 60 * 1000;
+const TENTATIVE_VOCAB = [
+  "early",
+  "emerging",
+  "tentative",
+  "small sample",
+  "preliminary",
+  "partial",
+];
+const PARTIAL_VOCAB = ["building", "partial", "still", "starting", "early"];
+
+function hashEvidence(evidence) {
+  const json = JSON.stringify(evidence);
+  return crypto.createHash("sha256").update(json).digest("hex").slice(0, 32);
+}
+
+// Pull the last `{...}` JSON object out of the model response. The
+// prompt instructs the model to emit a <thinking> block before the
+// JSON, so we can't rely on response_format: json_object. We grab the
+// outermost braces using a paren counter.
+function extractJSON(text) {
+  if (!text) return null;
+  // Find the first `{` and match balanced braces to end.
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        const slice = text.slice(start, i + 1);
+        try {
+          return JSON.parse(slice);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// Five hard-rule checks. Returns { valid, violations: [] }. If any
+// violation fires the caller discards the LLM output and uses fallback.
+function validateVerdict(verdict, evidence) {
+  const violations = [];
+  if (!verdict || typeof verdict !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  // Schema shape
+  const { headline, strengths, gaps, readinessNote, dataQualityNote } = verdict;
+  if (typeof headline !== "string" || headline.length === 0 || headline.length > 200) {
+    violations.push("headline-shape");
+  }
+  if (!Array.isArray(strengths) || strengths.length > 2) {
+    violations.push("strengths-cap");
+  }
+  if (!Array.isArray(gaps) || gaps.length > 2) {
+    violations.push("gaps-cap");
+  }
+  if (typeof readinessNote !== "string" || typeof dataQualityNote !== "string") {
+    violations.push("notes-shape");
+  }
+  if (violations.length) return { valid: false, violations };
+
+  // Rule 1 + 5: no claims about inactive dims, every item cites numbers
+  const inactiveKeys = new Set(
+    (evidence.dimensions || [])
+      .filter((d) => d.status === "inactive")
+      .map((d) => d.key.toLowerCase()),
+  );
+  const keyLabels = {
+    patternrecognition: ["pattern recognition", "pattern", "patterns"],
+    solutiondepth: ["solution depth", "depth"],
+    communication: ["communication"],
+    optimization: ["optimization", "optimize"],
+    pressureperformance: ["pressure performance", "pressure"],
+    retention: ["retention"],
+  };
+
+  const checkClaim = (item, label) => {
+    if (!item || typeof item !== "object") {
+      violations.push(`${label}-not-object`);
+      return;
+    }
+    if (typeof item.claim !== "string" || typeof item.evidence !== "string") {
+      violations.push(`${label}-missing-fields`);
+      return;
+    }
+    // Rule 5: evidence must cite a number
+    if (!/\d/.test(item.evidence)) {
+      violations.push(`${label}-evidence-no-number`);
+    }
+    // Rule 1: no reference to an inactive dim
+    const haystack = `${item.claim} ${item.evidence}`.toLowerCase();
+    for (const key of inactiveKeys) {
+      const terms = keyLabels[key] || [key];
+      if (terms.some((t) => haystack.includes(t))) {
+        violations.push(`${label}-cites-inactive:${key}`);
+      }
+    }
+  };
+  strengths.forEach((s, i) => checkClaim(s, `strengths[${i}]`));
+  gaps.forEach((g, i) => {
+    checkClaim(g, `gaps[${i}]`);
+    if (g && typeof g.action !== "string") violations.push(`gaps[${i}]-no-action`);
+  });
+
+  // Rule 2: small-sample dims must use tentative language for "high" confidence
+  const dimByKey = {};
+  for (const d of evidence.dimensions || []) dimByKey[d.key] = d;
+
+  strengths.forEach((s, i) => {
+    if (!s || typeof s !== "object") return;
+    // If claim references an active dim with n < 5, confidence must be "tentative"
+    for (const d of evidence.dimensions || []) {
+      if (d.status !== "active" || d.n >= 5) continue;
+      const terms = keyLabels[d.key.toLowerCase()] || [d.key];
+      const mentioned = terms.some((t) =>
+        `${s.claim} ${s.evidence}`.toLowerCase().includes(t),
+      );
+      if (mentioned && s.confidence === "high") {
+        // Allow if they still used tentative vocabulary in the text
+        const hedged = TENTATIVE_VOCAB.some((v) =>
+          `${s.claim} ${s.evidence}`.toLowerCase().includes(v),
+        );
+        if (!hedged) violations.push(`strengths[${i}]-small-sample-overclaim`);
+      }
+    }
+  });
+
+  // Rule 3: partial-profile headline
+  const coveragePct = evidence.reportCoverage?.pct ?? 0;
+  if (coveragePct < 50) {
+    const hLower = headline.toLowerCase();
+    if (!PARTIAL_VOCAB.some((v) => hLower.includes(v))) {
+      violations.push("partial-headline-missing-hedge");
+    }
+  }
+
+  // Rule 7: readinessNote must cite the server-provided tier name (either
+  // nearestTier or nextTier). If neither exists (zero-data), just allow.
+  const allowedTierNames = [
+    evidence.nearestTier?.name,
+    evidence.nextTier?.name,
+  ]
+    .filter(Boolean)
+    .map((x) => x.toLowerCase());
+  if (allowedTierNames.length > 0) {
+    const rnLower = readinessNote.toLowerCase();
+    const hasKnownTier = allowedTierNames.some((n) => rnLower.includes(n));
+    // Only enforce when the note actually claims a tier
+    // (mentions a known "ready" / "tier" phrase)
+    const claimsTier = /tier|ready|faang|junior|mid-tier/.test(rnLower);
+    if (claimsTier && !hasKnownTier) {
+      violations.push("readiness-note-unknown-tier");
+    }
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
+// Fallback verdict — always safe, always matches the schema. Used when
+// the LLM output fails validation, when AI is rate-limited, or when
+// OpenAI is unreachable.
+function buildFallbackVerdict(evidence) {
+  const coverage = evidence.reportCoverage || { active: 0, total: 6, pct: 0 };
+  const activeCount = coverage.active ?? 0;
+  const coveragePct = coverage.pct ?? 0;
+  const overall = evidence.overall?.score ?? null;
+  const nearestTier = evidence.nearestTier;
+  const nextTier = evidence.nextTier;
+
+  // Zero-data / too-sparse profile
+  if (activeCount < 3 || overall == null) {
+    const inactive = (evidence.dimensions || []).filter((d) => d.status === "inactive");
+    const gaps = inactive.slice(0, 2).map((d) => ({
+      claim: `${prettyDimName(d.key)} has no measurement yet`,
+      evidence: `n=${d.n ?? 0} so far`,
+      action: d.activationMessage || "Submit more solutions to unlock this dimension",
+    }));
+    return {
+      headline: "Your readiness profile is still being built — not enough data yet to score most dimensions.",
+      strengths: [],
+      gaps,
+      readinessNote:
+        "Profile too sparse to assess tier readiness. Keep submitting solutions and requesting AI reviews — dimensions unlock as evidence accumulates.",
+      dataQualityNote: `${activeCount} of 6 dimensions currently active.`,
+    };
+  }
+
+  const activeDims = (evidence.dimensions || []).filter((d) => d.status === "active");
+  const topDim = [...activeDims].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+  const weakDim = [...activeDims]
+    .filter((d) => d.score != null && d.score < 65)
+    .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
+
+  const strengths = [];
+  if (topDim && topDim.score >= 50) {
+    strengths.push({
+      claim: `${prettyDimName(topDim.key)} is your leading dimension`,
+      evidence: `score=${topDim.score} over n=${topDim.n} data points`,
+      confidence: topDim.n >= 5 ? "high" : "tentative",
+    });
+  }
+  const gapsOut = [];
+  if (weakDim) {
+    gapsOut.push({
+      claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,
+      evidence: `score=${weakDim.score} over n=${weakDim.n} data points`,
+      action: `Focus practice sessions on ${prettyDimName(weakDim.key).toLowerCase()} over the next week`,
+    });
+  }
+
+  let headline;
+  let readinessNote;
+  if (coveragePct < 50) {
+    headline = `Partial profile — ${activeCount} of 6 dimensions measured so far. Treat these as early signals.`;
+    readinessNote = nearestTier?.name
+      ? `Current data suggests you're near the ${nearestTier.name} range, but coverage is still below 50% — not enough evidence to confirm tier readiness.`
+      : "Too few active dimensions to assess tier readiness.";
+  } else if (nearestTier?.ready) {
+    headline = `Meeting ${nearestTier.name} expectations across ${activeCount} of 6 dimensions.`;
+    readinessNote = nextTier
+      ? `Ready for ${nearestTier.name}. Next tier (${nextTier.name}) is ${nextTier.gap} overall points away.`
+      : `Meets the highest tier on record.`;
+  } else if (nextTier) {
+    headline = `${nextTier.gap} overall points from ${nextTier.name} readiness.`;
+    readinessNote = `Currently below the ${nextTier.name} threshold (${nextTier.threshold}); working on gaps would close the distance.`;
+  } else {
+    headline = `Profile under construction — keep building.`;
+    readinessNote = "Continue practicing to reach a tier threshold.";
+  }
+
+  return {
+    headline,
+    strengths,
+    gaps: gapsOut,
+    readinessNote,
+    dataQualityNote: `${activeCount} of 6 dimensions active at ${coveragePct}% coverage.`,
+  };
+}
+
+function prettyDimName(key) {
+  return (
+    {
+      patternRecognition: "Pattern Recognition",
+      solutionDepth: "Solution Depth",
+      communication: "Communication",
+      optimization: "Optimization",
+      pressurePerformance: "Pressure Performance",
+      retention: "Retention",
+    }[key] || key
+  );
+}
+
+// Build the evidence block sent to the LLM. Shape matches the verdict
+// prompt's <evidence> schema exactly. All signals come from the already-
+// computed `report` so we avoid duplicate DB traversal.
+function buildVerdictEvidence(report) {
+  const totalSolutions = report.totalSolutions || 0;
+  const totalReviews = report.scoringSignals?.aiReviewedSolutions ?? 0;
+  const totalSuccessfulReviews =
+    (report.dimensions || []).find((d) => d.key === "retention")?.n ?? 0;
+
+  const nearestTier = report.tier?.highest
+    ? {
+        name: report.tier.highest.name,
+        threshold: report.tier.highest.threshold,
+        ready: true,
+      }
+    : null;
+  const nextTier = report.tier?.next
+    ? {
+        name: report.tier.next.name,
+        threshold: report.tier.next.threshold,
+        gap: report.tier.next.overallGap,
+      }
+    : null;
+
+  return {
+    user: { totalSolutions, totalReviews, totalSuccessfulReviews },
+    dimensions: report.dimensions || [],
+    overall: report.overall,
+    reportCoverage: report.reportCoverage,
+    nearestTier,
+    nextTier,
+    recentFlags: {
+      wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
+      overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,
+      incomplete: report.scoringSignals?.incompleteSubmissions ?? 0,
+    },
+  };
+}
+
+// Capture-stub res used to call get6DReport internally and read back
+// the report object without hitting HTTP. get6DReport calls
+// `success(res, {...})` which runs res.status(200).json(envelope).
+function makeCaptureRes() {
+  const res = {
+    _body: null,
+    status() { return res; },
+    json(body) { res._body = body; return res; },
+  };
+  return res;
+}
+
+export async function generateReadinessVerdict(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+
+    // Run the same report computation to get the exact evidence the
+    // client would see. Uses a capture response stub — the controller
+    // calls res.json once at the end; we intercept that.
+    const captureRes = makeCaptureRes();
+    await get6DReport(req, captureRes);
+    const captured = captureRes._body;
+    if (!captured || !captured.success || !captured.data?.report) {
+      return error(res, "Failed to build evidence for verdict.", 500);
+    }
+    const report = captured.data.report;
+
+    const evidence = buildVerdictEvidence(report);
+    const inputHash = hashEvidence(evidence);
+
+    // Cache lookup — return any verdict for this exact evidence within TTL
+    const cacheCutoff = new Date(Date.now() - VERDICT_CACHE_TTL_MS);
+    const cached = await prisma.verdictLog.findFirst({
+      where: {
+        userId,
+        teamId,
+        inputHash,
+        createdAt: { gte: cacheCutoff },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (cached) {
+      return success(res, {
+        verdict: cached.verdictJson,
+        usedFallback: cached.usedFallback,
+        cached: true,
+      });
+    }
+
+    // LLM call with few-shot
+    const { system, user } = readinessVerdictPrompt(evidence);
+    const model =
+      process.env.OPENAI_MODEL_PREMIUM ||
+      process.env.OPENAI_MODEL ||
+      "gpt-4o-mini";
+
+    let verdictJson;
+    let usedFallback = false;
+    let violations = [];
+
+    try {
+      // jsonMode=false because few-shot assistant messages include a
+      // <thinking> block that isn't valid JSON. We extract the JSON
+      // from the full response manually.
+      const raw = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        model,
+        temperature: 0.2,
+        maxTokens: 1200,
+        jsonMode: false,
+        fewShotMessages: READINESS_VERDICT_FEWSHOT,
+      });
+
+      const parsed = extractJSON(raw);
+      const check = validateVerdict(parsed, evidence);
+      if (check.valid) {
+        verdictJson = parsed;
+      } else {
+        violations = check.violations;
+        console.warn(
+          `[verdict] validation failed for user ${userId}: ${violations.join(", ")}`,
+        );
+        verdictJson = buildFallbackVerdict(evidence);
+        usedFallback = true;
+      }
+    } catch (aiErr) {
+      console.warn(`[verdict] LLM call failed: ${aiErr.message}`);
+      verdictJson = buildFallbackVerdict(evidence);
+      usedFallback = true;
+      violations = [`llm-error:${aiErr.code || aiErr.message}`];
+    }
+
+    // Audit log — every call lands here, cache hit or not.
+    await prisma.verdictLog.create({
+      data: {
+        userId,
+        teamId,
+        inputHash,
+        inputPayload: evidence,
+        verdictJson: { ...verdictJson, _violations: violations.length ? violations : undefined },
+        usedFallback,
+      },
+    });
+
+    return success(res, {
+      verdict: verdictJson,
+      usedFallback,
+      cached: false,
+    });
+  } catch (err) {
+    console.error("Readiness verdict error:", err);
+    return error(res, "Failed to generate readiness verdict.", 500);
   }
 }

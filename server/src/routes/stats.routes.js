@@ -9,6 +9,7 @@ import {
   getPlatformStats,
   getShowcaseStats,
   getTeamActivity,
+  generateReadinessVerdict,
 } from "../controllers/stats.controller.js";
 import { getUserSkillProfile } from '../services/skillComputation.service.js'
 
@@ -23,6 +24,11 @@ router.get("/showcase", requireTeamContext, getShowcaseStats);
 router.get("/platform", requireSuperAdmin, getPlatformStats);
 // NEW: Team activity feed for dashboard
 router.get("/activity", requireTeamContext, getTeamActivity);
+// NEW: AI-generated readiness verdict (cached 5 min via VerdictLog).
+// ai.service.js enforces the per-user daily AI quota, and the cache
+// collapses repeat calls on the same evidence — so the default
+// apiLimiter that wraps /stats routes is sufficient protection here.
+router.get("/verdict", requireTeamContext, generateReadinessVerdict);
 router.get('/skills', requireTeamContext, async (req, res) => {
     try {
         const profiles = await getUserSkillProfile(req.user.id)

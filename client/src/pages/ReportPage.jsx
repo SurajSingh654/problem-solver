@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useTeamContext } from '@hooks/useTeamContext'
-import { use6DReport } from '@hooks/useReport'
+import { use6DReport, useReadinessVerdict } from '@hooks/useReport'
 import { Spinner } from '@components/ui/Spinner'
 import { RadarChart } from '@components/charts/RadarChart'
 import { cn } from '@utils/cn'
@@ -1172,6 +1172,151 @@ function CoachingPlanCard() {
   )
 }
 
+// ── AI Readiness Verdict (grounded) ───────────────────
+// Renders the structured verdict returned by GET /stats/verdict.
+// Server already ran the 7-rule validator + deterministic fallback,
+// so this component treats the payload as trusted — no client-side
+// "protection" against overclaim is needed (and adding one would just
+// fight the server).
+function AIVerdictCard({ verdict, usedFallback, cached, isLoading, isError }) {
+  if (isLoading) {
+    return (
+      <div className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-4 h-4 rounded-full border-2 border-brand-400 border-t-transparent animate-spin" />
+          <p className="text-xs text-text-tertiary">Generating grounded verdict from your evidence...</p>
+        </div>
+      </div>
+    )
+  }
+  if (isError || !verdict) return null
+
+  const { headline, strengths = [], gaps = [], readinessNote, dataQualityNote } = verdict
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6"
+    >
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <h2 className="text-sm font-bold text-text-primary">AI Readiness Verdict</h2>
+        {usedFallback && (
+          <span className="text-[9px] font-bold px-2 py-px rounded-full border bg-warning-soft text-warning-fg border-warning-line"
+            title="LLM output did not clear the anti-hallucination checks, so a deterministic template was used. Still grounded, just more conservative.">
+            deterministic fallback
+          </span>
+        )}
+        {cached && (
+          <span className="text-[9px] text-text-disabled">cached</span>
+        )}
+      </div>
+
+      {/* Headline */}
+      <p className="text-sm text-text-primary font-semibold leading-relaxed mb-4">
+        {headline}
+      </p>
+
+      {/* Strengths + Gaps grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Strengths */}
+        <div>
+          <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+            Strengths
+          </p>
+          {strengths.length === 0 ? (
+            <p className="text-[11px] text-text-disabled italic">
+              No strengths meet the evidence threshold yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {strengths.map((s, i) => (
+                <li key={i} className="bg-success-soft border border-success-line rounded-lg p-2.5">
+                  <div className="flex items-start gap-2">
+                    <span className="text-success-fg flex-shrink-0 text-xs font-bold mt-px">✓</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <p className="text-xs font-semibold text-text-primary">{s.claim}</p>
+                        {s.confidence && (
+                          <span className={cn(
+                            'text-[8px] font-bold px-1.5 py-px rounded-full border',
+                            s.confidence === 'high'
+                              ? 'bg-success-soft text-success-fg border-success-line'
+                              : 'bg-warning-soft text-warning-fg border-warning-line'
+                          )}>
+                            {s.confidence}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-text-tertiary font-mono">{s.evidence}</p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Gaps */}
+        <div>
+          <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+            Gaps
+          </p>
+          {gaps.length === 0 ? (
+            <p className="text-[11px] text-text-disabled italic">
+              No gaps flagged at this coverage level.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {gaps.map((g, i) => (
+                <li key={i} className="bg-warning-soft border border-warning-line rounded-lg p-2.5">
+                  <div className="flex items-start gap-2">
+                    <span className="text-warning-fg flex-shrink-0 text-xs font-bold mt-px">!</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-text-primary mb-0.5">{g.claim}</p>
+                      <p className="text-[10px] text-text-tertiary font-mono mb-1.5">{g.evidence}</p>
+                      {g.action && (
+                        <div className="flex items-start gap-1.5 pt-1.5 border-t border-warning-line">
+                          <span className="text-brand-fg-soft flex-shrink-0 text-[10px] font-bold mt-px">→</span>
+                          <p className="text-[11px] text-text-secondary font-medium leading-relaxed">
+                            {g.action}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Notes */}
+      {(readinessNote || dataQualityNote) && (
+        <div className="mt-4 pt-4 border-t border-border-subtle space-y-2">
+          {readinessNote && (
+            <div>
+              <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-0.5">
+                Readiness
+              </p>
+              <p className="text-xs text-text-secondary leading-relaxed">{readinessNote}</p>
+            </div>
+          )}
+          {dataQualityNote && (
+            <div>
+              <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-0.5">
+                Data Quality
+              </p>
+              <p className="text-xs text-text-tertiary leading-relaxed">{dataQualityNote}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
 // ══════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════
@@ -1179,6 +1324,14 @@ export default function ReportPage() {
   const navigate = useNavigate()
   const { teamName, isPersonalMode } = useTeamContext()
   const { data: report, isLoading, isFetching } = use6DReport()
+  // Verdict loads progressively — never blocks the scores above. When
+  // the server returns the cached VerdictLog it's ~instant; first call
+  // on fresh evidence takes ~1–3s.
+  const {
+    data: verdictResponse,
+    isLoading: verdictLoading,
+    isError: verdictError,
+  } = useReadinessVerdict()
 
   // New server shape: report.dimensions is an array of DimScore, overall
   // is an object {score, ci} (or null if not computable). Derive legacy
@@ -1277,7 +1430,16 @@ export default function ReportPage() {
         </div>
       </motion.div>
 
-      {/* ── Section 1: Verdict ─────────────────────────── */}
+      {/* ── Section 1a: AI Grounded Verdict ─────────────── */}
+      <AIVerdictCard
+        verdict={verdictResponse?.verdict}
+        usedFallback={verdictResponse?.usedFallback}
+        cached={verdictResponse?.cached}
+        isLoading={verdictLoading}
+        isError={verdictError}
+      />
+
+      {/* ── Section 1b: Deterministic Verdict Summary ──── */}
       <VerdictCard
         dimByKey={dimByKey}
         overallObj={overallObj}
