@@ -311,6 +311,8 @@ model User {
   skillProfiles    SkillProfile[]
   skillAssessments SkillAssessment[]
 
+  verdictLogs      VerdictLog[]
+
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
   @@index([currentTeamId, activityStatus])
@@ -391,6 +393,7 @@ model Team {
   quizAttempts      QuizAttempt[]
   interviewSessions InterviewSession[]
   memberships       TeamMembership[]
+  verdictLogs       VerdictLog[]
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
