@@ -12,6 +12,10 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
+import {
+  hasBothApproaches,
+  isCodingSolution,
+} from "../utils/solutionSignals.js";
 
 // ============================================================================
 // AI SOLUTION REVIEW (RAG-Enhanced, Team-Scoped)
@@ -88,7 +92,7 @@ export async function reviewSolution(req, res) {
         teammateSolutions = await prisma.$queryRawUnsafe(
           `SELECT s.id, s.approach, s."keyInsight" as "key_insight",
            s."timeComplexity" as "time_complexity", s."spaceComplexity" as "space_complexity",
-           s.confidence, s.pattern, u.name as author_name,
+           s.confidence, s.patterns, u.name as author_name,
            1 - (s.embedding <=> $1::vector) as similarity
            FROM solutions s JOIN users u ON s."userId" = u.id
            WHERE s."teamId" = $2 AND s."problemId" = $3 AND s."userId" != $4
@@ -113,7 +117,7 @@ export async function reviewSolution(req, res) {
   Approach: ${ts.approach || "Not provided"}
   Key Insight: ${ts.key_insight || "Not provided"}
   Complexity: ${ts.time_complexity || "?"} time, ${ts.space_complexity || "?"} space
-  Pattern: ${ts.pattern || "Not identified"}
+  Pattern: ${(ts.patterns ?? []).join(", ") || "Not identified"}
   Confidence: ${ts.confidence}/5`,
         )
         .join("\n\n");
@@ -124,13 +128,16 @@ export async function reviewSolution(req, res) {
     // Tells the AI: "this user usually scores X/10 on [pattern] problems."
     // Non-fatal — review continues without it if query fails.
     let patternBaseline = null;
-    if (solution.pattern) {
+    if (solution.patterns?.length > 0) {
       try {
         const patternSolutions = await prisma.solution.findMany({
           where: {
             userId,
             teamId,
-            pattern: solution.pattern,
+            // Overlap match: baseline includes any past solution that
+            // shared ANY of this solution's patterns. Stronger signal
+            // than primary-only matching.
+            patterns: { hasSome: solution.patterns },
             id: { not: solutionId },
             aiFeedback: { not: null },
           },
@@ -199,7 +206,9 @@ export async function reviewSolution(req, res) {
             }
 
             patternBaseline = {
-              pattern: solution.pattern,
+              // Joined display string — baseline spans any-overlap with
+              // the current solution's patterns.
+              pattern: solution.patterns.join(", "),
               solutionCount: patternSolutions.length,
               avgOverallScore: avgScore,
               dimensionAverages: dimAvgs,
@@ -237,7 +246,7 @@ export async function reviewSolution(req, res) {
       language: solution.language,
       code: solution.code,
       approach: solution.approach,
-      pattern: solution.pattern,
+      patterns: solution.patterns,
       keyInsight: solution.keyInsight,
       feynmanExplanation: solution.feynmanExplanation,
       realWorldConnection: solution.realWorldConnection,
@@ -304,7 +313,10 @@ export async function reviewSolution(req, res) {
       selectedLanguage: solution.language || null,
       incompleteSubmission: aiFlags.incompleteSubmission || false,
       wrongPattern: aiFlags.wrongPattern || false,
-      identifiedPattern: solution.pattern || aiFlags.identifiedPattern || null,
+      identifiedPattern:
+        (solution.patterns ?? []).join(", ") ||
+        aiFlags.identifiedPattern ||
+        null,
       correctPattern: aiFlags.correctPattern || null,
       overconfidenceDetected,
       candidateConfidence: solution.confidence,
@@ -506,7 +518,7 @@ export async function getWeeklyPlan(req, res) {
     const solutions = await prisma.solution.findMany({
       where: { userId, teamId },
       select: {
-        pattern: true,
+        patterns: true,
         confidence: true,
         bruteForce: true,
         optimizedApproach: true,
@@ -514,6 +526,7 @@ export async function getWeeklyPlan(req, res) {
         spaceComplexity: true,
         keyInsight: true,
         feynmanExplanation: true,
+        categorySpecificData: true,
         aiFeedback: true,
         sm2EasinessFactor: true,
         sm2Repetitions: true,
@@ -535,24 +548,21 @@ export async function getWeeklyPlan(req, res) {
     // since we only need the scores, not the full analytics layer.
 
     // D1 proxy
-    const withPattern = solutions.filter((s) => s.pattern).length;
+    const withPattern = solutions.filter((s) => s.patterns?.length > 0).length;
     const uniquePatterns = new Set(
-      solutions.filter((s) => s.pattern).map((s) => s.pattern),
+      solutions.flatMap((s) => s.patterns ?? []),
     );
     const patternCoverageRate =
       totalSolutions > 0 ? Math.round((withPattern / totalSolutions) * 100) : 0;
 
-    // D4 proxy
-    const withBothApproaches = solutions.filter(
-      (s) =>
-        s.bruteForce &&
-        s.bruteForce.trim().length > 20 &&
-        s.optimizedApproach &&
-        s.optimizedApproach.trim().length > 20,
-    ).length;
+    // D4 proxy — "optimization" is a CODING concept; compute % against
+    // coding solutions only rather than diluting with non-CODING rows.
+    const codingSolutions = solutions.filter(isCodingSolution);
+    const codingTotal = codingSolutions.length;
+    const withBothApproachesCount = codingSolutions.filter(hasBothApproaches).length;
     const optimizationRate =
-      totalSolutions > 0
-        ? Math.round((withBothApproaches / totalSolutions) * 100)
+      codingTotal > 0
+        ? Math.round((withBothApproachesCount / codingTotal) * 100)
         : 0;
 
     // AI review signals
@@ -598,20 +608,22 @@ export async function getWeeklyPlan(req, res) {
       (p) => !uniquePatterns.has(p),
     );
 
-    // SM-2 overdue with pattern context
+    // SM-2 overdue with pattern context — flatten per-pattern so
+    // multi-pattern overdue solutions contribute to every pattern they touch.
     const overdueItems = solutions
       .filter(
         (s) => s.nextReviewDate && new Date(s.nextReviewDate) <= new Date(),
       )
-      .map((s) => ({
-        pattern: s.pattern,
-        category: s.problem?.category,
-        daysSince: Math.round(
+      .flatMap((s) => {
+        const daysSince = Math.round(
           (Date.now() - new Date(s.nextReviewDate).getTime()) /
             (1000 * 60 * 60 * 24),
-        ),
-        ef: s.sm2EasinessFactor ?? 2.5,
-      }))
+        );
+        const ef = s.sm2EasinessFactor ?? 2.5;
+        const category = s.problem?.category;
+        const patterns = s.patterns?.length > 0 ? s.patterns : [null];
+        return patterns.map((pattern) => ({ pattern, category, daysSince, ef }));
+      })
       .sort((a, b) => b.daysSince - a.daysSince);
 
     // Most at-risk patterns (lowest EF + most overdue)
@@ -1045,7 +1057,7 @@ export async function generateProblemsAI(req, res) {
           // not team-scoped — we want to know what THIS user has practiced)
           prisma.solution.findMany({
             where: { teamId, userId },
-            select: { pattern: true, confidence: true },
+            select: { patterns: true, confidence: true },
             orderBy: { createdAt: "desc" },
             take: 30,
           }),
@@ -1073,9 +1085,7 @@ export async function generateProblemsAI(req, res) {
         });
 
         const practicedPatterns = [
-          ...new Set(
-            patternGaps.filter((s) => s.pattern).map((s) => s.pattern),
-          ),
+          ...new Set(patternGaps.flatMap((s) => s.patterns ?? [])),
         ];
         if (practicedPatterns.length > 0) {
           teamContext += `Patterns already practiced: ${practicedPatterns.join(", ")}\n`;
@@ -1084,8 +1094,8 @@ export async function generateProblemsAI(req, res) {
         const weakPatterns = [
           ...new Set(
             patternGaps
-              .filter((s) => s.confidence <= 2 && s.pattern)
-              .map((s) => s.pattern),
+              .filter((s) => s.confidence <= 2 && s.patterns?.length > 0)
+              .flatMap((s) => s.patterns),
           ),
         ];
         if (weakPatterns.length > 0) {
@@ -1433,7 +1443,7 @@ export async function generateReviewHints(req, res) {
       where: { id: solutionId, userId, teamId },
       select: {
         id: true,
-        pattern: true,
+        patterns: true,
         keyInsight: true,
         confidence: true,
         reviewCount: true,
@@ -1512,7 +1522,7 @@ Return JSON:
         {
           role: "user",
           content: `Problem: ${solution.problem.title} (${solution.problem.difficulty} ${solution.problem.category})
-Pattern: ${solution.pattern || "not identified"}
+Pattern: ${(solution.patterns ?? []).join(", ") || "not identified"}
 Previous AI score: ${previousScore !== null ? `${previousScore}/10` : "not reviewed"}
 Review count: ${solution.reviewCount}
 ${weakAreas.length > 0 ? `Known weak areas: ${weakAreas.join(", ")}` : ""}
@@ -1530,7 +1540,7 @@ Generate 2 questions that will test if they truly remember and understand this p
       hint: parsed.hint || null,
       context: {
         problemTitle: solution.problem.title,
-        pattern: solution.pattern,
+        patterns: solution.patterns,
         reviewCount: solution.reviewCount,
         previousScore,
       },

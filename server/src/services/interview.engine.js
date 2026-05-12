@@ -168,19 +168,20 @@ const toolHandlers = {
   },
 
   async getCandidateProfile(_, context) {
-    const [solutionCount, patterns, avgConfidence, simCount, quizCount] =
+    const [solutionCount, patternRows, avgConfidence, simCount, quizCount] =
       await Promise.all([
         prisma.solution.count({
           where: { userId: context.userId, teamId: context.teamId },
         }),
+        // Array column: `distinct` on a String[] field isn't meaningful;
+        // dedupe in JS after fetching.
         prisma.solution.findMany({
           where: {
             userId: context.userId,
             teamId: context.teamId,
-            pattern: { not: null },
+            patterns: { isEmpty: false },
           },
-          select: { pattern: true },
-          distinct: ["pattern"],
+          select: { patterns: true },
         }),
         prisma.solution.aggregate({
           where: { userId: context.userId, teamId: context.teamId },
@@ -207,7 +208,7 @@ const toolHandlers = {
       name: user?.name,
       targetCompany: user?.targetCompany,
       solutionCount,
-      uniquePatterns: patterns.map((p) => p.pattern),
+      uniquePatterns: [...new Set(patternRows.flatMap((p) => p.patterns))],
       avgConfidence: avgConfidence._avg.confidence
         ? Math.round(avgConfidence._avg.confidence * 10) / 10
         : 0,
@@ -238,7 +239,7 @@ const toolHandlers = {
           const results = await prisma.$queryRawUnsafe(
             `SELECT s.approach, s."keyInsight" as "key_insight",
              s."timeComplexity" as "time_complexity", s."spaceComplexity" as "space_complexity",
-             s.pattern, s.confidence, u.name as author_name
+             s.patterns, s.confidence, u.name as author_name
              FROM solutions s JOIN users u ON s."userId" = u.id
              WHERE s."teamId" = $1 AND s."problemId" = $2 AND s."userId" != $3
              AND s.embedding IS NOT NULL ORDER BY s.embedding <=> $4::vector LIMIT 3`,
@@ -264,7 +265,7 @@ const toolHandlers = {
         keyInsight: true,
         timeComplexity: true,
         spaceComplexity: true,
-        pattern: true,
+        patterns: true,
         confidence: true,
         user: { select: { name: true } },
       },

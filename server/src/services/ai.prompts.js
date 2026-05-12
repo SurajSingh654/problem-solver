@@ -583,7 +583,7 @@ ${implementationCode ? implementationCode.substring(0, 2500) : "No implementatio
         : null;
 
     submissionSection = `Question Category:
-${categorySpecific?.questionCategory || data.pattern || "Not specified"}
+${categorySpecific?.questionCategory || data.patterns?.[0] || "Not specified"}
 
 What the Interviewer Is Really Checking:
 ${hrSpecific?.underlyingConcern || data.approach || "Not provided"}
@@ -609,7 +609,7 @@ ${hrSpecific?.selfAssessment || data.realWorldConnection || "Not provided"}`;
         : null;
 
     submissionSection = `Competency Being Tested:
-${behavioralSpecific?.competency || data.pattern || "Not specified"}
+${behavioralSpecific?.competency || data.patterns?.[0] || "Not specified"}
 
 STAR — Situation & Task:
 ${behavioralSpecific?.situation || data.approach || "Not provided"}
@@ -635,7 +635,7 @@ ${behavioralSpecific?.reflection || data.feynmanExplanation || "Not provided"}`;
         : null;
 
     submissionSection = `Subject & Concept:
-${tkSpecific?.subject || data.pattern || "Not specified"}
+${tkSpecific?.subject || data.patterns?.[0] || "Not specified"}
 
 Core Explanation — How It Works (Mechanism Level):
 ${tkSpecific?.coreExplanation || data.approach || "Not provided — THIS IS THE PRIMARY EVALUATION FIELD. If empty, flag as critical gap."}
@@ -662,7 +662,7 @@ ${tkSpecific?.realWorldUsage || data.feynmanExplanation || "Not provided"}`;
         : null;
 
     const isQueryMode =
-      (dbSpecific?.problemType || data.pattern || "QUERY") !== "SCHEMA_DESIGN";
+      (dbSpecific?.problemType || data.patterns?.[0] || "QUERY") !== "SCHEMA_DESIGN";
 
     if (isQueryMode) {
       submissionSection = `Problem Type: QUERY
@@ -720,7 +720,7 @@ Real-World Connection: ${data.realWorldConnection || "Not provided"}`;
     "",
     "<candidate_meta>",
     `  <language>${xmlEscape(data.language || "Not specified")}</language>`,
-    `  <pattern_identified>${xmlEscape(data.pattern || "None")}</pattern_identified>`,
+    `  <pattern_identified>${xmlEscape((data.patterns ?? []).join(", ") || "None")}</pattern_identified>`,
     `  <self_confidence>${Number(data.confidence) || 3}/5</self_confidence>`,
     `  <solve_method>${xmlEscape(solveMethodLabel)}</solve_method>`,
     `  <time_taken>${xmlEscape(timeTakenLabel)}</time_taken>`,

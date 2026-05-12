@@ -111,7 +111,8 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     // Phase: 'recall' | 'reveal' | 'rate'
     const [phase, setPhase] = useState('recall')
     const [recallText, setRecallText] = useState('')
-    const [confidence, setConfidence] = useState(solution.confidence || 0)
+    // null = unset. Server's submitReview endpoint rejects anything outside 1-5.
+    const [confidence, setConfidence] = useState(solution.confidence || null)
     const [timerExpired, setTimerExpired] = useState(false)
     const [aiQuestions, setAiQuestions] = useState(null)
     const [showAiHints, setShowAiHints] = useState(false)
@@ -332,10 +333,10 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         </p>
                                         {hasNotes ? (
                                             <div className="space-y-2">
-                                                {solution.pattern && (
+                                                {solution.patterns?.length > 0 && (
                                                     <div>
                                                         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Pattern</p>
-                                                        <p className="text-xs font-semibold text-brand-fg-soft">{solution.pattern}</p>
+                                                        <p className="text-xs font-semibold text-brand-fg-soft">{solution.patterns.join(', ')}</p>
                                                     </div>
                                                 )}
                                                 {solution.keyInsight && (
@@ -591,7 +592,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     variant="primary"
                                     size="md"
                                     fullWidth
-                                    disabled={confidence === 0}
+                                    disabled={confidence == null}
                                     loading={isSaving}
                                     onClick={() => onSave(confidence)}
                                 >
@@ -827,8 +828,8 @@ function UpcomingCard({ solution, index }) {
                         {solution.problem?.difficulty?.charAt(0) +
                             solution.problem?.difficulty?.slice(1).toLowerCase()}
                     </Badge>
-                    {solution.pattern && (
-                        <span className="text-[10px] text-brand-fg-soft">{solution.pattern}</span>
+                    {solution.patterns?.length > 0 && (
+                        <span className="text-[10px] text-brand-fg-soft">{solution.patterns.join(', ')}</span>
                     )}
                     <span className="text-[11px] text-text-tertiary">
                         in {daysUntil} day{daysUntil !== 1 ? 's' : ''}
@@ -879,8 +880,11 @@ export default function ReviewQueuePage() {
     const patternGroups = useMemo(() => {
         if (!due.length) return {}
         const groups = {}
+        // Group by the primary (first) pattern. Multi-pattern solutions
+        // still show all their patterns in the card; this is about which
+        // bucket they land in.
         due.forEach(s => {
-            const key = s.pattern || 'No Pattern'
+            const key = s.patterns?.[0] || 'No Pattern'
             if (!groups[key]) groups[key] = []
             groups[key].push(s)
         })

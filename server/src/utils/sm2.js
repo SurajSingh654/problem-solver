@@ -18,13 +18,18 @@
 //
 // EF (Easiness Factor):
 //   Starts at 2.5. Increases when quality is high, decreases when low.
-//   Minimum 1.3 — items never become harder to schedule than this.
+//   Lower bound 1.3 — items never become harder to schedule than this.
+//   Canonical SM-2 has no upper cap; EF grows unbounded in principle, but
+//   the 180-day interval cap below prevents runaway schedules in practice.
 //   Formula: EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
 //
 // Interval:
 //   Repetition 1: 1 day
 //   Repetition 2: 6 days
 //   Repetition n: interval(n-1) * EF
+//   ±10% jitter applied on intervals >= 4 days to avoid day-level clustering
+//   when many items are submitted together. Canonical SM-2 doesn't jitter;
+//   we do because it's free variance that spreads review load over time.
 //
 // Reset on quality < 3:
 //   Repetitions reset to 0, interval resets to 1.
@@ -92,6 +97,14 @@ export function calculateSM2(quality, easinessFactor, interval, repetitions) {
     newEF = Math.max(1.3, ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)));
   }
 
+  // Jitter — spread clumped reviews over time so items submitted on the
+  // same day don't align forever. Intervals < 4 days don't benefit from
+  // jitter (Math.round collapses the ±10% window).
+  if (newInterval >= 4) {
+    const jitterFactor = 0.9 + Math.random() * 0.2; // [0.9, 1.1)
+    newInterval = Math.max(1, Math.round(newInterval * jitterFactor));
+  }
+
   // Cap maximum interval at 180 days (6 months)
   // Beyond this, even well-known items should be refreshed
   newInterval = Math.min(newInterval, 180);
@@ -111,35 +124,22 @@ export function calculateSM2(quality, easinessFactor, interval, repetitions) {
 
 /**
  * Calculate initial SM-2 state on first submission.
- * First review is always in 1 day regardless of initial confidence.
- * The initial confidence adjusts the starting EF so well-understood
- * items get longer intervals faster.
  *
- * @param {number} confidence - 1-5 initial confidence at submission time
+ * Always starts at the canonical SM-2 default EF of 2.5 and a 1-day first
+ * review. Submission confidence is NOT used to seed EF — self-rated
+ * confidence before any recall test is known to correlate poorly with
+ * actual retention (Dunning & Kruger, 1999). The first real review adjusts
+ * EF based on observed recall, which is what SM-2 is designed to use.
+ *
  * @returns {{ easinessFactor, interval, repetitions, nextReviewDate }}
  */
-export function initialSM2State(confidence) {
-  // Initial EF is adjusted by submission confidence
-  // High initial confidence = start with higher EF (items will space out faster)
-  // Low initial confidence = start with lower EF (items will come back sooner)
-  const initialEFMap = {
-    1: 1.5, // Very unsure — will come back frequently
-    2: 1.8,
-    3: 2.2, // Average — standard starting point (slightly lower than default 2.5)
-    4: 2.5, // Confident — standard SM-2 default
-    5: 2.8, // Very confident — will space out quickly
-  };
-
-  const easinessFactor = initialEFMap[confidence] ?? 2.5;
-
-  // First review always in 1 day — regardless of confidence
-  // We need to observe actual recall before extending intervals
+export function initialSM2State() {
   const nextReviewDate = new Date();
   nextReviewDate.setDate(nextReviewDate.getDate() + 1);
   nextReviewDate.setHours(0, 0, 0, 0);
 
   return {
-    easinessFactor,
+    easinessFactor: 2.5,
     interval: 1,
     repetitions: 0,
     nextReviewDate,

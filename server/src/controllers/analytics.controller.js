@@ -11,6 +11,12 @@ import prisma from "../lib/prisma.js";
 import { aiComplete } from "../services/ai.service.js";
 import { isAIEnabled } from "../services/ai.service.js";
 import { success, error } from "../utils/response.js";
+import {
+  hasReflectiveContent,
+  hasCodeSignal,
+  hasBothApproaches,
+  isCodingSolution,
+} from "../utils/solutionSignals.js";
 
 // ── Helper: date ranges ────────────────────────────────
 function getDaysAgo(days) {
@@ -115,7 +121,7 @@ export async function getProductHealth(req, res) {
         id: true,
         createdAt: true,
         confidence: true,
-        pattern: true,
+        patterns: true,
         keyInsight: true,
         feynmanExplanation: true,
         optimizedApproach: true,
@@ -125,6 +131,8 @@ export async function getProductHealth(req, res) {
         aiFeedback: true,
         timeComplexity: true,
         spaceComplexity: true,
+        categorySpecificData: true,
+        problem: { select: { category: true } },
       },
     });
 
@@ -138,15 +146,18 @@ export async function getProductHealth(req, res) {
 
     const solutionsPerWeek = getWeeksData(allSolutions, "createdAt", 8);
 
-    const withPattern = allSolutions.filter((s) => s.pattern).length;
-    const withInsight = allSolutions.filter((s) => s.keyInsight).length;
-    const withExplanation = allSolutions.filter(
-      (s) => s.feynmanExplanation,
-    ).length;
-    const withCode = allSolutions.filter((s) => s.code).length;
-    const withBothApproaches = allSolutions.filter(
-      (s) => s.bruteForce && s.optimizedApproach,
-    ).length;
+    // "Reflective content" = keyInsight/feynmanExplanation for CODING,
+    // any categorySpecificData field > 20 chars for non-CODING.
+    // CODING-specific counters (withCode, withBothApproaches) are scoped
+    // to coding solutions on both numerator AND denominator — reporting
+    // "what fraction of CODING has X" is more meaningful than diluting
+    // the denominator with categories for which X doesn't apply.
+    const codingSolutions = allSolutions.filter(isCodingSolution);
+    const withPattern = allSolutions.filter((s) => s.patterns?.length > 0).length;
+    const withInsight = allSolutions.filter(hasReflectiveContent).length;
+    const withExplanation = withInsight; // collapsed — same signal under the category-aware helper
+    const withCode = codingSolutions.filter(hasCodeSignal).length;
+    const withBothApproaches = codingSolutions.filter(hasBothApproaches).length;
 
     const avgConfidence = allSolutions.length
       ? (
@@ -425,11 +436,12 @@ export async function getProductHealth(req, res) {
           withExplanation: Math.round(
             (withExplanation / Math.max(allSolutions.length, 1)) * 100,
           ),
+          // CODING-only ratios: denominator is coding solutions, not all.
           withCode: Math.round(
-            (withCode / Math.max(allSolutions.length, 1)) * 100,
+            (withCode / Math.max(codingSolutions.length, 1)) * 100,
           ),
           withBothApproaches: Math.round(
-            (withBothApproaches / Math.max(allSolutions.length, 1)) * 100,
+            (withBothApproaches / Math.max(codingSolutions.length, 1)) * 100,
           ),
         },
         avgConfidence: parseFloat(avgConfidence),

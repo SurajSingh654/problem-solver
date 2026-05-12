@@ -89,10 +89,10 @@ function SolutionRow({ solution, index, onClick }) {
                             {solution.problem.category.replace('_', ' ')}
                         </span>
                     )}
-                    {solution.pattern && (
+                    {solution.patterns?.length > 0 && (
                         <span className="text-[11px] text-brand-fg-soft bg-brand-soft
                              border border-brand-line rounded-full px-2 py-px">
-                            {solution.pattern}
+                            {solution.patterns.join(', ')}
                         </span>
                     )}
                 </div>

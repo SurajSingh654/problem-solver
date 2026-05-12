@@ -3,6 +3,11 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import {
+  hasReflectiveContent,
+  hasBothApproaches,
+  isCodingSolution,
+} from "../utils/solutionSignals.js";
 
 function stripHtml(html) {
   if (!html) return "";
@@ -362,7 +367,7 @@ export async function getLeaderboard(req, res) {
       select: {
         userId: true,
         confidence: true,
-        pattern: true,
+        patterns: true,
         bruteForce: true,
         optimizedApproach: true,
         timeComplexity: true,
@@ -636,7 +641,7 @@ export async function getLeaderboard(req, res) {
       // user practiced? Breadth bonus (10%) if > 8 patterns covered.
       // ─────────────────────────────────────────────
       const uniquePatterns = new Set(
-        solutions.filter((s) => s.pattern).map((s) => s.pattern),
+        solutions.flatMap((s) => s.patterns ?? []),
       );
       let pbs = Math.round(
         (uniquePatterns.size / CANONICAL_PATTERN_COUNT) * 100,
@@ -729,7 +734,7 @@ export async function get6DReport(req, res) {
     const solutions = await prisma.solution.findMany({
       where: { userId, teamId },
       select: {
-        pattern: true,
+        patterns: true,
         patternIdentificationTime: true,
         keyInsight: true,
         feynmanExplanation: true,
@@ -740,6 +745,7 @@ export async function get6DReport(req, res) {
         approach: true,
         timeComplexity: true,
         spaceComplexity: true,
+        categorySpecificData: true,
         sm2EasinessFactor: true,
         sm2Interval: true,
         sm2Repetitions: true,
@@ -748,6 +754,7 @@ export async function get6DReport(req, res) {
         reviewCount: true,
         aiFeedback: true,
         createdAt: true,
+        problem: { select: { category: true } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -1062,9 +1069,9 @@ export async function get6DReport(req, res) {
     // ════════════════════════════════════════════════
     // D1: Pattern Recognition
     // ════════════════════════════════════════════════
-    const withPattern = solutions.filter((s) => s.pattern).length;
+    const withPattern = solutions.filter((s) => s.patterns?.length > 0).length;
     const uniquePatterns = new Set(
-      solutions.filter((s) => s.pattern).map((s) => s.pattern),
+      solutions.flatMap((s) => s.patterns ?? []),
     );
 
     const patternAttemptRate = (withPattern / totalSolutions) * 30;
@@ -1111,14 +1118,22 @@ export async function get6DReport(req, res) {
     const FEYNMAN_MIN_CHARS = 200;
     const REALWORLD_MIN_CHARS = 80;
 
+    // CODING-native signal (generic columns). Non-CODING submissions
+    // use a categorySpecificData-aware helper instead of these raw checks.
     const withMeaningfulInsight = solutions.filter(
-      (s) => stripHtml(s.keyInsight).length >= INSIGHT_MIN_CHARS,
+      (s) => isCodingSolution(s)
+        ? stripHtml(s.keyInsight).length >= INSIGHT_MIN_CHARS
+        : hasReflectiveContent(s),
     ).length;
     const withMeaningfulFeynman = solutions.filter(
-      (s) => stripHtml(s.feynmanExplanation).length >= FEYNMAN_MIN_CHARS,
+      (s) => isCodingSolution(s)
+        ? stripHtml(s.feynmanExplanation).length >= FEYNMAN_MIN_CHARS
+        : hasReflectiveContent(s),
     ).length;
     const withMeaningfulRealWorld = solutions.filter(
-      (s) => stripHtml(s.realWorldConnection).length >= REALWORLD_MIN_CHARS,
+      (s) => isCodingSolution(s)
+        ? stripHtml(s.realWorldConnection).length >= REALWORLD_MIN_CHARS
+        : hasReflectiveContent(s),
     ).length;
 
     const overconfidencePenaltyFactor =
@@ -1240,30 +1255,29 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
-    // D4: Optimization
+    // D4: Optimization — CODING-only dimension. Non-CODING submissions
+    // don't express brute/optimized approaches, so they don't dilute this
+    // denominator; a user with 0 CODING solutions has no optimization
+    // signal at all (d4 = 0 via the guard below).
     // ════════════════════════════════════════════════
-    const withBrute = solutions.filter(
+    const codingSolutions = solutions.filter(isCodingSolution);
+    const codingTotal = codingSolutions.length;
+    const withBrute = codingSolutions.filter(
       (s) => s.bruteForce && s.bruteForce.trim().length > 20,
     ).length;
-    const withOptimized = solutions.filter(
+    const withOptimized = codingSolutions.filter(
       (s) => s.optimizedApproach && s.optimizedApproach.trim().length > 20,
     ).length;
-    const withBothApproaches = solutions.filter(
-      (s) =>
-        s.bruteForce &&
-        s.bruteForce.trim().length > 20 &&
-        s.optimizedApproach &&
-        s.optimizedApproach.trim().length > 20,
-    ).length;
-    const withBothComplexity = solutions.filter(
+    const withBothApproachesCount = codingSolutions.filter(hasBothApproaches).length;
+    const withBothComplexity = codingSolutions.filter(
       (s) => s.timeComplexity && s.spaceComplexity,
     ).length;
 
-    const d4Base = Math.round(
-      (withBrute / totalSolutions) * 15 +
-        (withOptimized / totalSolutions) * 20 +
-        (withBothApproaches / totalSolutions) * 30 +
-        (withBothComplexity / totalSolutions) * 15,
+    const d4Base = codingTotal === 0 ? 0 : Math.round(
+      (withBrute / codingTotal) * 15 +
+        (withOptimized / codingTotal) * 20 +
+        (withBothApproachesCount / codingTotal) * 30 +
+        (withBothComplexity / codingTotal) * 15,
     );
 
     let d4;
@@ -1535,7 +1549,7 @@ export async function get6DReport(req, res) {
     ];
 
     const usedPatterns = new Set(
-      solutions.filter((s) => s.pattern).map((s) => s.pattern),
+      solutions.flatMap((s) => s.patterns ?? []),
     );
     const missingPatterns = CANONICAL_PATTERNS.filter(
       (p) => !usedPatterns.has(p),
@@ -1584,9 +1598,11 @@ export async function get6DReport(req, res) {
             : "stable";
     }
 
+    // Reported as a % of CODING solutions — doesn't make sense against
+    // a total that includes HR / Behavioral / etc.
     const bothApproachesRate =
-      totalSolutions > 0
-        ? Math.round((withBothApproaches / totalSolutions) * 100)
+      codingTotal > 0
+        ? Math.round((withBothApproachesCount / codingTotal) * 100)
         : 0;
 
     const quizCount = await prisma.quizAttempt.count({ where: { userId } });
@@ -1882,7 +1898,7 @@ export async function getTeamActivity(req, res) {
       select: {
         id: true,
         confidence: true,
-        pattern: true,
+        patterns: true,
         createdAt: true,
         userId: true,
         user: {

@@ -594,7 +594,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         createdAt,
         language,
         code,
-        pattern,
+        patterns,
         approach,
         bruteForce,
         optimizedApproach,
@@ -607,6 +607,11 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
         avgClarityRating,
         totalRatings,
     } = solution
+
+    // Primary (first) pattern is what legacy single-value consumers want.
+    // Display uses the joined list.
+    const primaryPattern = patterns?.[0] || null
+    const patternLabel = (patterns ?? []).join(', ')
 
     // ── Submission type detection ──────────────────────
     //
@@ -648,7 +653,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
     // These were submitted before categorySpecificData was introduced.
     const isOldHRSubmission = !isSDSubmission && !isLLDSubmission && !isHRSubmission &&
         !code &&
-        !!(pattern && HR_CATEGORY_IDS.has(pattern))
+        !!(primaryPattern && HR_CATEGORY_IDS.has(primaryPattern))
 
     // New-format TK: has coreExplanation, whyItExists, or tradeoffs
     const isTKSubmission = !!(
@@ -760,7 +765,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
 
                         {/* HR badge — new or old format */}
                         {(isHRSubmission || isOldHRSubmission) && (() => {
-                            const qCat = solution.categorySpecificData?.questionCategory || pattern
+                            const qCat = solution.categorySpecificData?.questionCategory || primaryPattern
                             const cat = qCat ? HR_QUESTION_CATEGORY_MAP[qCat] : null
                             return cat ? (
                                 <span className={cn(
@@ -855,7 +860,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                 ) : isHRSubmission ? (
                                     <HRSolutionDisplay
                                         data={solution.categorySpecificData}
-                                        pattern={pattern}
+                                        pattern={primaryPattern}
                                     />
                                 ) : isOldHRSubmission ? (
                                     // Old format HR: generic fields mapped to HR display
@@ -864,7 +869,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                         keyInsight={keyInsight}
                                         feynmanExplanation={feynmanExplanation}
                                         realWorldConnection={realWorldConnection}
-                                        pattern={pattern}
+                                        pattern={primaryPattern}
                                     />
                                 ) : isTKSubmission ? (
                                     <TKSolutionDisplay data={solution.categorySpecificData} />
@@ -875,7 +880,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] })
                                     <>
                                         {tab === 'approach' && (
                                             <>
-                                                <SectionRow label="Pattern" value={pattern} mode="mono" />
+                                                <SectionRow label="Pattern" value={patternLabel || null} mode="mono" />
                                                 <SectionRow label="Approach" value={approach} mode="markdown" />
                                                 {bruteForce && (
                                                     <div className="border border-border-subtle rounded-xl p-3 space-y-2">

@@ -42,7 +42,7 @@ export async function recomputeSkillsFromSolution(solutionId) {
       where: { id: solutionId },
       select: {
         userId: true,
-        pattern: true,
+        patterns: true,
         confidence: true,
         sm2EasinessFactor: true,
         sm2Repetitions: true,
@@ -58,7 +58,7 @@ export async function recomputeSkillsFromSolution(solutionId) {
     if (!solution) return;
 
     // Get skill ids this solution contributes to
-    const skillIds = mapPatternToSkills(solution.pattern);
+    const skillIds = mapPatternToSkills(solution.patterns);
 
     // Also add category-level skills for non-CODING categories
     if (solution.problem?.category && solution.problem.category !== "CODING") {

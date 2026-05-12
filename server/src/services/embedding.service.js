@@ -43,18 +43,31 @@ export function buildSolutionText(solution, problem) {
   if (problem?.title) parts.push(`Problem: ${problem.title}`);
   if (problem?.difficulty) parts.push(`Difficulty: ${problem.difficulty}`);
   if (problem?.category) parts.push(`Category: ${problem.category}`);
-  if (solution.patternIdentified)
-    parts.push(`Pattern: ${solution.patternIdentified}`);
-  if (solution.bruteForceApproach)
-    parts.push(`Brute Force: ${solution.bruteForceApproach}`);
+  if (Array.isArray(solution.patterns) && solution.patterns.length > 0)
+    parts.push(`Patterns: ${solution.patterns.join(", ")}`);
+  // CODING-native generic columns (populated only for CODING submissions
+  // after the category-specific-data refactor; legacy rows still have them).
+  if (solution.bruteForce)
+    parts.push(`Brute Force: ${solution.bruteForce}`);
   if (solution.optimizedApproach)
     parts.push(`Optimized: ${solution.optimizedApproach}`);
-  if (solution.optimizedTime) parts.push(`Time: ${solution.optimizedTime}`);
-  if (solution.optimizedSpace) parts.push(`Space: ${solution.optimizedSpace}`);
+  if (solution.timeComplexity) parts.push(`Time: ${solution.timeComplexity}`);
+  if (solution.spaceComplexity) parts.push(`Space: ${solution.spaceComplexity}`);
   if (solution.keyInsight) parts.push(`Key Insight: ${solution.keyInsight}`);
   if (solution.feynmanExplanation)
     parts.push(`Explanation: ${solution.feynmanExplanation}`);
   if (solution.code) parts.push(`Code: ${solution.code.slice(0, 1000)}`);
+
+  // Non-CODING submissions carry their content in categorySpecificData.
+  // Flatten any string fields into the embedding text so similarity search
+  // has something meaningful to match against for HR / Behavioral / TK / SQL.
+  if (solution.categorySpecificData && typeof solution.categorySpecificData === "object") {
+    const csdText = Object.values(solution.categorySpecificData)
+      .filter((v) => typeof v === "string" && v.trim().length > 0)
+      .join(" ")
+      .slice(0, 2000);
+    if (csdText) parts.push(csdText);
+  }
 
   return parts.join("\n");
 }
@@ -166,7 +179,7 @@ export async function findSimilarSolutions(solutionId, teamId, limit = 5) {
   try {
     const results = await prisma.$queryRawUnsafe(
       `
-      SELECT s.id, s."problemId", s."userId", s.pattern,
+      SELECT s.id, s."problemId", s."userId", s.patterns,
              s."optimizedApproach", s."keyInsight", s."timeComplexity",
              s.confidence, s.language,
              s.embedding <=> (SELECT embedding FROM solutions WHERE id = $1) AS distance
@@ -225,7 +238,7 @@ export async function searchSolutionsByText(queryText, teamId, limit = 5) {
     const vectorStr = `[${embedding.join(",")}]`;
     const results = await prisma.$queryRawUnsafe(
       `
-      SELECT s.id, s."problemId", s."userId", s.pattern,
+      SELECT s.id, s."problemId", s."userId", s.patterns,
              s."optimizedApproach", s."keyInsight",
              s.embedding <=> $1::vector AS distance
       FROM solutions s

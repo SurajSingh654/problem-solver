@@ -9,11 +9,8 @@
 //   All other categories    → generic form (Pattern multi-select, SolutionTabs, Reflection)
 //
 // CHANGES IN THIS VERSION:
-//   Bug 2 fix: Pattern selector upgraded to multi-select array state.
-//     - editPatterns: string[] replaces formData.pattern: string
-//     - Pre-fill deserializes comma-separated pattern string to array
-//     - onSubmit serializes array back to comma-separated string
-//     - No schema migration needed — pattern column remains String?
+//   Pattern selector is multi-select; server column is String[] (`patterns`).
+//   Pre-fill reads the array directly; onSubmit sends it directly.
 //   Bug fix: All navigate tagged template literals → navigate() function calls
 //   Bug fix: AnimatePresence added to framer-motion import (used in DatabaseEditWorkspace)
 //   Bug fix: CodeEditor import added (used in DatabaseEditWorkspace SQL editor section)
@@ -805,7 +802,7 @@ export default function EditSolutionPage() {
                     companyConnection: csd.companyConnection || '',
                     selfAssessment: csd.selfAssessment || '',
                 })
-                setHrQuestionCategory(csd.questionCategory || mySolution.pattern || '')
+                setHrQuestionCategory(csd.questionCategory || mySolution.patterns?.[0] || '')
             } else {
                 setHrData({
                     underlyingConcern: mySolution.approach || '',
@@ -813,7 +810,7 @@ export default function EditSolutionPage() {
                     companyConnection: mySolution.feynmanExplanation || '',
                     selfAssessment: mySolution.realWorldConnection || '',
                 })
-                setHrQuestionCategory(mySolution.pattern || '')
+                setHrQuestionCategory(mySolution.patterns?.[0] || '')
             }
             setHrConfidence(mySolution.confidence || 3)
             if (mySolution.followUpAnswers?.length > 0) {
@@ -834,7 +831,7 @@ export default function EditSolutionPage() {
                 })
             } else {
                 setTkData({
-                    subject: mySolution.pattern || '',
+                    subject: mySolution.patterns?.[0] || '',
                     coreExplanation: mySolution.approach || '',
                     whyItExists: mySolution.optimizedApproach || '',
                     tradeoffs: mySolution.keyInsight || '',
@@ -907,12 +904,8 @@ export default function EditSolutionPage() {
             setSolutionTabs(existingTabs)
             setCommonNotes(mySolution.realWorldConnection || '')
 
-            // Bug 2 fix: deserialize comma-separated pattern string → string array
-            setEditPatterns(
-                mySolution.pattern
-                    ? mySolution.pattern.split(', ').filter(Boolean)
-                    : []
-            )
+            // patterns is now a native String[] on the server; assign directly.
+            setEditPatterns(mySolution.patterns ?? [])
 
             setFormData({
                 approach: mySolution.approach || '',
@@ -956,44 +949,36 @@ export default function EditSolutionPage() {
 
         let data
 
+        // Non-CODING writes: explicitly null every generic column so a
+        // legacy row being edited gets its stale duplicates cleared
+        // (updateSolutionSchema is a partial, so omitted keys are left alone).
+        const nonCodingNulls = {
+            approach: null, code: null, language: null,
+            keyInsight: null, feynmanExplanation: null, realWorldConnection: null,
+            bruteForce: null, optimizedApproach: null,
+            timeComplexity: null, spaceComplexity: null,
+        }
+
         if (isHRRound) {
             data = {
-                approach: hrData.underlyingConcern || null,
-                keyInsight: hrData.answer || null,
-                feynmanExplanation: hrData.companyConnection || null,
-                realWorldConnection: hrData.selfAssessment || null,
-                pattern: hrQuestionCategory || null,
-                code: null,
-                language: null,
+                ...nonCodingNulls,
+                patterns: hrQuestionCategory ? [hrQuestionCategory] : [],
                 confidence: hrConfidence,
                 categorySpecificData: { ...hrData, questionCategory: hrQuestionCategory },
                 followUpAnswers: followUpAnswersArray,
             }
         } else if (isTKRound) {
             data = {
-                approach: tkData.coreExplanation || null,
-                optimizedApproach: tkData.whyItExists || null,
-                keyInsight: tkData.tradeoffs || null,
-                feynmanExplanation: tkData.realWorldUsage || null,
-                realWorldConnection: null,
-                pattern: tkData.subject?.trim() || null,
-                code: null,
-                language: null,
+                ...nonCodingNulls,
+                patterns: tkData.subject?.trim() ? [tkData.subject.trim()] : [],
                 confidence: tkConfidence,
                 categorySpecificData: { ...tkData },
                 followUpAnswers: followUpAnswersArray,
             }
         } else if (isDBRound) {
-            const isQueryMode = dbProblemType !== 'SCHEMA_DESIGN'
             data = {
-                approach: isQueryMode ? dbData.queryApproach || null : dbData.schemaDesign || null,
-                code: dbData.sqlQuery || null,
-                language: dbData.sqlQuery ? 'SQL' : null,
-                optimizedApproach: isQueryMode ? null : dbData.normalizationReasoning || null,
-                keyInsight: isQueryMode ? dbData.indexStrategy || null : dbData.indexDesign || null,
-                feynmanExplanation: isQueryMode ? dbData.optimizationNotes || null : dbData.noSQLConsideration || null,
-                realWorldConnection: null,
-                pattern: dbProblemType || null,
+                ...nonCodingNulls,
+                patterns: dbProblemType ? [dbProblemType] : [],
                 confidence: dbConfidence,
                 categorySpecificData: { ...dbData, problemType: dbProblemType },
                 followUpAnswers: followUpAnswersArray,
@@ -1018,8 +1003,7 @@ export default function EditSolutionPage() {
                 feynmanExplanation: formData.feynmanExplanation || null,
                 realWorldConnection: formData.realWorldConnection || commonNotes || null,
                 confidence: formData.confidence || 3,
-                // Bug 2 fix: serialize string[] → comma-separated string for DB compat
-                pattern: editPatterns.length > 0 ? editPatterns.join(', ') : null,
+                patterns: editPatterns,
                 followUpAnswers: followUpAnswersArray,
             }
         }

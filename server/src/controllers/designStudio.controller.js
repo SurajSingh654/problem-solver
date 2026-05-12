@@ -81,7 +81,7 @@ function inferSolveMethod(aiInteractions) {
 
 // Extract the dominant design pattern from the LLD designPatterns phase
 // content. Looks for well-known pattern names; returns the first match or
-// null. Used to populate Solution.pattern for pattern-baseline tracking.
+// null. Used to populate Solution.patterns[] for pattern-baseline tracking.
 const LLD_PATTERNS = [
   "Singleton",
   "Factory",
@@ -154,7 +154,7 @@ function buildSolutionPayloadFromSession(session, evaluation) {
       feynmanExplanation:
         session.dataFlowDescription || phases.deepDive || null,
       realWorldConnection: phases.apiDesign || null,
-      pattern: null, // SD has no single "pattern" axis
+      patterns: [], // SD has no single "pattern" axis
       categorySpecificData: {
         functionalRequirements: phases.requirements || "",
         nonFunctionalRequirements: phases.requirements || "",
@@ -173,7 +173,7 @@ function buildSolutionPayloadFromSession(session, evaluation) {
   }
 
   // LLD
-  const pattern = extractDominantPattern(phases.designPatterns);
+  const dominant = extractDominantPattern(phases.designPatterns);
   return {
     ...base,
     approach: phases.requirements || null,
@@ -183,7 +183,7 @@ function buildSolutionPayloadFromSession(session, evaluation) {
     feynmanExplanation: phases.solidAnalysis || null,
     realWorldConnection: null,
     code: phases.methodSignatures || null,
-    pattern,
+    patterns: dominant ? [dominant] : [],
     categorySpecificData: {
       entities: phases.entities || "",
       classHierarchy: phases.classHierarchy || "",
@@ -226,8 +226,10 @@ async function bridgeDesignSessionToSolution(session, evaluation) {
         data: payload,
       });
     } else {
-      // Seed SM-2 from the inferred confidence (first review always in 1 day).
-      const sm2 = initialSM2State(payload.confidence);
+      // Canonical SM-2 initial state (EF=2.5, first review in 1 day).
+      // payload.confidence is stored on the Solution row but does not
+      // seed EF — the first real review is what moves the scheduler.
+      const sm2 = initialSM2State();
       await prisma.solution.create({
         data: {
           ...payload,

@@ -127,7 +127,7 @@ export async function getUserProfile(req, res) {
       select: {
         id: true,
         confidence: true,
-        pattern: true,
+        patterns: true,
         createdAt: true,
         problem: {
           select: { id: true, title: true, difficulty: true, category: true },

@@ -8,6 +8,7 @@ import { useProblem } from '@hooks/useProblems'
 import { useSubmitSolution } from '@hooks/useSolutions'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
 import { CodeEditor, SUBMIT_LANGUAGES } from '@components/ui/CodeEditor'
+import { WorkspaceEditor } from '@components/features/solutions/WorkspaceEditor'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
@@ -288,120 +289,34 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
 // ══════════════════════════════════════════════════════
 // HR WORKSPACE
 // ══════════════════════════════════════════════════════
+const HR_SECTIONS = [
+    { key: 'underlyingConcern', label: 'Analyze', icon: '🔍', sublabel: 'What are they really checking?', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: true, tabDoneThreshold: 21 },
+    { key: 'answer', label: 'Answer', icon: '💬', sublabel: 'Your complete polished response', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 21 },
+    { key: 'companyConnection', label: 'Tailor', icon: '🎯', sublabel: 'Make it specific to this company', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false, tabDoneThreshold: 21 },
+    { key: 'selfAssessment', label: 'Reflect', icon: '🪞', sublabel: 'Honest self-assessment', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false, tabDoneThreshold: 21 },
+]
+
 function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCategoryChange }) {
-    const [activeSection, setActiveSection] = useState('underlyingConcern')
-
-    function update(field, value) {
-        onHrDataChange({ ...hrData, [field]: value })
-    }
-
     const hrConfig = getCategoryForm('HR')
-    const fieldConfigs = hrConfig.hrFields || {}
-
-    const sections = [
-        { key: 'underlyingConcern', label: 'Analyze', icon: '🔍', sublabel: 'What are they really checking?', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: true },
-        { key: 'answer', label: 'Answer', icon: '💬', sublabel: 'Your complete polished response', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
-        { key: 'companyConnection', label: 'Tailor', icon: '🎯', sublabel: 'Make it specific to this company', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
-        { key: 'selfAssessment', label: 'Reflect', icon: '🪞', sublabel: 'Honest self-assessment', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
-    ]
-
-    const activeSectionConfig = sections.find(s => s.key === activeSection)
-    const activeIndex = sections.findIndex(s => s.key === activeSection)
-    const completedCount = sections.filter(s => (hrData[s.key]?.trim?.()?.length ?? 0) > 20).length
-    const requiredComplete = sections.filter(s => s.required).every(s => (hrData[s.key]?.trim?.()?.length ?? 0) > 20)
 
     return (
         <div className="space-y-4">
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold text-text-primary flex items-center gap-2">
-                        <span>🤝</span> HR Answer Workspace
+            <WorkspaceEditor
+                headerIcon="🤝"
+                headerLabel="HR Answer Workspace"
+                progressColorClass="bg-danger"
+                sections={HR_SECTIONS}
+                fieldConfigs={hrConfig.hrFields || {}}
+                values={hrData}
+                onChange={onHrDataChange}
+                defaultActiveSection="underlyingConcern"
+                banner={({ completedCount }) => completedCount === 0 ? (
+                    <p className="text-[10px] text-warning-fg flex items-center gap-1.5 mt-2">
+                        <span>⚠️</span>
+                        Fill in <strong>Analyze</strong> or <strong>Answer</strong> sections above before submitting
                     </p>
-                    <span className="text-[10px] font-bold text-text-disabled">
-                        {completedCount}/{sections.length} sections filled
-                    </span>
-                </div>
-                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
-                    <motion.div
-                        animate={{ width: `${(completedCount / sections.length) * 100}%` }}
-                        transition={{ duration: 0.4 }}
-                        className="h-full bg-danger rounded-full"
-                    />
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-                    {sections.map(s => {
-                        const isDone = (hrData[s.key]?.trim?.()?.length ?? 0) > 20
-                        const isActive = activeSection === s.key
-                        return (
-                            <button key={s.key} onClick={() => setActiveSection(s.key)}
-                                className={cn(
-                                    'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong'
-                                )}>
-                                <div className="flex items-center gap-0.5">
-                                    <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && <span className="text-danger-fg text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
-                                </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>
-                                    {s.label}
-                                </span>
-                            </button>
-                        )
-                    })}
-                </div>
-            </div>
-
-            {completedCount === 0 && (
-                <p className="text-[10px] text-warning-fg flex items-center gap-1.5 mt-2">
-                    <span>⚠️</span>
-                    Fill in <strong>Analyze</strong> or <strong>Answer</strong> sections above before submitting
-                </p>
-            )}
-
-            <motion.div key={activeSection} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
-                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
-                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig.activeBg)}>
-                    <span className="text-xl">{activeSectionConfig.icon}</span>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
-                            {activeSectionConfig.required && (
-                                <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>
-                            )}
-                        </div>
-                        <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
-                    </div>
-                    <span className="text-[10px] text-text-disabled flex-shrink-0">{activeIndex + 1} / {sections.length}</span>
-                </div>
-                <div className="p-5">
-                    {fieldConfigs[activeSection]?.hint && (
-                        <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2 mb-3">
-                            💡 {fieldConfigs[activeSection].hint}
-                        </p>
-                    )}
-                    <textarea
-                        rows={fieldConfigs[activeSection]?.rows || 10}
-                        value={hrData[activeSection] || ''}
-                        onChange={e => update(activeSection, e.target.value)}
-                        placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                        className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                        style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }}
-                    />
-                </div>
-                <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
-                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }} disabled={activeIndex === 0}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
-                        Previous
-                    </button>
-                    <button type="button" onClick={() => { if (activeIndex < sections.length - 1) setActiveSection(sections[activeIndex + 1].key) }} disabled={activeIndex === sections.length - 1}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
-                        Next
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-                    </button>
-                </div>
-            </motion.div>
+                ) : null}
+            />
 
             <div className="bg-surface-1 border border-border-default rounded-2xl p-5">
                 <p className="text-xs font-bold text-text-primary mb-1 flex items-center gap-2">
@@ -434,74 +349,30 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
 // ══════════════════════════════════════════════════════
 // BEHAVIORAL WORKSPACE
 // ══════════════════════════════════════════════════════
+const BEHAVIORAL_SECTIONS = [
+    { key: 'competency', label: 'Competency', icon: '🎯', sublabel: 'What is this question really testing?', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: true, tabDoneThreshold: 31, charThreshold: 100 },
+    { key: 'situation', label: 'Situation', icon: '📖', sublabel: 'Set the scene — specific and scoped', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 31, charThreshold: 300 },
+    { key: 'action', label: 'Action', icon: '⚡', sublabel: 'What YOU did — use "I" not "we"', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true, tabDoneThreshold: 31, charThreshold: 600 },
+    { key: 'result', label: 'Result', icon: '📊', sublabel: 'Quantified outcome and impact', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false, tabDoneThreshold: 31, charThreshold: 150 },
+    { key: 'reflection', label: 'Reflection', icon: '🔬', sublabel: "Learning and what you'd change", color: 'text-purple-400', activeBg: 'bg-purple-400/10 border-purple-400/30', required: false, tabDoneThreshold: 31, charThreshold: 200 },
+]
+
 function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
-    const [activeSection, setActiveSection] = useState('competency')
-
-    function update(field, value) {
-        onBehavioralDataChange({ ...behavioralData, [field]: value })
-    }
-
     const behavioralConfig = getCategoryForm('BEHAVIORAL')
-    const fieldConfigs = behavioralConfig.behavioralFields || {}
-
-    const sections = [
-        { key: 'competency', label: 'Competency', icon: '🎯', sublabel: 'What is this question really testing?', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: true },
-        { key: 'situation', label: 'Situation', icon: '📖', sublabel: 'Set the scene — specific and scoped', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
-        { key: 'action', label: 'Action', icon: '⚡', sublabel: 'What YOU did — use "I" not "we"', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true },
-        { key: 'result', label: 'Result', icon: '📊', sublabel: 'Quantified outcome and impact', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
-        { key: 'reflection', label: 'Reflection', icon: '🔬', sublabel: "Learning and what you'd change", color: 'text-purple-400', activeBg: 'bg-purple-400/10 border-purple-400/30', required: false },
-    ]
-
-    const activeSectionConfig = sections.find(s => s.key === activeSection)
-    const activeIndex = sections.findIndex(s => s.key === activeSection)
-    const completedCount = sections.filter(s => (behavioralData[s.key]?.trim?.()?.length ?? 0) > 30).length
-    const requiredComplete = sections.filter(s => s.required).every(s => (behavioralData[s.key]?.trim?.()?.length ?? 0) > 30)
-
-    const minThresholds = { competency: 100, situation: 300, action: 600, result: 150, reflection: 200 }
-    const activeCharCount = (behavioralData[activeSection]?.trim?.()?.length ?? 0)
-    const threshold = minThresholds[activeSection] || 100
-    const isShort = activeCharCount > 0 && activeCharCount < threshold
-    const progressPct = Math.min(100, (activeCharCount / threshold) * 100)
 
     return (
-        <div className="space-y-4">
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold text-text-primary flex items-center gap-2"><span>🗣️</span> STAR Workspace</p>
-                    <div className="flex items-center gap-2">
-                        {requiredComplete && (
-                            <span className="text-[10px] font-bold text-success-fg flex items-center gap-1">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                                Core complete
-                            </span>
-                        )}
-                        <span className="text-[10px] font-bold text-text-disabled">{completedCount}/{sections.length} sections</span>
-                    </div>
-                </div>
-                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
-                    <motion.div animate={{ width: `${(completedCount / sections.length) * 100}%` }} transition={{ duration: 0.4 }} className="h-full bg-success rounded-full" />
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-                    {sections.map(s => {
-                        const isDone = (behavioralData[s.key]?.trim?.()?.length ?? 0) > 30
-                        const isActive = activeSection === s.key
-                        return (
-                            <button key={s.key} onClick={() => setActiveSection(s.key)}
-                                className={cn('flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
-                                <div className="flex items-center gap-0.5">
-                                    <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
-                                </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>{s.label}</span>
-                            </button>
-                        )
-                    })}
-                </div>
-            </div>
-
-            {!requiredComplete && (
+        <WorkspaceEditor
+            headerIcon="🗣️"
+            headerLabel="STAR Workspace"
+            progressColorClass="bg-success"
+            sections={BEHAVIORAL_SECTIONS}
+            fieldConfigs={behavioralConfig.behavioralFields || {}}
+            values={behavioralData}
+            onChange={onBehavioralDataChange}
+            defaultActiveSection="competency"
+            nonRequiredBadgeLabel="High signal"
+            showCoreCompleteBadge
+            banner={({ requiredComplete }) => !requiredComplete ? (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
                     className="bg-success-soft border border-success-line rounded-xl px-4 py-3 flex items-start gap-3">
                     <span className="text-base flex-shrink-0 mt-0.5">💡</span>
@@ -510,60 +381,8 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
                         <p className="text-[11px] text-text-tertiary leading-relaxed">Naming the <strong>Competency</strong> first is the most important step.</p>
                     </div>
                 </motion.div>
-            )}
-
-            <motion.div key={activeSection} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
-                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
-                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig.activeBg)}>
-                    <span className="text-xl">{activeSectionConfig.icon}</span>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
-                            {activeSectionConfig.required && <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>}
-                            {!activeSectionConfig.required && <span className="text-[9px] font-bold text-text-disabled bg-surface-3 border border-border-default px-1.5 py-px rounded-full">High signal</span>}
-                        </div>
-                        <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
-                    </div>
-                    <span className="text-[10px] text-text-disabled flex-shrink-0">{activeIndex + 1} / {sections.length}</span>
-                </div>
-                <div className="p-5 space-y-3">
-                    {fieldConfigs[activeSection]?.hint && (
-                        <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">💡 {fieldConfigs[activeSection].hint}</p>
-                    )}
-                    <textarea rows={fieldConfigs[activeSection]?.rows || 10} value={behavioralData[activeSection] || ''} onChange={e => update(activeSection, e.target.value)} placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                        className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                        style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }} />
-                    {activeCharCount > 0 && (
-                        <div className="space-y-1.5">
-                            <div className="flex items-center justify-between text-[10px]">
-                                <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success-fg' : isShort ? 'text-warning-fg' : 'text-text-disabled')}>
-                                    {activeCharCount >= threshold ? '✓ Good depth' : isShort ? `Still shallow — aim for ${threshold - activeCharCount} more chars` : 'Keep going...'}
-                                </span>
-                                <span className="text-text-disabled tabular-nums">{activeCharCount} / ~{threshold}</span>
-                            </div>
-                            <div className="h-1 bg-surface-3 rounded-full overflow-hidden">
-                                <motion.div animate={{ width: `${progressPct}%` }} transition={{ duration: 0.3 }}
-                                    className={cn('h-full rounded-full', activeCharCount >= threshold ? 'bg-success' : 'bg-warning')} />
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
-                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }} disabled={activeIndex === 0}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
-                        Previous
-                    </button>
-                    {activeIndex < sections.length - 1 && (
-                        <button type="button" onClick={() => setActiveSection(sections[activeIndex + 1].key)}
-                            className="text-xs font-semibold text-text-tertiary hover:text-text-primary transition-colors flex items-center gap-1">
-                            Next
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-                        </button>
-                    )}
-                </div>
-            </motion.div>
-        </div>
+            ) : null}
+        />
     )
 }
 
@@ -614,66 +433,81 @@ const TK_SUBJECT_GROUPS = TK_SUBJECT_SUGGESTIONS.reduce((acc, item) => {
     return acc
 }, {})
 
-function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
-    const [activeSection, setActiveSection] = useState('subject')
+// Subject picker for TK — renders above the textarea on the subject section,
+// then advances to coreExplanation on selection.
+function TKSubjectPicker({ tkData, update, setActiveSection }) {
     const [showSubjectPicker, setShowSubjectPicker] = useState(true)
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">Quick pick a topic</p>
+                <button type="button" onClick={() => setShowSubjectPicker(v => !v)} className="text-[10px] text-brand-fg-soft hover:text-brand-200 transition-colors">
+                    {showSubjectPicker ? 'Hide' : 'Show topics'}
+                </button>
+            </div>
+            {showSubjectPicker && (
+                <div className="space-y-3">
+                    {Object.entries(TK_SUBJECT_GROUPS).map(([group, items]) => (
+                        <div key={group}>
+                            <p className="text-[9px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">{group}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {items.map(item => (
+                                    <button
+                                        key={item}
+                                        type="button"
+                                        onClick={() => {
+                                            update('subject', `${group} — ${item}`)
+                                            setShowSubjectPicker(false)
+                                            setActiveSection('coreExplanation')
+                                        }}
+                                        className={cn(
+                                            'text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150',
+                                            tkData.subject === `${group} — ${item}`
+                                                ? 'bg-warning-soft border-warning-line text-warning-fg'
+                                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-warning-line hover:text-warning-fg',
+                                        )}
+                                    >
+                                        {item}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+            <div className="border-t border-border-subtle pt-3">
+                <p className="text-[10px] text-text-disabled mb-2">Or type your own:</p>
+            </div>
+        </div>
+    )
+}
 
-    function update(field, value) {
-        onTkDataChange({ ...tkData, [field]: value })
-    }
+// Subject intentionally has no charThreshold — typing past the 20-char
+// threshold flips the tab to "done" but we don't want a depth progress bar
+// for what is essentially a single-line label.
+const TK_SECTIONS = [
+    { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true, tabDoneThreshold: 20 },
+    { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 400, charThreshold: 400 },
+    { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
+    { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices, when to choose differently', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
+    { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
+]
 
+function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
     const tkConfig = getCategoryForm('CS_FUNDAMENTALS')
-    const fieldConfigs = tkConfig.technicalKnowledgeFields || {}
-
-    const sections = [
-        { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true },
-        { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
-        { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
-        { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices, when to choose differently', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: false },
-        { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
-    ]
-
-    const activeSectionConfig = sections.find(s => s.key === activeSection)
-    const activeIndex = sections.findIndex(s => s.key === activeSection)
-    const minThresholds = { subject: 20, coreExplanation: 400, whyItExists: 200, tradeoffs: 200, realWorldUsage: 200 }
-    const completedCount = sections.filter(s => (tkData[s.key]?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)).length
-    const activeCharCount = (tkData[activeSection]?.trim?.()?.length ?? 0)
-    const threshold = minThresholds[activeSection] || 200
-    const isShort = activeCharCount > 0 && activeCharCount < threshold
-    const progressPct = Math.min(100, (activeCharCount / threshold) * 100)
-    const isSubjectActive = activeSection === 'subject'
 
     return (
-        <div className="space-y-4">
-            <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold text-text-primary flex items-center gap-2"><span>🧠</span> Technical Knowledge Workspace</p>
-                    <span className="text-[10px] font-bold text-text-disabled">{completedCount}/{sections.length} sections</span>
-                </div>
-                <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
-                    <motion.div animate={{ width: `${(completedCount / sections.length) * 100}%` }} transition={{ duration: 0.4 }} className="h-full bg-warning rounded-full" />
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-                    {sections.map(s => {
-                        const isDone = (tkData[s.key]?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
-                        const isActive = activeSection === s.key
-                        return (
-                            <button key={s.key} onClick={() => setActiveSection(s.key)}
-                                className={cn('flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
-                                <div className="flex items-center gap-0.5">
-                                    <span className="text-sm">{s.icon}</span>
-                                    {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
-                                    {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
-                                </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>{s.label}</span>
-                            </button>
-                        )
-                    })}
-                </div>
-            </div>
-
-            {!(tkData.coreExplanation?.trim?.()?.length > 100) && (
+        <WorkspaceEditor
+            headerIcon="🧠"
+            headerLabel="Technical Knowledge Workspace"
+            progressColorClass="bg-warning"
+            sections={TK_SECTIONS}
+            fieldConfigs={tkConfig.technicalKnowledgeFields || {}}
+            values={tkData}
+            onChange={onTkDataChange}
+            defaultActiveSection="subject"
+            nonRequiredBadgeLabel="High signal"
+            banner={({ values }) => !(values.coreExplanation?.trim?.()?.length > 100) ? (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
                     className="bg-warning-soft border border-warning-line rounded-xl px-4 py-3 flex items-start gap-3">
                     <span className="text-base flex-shrink-0 mt-0.5">⚙️</span>
@@ -682,91 +516,13 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
                         <p className="text-[11px] text-text-tertiary leading-relaxed">Definitions come from textbooks. Mechanisms come from understanding.</p>
                     </div>
                 </motion.div>
+            ) : null}
+            renderSectionAbove={(activeKey, { values, update, setActiveSection }) => (
+                activeKey === 'subject'
+                    ? <TKSubjectPicker tkData={values} update={update} setActiveSection={setActiveSection} />
+                    : null
             )}
-
-            <motion.div key={activeSection} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
-                className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
-                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig.activeBg)}>
-                    <span className="text-xl">{activeSectionConfig.icon}</span>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <p className={cn('text-sm font-bold', activeSectionConfig.color)}>{activeSectionConfig.label}</p>
-                            {activeSectionConfig.required && <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>}
-                            {!activeSectionConfig.required && <span className="text-[9px] font-bold text-text-disabled bg-surface-3 border border-border-default px-1.5 py-px rounded-full">High signal</span>}
-                        </div>
-                        <p className="text-[11px] text-text-disabled">{activeSectionConfig.sublabel}</p>
-                    </div>
-                    <span className="text-[10px] text-text-disabled flex-shrink-0">{activeIndex + 1} / {sections.length}</span>
-                </div>
-                <div className="p-5 space-y-3">
-                    {fieldConfigs[activeSection]?.hint && (
-                        <p className="text-[11px] text-text-tertiary leading-relaxed bg-surface-2 border border-border-subtle rounded-lg px-3 py-2">💡 {fieldConfigs[activeSection].hint}</p>
-                    )}
-                    {isSubjectActive && (
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">Quick pick a topic</p>
-                                <button type="button" onClick={() => setShowSubjectPicker(v => !v)} className="text-[10px] text-brand-fg-soft hover:text-brand-200 transition-colors">
-                                    {showSubjectPicker ? 'Hide' : 'Show topics'}
-                                </button>
-                            </div>
-                            {showSubjectPicker && (
-                                <div className="space-y-3">
-                                    {Object.entries(TK_SUBJECT_GROUPS).map(([group, items]) => (
-                                        <div key={group}>
-                                            <p className="text-[9px] font-bold text-text-disabled uppercase tracking-widest mb-1.5">{group}</p>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {items.map(item => (
-                                                    <button key={item} type="button"
-                                                        onClick={() => { update('subject', `${group} — ${item}`); setShowSubjectPicker(false); setActiveSection('coreExplanation') }}
-                                                        className={cn('text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150',
-                                                            tkData.subject === `${group} — ${item}` ? 'bg-warning-soft border-warning-line text-warning-fg' : 'bg-surface-3 border-border-default text-text-secondary hover:border-warning-line hover:text-warning-fg')}>
-                                                        {item}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            <div className="border-t border-border-subtle pt-3">
-                                <p className="text-[10px] text-text-disabled mb-2">Or type your own:</p>
-                            </div>
-                        </div>
-                    )}
-                    <textarea rows={fieldConfigs[activeSection]?.rows || 10} value={tkData[activeSection] || ''} onChange={e => update(activeSection, e.target.value)} placeholder={fieldConfigs[activeSection]?.placeholder || ''}
-                        className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-disabled px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-                        style={{ minHeight: `${(fieldConfigs[activeSection]?.rows || 10) * 24}px` }} />
-                    {!isSubjectActive && activeCharCount > 0 && (
-                        <div className="space-y-1.5">
-                            <div className="flex items-center justify-between text-[10px]">
-                                <span className={cn('font-semibold', activeCharCount >= threshold ? 'text-success-fg' : isShort ? 'text-warning-fg' : 'text-text-disabled')}>
-                                    {activeCharCount >= threshold ? '✓ Good depth' : isShort ? `Shallow — aim for ${threshold - activeCharCount} more chars` : 'Keep going...'}
-                                </span>
-                                <span className="text-text-disabled tabular-nums">{activeCharCount} / ~{threshold}</span>
-                            </div>
-                            <div className="h-1 bg-surface-3 rounded-full overflow-hidden">
-                                <motion.div animate={{ width: `${progressPct}%` }} transition={{ duration: 0.3 }} className={cn('h-full rounded-full', activeCharCount >= threshold ? 'bg-success' : 'bg-warning')} />
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-surface-1/50">
-                    <button type="button" onClick={() => { if (activeIndex > 0) setActiveSection(sections[activeIndex - 1].key) }} disabled={activeIndex === 0}
-                        className="text-xs font-semibold text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
-                        Previous
-                    </button>
-                    {activeIndex < sections.length - 1 && (
-                        <button type="button" onClick={() => setActiveSection(sections[activeIndex + 1].key)}
-                            className="text-xs font-semibold text-text-tertiary hover:text-text-primary transition-colors flex items-center gap-1">
-                            Next
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-                        </button>
-                    )}
-                </div>
-            </motion.div>
-        </div>
+        />
     )
 }
 
@@ -989,9 +745,10 @@ export default function SubmitSolutionPage() {
     const [keyInsight, setKeyInsight] = useState('')
     const [feynmanExplanation, setFeynmanExplanation] = useState('')
     const [realWorldConnection, setRealWorldConnection] = useState('')
-    // Bug 3 fix: confidence ref mirrors state to prevent race condition
-    const [confidence, setConfidence] = useState(0)
-    const confidenceRef = useRef(0)
+    // Confidence is null until the user picks a level. The server rejects
+    // anything outside 1-5, so we gate submission on a real value.
+    const [confidence, setConfidence] = useState(null)
+    const confidenceRef = useRef(null)
     const [followUpAnswers, setFollowUpAnswers] = useState({})
 
     // SD/LLD state removed — those categories are fully handled by the migration
@@ -1032,8 +789,7 @@ export default function SubmitSolutionPage() {
 
     // ── Submit ─────────────────────────────────────────────
     async function onSubmit() {
-        // Bug 3 fix: read from ref (always current, not stale)
-        if (confidenceRef.current === 0) {
+        if (confidenceRef.current == null) {
             toast.error('Please set your confidence level')
             return
         }
@@ -1070,51 +826,69 @@ export default function SubmitSolutionPage() {
             .filter(([, text]) => text?.trim())
             .map(([questionId, text]) => ({ followUpQuestionId: questionId, answerText: text.trim() }))
 
-        // SD/LLD branches removed — those categories never reach this code
-        // (early-return banner routes them to Design Studio).
-        const data = {
-            approach: isHR ? hrData.underlyingConcern
-                : isBehavioral ? behavioralData.situation
-                    : isTechnicalKnowledge ? tkData.coreExplanation
-                        : isDatabase ? (dbProblemType === 'SCHEMA_DESIGN' ? dbData.schemaDesign : dbData.queryApproach)
-                            : (approach || null),
-            code: isHR ? null
-                : isBehavioral ? null
-                    : isTechnicalKnowledge ? null
-                        : isDatabase ? (dbData.sqlQuery || null)
-                            : (code || null),
-            language: isHR ? null
-                : isBehavioral ? null
-                    : isTechnicalKnowledge ? null
-                        : isDatabase ? (dbData.sqlQuery ? 'SQL' : null)
-                            : (code ? language : null),
-            pattern: isHR ? (hrQuestionCategory || null)
-                : isBehavioral ? (behavioralData.competency?.trim() || null)
-                    : isTechnicalKnowledge ? (tkData.subject?.trim() || null)
-                        : isDatabase ? (dbProblemType || null)
-                            // Bug 2 fix: serialize string[] to comma-separated string
-                            : (patterns.length > 0 ? patterns.join(', ') : null),
-            keyInsight: isHR ? hrData.answer
-                : isBehavioral ? behavioralData.result
-                    : isTechnicalKnowledge ? tkData.tradeoffs
-                        : isDatabase ? (dbProblemType === 'SCHEMA_DESIGN' ? dbData.normalizationReasoning : dbData.indexStrategy)
-                            : (keyInsight || null),
-            feynmanExplanation: isHR ? hrData.companyConnection
-                : isBehavioral ? behavioralData.reflection
-                    : isTechnicalKnowledge ? tkData.realWorldUsage
-                        : isDatabase ? (dbProblemType === 'SCHEMA_DESIGN' ? dbData.indexDesign : dbData.optimizationNotes)
-                            : (feynmanExplanation || null),
-            realWorldConnection: isHR ? hrData.selfAssessment
-                : (isBehavioral || isTechnicalKnowledge || isDatabase) ? null
-                    : (realWorldConnection || null),
-            // Bug 3 fix: always use ref value — never stale
+        // For non-CODING categories, categorySpecificData is the sole source
+        // of truth. Generic columns (approach, keyInsight, etc.) are always
+        // null so the DB can't silently desync. CODING keeps using the
+        // generic columns as its native shape. (SD/LLD route to Design
+        // Studio via the banner above, never reaching this code.)
+        const base = {
             confidence: confidenceRef.current,
-            categorySpecificData: isHR ? { ...hrData, questionCategory: hrQuestionCategory }
-                : isBehavioral ? { ...behavioralData }
-                    : isTechnicalKnowledge ? { ...tkData }
-                        : isDatabase ? { ...dbData, problemType: dbProblemType }
-                            : undefined,
             followUpAnswers: followUpAnswersArray,
+        }
+        let data
+        if (isHR) {
+            data = {
+                ...base,
+                approach: null, code: null, language: null,
+                keyInsight: null, feynmanExplanation: null, realWorldConnection: null,
+                bruteForce: null, optimizedApproach: null,
+                timeComplexity: null, spaceComplexity: null,
+                patterns: hrQuestionCategory ? [hrQuestionCategory] : [],
+                categorySpecificData: { ...hrData, questionCategory: hrQuestionCategory },
+            }
+        } else if (isBehavioral) {
+            data = {
+                ...base,
+                approach: null, code: null, language: null,
+                keyInsight: null, feynmanExplanation: null, realWorldConnection: null,
+                bruteForce: null, optimizedApproach: null,
+                timeComplexity: null, spaceComplexity: null,
+                patterns: behavioralData.competency?.trim() ? [behavioralData.competency.trim()] : [],
+                categorySpecificData: { ...behavioralData },
+            }
+        } else if (isTechnicalKnowledge) {
+            data = {
+                ...base,
+                approach: null, code: null, language: null,
+                keyInsight: null, feynmanExplanation: null, realWorldConnection: null,
+                bruteForce: null, optimizedApproach: null,
+                timeComplexity: null, spaceComplexity: null,
+                patterns: tkData.subject?.trim() ? [tkData.subject.trim()] : [],
+                categorySpecificData: { ...tkData },
+            }
+        } else if (isDatabase) {
+            data = {
+                ...base,
+                approach: null, code: null, language: null,
+                keyInsight: null, feynmanExplanation: null, realWorldConnection: null,
+                bruteForce: null, optimizedApproach: null,
+                timeComplexity: null, spaceComplexity: null,
+                patterns: dbProblemType ? [dbProblemType] : [],
+                categorySpecificData: { ...dbData, problemType: dbProblemType },
+            }
+        } else {
+            // CODING — generic columns remain canonical.
+            data = {
+                ...base,
+                approach: approach || null,
+                code: code || null,
+                language: code ? language : null,
+                keyInsight: keyInsight || null,
+                feynmanExplanation: feynmanExplanation || null,
+                realWorldConnection: realWorldConnection || null,
+                patterns,
+                // categorySpecificData omitted for CODING
+            }
         }
 
         try {
@@ -1420,10 +1194,10 @@ export default function SubmitSolutionPage() {
                                 const workspaceEmpty = (hrData.underlyingConcern?.trim().length ?? 0) === 0 && (hrData.answer?.trim().length ?? 0) === 0
                                 if (workspaceEmpty) return <span className="text-xs text-warning-fg hidden sm:block font-semibold">Fill in the Answer workspace above first</span>
                             }
-                            if (confidence === 0) return <span className="text-xs text-text-disabled hidden sm:block">Set confidence to submit</span>
+                            if (confidence == null) return <span className="text-xs text-text-disabled hidden sm:block">Set confidence to submit</span>
                             return null
                         })()}
-                        <Button type="button" variant="primary" size="lg" loading={submitSolution.isPending} disabled={confidence === 0} onClick={onSubmit}>
+                        <Button type="button" variant="primary" size="lg" loading={submitSolution.isPending} disabled={confidence == null} onClick={onSubmit}>
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12" />
                             </svg>

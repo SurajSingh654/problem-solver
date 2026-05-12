@@ -505,7 +505,7 @@ export const SKILL_TAXONOMY = [
 
   // ══ BEHAVIORAL ═══════════════════════════════════════════════════════
   // Evidence from Behavioral workspace submissions (STAR format).
-  // Competency tags stored in Solution.pattern for behavioral problems.
+  // Competency tags stored in Solution.patterns[] for behavioral problems.
 
   {
     skillId: "leadership",
@@ -593,13 +593,13 @@ export function getSkillsForCategory(problemCategory) {
   return SKILL_TAXONOMY.filter((s) => s.category === targetCategory);
 }
 
-// Map a solution's pattern tag to skill ids
-export function mapPatternToSkills(pattern) {
-  if (!pattern) return [];
-  // Pattern may be comma-separated (multi-pattern after our Bug 2 fix)
-  const patterns = pattern.split(", ").map((p) => p.trim());
+// Map a solution's pattern tags (String[]) to skill ids.
+// Accepts an array — empty/nullish input returns no skills.
+export function mapPatternToSkills(patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) return [];
+  const set = new Set(patterns);
   return SKILL_TAXONOMY.filter(
-    (skill) => skill.patternTag && patterns.includes(skill.patternTag),
+    (skill) => skill.patternTag && set.has(skill.patternTag),
   ).map((s) => s.skillId);
 }
 

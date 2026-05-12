@@ -7,6 +7,7 @@ import {
   initialSM2State,
   calculateSM2,
   confidenceToQuality,
+  estimateRetention,
 } from "../utils/sm2.js";
 
 // After the existing embedding generation:
@@ -51,18 +52,22 @@ export async function submitSolution(req, res) {
       feynmanExplanation,
       realWorldConnection,
       confidence,
-      pattern,
+      patterns,
       patternIdentificationTime,
       followUpAnswers,
     } = req.body;
 
-    const submissionConfidence = confidence || 3;
+    // Confidence must be an explicit 1-5 self-rating. No default coercion:
+    // "unset" (null/0/undefined) is a client bug, not a valid submission.
+    if (!Number.isInteger(confidence) || confidence < 1 || confidence > 5) {
+      return error(res, "Confidence must be an integer between 1 and 5.", 400);
+    }
 
     // ── SM-2 initial state ─────────────────────────────
-    // Initial EF is seeded from submission confidence.
-    // First review is always tomorrow — we need to observe recall
-    // before trusting the initial confidence self-assessment.
-    const sm2 = initialSM2State(submissionConfidence);
+    // Canonical SM-2: EF starts at 2.5, first review tomorrow.
+    // Submission confidence is stored but does NOT seed EF — the first
+    // actual review is what moves the scheduler.
+    const sm2 = initialSM2State();
 
     const solution = await prisma.$transaction(async (tx) => {
       const created = await tx.solution.create({
@@ -80,8 +85,8 @@ export async function submitSolution(req, res) {
           keyInsight,
           feynmanExplanation,
           realWorldConnection,
-          confidence: submissionConfidence,
-          pattern,
+          confidence,
+          patterns,
           patternIdentificationTime,
           categorySpecificData: req.body.categorySpecificData || null,
           // SM-2 initial state
@@ -153,10 +158,7 @@ export async function submitReview(req, res) {
     const userId = req.user.id;
     const teamId = req.teamId;
     const { confidence } = req.body;
-
-    if (!confidence || confidence < 1 || confidence > 5) {
-      return error(res, "Confidence must be between 1 and 5.", 400);
-    }
+    // Bounds enforced by submitReviewSchema in solutions.routes.js.
 
     // Load current SM-2 state from DB — never trust client-sent state
     const solution = await prisma.solution.findFirst({
@@ -169,6 +171,7 @@ export async function submitReview(req, res) {
         reviewCount: true,
         reviewDates: true,
         confidence: true,
+        lapseCount: true,
       },
     });
 
@@ -176,6 +179,7 @@ export async function submitReview(req, res) {
 
     // Convert 1-5 confidence to SM-2 quality score
     const quality = confidenceToQuality(confidence);
+    const isFailure = quality < 3;
 
     // Run SM-2 algorithm with current state from DB
     const sm2Result = calculateSM2(
@@ -191,6 +195,10 @@ export async function submitReview(req, res) {
       : [];
     reviewHistory.push(new Date().toISOString());
 
+    const LEECH_THRESHOLD = 8;
+    const newLapseCount = (solution.lapseCount ?? 0) + (isFailure ? 1 : 0);
+    const isLeech = newLapseCount >= LEECH_THRESHOLD;
+
     await prisma.solution.update({
       where: { id: solutionId },
       data: {
@@ -203,6 +211,8 @@ export async function submitReview(req, res) {
         reviewCount: { increment: 1 },
         lastReviewedAt: new Date(),
         reviewDates: reviewHistory,
+        // Cumulative failure count — doesn't reset with sm2Repetitions.
+        ...(isFailure ? { lapseCount: { increment: 1 } } : {}),
         // Update confidence to reflect current review rating
         confidence,
       },
@@ -218,6 +228,8 @@ export async function submitReview(req, res) {
         // Tell the client whether this was a pass or reset
         // so the UI can show appropriate feedback
         recalled: quality >= 3,
+        lapseCount: newLapseCount,
+        isLeech,
       },
     });
   } catch (err) {
@@ -266,7 +278,7 @@ export async function getReviewQueue(req, res) {
           sm2Repetitions: true,
           reviewCount: true,
           confidence: true,
-          pattern: true,
+          patterns: true,
           problem: {
             select: { id: true, title: true, difficulty: true, category: true },
           },
@@ -276,29 +288,35 @@ export async function getReviewQueue(req, res) {
       }),
     ]);
 
-    // Compute overdue days and retention estimate for each due item
+    // Compute overdue days, retention estimate, and leech flag for each due item
+    const LEECH_THRESHOLD = 8;
     const enrichedDue = dueReviews.map((s) => {
       const daysSince = Math.max(
         0,
         (now.getTime() - new Date(s.nextReviewDate).getTime()) /
           (1000 * 60 * 60 * 24),
       );
-      // Import inline to avoid circular deps at module level
-      const ef = s.sm2EasinessFactor ?? 2.5;
-      const reps = s.sm2Repetitions ?? 0;
-      const stability = Math.max(1, ef * Math.pow(reps + 1, 0.7));
-      const retentionEstimate = Math.exp(-daysSince / (stability * 10));
+      const retentionEstimate = estimateRetention(
+        daysSince,
+        s.sm2EasinessFactor ?? 2.5,
+        s.sm2Repetitions ?? 0,
+      );
+      const isLeech = (s.lapseCount ?? 0) >= LEECH_THRESHOLD;
 
       return {
         ...s,
         overdueDays: Math.floor(daysSince),
         retentionEstimate: Math.round(retentionEstimate * 100),
+        isLeech,
       };
     });
+
+    const leechCount = enrichedDue.filter((s) => s.isLeech).length;
 
     return success(res, {
       due: enrichedDue,
       dueCount: enrichedDue.length,
+      leechCount,
       upcoming,
     });
   } catch (err) {
@@ -439,7 +457,7 @@ export async function updateSolution(req, res) {
       "feynmanExplanation",
       "realWorldConnection",
       "confidence",
-      "pattern",
+      "patterns",
       "patternIdentificationTime",
       "categorySpecificData",
     ];
@@ -447,23 +465,10 @@ export async function updateSolution(req, res) {
       if (restBody[field] !== undefined) data[field] = restBody[field];
     });
 
-    // If confidence changed on a content edit, update EF proportionally
-    // This handles the case where someone rewrites their solution and
-    // their confidence changes significantly
-    if (restBody.confidence !== undefined) {
-      const current = await prisma.solution.findUnique({
-        where: { id: solutionId },
-        select: { confidence: true, sm2EasinessFactor: true },
-      });
-      if (current && current.confidence !== restBody.confidence) {
-        const confDelta = (restBody.confidence - current.confidence) * 0.1;
-        const newEF = Math.max(
-          1.3,
-          Math.min(3.0, (current.sm2EasinessFactor ?? 2.5) + confDelta),
-        );
-        data.sm2EasinessFactor = Math.round(newEF * 100) / 100;
-      }
-    }
+    // SM-2 EF is intentionally NOT touched here. EF only updates on an actual
+    // scheduled review via submitReview(), when recall is observed. A content
+    // edit — even one that changes self-rated confidence — is not a recall
+    // event, so letting it move EF would corrupt the scheduler.
 
     await prisma.$transaction(async (tx) => {
       await tx.solution.update({ where: { id: solutionId }, data });
@@ -565,15 +570,28 @@ async function updateStreak(userId) {
     select: { lastSolvedAt: true, streak: true },
   });
   if (!user) return;
+
+  // Streak counts distinct calendar days with a submission — not hours
+  // and not submissions. Same-day extra submissions don't bump the streak;
+  // a gap of 2+ days resets to 1.
   const now = new Date();
   const lastSolved = user.lastSolvedAt;
-  let newStreak = user.streak;
-  if (!lastSolved) {
-    newStreak = 1;
-  } else {
-    const diffHours = (now - lastSolved) / (1000 * 60 * 60);
-    newStreak = diffHours < 48 ? user.streak + 1 : 1;
+  let newStreak = 1;
+
+  if (lastSolved) {
+    const startOfDay = (d) => {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return x;
+    };
+    const dayDelta = Math.round(
+      (startOfDay(now) - startOfDay(lastSolved)) / (24 * 60 * 60 * 1000),
+    );
+    if (dayDelta === 0) newStreak = user.streak || 1;
+    else if (dayDelta === 1) newStreak = (user.streak || 0) + 1;
+    // dayDelta >= 2 → gap, reset to 1 (already default)
   }
+
   await prisma.user.update({
     where: { id: userId },
     data: { streak: newStreak, lastSolvedAt: now },
@@ -590,7 +608,7 @@ async function generateSolutionEmbedding(solutionId) {
         approach: true,
         code: true,
         keyInsight: true,
-        pattern: true,
+        patterns: true,
         problem: { select: { title: true } },
       },
     });
@@ -599,7 +617,7 @@ async function generateSolutionEmbedding(solutionId) {
       solution.problem?.title || "",
       solution.approach || "",
       solution.keyInsight || "",
-      solution.pattern || "",
+      (solution.patterns ?? []).join(" "),
       solution.code ? solution.code.substring(0, 500) : "",
     ].join(" ");
     const { generateEmbedding } =

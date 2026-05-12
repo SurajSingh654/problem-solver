@@ -31,7 +31,7 @@ export async function getRecommendations(req, res) {
       select: {
         problemId: true,
         confidence: true,
-        pattern: true,
+        patterns: true,
         problem: { select: { category: true, difficulty: true, tags: true } },
       },
     });
@@ -81,7 +81,7 @@ export async function getRecommendations(req, res) {
 
     // ── Strategy 2: Pattern Gaps ───────────────────────
     const practicedPatterns = new Set(
-      userSolutions.filter((s) => s.pattern).map((s) => s.pattern),
+      userSolutions.flatMap((s) => s.patterns ?? []),
     );
     const allPatterns = [
       "Two Pointers",
@@ -147,7 +147,7 @@ export async function getRecommendations(req, res) {
 
         // Use most recent solution's context as query
         const recent = userSolutions[0];
-        const queryText = `${recent.pattern || ""} ${recent.problem.category}`;
+        const queryText = `${(recent.patterns ?? []).join(" ")} ${recent.problem.category}`;
         const embedding = await generateEmbedding(queryText);
 
         if (embedding) {

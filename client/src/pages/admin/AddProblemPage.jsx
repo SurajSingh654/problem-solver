@@ -4,12 +4,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ProblemForm } from '@components/features/admin/ProblemForm'
 import { useCreateProblem } from '@hooks/useProblems'
 import { useGenerateProblemsAI } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
-import { Spinner } from '@components/ui/Spinner'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import api from '@services/api'
@@ -26,13 +24,6 @@ const MAX_PROBLEMS_PER_BATCH = 5
 // ── AI Generated Problem Preview Card ──────────────────
 function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving, disabled }) {
     const [expanded, setExpanded] = useState(false)
-
-    // Normalize adminNotes for display — AI sometimes returns an object
-    const adminNotesDisplay = problem.adminNotes
-        ? typeof problem.adminNotes === 'object'
-            ? Object.values(problem.adminNotes).join('\n\n')
-            : problem.adminNotes
-        : null
 
     return (
         <motion.div
@@ -165,11 +156,11 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                                         className="text-text-tertiary" />
                                 </div>
                             )}
-                            {adminNotesDisplay && (
+                            {problem.adminNotes && (
                                 <div className="bg-warning-soft border border-warning-line rounded-xl p-3">
                                     <p className="text-[10px] font-bold text-warning-fg uppercase
            tracking-widest mb-1">Teaching Notes</p>
-                                    <MarkdownRenderer content={adminNotesDisplay} size="sm"
+                                    <MarkdownRenderer content={problem.adminNotes} size="sm"
                                         className="text-text-tertiary" />
                                 </div>
                             )}
@@ -206,7 +197,7 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
     )
 }
 
-function AIGenerateScreen({ onBack }) {
+function AIGenerateScreen() {
     const navigate = useNavigate()
     const [category, setCategory] = useState('CODING')
     const [count, setCount] = useState(3)
@@ -239,6 +230,10 @@ function AIGenerateScreen({ onBack }) {
             difficulty: problem.difficulty || 'MEDIUM',
             category: problem.category || category,
             source: 'AI_GENERATED',
+            // Top-level companyTags so the server merges them into tags[]
+            // (where title/tag search looks). Also kept inside categoryData
+            // for any reader that still expects them there.
+            companyTags: problem.companyTags || [],
             categoryData: {
                 sourceUrl: problem.sourceUrl || '',
                 companyTags: problem.companyTags || [],
@@ -249,13 +244,9 @@ function AIGenerateScreen({ onBack }) {
             tags: problem.tags || [],
             realWorldContext: problem.realWorldContext || '',
             useCases: problem.useCases || '',
-            // Normalize adminNotes client-side too — server also normalizes,
-            // but this ensures the payload is always a string
-            adminNotes: problem.adminNotes
-                ? typeof problem.adminNotes === 'object'
-                    ? Object.values(problem.adminNotes).join('\n\n')
-                    : problem.adminNotes
-                : '',
+            // AI output schema (ai.schemas.js) forces adminNotes to string,
+            // and the server-side createProblemSchema rejects non-strings.
+            adminNotes: problem.adminNotes || '',
             followUps: (problem.followUpQuestions || []).map((fq, i) => ({
                 question: fq.question,
                 difficulty: fq.difficulty || 'MEDIUM',
@@ -760,12 +751,6 @@ function AIGenerateScreen({ onBack }) {
 // ══════════════════════════════════════════════════════
 export default function AddProblemPage() {
     const navigate = useNavigate()
-    const createProblem = useCreateProblem()
-
-    async function handleManualSubmit(data) {
-        await createProblem.mutateAsync(data)
-        navigate('/admin')
-    }
 
     return (
         <div className="p-6 max-w-[800px] mx-auto">

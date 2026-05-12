@@ -717,7 +717,10 @@ model Solution {
   confidence Int @default(3)
 
   // ── Pattern recognition ────────────────────────────
-  pattern                   String?
+  // Multi-select: a solution can apply multiple patterns (e.g. Hashing
+  // + Sliding Window). Empty array = no pattern claimed. First element
+  // is treated as "primary" where a single-value read is required.
+  patterns                  String[] @default([])
   patternIdentificationTime Int?
 
   // ── AI feedback (stored after review) ──────────────
@@ -752,6 +755,11 @@ model Solution {
   sm2EasinessFactor Float     @default(2.5)
   sm2Interval       Int       @default(1)
   sm2Repetitions    Int       @default(0)
+  // Cumulative count of failed recalls (quality < 3). Distinct from
+  // sm2Repetitions (which resets on each failure). Items with
+  // lapseCount >= 8 are flagged as "leeches" — they keep tripping the
+  // user up and warrant extra attention. Convention from Anki.
+  lapseCount        Int       @default(0)
 
 
   // ── Category-specific submission data ──────────────

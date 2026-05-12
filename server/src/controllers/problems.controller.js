@@ -1,22 +1,12 @@
 // ============================================================================
 // ProbSolver v3.0 — Problems Controller (Team-Scoped)
 // ============================================================================
+// All POST/PUT/PATCH bodies are validated by Zod via validate() middleware
+// in problems.routes.js, so field types reaching this controller match
+// server/src/schemas/problem.schema.js. No defensive coercion required.
+// ============================================================================
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
-
-// ── Shared normalizer for adminNotes ───────────────────────
-// AI sometimes returns adminNotes as a JSON object {"1": "...", "2": "..."}
-// instead of a string. Prisma expects String or Null.
-// Normalize defensively here so the Prisma call never receives an object.
-function normalizeAdminNotes(adminNotes) {
-  if (!adminNotes) return null;
-  if (typeof adminNotes === "string") return adminNotes;
-  if (typeof adminNotes === "object") {
-    // Convert {"1": "...", "2": "..."} → "...\n\n..."
-    return Object.values(adminNotes).join("\n\n");
-  }
-  return null;
-}
 
 // ============================================================================
 // LIST PROBLEMS
@@ -195,46 +185,39 @@ export async function createProblem(req, res) {
       useCases,
       adminNotes,
       source,
-      followUpQuestions,
       followUps,
       companyTags,
-      sourceUrl,
-      isBlindChallenge,
+      isPinned,
     } = req.body;
 
-    const normalizedFollowUps = followUpQuestions || followUps || [];
-    const normalizedSource =
-      source === "AI_GENERATED" ? "AI_GENERATED" : "MANUAL";
     const normalizedUseCases = Array.isArray(useCases)
       ? useCases.join("\n")
-      : useCases || null;
-    const normalizedTags = [
-      ...(Array.isArray(tags) ? tags : []),
-      ...(Array.isArray(companyTags) ? companyTags : []),
-    ];
+      : useCases ?? null;
+    const normalizedTags = [...tags, ...companyTags];
 
     const problem = await prisma.problem.create({
       data: {
         title,
-        description: description || null,
-        difficulty: difficulty || "MEDIUM",
-        category: category || "CODING",
-        categoryData: categoryData || null,
+        description: description ?? null,
+        difficulty,
+        category,
+        categoryData: categoryData ?? null,
         tags: normalizedTags,
-        realWorldContext: realWorldContext || null,
+        realWorldContext: realWorldContext ?? null,
         useCases: normalizedUseCases,
-        adminNotes: normalizeAdminNotes(adminNotes),
-        source: normalizedSource,
+        adminNotes: adminNotes ?? null,
+        source,
+        isPinned,
         isPublished: true,
         teamId,
         createdById: userId,
         followUpQuestions:
-          normalizedFollowUps.length > 0
+          followUps.length > 0
             ? {
-                create: normalizedFollowUps.map((fq, index) => ({
+                create: followUps.map((fq, index) => ({
                   question: fq.question,
-                  difficulty: fq.difficulty || "MEDIUM",
-                  hint: fq.hint || null,
+                  difficulty: fq.difficulty,
+                  hint: fq.hint ?? null,
                   order: fq.order ?? index,
                 })),
               }
@@ -272,46 +255,31 @@ export async function batchCreateProblems(req, res) {
 
     const { problems } = req.body;
 
-    if (!Array.isArray(problems) || problems.length === 0) {
-      return error(res, "problems array is required.", 400);
-    }
-
-    if (problems.length > 5) {
-      return error(res, "Maximum 5 problems per batch.", 400);
-    }
-
-    // Normalize each problem the same way createProblem does
-    const normalized = problems.map((p) => {
-      const normalizedFollowUps = p.followUpQuestions || p.followUps || [];
-      const normalizedUseCases = Array.isArray(p.useCases)
+    // Shape each validated problem for Prisma (merge tags+companyTags,
+    // coerce useCases array → string, etc.) — mirrors createProblem.
+    const shaped = problems.map((p) => ({
+      title: p.title,
+      description: p.description ?? null,
+      difficulty: p.difficulty,
+      category: p.category,
+      categoryData: p.categoryData ?? null,
+      tags: [...p.tags, ...p.companyTags],
+      realWorldContext: p.realWorldContext ?? null,
+      useCases: Array.isArray(p.useCases)
         ? p.useCases.join("\n")
-        : p.useCases || null;
-      const normalizedTags = [
-        ...(Array.isArray(p.tags) ? p.tags : []),
-        ...(Array.isArray(p.companyTags) ? p.companyTags : []),
-      ];
-
-      return {
-        title: p.title,
-        description: p.description || null,
-        difficulty: p.difficulty || "MEDIUM",
-        category: p.category || "CODING",
-        categoryData: p.categoryData || null,
-        tags: normalizedTags,
-        realWorldContext: p.realWorldContext || null,
-        useCases: normalizedUseCases,
-        adminNotes: normalizeAdminNotes(p.adminNotes),
-        source: p.source === "AI_GENERATED" ? "AI_GENERATED" : "MANUAL",
-        isPublished: true,
-        teamId,
-        createdById: userId,
-        followUps: normalizedFollowUps,
-      };
-    });
+        : p.useCases ?? null,
+      adminNotes: p.adminNotes ?? null,
+      source: p.source,
+      isPinned: p.isPinned,
+      isPublished: true,
+      teamId,
+      createdById: userId,
+      followUps: p.followUps,
+    }));
 
     // Single transaction — all or nothing
     const created = await prisma.$transaction(
-      normalized.map(({ followUps, ...data }) =>
+      shaped.map(({ followUps, ...data }) =>
         prisma.problem.create({
           data: {
             ...data,
@@ -320,8 +288,8 @@ export async function batchCreateProblems(req, res) {
                 ? {
                     create: followUps.map((fq, index) => ({
                       question: fq.question,
-                      difficulty: fq.difficulty || "MEDIUM",
-                      hint: fq.hint || null,
+                      difficulty: fq.difficulty,
+                      hint: fq.hint ?? null,
                       order: fq.order ?? index,
                     })),
                   }
@@ -396,13 +364,12 @@ export async function updateProblem(req, res) {
     if (difficulty !== undefined) data.difficulty = difficulty;
     if (category !== undefined) data.category = category;
     if (categoryData !== undefined) data.categoryData = categoryData;
-    if (tags !== undefined) data.tags = Array.isArray(tags) ? tags : [];
+    if (tags !== undefined) data.tags = tags;
     if (realWorldContext !== undefined)
       data.realWorldContext = realWorldContext;
     if (useCases !== undefined)
       data.useCases = Array.isArray(useCases) ? useCases.join("\n") : useCases;
-    if (adminNotes !== undefined)
-      data.adminNotes = normalizeAdminNotes(adminNotes);
+    if (adminNotes !== undefined) data.adminNotes = adminNotes;
     if (isPublished !== undefined) data.isPublished = isPublished;
     if (isPinned !== undefined) data.isPinned = isPinned;
     if (isHidden !== undefined) data.isHidden = isHidden;

@@ -37,9 +37,16 @@ export const createSolutionSchema = z.object({
   keyInsight: optStr,
   feynmanExplanation: optStr,
   realWorldConnection: optStr,
-  confidence: z.number().int().min(0).max(5).default(3),
-  pattern: optStr,
+  // Confidence is an explicit 1-5 self-rating. 0/null is "unset" — the
+  // client must resolve that before POSTing; the server will not coerce.
+  confidence: z.number().int().min(1).max(5),
+  // Multi-select patterns — empty array = no pattern claimed.
+  // Cap at 10 to prevent abusive payloads; labels capped at 100 chars.
+  patterns: z.array(z.string().min(1).max(100)).max(10).default([]),
   patternIdentificationTime: z.number().int().positive().nullable().optional(),
+  // Category-specific structured data (HR/Behavioral/TK/DB workspaces etc.)
+  // Stored as Prisma `Json?` — shape varies per category.
+  categorySpecificData: z.record(z.any()).nullable().optional(),
   // Follow-up answers — array of { followUpQuestionId, answerText }
   followUpAnswers: z
     .array(
@@ -53,3 +60,15 @@ export const createSolutionSchema = z.object({
 });
 
 export const updateSolutionSchema = createSolutionSchema.partial();
+
+// ── SM-2 review submission ───────────────────────────────
+// POST /solutions/:solutionId/review
+export const submitReviewSchema = z.object({
+  confidence: z.number().int().min(1).max(5),
+});
+
+// ── Peer clarity rating ──────────────────────────────────
+// POST /solutions/:solutionId/rate
+export const rateSolutionClaritySchema = z.object({
+  rating: z.number().int().min(1).max(5),
+});

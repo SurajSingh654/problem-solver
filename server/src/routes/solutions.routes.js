@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requireTeamContext } from "../middleware/team.middleware.js";
+import { validate } from "../middleware/validate.middleware.js";
+import {
+  createSolutionSchema,
+  updateSolutionSchema,
+  submitReviewSchema,
+  rateSolutionClaritySchema,
+} from "../schemas/solution.schema.js";
 import {
   submitSolution,
   getProblemSolutions,
@@ -14,13 +21,21 @@ import {
 const router = Router();
 router.use(authenticate, requireTeamContext);
 
-router.post("/:problemId", submitSolution);
+router.post("/:problemId", validate(createSolutionSchema), submitSolution);
 router.get("/problem/:problemId", getProblemSolutions);
 router.get("/user/:userId?", getUserSolutions);
-router.put("/:solutionId", updateSolution);
-router.post("/:solutionId/rate", rateSolutionClarity);
+router.put("/:solutionId", validate(updateSolutionSchema), updateSolution);
+router.post(
+  "/:solutionId/rate",
+  validate(rateSolutionClaritySchema),
+  rateSolutionClarity,
+);
 // SM-2 review submission — separate from content updates
-router.post("/:solutionId/review", submitReview);
+router.post(
+  "/:solutionId/review",
+  validate(submitReviewSchema),
+  submitReview,
+);
 router.get("/review/queue", getReviewQueue);
 
 export default router;
