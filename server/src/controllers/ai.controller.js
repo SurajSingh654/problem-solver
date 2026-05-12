@@ -378,21 +378,38 @@ export async function reviewSolution(req, res) {
         : [];
     const updatedFeedback = [...existingFeedback, reviewRecord];
 
-    await prisma.solution.update({
-      where: { id: solutionId },
-      data: {
-        aiFeedback: updatedFeedback,
-        reviewCount: { increment: 1 },
-        lastReviewedAt: new Date(),
-        timeComplexity:
-          solution.timeComplexity ||
-          aiResponse.complexityCheck?.timeComplexity ||
-          null,
-        spaceComplexity:
-          solution.spaceComplexity ||
-          aiResponse.complexityCheck?.spaceComplexity ||
-          null,
-      },
+    // Also freeze this review onto the most-recent SolutionAttempt so the
+    // attempt-history UI can show AI score deltas per attempt. The attempt
+    // log is never nullable once Commit 1 has shipped; this is a best-effort
+    // update — missing attempts just means older data (pre-history).
+    await prisma.$transaction(async (tx) => {
+      await tx.solution.update({
+        where: { id: solutionId },
+        data: {
+          aiFeedback: updatedFeedback,
+          reviewCount: { increment: 1 },
+          lastReviewedAt: new Date(),
+          timeComplexity:
+            solution.timeComplexity ||
+            aiResponse.complexityCheck?.timeComplexity ||
+            null,
+          spaceComplexity:
+            solution.spaceComplexity ||
+            aiResponse.complexityCheck?.spaceComplexity ||
+            null,
+        },
+      });
+      const latestAttempt = await tx.solutionAttempt.findFirst({
+        where: { solutionId },
+        orderBy: { attemptNumber: "desc" },
+        select: { id: true },
+      });
+      if (latestAttempt) {
+        await tx.solutionAttempt.update({
+          where: { id: latestAttempt.id },
+          data: { aiFeedbackSnapshot: reviewRecord },
+        });
+      }
     });
 
     return success(res, {

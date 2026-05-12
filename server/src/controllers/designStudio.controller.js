@@ -230,33 +230,90 @@ async function bridgeDesignSessionToSolution(session, evaluation) {
       }),
     ]);
 
-    if (existing) {
-      // Preserve SM-2 history on a re-evaluation; only refresh content + AI feedback.
-      await prisma.solution.update({
-        where: { id: existing.id },
-        data: payload,
-      });
-    } else {
-      // Canonical SM-2 initial state (EF=2.5, first review in 1 day).
-      // payload.confidence is stored on the Solution row but does not
-      // seed EF — the first real review is what moves the scheduler.
-      const sm2 = initialSM2State();
-      await prisma.solution.create({
-        data: {
-          ...payload,
-          userId: session.userId,
-          problemId: session.problemId,
-          teamId: session.teamId,
-          // Freeze the problem version at bridge time.
-          problemVersion: problem?.version ?? null,
-          sm2EasinessFactor: sm2.easinessFactor,
-          sm2Interval: sm2.interval,
-          sm2Repetitions: sm2.repetitions,
-          nextReviewDate: sm2.nextReviewDate,
-          reviewCount: 0,
+    // Take everything inside one transaction: Solution upsert + the
+    // accompanying SolutionAttempt must succeed or fail together.
+    await prisma.$transaction(async (tx) => {
+      let solutionId;
+
+      if (existing) {
+        // Preserve SM-2 history on a re-evaluation; only refresh content + AI feedback.
+        await tx.solution.update({
+          where: { id: existing.id },
+          data: payload,
+        });
+        solutionId = existing.id;
+      } else {
+        // Canonical SM-2 initial state (EF=2.5, first review in 1 day).
+        // payload.confidence is stored on the Solution row but does not
+        // seed EF — the first real review is what moves the scheduler.
+        const sm2 = initialSM2State();
+        const created = await tx.solution.create({
+          data: {
+            ...payload,
+            userId: session.userId,
+            problemId: session.problemId,
+            teamId: session.teamId,
+            // Freeze the problem version at bridge time.
+            problemVersion: problem?.version ?? null,
+            sm2EasinessFactor: sm2.easinessFactor,
+            sm2Interval: sm2.interval,
+            sm2Repetitions: sm2.repetitions,
+            nextReviewDate: sm2.nextReviewDate,
+            reviewCount: 0,
+          },
+          select: { id: true },
+        });
+        solutionId = created.id;
+      }
+
+      // Append an attempt snapshot for the bridge — either the initial
+      // #1 or the next one if this is a re-evaluation.
+      const fresh = await tx.solution.findUnique({
+        where: { id: solutionId },
+        select: {
+          approach: true,
+          code: true,
+          language: true,
+          bruteForce: true,
+          optimizedApproach: true,
+          timeComplexity: true,
+          spaceComplexity: true,
+          keyInsight: true,
+          feynmanExplanation: true,
+          realWorldConnection: true,
+          confidence: true,
+          patterns: true,
+          categorySpecificData: true,
+          problemVersion: true,
         },
       });
-    }
+      const lastAttempt = await tx.solutionAttempt.findFirst({
+        where: { solutionId },
+        orderBy: { attemptNumber: "desc" },
+        select: { attemptNumber: true },
+      });
+      await tx.solutionAttempt.create({
+        data: {
+          solutionId,
+          attemptNumber: (lastAttempt?.attemptNumber ?? 0) + 1,
+          trigger: "DESIGN_BRIDGE",
+          approach: fresh.approach,
+          code: fresh.code,
+          language: fresh.language,
+          bruteForce: fresh.bruteForce,
+          optimizedApproach: fresh.optimizedApproach,
+          timeComplexity: fresh.timeComplexity,
+          spaceComplexity: fresh.spaceComplexity,
+          keyInsight: fresh.keyInsight,
+          feynmanExplanation: fresh.feynmanExplanation,
+          realWorldConnection: fresh.realWorldConnection,
+          confidence: fresh.confidence,
+          patterns: fresh.patterns,
+          categorySpecificData: fresh.categorySpecificData ?? undefined,
+          problemVersion: fresh.problemVersion,
+        },
+      });
+    });
   } catch (err) {
     console.error("Design Studio → Solution bridge failed:", err);
   }

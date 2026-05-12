@@ -18,4 +18,7 @@ export const solutionsApi = {
   // optional `recallText`; the server's submitReviewSchema requires those keys.
   review: (id, { confidence, recallText } = {}) =>
     api.post(`/solutions/${id}/review`, { confidence, recallText }),
+
+  // Per-solution SolutionAttempt history — newest first.
+  getAttempts: (id) => api.get(`/solutions/${id}/attempts`),
 };

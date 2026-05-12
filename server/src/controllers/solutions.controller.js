@@ -133,6 +133,30 @@ export async function submitSolution(req, res) {
         }
       }
 
+      // First attempt — always #1 on a fresh Solution. See SolutionAttempt
+      // schema comment for the full invariant.
+      await tx.solutionAttempt.create({
+        data: {
+          solutionId: created.id,
+          attemptNumber: 1,
+          trigger: "SUBMIT",
+          approach: created.approach,
+          code: created.code,
+          language: created.language,
+          bruteForce: created.bruteForce,
+          optimizedApproach: created.optimizedApproach,
+          timeComplexity: created.timeComplexity,
+          spaceComplexity: created.spaceComplexity,
+          keyInsight: created.keyInsight,
+          feynmanExplanation: created.feynmanExplanation,
+          realWorldConnection: created.realWorldConnection,
+          confidence: created.confidence,
+          patterns: created.patterns,
+          categorySpecificData: created.categorySpecificData ?? undefined,
+          problemVersion: created.problemVersion,
+        },
+      });
+
       return created;
     });
 
@@ -445,6 +469,59 @@ export async function getUserSolutions(req, res) {
 }
 
 // ============================================================================
+// GET SOLUTION ATTEMPTS (history)
+// ============================================================================
+// Returns every SolutionAttempt row for a solution, newest first.
+// Auth: the solution's author OR a team admin in the same team can read.
+//
+// Response includes full content snapshots, AI feedback snapshots, and
+// metadata (trigger, attemptNumber, problemVersion, createdAt) so the
+// client can render a timeline and diff any two attempts without a
+// follow-up round trip.
+export async function getSolutionAttempts(req, res) {
+  try {
+    const { solutionId } = req.params;
+    const teamId = req.teamId;
+    const userId = req.user.id;
+
+    const solution = await prisma.solution.findFirst({
+      where: { id: solutionId, teamId },
+      select: {
+        id: true,
+        userId: true,
+        problemId: true,
+        problem: {
+          select: { id: true, title: true, category: true, difficulty: true, version: true },
+        },
+      },
+    });
+    if (!solution) return error(res, "Solution not found.", 404);
+
+    const isAuthor = solution.userId === userId;
+    const isAdmin =
+      req.user.globalRole === "SUPER_ADMIN" ||
+      req.user.teamRole === "TEAM_ADMIN";
+    if (!isAuthor && !isAdmin) {
+      return error(res, "Not authorized to view this history.", 403);
+    }
+
+    const attempts = await prisma.solutionAttempt.findMany({
+      where: { solutionId },
+      orderBy: { attemptNumber: "desc" },
+    });
+
+    return success(res, {
+      solution,
+      attempts,
+      attemptCount: attempts.length,
+    });
+  } catch (err) {
+    console.error("Get solution attempts error:", err);
+    return error(res, "Failed to fetch attempts.", 500);
+  }
+}
+
+// ============================================================================
 // UPDATE SOLUTION (content edits only — no review logic here)
 // ============================================================================
 export async function updateSolution(req, res) {
@@ -525,6 +602,55 @@ export async function updateSolution(req, res) {
           });
         }
       }
+
+      // Append a new SolutionAttempt snapshot with the post-update state.
+      // Use the freshly-read solution so every content column reflects
+      // what's actually in the DB, not a reconstruction from req.body.
+      const fresh = await tx.solution.findUnique({
+        where: { id: solutionId },
+        select: {
+          approach: true,
+          code: true,
+          language: true,
+          bruteForce: true,
+          optimizedApproach: true,
+          timeComplexity: true,
+          spaceComplexity: true,
+          keyInsight: true,
+          feynmanExplanation: true,
+          realWorldConnection: true,
+          confidence: true,
+          patterns: true,
+          categorySpecificData: true,
+          problemVersion: true,
+        },
+      });
+      const lastAttempt = await tx.solutionAttempt.findFirst({
+        where: { solutionId },
+        orderBy: { attemptNumber: "desc" },
+        select: { attemptNumber: true },
+      });
+      await tx.solutionAttempt.create({
+        data: {
+          solutionId,
+          attemptNumber: (lastAttempt?.attemptNumber ?? 0) + 1,
+          trigger: "EDIT",
+          approach: fresh.approach,
+          code: fresh.code,
+          language: fresh.language,
+          bruteForce: fresh.bruteForce,
+          optimizedApproach: fresh.optimizedApproach,
+          timeComplexity: fresh.timeComplexity,
+          spaceComplexity: fresh.spaceComplexity,
+          keyInsight: fresh.keyInsight,
+          feynmanExplanation: fresh.feynmanExplanation,
+          realWorldConnection: fresh.realWorldConnection,
+          confidence: fresh.confidence,
+          patterns: fresh.patterns,
+          categorySpecificData: fresh.categorySpecificData ?? undefined,
+          problemVersion: fresh.problemVersion,
+        },
+      });
     });
 
     const solution = await prisma.solution.findUnique({

@@ -16,6 +16,7 @@ import {
   rateSolutionClarity,
   getReviewQueue,
   submitReview,
+  getSolutionAttempts,
 } from "../controllers/solutions.controller.js";
 
 const router = Router();
@@ -37,5 +38,7 @@ router.post(
   submitReview,
 );
 router.get("/review/queue", getReviewQueue);
+// Per-attempt snapshot history for a solution
+router.get("/:solutionId/attempts", getSolutionAttempts);
 
 export default router;

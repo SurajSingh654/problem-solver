@@ -1370,25 +1370,41 @@ export default function EditSolutionPage() {
                 )}
 
                 {/* Submit */}
-                <div className="flex items-center justify-between pt-4 border-t border-border-default">
-                    {/* Bug fix: was navigate`...` */}
+                <div className="flex items-center justify-between gap-3 pt-4 border-t border-border-default flex-wrap">
                     <Button type="button" variant="ghost" size="md" onClick={() => navigate(`/problems/${problemId}`)}>
                         Cancel
                     </Button>
-                    <Button
-                        type="button"
-                        variant="primary"
-                        size="md"
-                        loading={updateSolution.isPending}
-                        onClick={onSubmit}
-                    >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2.5"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        {isHR ? 'Save Answer' : isTechnicalKnowledge ? 'Save Explanation' : isDatabase ? 'Save Solution' : 'Save Changes'}
-                    </Button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {mySolution?.id && (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="md"
+                                onClick={() => navigate(`/solutions/${mySolution.id}/history`)}
+                            >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                                View history
+                            </Button>
+                        )}
+                        <Button
+                            type="button"
+                            variant="primary"
+                            size="md"
+                            loading={updateSolution.isPending}
+                            onClick={onSubmit}
+                        >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2.5"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            {isHR ? 'Save Answer' : isTechnicalKnowledge ? 'Save Explanation' : isDatabase ? 'Save Solution' : 'Save Changes'}
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>

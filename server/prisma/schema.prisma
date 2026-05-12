@@ -803,6 +803,7 @@ model Solution {
   clarityRatings  ClarityRating[]
   followUpAnswers SolutionFollowUpAnswer[]
   reviewAttempts  ReviewAttempt[]
+  attempts        SolutionAttempt[]
 
   // ── Constraints ────────────────────────────────────
   // One solution per user per problem per team
@@ -823,6 +824,72 @@ model Solution {
   // HNSW vector index — registered to prevent drift detection
   @@index([embedding], map: "idx_solutions_embedding_hnsw")
   @@map("solutions")
+}
+
+// ============================================================================
+// SOLUTION ATTEMPT
+// ============================================================================
+
+/// Per-submission/per-edit snapshot of a Solution's content. The Solution
+/// row always holds the latest state; SolutionAttempt rows are an immutable
+/// history of everything that ever got written to it. Lets the user see how
+/// their solution evolved, diff between attempts, and track confidence
+/// trajectory over time.
+///
+/// Distinct from ReviewAttempt (which captures SM-2 review recall text).
+/// A ReviewAttempt is "I tried to remember what I wrote"; a SolutionAttempt
+/// is "here is what I actually wrote this time."
+enum AttemptTrigger {
+  SUBMIT       // initial Solution.create via submitSolution
+  EDIT         // Solution.update via updateSolution
+  DESIGN_BRIDGE // DesignSession → Solution upsert
+}
+
+model SolutionAttempt {
+  id String @id @default(cuid())
+
+  solutionId String
+  solution   Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+
+  // 1-indexed, monotonic per solution. Unique constraint below ensures
+  // we can't accidentally duplicate an attempt number.
+  attemptNumber Int
+
+  // How this attempt came into being. Lets the history UI show which
+  // edits were user-initiated vs bridged from a design session etc.
+  trigger AttemptTrigger
+
+  // Frozen content snapshot (mirrors Solution writable columns so we can
+  // reconstruct exactly what was saved at this attempt).
+  approach             String?
+  code                 String?
+  language             String?
+  bruteForce           String?
+  optimizedApproach    String?
+  timeComplexity       String?
+  spaceComplexity      String?
+  keyInsight           String?
+  feynmanExplanation   String?
+  realWorldConnection  String?
+  confidence           Int
+  patterns             String[] @default([])
+  categorySpecificData Json?
+
+  // Problem version this attempt was written against. Lets a later reader
+  // see "you solved against v2; problem is now v5".
+  problemVersion Int?
+
+  // Frozen AI review JSON at attempt time, if one ran. The Solution's
+  // `aiFeedback` field is the growing live store; this snapshot captures
+  // the review entry that was most relevant to THIS attempt, so attempt
+  // diffs can also show AI score deltas.
+  aiFeedbackSnapshot Json?
+
+  createdAt DateTime @default(now())
+
+  @@unique([solutionId, attemptNumber])
+  @@index([solutionId, createdAt(sort: Desc)])
+  @@map("solution_attempts")
 }
 
 // ============================================================================

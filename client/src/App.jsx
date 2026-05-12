@@ -71,6 +71,7 @@ const ProblemsPage = lazy(() => import('@pages/problems/ProblemsPage'))
 const ProblemDetailPage = lazy(() => import('@pages/problems/ProblemDetailPage'))
 const SubmitSolutionPage = lazy(() => import('@pages/problems/SubmitSolutionPage'))
 const EditSolutionPage = lazy(() => import('@pages/problems/EditSolutionPage'))
+const SolutionHistoryPage = lazy(() => import('@pages/problems/SolutionHistoryPage'))
 const AllTeamsPage = lazy(() => import('@pages/superadmin/AllTeamsPage'))
 const AllUsersPage = lazy(() => import('@pages/superadmin/AllUsersPage'))
 const SuperAdminAnalyticsPage = lazy(() => import('@pages/superadmin/SuperAdminAnalyticsPage'))
@@ -196,6 +197,7 @@ export default function App() {
             <Route path="problems/:problemId" element={<Lazy><ProblemDetailPage /></Lazy>} />
             <Route path="problems/:problemId/submit" element={<Lazy><SubmitSolutionPage /></Lazy>} />
             <Route path="problems/:problemId/edit-solution/:solutionId" element={<Lazy><EditSolutionPage /></Lazy>} />
+            <Route path="solutions/:solutionId/history" element={<Lazy><SolutionHistoryPage /></Lazy>} />
             {/* ── Solutions & Review ────────────────────────────────── */}
             <Route path="review" element={<ReviewQueuePage />} />
             {/* ── Quizzes ───────────────────────────────────────────── */}
