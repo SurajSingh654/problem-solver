@@ -75,72 +75,46 @@ const DIMENSIONS = [
   },
 ]
 
-// Company tier thresholds — based on what interviewers actually evaluate
-const COMPANY_TIERS = [
-  {
-    id: 'faang',
-    name: 'FAANG / Top Tier',
-    companies: 'Google, Meta, Apple, Netflix',
-    minOverall: 80,
-    requirements: { patternRecognition: 75, optimization: 70, pressurePerformance: 70, solutionDepth: 65 },
-    icon: '🏆',
-  },
-  {
-    id: 'tier2',
-    name: 'Tier 2 Tech',
-    companies: 'Amazon, Microsoft, Uber, Airbnb',
-    minOverall: 65,
-    requirements: { patternRecognition: 60, optimization: 50, pressurePerformance: 55, solutionDepth: 50 },
-    icon: '🥈',
-  },
-  {
-    id: 'tier3',
-    name: 'Mid-tier / Growth',
-    companies: 'Series B-D startups, mid-size tech',
-    minOverall: 50,
-    requirements: { patternRecognition: 45, optimization: 35, pressurePerformance: 40 },
-    icon: '🥉',
-  },
-  {
-    id: 'junior',
-    name: 'Junior / Startup',
-    companies: 'Early startups, junior roles',
-    minOverall: 35,
-    requirements: { patternRecognition: 30, optimization: 20 },
-    icon: '🌱',
-  },
-]
+// Icon + label hints keyed on server tier.id. Server's readinessTiers.js
+// is the single source of truth for thresholds + requirements.
+const TIER_META = {
+  faang: { icon: '🏆' },
+  tier2: { icon: '🥈' },
+  tier3: { icon: '🥉' },
+  junior: { icon: '🌱' },
+}
 
-// ── Compute verdict and readiness ─────────────────────
-function computeReadiness(dims, overall, analytics) {
-  // Find critical gap — lowest scoring HIGH/CRITICAL weight dimension
+// ── Compute verdict and readiness from server-shaped report ──
+// `dimByKey` is a map { key → {status, score, n, ci, activationMessage} }.
+function computeReadiness(dimByKey, overall, tier) {
+  // Find critical gap — lowest scoring HIGH/CRITICAL dimension among
+  // ACTIVE dims only. Inactive dims with score=null must not be
+  // presented as a "gap" because that would overclaim evidence.
   const sortedByScore = [...DIMENSIONS]
     .filter(d => d.weight === 'CRITICAL' || d.weight === 'HIGH')
-    .sort((a, b) => (dims[a.key] || 0) - (dims[b.key] || 0))
+    .filter(d => dimByKey[d.key]?.status === 'active')
+    .sort((a, b) => (dimByKey[a.key]?.score || 0) - (dimByKey[b.key]?.score || 0))
 
-  const criticalGap = sortedByScore[0]
-  const criticalScore = dims[criticalGap?.key] || 0
+  const criticalGap = sortedByScore[0] || null
+  const criticalScore = criticalGap ? (dimByKey[criticalGap.key]?.score || 0) : 0
 
-  // Company tier assessment
-  const tierResults = COMPANY_TIERS.map(tier => {
-    const meetsOverall = overall >= tier.minOverall
-    const failingRequirements = Object.entries(tier.requirements)
-      .filter(([key, minScore]) => (dims[key] || 0) < minScore)
-      .map(([key]) => DIMENSIONS.find(d => d.key === key)?.label)
-      .filter(Boolean)
+  // Tier results come from the server's `tier.tiers` (classifyReadiness output).
+  const tierResults = (tier?.tiers || []).map(t => ({
+    id: t.id,
+    name: t.name,
+    companies: t.companies,
+    icon: TIER_META[t.id]?.icon || '•',
+    ready: t.ready,
+    close: t.close,
+    failingRequirements: (t.failingDimensions || [])
+      .map(f => DIMENSIONS.find(d => d.key === f.dimension)?.label)
+      .filter(Boolean),
+    threshold: t.threshold,
+    overallGap: t.overallGap,
+  }))
 
-    const ready = meetsOverall && failingRequirements.length === 0
-    const close = !ready && overall >= tier.minOverall - 10 && failingRequirements.length <= 1
-
-    return { ...tier, ready, close, failingRequirements }
-  })
-
-  // Current stage
-  const highestReady = tierResults.find(t => t.ready)
-  const nextTarget = tierResults.find(t => !t.ready)
-
-  // Velocity-based weeks estimate
-  const weeksToNext = analytics?.weeksToThresholds
+  const highestReady = tier?.highest ? tierResults.find(t => t.id === tier.highest.id) : null
+  const nextTarget = tier?.next ? tierResults.find(t => t.id === tier.next.id) : null
 
   return {
     criticalGap,
@@ -148,42 +122,56 @@ function computeReadiness(dims, overall, analytics) {
     tierResults,
     highestReady,
     nextTarget,
-    weeksToNext,
   }
 }
 
 // ── Verdict text generator ─────────────────────────────
-function generateVerdict(dims, overall, analytics, readiness) {
+// Grounded verdict — will NOT claim readiness or "strongest signal" when
+// coverage is low. Server decides which dims are active; we never invent
+// a strength from an unmeasured dim.
+function generateVerdict(dimByKey, overall, analytics, readiness, reportCoverage) {
   const { criticalGap, criticalScore, highestReady, nextTarget } = readiness
   const velocity = analytics?.weeklyVelocity?.avg || 0
+  const coveragePct = reportCoverage?.pct ?? 0
+  const activeCount = reportCoverage?.active ?? 0
 
-  let verdictParts = []
+  // Profile-too-small guard — cannot issue tier or strength claims
+  // when fewer than 3 dims are active. Plan mandate: "If coverage <
+  // 50%, your headline MUST acknowledge the profile is partial."
+  if (overall == null || activeCount < 3) {
+    return "Your profile is still being built — submit more solutions and request AI reviews to unlock readiness signals. Scores on dimensions with few data points remain intentionally hidden until there's enough evidence."
+  }
 
-  // What you can do now
-  if (highestReady) {
+  const verdictParts = []
+
+  if (coveragePct < 50) {
+    verdictParts.push(`Partial profile — ${activeCount} of 6 dimensions measured so far. Treat these as early signals, not confirmed readiness.`)
+  } else if (highestReady) {
     verdictParts.push(`You're ready to apply to ${highestReady.name} companies (${highestReady.companies}).`)
   } else {
     verdictParts.push("You're building your foundation — keep consistent.")
   }
 
-  // Biggest strength
-  const topDim = [...DIMENSIONS].sort((a, b) => (dims[b.key] || 0) - (dims[a.key] || 0))[0]
-  if ((dims[topDim?.key] || 0) > 60) {
-    verdictParts.push(`Your strongest signal is ${topDim.label} (${dims[topDim.key]}/100) — this is what gets you through phone screens.`)
+  // Biggest strength — only from active dims AND only when n is meaningful.
+  const activeDims = [...DIMENSIONS]
+    .map(d => ({ d, info: dimByKey[d.key] }))
+    .filter(({ info }) => info?.status === 'active' && info.n >= 3)
+    .sort((a, b) => (b.info.score || 0) - (a.info.score || 0))
+  const topEntry = activeDims[0]
+  if (topEntry && topEntry.info.score >= 65 && coveragePct >= 50) {
+    const qualifier = topEntry.info.n < 5 ? 'early signal' : 'strong signal'
+    verdictParts.push(`Your ${qualifier} is ${topEntry.d.label} (${topEntry.info.score}/100, n=${topEntry.info.n}).`)
   }
 
-  // Critical gap
-  if (criticalScore < 50 && criticalGap) {
-    verdictParts.push(`Your most critical gap is ${criticalGap.label} (${criticalScore}/100). ${criticalGap.interviewRelevance}`)
+  // Critical gap — only from an active dim.
+  if (criticalScore > 0 && criticalScore < 50 && criticalGap) {
+    verdictParts.push(`Most critical gap: ${criticalGap.label} (${criticalScore}/100). ${criticalGap.interviewRelevance}`)
   }
 
-  // Next milestone
-  if (nextTarget && analytics?.weeksToThresholds) {
-    const tierKey = nextTarget.id === 'faang' ? 'faang'
-      : nextTarget.id === 'tier2' ? 'onsite'
-        : nextTarget.id === 'tier3' ? 'technical_screen'
-          : 'phone_screen'
-    const weeks = analytics.weeksToThresholds[tierKey]
+  // Next milestone — server already keyed weeksToTiers by tier.id, so
+  // the client doesn't need to re-map labels.
+  if (nextTarget && analytics?.weeksToTiers) {
+    const weeks = analytics.weeksToTiers[nextTarget.id]
     if (weeks && weeks > 0 && velocity > 0) {
       verdictParts.push(`At your current pace (${velocity} solutions/week), you could reach ${nextTarget.name} readiness in approximately ${weeks} week${weeks !== 1 ? 's' : ''}.`)
     }
@@ -197,12 +185,25 @@ function generateVerdict(dims, overall, analytics, readiness) {
 // ══════════════════════════════════════════════════════
 
 // ── Verdict card ───────────────────────────────────────
-function VerdictCard({ dims, overall, analytics, readiness }) {
-  const verdict = generateVerdict(dims, overall, analytics, readiness)
+function VerdictCard({ dimByKey, overallObj, analytics, readiness, reportCoverage, tierInfo }) {
+  const overall = overallObj?.score ?? null
+  const ci = overallObj?.ci ?? null
+  const coveragePct = reportCoverage?.pct ?? 0
+  const verdict = generateVerdict(dimByKey, overall, analytics, readiness, reportCoverage)
 
-  const scoreColor = overall >= 75 ? 'text-success-fg'
-    : overall >= 55 ? 'text-warning-fg'
-      : 'text-danger-fg'
+  // Use server tier info for the header badge instead of the old ternary
+  // (which disagreed with the tier-readiness card below it).
+  const highestName = tierInfo?.highest?.name || (overall == null ? 'Building profile' : 'Not yet tier-ready')
+  const isProfilePartial = overall == null || coveragePct < 50
+
+  const scoreColor = overall == null ? 'text-text-disabled'
+    : overall >= 75 ? 'text-success-fg'
+      : overall >= 55 ? 'text-warning-fg'
+        : 'text-danger-fg'
+
+  const badgeColor = overall == null ? 'bg-surface-3 text-text-disabled border-border-default'
+    : tierInfo?.highest ? 'bg-success-soft text-success-fg border-success-line'
+      : 'bg-warning-soft text-warning-fg border-warning-line'
 
   return (
     <motion.div
@@ -217,19 +218,21 @@ function VerdictCard({ dims, overall, analytics, readiness }) {
             <svg width="96" height="96" className="-rotate-90">
               <circle cx="48" cy="48" r="40" fill="none"
                 stroke="rgba(128,128,128,0.15)" strokeWidth="7" />
-              <motion.circle
-                cx="48" cy="48" r="40" fill="none"
-                stroke={overall >= 75 ? '#22c55e' : overall >= 55 ? '#eab308' : '#ef4444'}
-                strokeWidth="7" strokeLinecap="round"
-                strokeDasharray={2 * Math.PI * 40}
-                initial={{ strokeDashoffset: 2 * Math.PI * 40 }}
-                animate={{ strokeDashoffset: 2 * Math.PI * 40 * (1 - overall / 100) }}
-                transition={{ duration: 1.2, ease: 'easeOut' }}
-              />
+              {overall != null && (
+                <motion.circle
+                  cx="48" cy="48" r="40" fill="none"
+                  stroke={overall >= 75 ? '#22c55e' : overall >= 55 ? '#eab308' : '#ef4444'}
+                  strokeWidth="7" strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 40}
+                  initial={{ strokeDashoffset: 2 * Math.PI * 40 }}
+                  animate={{ strokeDashoffset: 2 * Math.PI * 40 * (1 - overall / 100) }}
+                  transition={{ duration: 1.2, ease: 'easeOut' }}
+                />
+              )}
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className={cn('text-2xl font-extrabold font-mono', scoreColor)}>
-                {overall}
+                {overall == null ? '—' : overall}
               </span>
               <span className="text-[9px] text-text-disabled uppercase tracking-wider">
                 /100
@@ -239,6 +242,11 @@ function VerdictCard({ dims, overall, analytics, readiness }) {
           <p className="text-[10px] text-text-disabled uppercase tracking-widest">
             Overall
           </p>
+          {ci && (
+            <p className="text-[9px] text-text-disabled font-mono">
+              95% CI {ci[0]}–{ci[1]}
+            </p>
+          )}
         </div>
 
         {/* Verdict text */}
@@ -247,13 +255,8 @@ function VerdictCard({ dims, overall, analytics, readiness }) {
             <h2 className="text-sm font-bold text-text-primary">
               Interview Readiness Verdict
             </h2>
-            <span className={cn(
-              'text-[9px] font-bold px-2 py-px rounded-full border',
-              overall >= 75 ? 'bg-success-soft text-success-fg border-success-line'
-                : overall >= 55 ? 'bg-warning-soft text-warning-fg border-warning-line'
-                  : 'bg-danger-soft text-danger-fg border-danger-line'
-            )}>
-              {overall >= 75 ? 'Onsite Ready' : overall >= 55 ? 'Phone Screen Ready' : overall >= 35 ? 'Building Foundation' : 'Getting Started'}
+            <span className={cn('text-[9px] font-bold px-2 py-px rounded-full border', badgeColor)}>
+              {isProfilePartial ? `${reportCoverage?.active ?? 0} of 6 dimensions active` : highestName}
             </span>
           </div>
           <p className="text-sm text-text-secondary leading-relaxed">
@@ -390,20 +393,21 @@ function CompanyReadinessGrid({ tierResults, analytics }) {
         ))}
       </div>
 
-      {/* Timeline estimate */}
-      {analytics?.weeksToThresholds && (
+      {/* Timeline estimate — keyed on tier.id so client & server agree */}
+      {analytics?.weeksToTiers && Object.keys(analytics.weeksToTiers).length > 0 && (
         <div className="mt-4 pt-4 border-t border-border-subtle">
           <p className="text-[10px] text-text-disabled uppercase tracking-widest mb-3">
             Estimated time at current practice velocity
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: 'Phone Screen Ready', key: 'phone_screen', color: 'text-success-fg' },
-              { label: 'Technical Screen', key: 'technical_screen', color: 'text-brand-fg-soft' },
-              { label: 'Onsite Ready', key: 'onsite', color: 'text-warning-fg' },
+              { label: 'Junior / Startup', key: 'junior', color: 'text-success-fg' },
+              { label: 'Mid-tier', key: 'tier3', color: 'text-brand-fg-soft' },
+              { label: 'Tier 2 Tech', key: 'tier2', color: 'text-warning-fg' },
               { label: 'FAANG Ready', key: 'faang', color: 'text-danger-fg' },
             ].map(({ label, key, color }) => {
-              const weeks = analytics.weeksToThresholds[key]
+              const weeks = analytics.weeksToTiers[key]
+              if (weeks == null) return null
               return (
                 <div key={key} className="text-center bg-surface-2 rounded-xl p-3">
                   <p className={cn('text-base font-extrabold font-mono', weeks === 0 ? 'text-success-fg' : color)}>
@@ -492,18 +496,23 @@ function CriticalGapCard({ criticalGap, criticalScore, analytics }) {
 }
 
 // ── Dimension cards (contextual) ───────────────────────
-function DimensionCards({ dims, communicationFromProxy }) {
+function DimensionCards({ dimByKey, communicationFromProxy }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
       {DIMENSIONS.map((dim, i) => {
-        const score = dims[dim.key] || 0
-        const isLow = score < 50
-        const isHigh = score >= 75
+        const info = dimByKey[dim.key]
+        const isInactive = !info || info.status !== 'active'
+        const score = info?.score ?? 0
+        const ci = info?.ci ?? null
+        const n = info?.n ?? 0
+        const isLow = !isInactive && score < 50
+        const isHigh = !isInactive && score >= 75
         const isCommProxy = dim.key === 'communication' && communicationFromProxy
 
-        const scoreColor = score >= 75 ? 'text-success-fg'
-          : score >= 50 ? 'text-warning-fg'
-            : 'text-danger-fg'
+        const scoreColor = isInactive ? 'text-text-disabled'
+          : score >= 75 ? 'text-success-fg'
+            : score >= 50 ? 'text-warning-fg'
+              : 'text-danger-fg'
 
         return (
           <motion.div
@@ -512,7 +521,7 @@ function DimensionCards({ dims, communicationFromProxy }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
             className="bg-surface-1 border border-border-default rounded-xl p-5"
-            style={{ borderTop: `3px solid ${dim.color}` }}
+            style={{ borderTop: `3px solid ${isInactive ? 'rgba(128,128,128,0.35)' : dim.color}` }}
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-2">
@@ -528,41 +537,62 @@ function DimensionCards({ dims, communicationFromProxy }) {
                   </span>
                 )}
                 <span className={cn('text-lg font-extrabold font-mono', scoreColor)}>
-                  {score}
+                  {isInactive ? '—' : score}
                 </span>
               </div>
             </div>
 
-            {/* Progress bar */}
-            <div className="w-full h-1.5 bg-surface-3 rounded-full overflow-hidden mb-3">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${score}%` }}
-                transition={{ duration: 0.8, delay: i * 0.05 }}
-                className="h-full rounded-full"
-                style={{ backgroundColor: dim.color }}
-              />
-            </div>
-
-            {/* Contextual insight */}
-            <p className="text-[11px] text-text-tertiary leading-relaxed mb-2">
-              {isHigh ? dim.actionWhenHigh : isLow ? dim.interviewRelevance : dim.interviewRelevance}
-            </p>
-
-            {/* Action */}
-            {isLow && (
-              <div className="flex items-start gap-1.5 mt-2 pt-2 border-t border-border-subtle">
-                <span className="text-brand-fg-soft flex-shrink-0 text-xs font-bold mt-px">→</span>
-                <p className="text-[11px] text-text-secondary font-medium leading-relaxed">
-                  {dim.actionWhenLow}
+            {isInactive ? (
+              <>
+                <div className="w-full h-1.5 bg-surface-3 rounded-full mb-3" />
+                <div className="flex items-start gap-1.5 bg-surface-2 border border-border-subtle rounded-lg p-2.5 mt-1">
+                  <span className="text-brand-fg-soft flex-shrink-0 text-xs font-bold mt-px">→</span>
+                  <p className="text-[11px] text-text-secondary font-medium leading-relaxed">
+                    {info?.activationMessage || 'Need more data to measure this dimension.'}
+                  </p>
+                </div>
+                <p className="text-[10px] text-text-disabled italic mt-2 leading-relaxed">
+                  No score shown until enough evidence is collected. Overclaiming here would mislead you about real interview readiness.
                 </p>
-              </div>
-            )}
+              </>
+            ) : (
+              <>
+                {/* Progress bar */}
+                <div className="w-full h-1.5 bg-surface-3 rounded-full overflow-hidden mb-1.5">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${score}%` }}
+                    transition={{ duration: 0.8, delay: i * 0.05 }}
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: dim.color }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[9px] text-text-disabled font-mono mb-2">
+                  <span>n = {n}</span>
+                  {ci && <span>95% CI {ci[0]}–{ci[1]}</span>}
+                </div>
 
-            {isCommProxy && (
-              <p className="text-[10px] text-text-disabled mt-1 italic">
-                Estimated from written explanations. Peer ratings give a stronger signal.
-              </p>
+                {/* Contextual insight */}
+                <p className="text-[11px] text-text-tertiary leading-relaxed mb-2">
+                  {isHigh ? dim.actionWhenHigh : dim.interviewRelevance}
+                </p>
+
+                {/* Action */}
+                {isLow && (
+                  <div className="flex items-start gap-1.5 mt-2 pt-2 border-t border-border-subtle">
+                    <span className="text-brand-fg-soft flex-shrink-0 text-xs font-bold mt-px">→</span>
+                    <p className="text-[11px] text-text-secondary font-medium leading-relaxed">
+                      {dim.actionWhenLow}
+                    </p>
+                  </div>
+                )}
+
+                {isCommProxy && (
+                  <p className="text-[10px] text-text-disabled mt-1 italic">
+                    Estimated from written explanations. Peer ratings give a stronger signal.
+                  </p>
+                )}
+              </>
             )}
           </motion.div>
         )
@@ -672,7 +702,6 @@ function WeeklyActionsCard({ dims, analytics, totalSolutions }) {
     }
 
     // D5 Pressure Performance — no simulations
-    const simCount = analytics ? 0 : 0
     if ((dims.pressurePerformance || 0) < 60) {
       result.push({
         priority: 3,
@@ -842,7 +871,7 @@ function ActivitySummary({ report, analytics }) {
 }
 
 // ── AI Coaching Plan Card ──────────────────────────────
-function CoachingPlanCard({ dims, analytics, totalSolutions }) {
+function CoachingPlanCard() {
   const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -854,7 +883,7 @@ function CoachingPlanCard({ dims, analytics, totalSolutions }) {
     try {
       const res = await weeklyPlanMutation.mutateAsync()
       setPlan(res.data.data.plan)
-    } catch (err) {
+    } catch {
       setError('Failed to generate plan. Try again.')
     } finally {
       setLoading(false)
@@ -1151,6 +1180,25 @@ export default function ReportPage() {
   const { teamName, isPersonalMode } = useTeamContext()
   const { data: report, isLoading, isFetching } = use6DReport()
 
+  // New server shape: report.dimensions is an array of DimScore, overall
+  // is an object {score, ci} (or null if not computable). Derive legacy
+  // object-shaped `dims` for components that still read by-key. Hooks
+  // must be declared before any early return to satisfy rules-of-hooks.
+  const dimByKey = useMemo(() => {
+    const arr = Array.isArray(report?.dimensions) ? report.dimensions : []
+    const map = {}
+    for (const d of arr) map[d.key] = d
+    return map
+  }, [report?.dimensions])
+  const dims = useMemo(() => {
+    const arr = Array.isArray(report?.dimensions) ? report.dimensions : []
+    const map = {}
+    for (const d of arr) {
+      map[d.key] = d.status === 'active' ? (d.score ?? 0) : 0
+    }
+    return map
+  }, [report?.dimensions])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -1162,9 +1210,11 @@ export default function ReportPage() {
     )
   }
 
-  const dims = report?.dimensions || {}
-  const overall = report?.overall || 0
+  const overallObj = report?.overall ?? null
+  const overall = overallObj?.score ?? 0
   const analytics = report?.analytics || null
+  const reportCoverage = report?.reportCoverage || { active: 0, total: 6, pct: 0, overallComputable: false }
+  const tierInfo = report?.tier || null
   const hasData = (report?.totalSolutions || 0) > 0
 
   // No data state
@@ -1201,8 +1251,9 @@ export default function ReportPage() {
     )
   }
 
-  // Compute readiness (pure client-side analytics)
-  const readiness = computeReadiness(dims, overall, analytics)
+  // Compute readiness — tier data comes from server; client only picks
+  // icons and sorts. Critical-gap selection is limited to active dims.
+  const readiness = computeReadiness(dimByKey, overall, tierInfo)
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
@@ -1227,7 +1278,14 @@ export default function ReportPage() {
       </motion.div>
 
       {/* ── Section 1: Verdict ─────────────────────────── */}
-      <VerdictCard dims={dims} overall={overall} analytics={analytics} readiness={readiness} />
+      <VerdictCard
+        dimByKey={dimByKey}
+        overallObj={overallObj}
+        analytics={analytics}
+        readiness={readiness}
+        reportCoverage={reportCoverage}
+        tierInfo={tierInfo}
+      />
 
       {/* ── Section 2: Company Tier Readiness ──────────── */}
       <CompanyReadinessGrid tierResults={readiness.tierResults} analytics={analytics} />
@@ -1247,11 +1305,7 @@ export default function ReportPage() {
       />
 
       {/* ── Section 4b: AI Coaching Plan ───────────────── */}
-      <CoachingPlanCard
-        dims={dims}
-        analytics={analytics}
-        totalSolutions={report?.totalSolutions || 0}
-      />
+      <CoachingPlanCard />
 
       {/* ── Section 5: 6D Radar + Dimension Cards ──────── */}
       <motion.div
@@ -1268,7 +1322,7 @@ export default function ReportPage() {
         </div>
       </motion.div>
 
-      <DimensionCards dims={dims} communicationFromProxy={report?.communicationFromProxy} />
+      <DimensionCards dimByKey={dimByKey} communicationFromProxy={report?.communicationFromProxy} />
 
       {/* ── Section 6: Pattern Coverage ─────────────────── */}
       <PatternCoverageCard analytics={analytics} />

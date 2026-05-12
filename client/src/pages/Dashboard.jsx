@@ -26,7 +26,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTeamContext } from '@hooks/useTeamContext'
 import { useDashboardData, useTeamActivity } from '@hooks/useReport'
 import { useReviewQueue } from '@hooks/useSolutions'
-import { useRecommendations } from '@hooks/useRecommendations'
 import { useRecallAnalytics } from '@hooks/useRecallAnalytics'
 import { ActivityFeed } from '@components/features/ActivityFeed'
 import { Recommendations } from '@components/features/Recommendations'
@@ -107,12 +106,22 @@ function MiniRadar({ dimensions }) {
 }
 
 // ── Readiness tier label ───────────────────────────────
-function getReadinessTier(overall) {
-  if (overall >= 82) return { label: 'FAANG Ready', color: 'text-success-fg', bg: 'bg-success-soft border-success-line' }
-  if (overall >= 70) return { label: 'Onsite Ready', color: 'text-brand-fg-soft', bg: 'bg-brand-soft border-brand-line' }
-  if (overall >= 58) return { label: 'Tech Screen Ready', color: 'text-info-fg', bg: 'bg-info-soft border-info-line' }
-  if (overall >= 45) return { label: 'Phone Screen Ready', color: 'text-warning-fg', bg: 'bg-warning-soft border-warning-line' }
-  return { label: 'Building Foundation', color: 'text-text-disabled', bg: 'bg-surface-3 border-border-default' }
+// Uses server-computed tier (readinessTiers.js) when available so label
+// agrees with the Report page. Falls back to a coarse mapping only when
+// the server hasn't yet classified (e.g. report not loaded).
+function getReadinessTier(tier) {
+  if (tier?.highest?.name) {
+    return {
+      label: `${tier.highest.name} Ready`,
+      color: 'text-success-fg',
+      bg: 'bg-success-soft border-success-line',
+    }
+  }
+  return {
+    label: 'Building Profile',
+    color: 'text-text-disabled',
+    bg: 'bg-surface-3 border-border-default',
+  }
 }
 
 // ── Difficulty bar — visual distribution ──────────────
@@ -171,10 +180,7 @@ function VelocitySparkline({ weekly }) {
   if (!weekly?.length) return null
 
   const max = Math.max(...weekly, 1)
-  const barWidth = 16
-  const barGap = 4
   const height = 32
-  const svgWidth = weekly.length * (barWidth + barGap) - barGap
 
   return (
     <div className="flex items-end gap-1">
@@ -246,7 +252,8 @@ function RecallMiniTile() {
 // ── Dimension row — compact ────────────────────────────
 function DimensionRow({ dim, score, index }) {
   const color = dim.color
-  const pct = Math.min(score || 0, 100)
+  const isInactive = score == null
+  const pct = isInactive ? 0 : Math.min(score, 100)
 
   return (
     <motion.div
@@ -257,16 +264,23 @@ function DimensionRow({ dim, score, index }) {
     >
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-text-secondary">{dim.short}</span>
-        <span className="text-[11px] font-bold font-mono text-text-primary">{pct}</span>
+        <span className={cn(
+          'text-[11px] font-bold font-mono',
+          isInactive ? 'text-text-disabled' : 'text-text-primary'
+        )}>
+          {isInactive ? '—' : pct}
+        </span>
       </div>
       <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.6, delay: 0.2 + index * 0.05, ease: 'easeOut' }}
-          className="h-full rounded-full"
-          style={{ backgroundColor: color }}
-        />
+        {!isInactive && (
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.6, delay: 0.2 + index * 0.05, ease: 'easeOut' }}
+            className="h-full rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        )}
       </div>
     </motion.div>
   )
@@ -311,7 +325,7 @@ function QuickAction({ icon, label, desc, to, color, badge, onClick }) {
 // ══════════════════════════════════════════════════════
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { teamName, isPersonalMode, isTeamAdmin } = useTeamContext()
+  const { teamName, isPersonalMode } = useTeamContext()
 
   // Coordinated data fetching — no race conditions
   const { stats, report, isLoading } = useDashboardData()
@@ -331,10 +345,24 @@ export default function Dashboard() {
     }
   }, [isPersonalMode])
 
-  // Derived values — computed once, used across sections
-  const overallScore = report?.overall || 0
-  const dimensions = report?.dimensions
-  const readinessTier = useMemo(() => getReadinessTier(overallScore), [overallScore])
+  // Derived values — computed once, used across sections. New server
+  // shape: overall is {score, ci} or null; dimensions is an array of
+  // DimScore. Map array → key-keyed object for existing renderers.
+  const overallScore = report?.overall?.score ?? 0
+  const overallCI = report?.overall?.ci ?? null
+  const dimensionsArr = Array.isArray(report?.dimensions) ? report.dimensions : null
+  const dimensions = useMemo(() => {
+    if (!dimensionsArr) return null
+    const map = {}
+    for (const d of dimensionsArr) {
+      // Use score only when active. DIMENSIONS constants key by id
+      // (e.g. 'patternRecognition'), same keys as server emits.
+      map[d.key] = d.status === 'active' ? (d.score ?? 0) : null
+    }
+    return map
+  }, [dimensionsArr])
+  const reportCoverage = report?.reportCoverage || null
+  const readinessTier = useMemo(() => getReadinessTier(report?.tier), [report?.tier])
   const dueCount = reviewData?.dueCount || 0
   const dueReviews = reviewData?.due?.slice(0, 3) || []
 
@@ -358,8 +386,8 @@ export default function Dashboard() {
     ? Math.max(0, Math.ceil((new Date(stats.interviewDate) - new Date()) / (1000 * 60 * 60 * 24)))
     : null
 
-  // Weeks to next threshold
-  const weeksToThresholds = report?.analytics?.weeksToThresholds || {}
+  // Weeks to next tier — keyed by tier.id (junior/tier3/tier2/faang)
+  const weeksToTiers = report?.analytics?.weeksToTiers || {}
 
   // Pattern coverage
   const patternCoverage = report?.analytics?.patternCoverage || { used: 0, total: 16, missing: [] }
@@ -391,14 +419,20 @@ export default function Dashboard() {
                 : 'Team preparation overview — your progress and team pulse'}
             </p>
           </div>
-          {/* Readiness tier badge */}
-          {overallScore > 0 && (
+          {/* Readiness badge — shows tier when ready, otherwise the
+                dimension-coverage state so users don't see a tier claim
+                they haven't earned. */}
+          {reportCoverage && reportCoverage.active > 0 && (
             <span className={cn(
               'text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5',
               readinessTier.bg
             )}>
               <span className={readinessTier.color}>●</span>
-              <span className={readinessTier.color}>{readinessTier.label}</span>
+              <span className={readinessTier.color}>
+                {report?.tier?.highest
+                  ? readinessTier.label
+                  : `${reportCoverage.active}/6 dimensions`}
+              </span>
             </span>
           )}
         </div>
@@ -558,9 +592,19 @@ export default function Dashboard() {
                 Interview Readiness
               </p>
               <div className="text-5xl font-extrabold font-mono text-text-primary leading-none">
-                {overallScore}
+                {report?.overall == null ? '—' : overallScore}
                 <span className="text-2xl text-text-disabled">/100</span>
               </div>
+              {overallCI && (
+                <p className="text-[10px] text-text-disabled font-mono mt-1">
+                  95% CI {overallCI[0]}–{overallCI[1]}
+                </p>
+              )}
+              {reportCoverage && (
+                <p className="text-[10px] text-text-disabled mt-1">
+                  {reportCoverage.active} of {reportCoverage.total} dimensions active
+                </p>
+              )}
             </div>
             <MiniRadar dimensions={dimensions} />
           </div>
@@ -574,14 +618,15 @@ export default function Dashboard() {
             <span className={readinessTier.color}>{readinessTier.label}</span>
           </span>
 
-          {/* Weeks to next tier */}
-          {weeksToThresholds.technical_screen > 0 && (
+          {/* Weeks to next tier — pulls the first unready tier from the
+                server's classifyReadiness output so label + number match. */}
+          {report?.tier?.next && weeksToTiers[report.tier.next.id] > 0 && (
             <div className="bg-surface-2 border border-border-subtle rounded-xl p-3">
               <p className="text-[10px] text-text-disabled uppercase tracking-widest mb-1">
-                Est. weeks to Tech Screen Ready
+                Est. weeks to {report.tier.next.name}
               </p>
               <p className="text-lg font-extrabold font-mono text-brand-fg-soft">
-                {weeksToThresholds.technical_screen}w
+                {weeksToTiers[report.tier.next.id]}w
                 <span className="text-xs font-normal text-text-disabled ml-1">
                   at current pace
                 </span>
@@ -589,9 +634,10 @@ export default function Dashboard() {
             </div>
           )}
 
-          {overallScore === 0 && (
+          {report?.overall == null && (
             <p className="text-[11px] text-text-disabled leading-relaxed">
               Submit solutions with AI review to start building your readiness score.
+              Scores unlock as each dimension collects enough evidence.
             </p>
           )}
 
@@ -642,12 +688,16 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Weakest dimension callout */}
+          {/* Weakest dimension callout — only from ACTIVE dims. An
+                 inactive dim has score=null and must not be called out
+                 as a "focus area" (we have no evidence to say so). */}
           {dimensions && (() => {
-            const weakest = DIMENSIONS.reduce((min, dim) =>
-              (dimensions[dim.id] || 0) < (dimensions[min.id] || 0) ? dim : min
+            const activeDims = DIMENSIONS.filter(d => dimensions[d.id] != null)
+            if (activeDims.length === 0) return null
+            const weakest = activeDims.reduce((min, dim) =>
+              dimensions[dim.id] < dimensions[min.id] ? dim : min
             )
-            const weakestScore = dimensions[weakest.id] || 0
+            const weakestScore = dimensions[weakest.id]
             if (weakestScore > 60) return null
             return (
               <div className="mt-4 pt-4 border-t border-border-subtle">

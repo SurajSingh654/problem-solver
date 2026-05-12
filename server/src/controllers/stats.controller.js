@@ -8,6 +8,15 @@ import {
   hasBothApproaches,
   isCodingSolution,
 } from "../utils/solutionSignals.js";
+import { wilsonCI, meanCI, combineCIs } from "../utils/dimensionStats.js";
+import {
+  retrievability,
+  stabilityAfterReps,
+} from "../utils/fsrsRetention.js";
+import {
+  READINESS_TIERS,
+  classifyReadiness,
+} from "../utils/readinessTiers.js";
 
 function stripHtml(html) {
   if (!html) return "";
@@ -726,6 +735,74 @@ export async function getLeaderboard(req, res) {
 // ============================================================================
 // 6D INTELLIGENCE REPORT (team-scoped)
 // ============================================================================
+// The report is rebuilt around three principles research has validated:
+//   1. Per-dimension activation gates — a score based on n=1 submission
+//      isn't a score, it's noise. Dimensions below their evidence floor
+//      return { status: 'inactive', score: null, activationMessage: ... }.
+//   2. Confidence intervals travel with every score (Wilson for proportions,
+//      mean±1.96·SE for continuous). Users see how trustworthy each number is.
+//   3. D6 "Retention" strictly requires OBSERVED recall (ReviewAttempt rows
+//      with quality ≥ 3) — unreviewed solutions don't contribute. Uses
+//      FSRS retrievability, not the naive Ebbinghaus-from-createdAt that
+//      was producing D6=89 for users with 1 partial submission.
+// ============================================================================
+
+// Weight of each dimension in the overall score. Re-normalized across
+// active dimensions only (inactive dims don't drag the average to zero).
+const DIM_WEIGHTS = {
+  patternRecognition: 0.2,
+  solutionDepth: 0.18,
+  communication: 0.12,
+  optimization: 0.22,
+  pressurePerformance: 0.16,
+  retention: 0.12,
+};
+
+const DIM_KEYS = Object.keys(DIM_WEIGHTS);
+
+function inactiveDim(key, reason, n = 0) {
+  return {
+    key,
+    status: "inactive",
+    score: null,
+    n,
+    ci: null,
+    basis: [],
+    activationMessage: reason,
+  };
+}
+
+function activeDim(key, { score, n, ci, basis }) {
+  return {
+    key,
+    status: "active",
+    score: Math.max(0, Math.min(100, Math.round(score))),
+    n,
+    ci: ci ? [Math.round(ci[0]), Math.round(ci[1])] : null,
+    basis: basis ?? [],
+    activationMessage: null,
+  };
+}
+
+function buildInactiveReport({ message } = {}) {
+  const dimensions = DIM_KEYS.map((key) =>
+    inactiveDim(key, "Submit solutions to unlock this dimension"),
+  );
+  return {
+    dimensions,
+    overall: null,
+    reportCoverage: {
+      active: 0,
+      total: DIM_KEYS.length,
+      pct: 0,
+      overallComputable: false,
+    },
+    tier: classifyReadiness(0, {}),
+    totalSolutions: 0,
+    message: message || null,
+  };
+}
+
 export async function get6DReport(req, res) {
   try {
     const teamId = req.teamId;
@@ -762,20 +839,13 @@ export async function get6DReport(req, res) {
     const totalSolutions = solutions.length;
 
     if (totalSolutions === 0) {
+      // Zero-submission users get a fully-inactive report shape —
+      // same schema as the normal response so the client doesn't have
+      // to branch on presence/absence of fields.
       return success(res, {
-        report: {
-          dimensions: {
-            patternRecognition: 0,
-            solutionDepth: 0,
-            communication: 0,
-            optimization: 0,
-            pressurePerformance: 0,
-            retention: 0,
-          },
-          overall: 0,
-          totalSolutions: 0,
+        report: buildInactiveReport({
           message: "Submit solutions to build your intelligence profile.",
-        },
+        }),
       });
     }
 
@@ -792,6 +862,7 @@ export async function get6DReport(req, res) {
       clarityRatings,
       allQuizzesForDimensions,
       overdueCount,
+      successfulReviewAttempts,
     ] = await Promise.all([
       prisma.simSession.findMany({
         where: { userId, teamId, completed: true },
@@ -828,6 +899,27 @@ export async function get6DReport(req, res) {
       }),
       prisma.solution.count({
         where: { userId, teamId, nextReviewDate: { lte: new Date() } },
+      }),
+      // Successful review attempts (SM-2 quality >= 3). D6 ("Retention")
+      // is computed ONLY from these — never from createdAt of unreviewed
+      // solutions. We scope by the parent solution's userId+teamId so
+      // cross-team attempts don't leak.
+      prisma.reviewAttempt.findMany({
+        where: {
+          quality: { gte: 3 },
+          solution: { userId, teamId },
+        },
+        select: {
+          solutionId: true,
+          createdAt: true,
+          solution: {
+            select: {
+              sm2EasinessFactor: true,
+              sm2Repetitions: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -1435,78 +1527,292 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
-    // D6: Knowledge Retention — Ebbinghaus + SM-2
+    // D6: Retention — STRICT, FSRS-based.
+    //
+    // Only ReviewAttempt rows with quality >= 3 count. A fresh unreviewed
+    // solution contributes zero signal — it is unmeasured, not "retained."
+    // Per FSRS: retention is a function of stability × elapsed time, and
+    // stability is meaningless until observed recall has occurred.
+    //
+    // Activation gate: need ≥ 3 successful attempts across ≥ 2 distinct
+    // solutions (prevents single-card artifact from driving the whole dim).
     // ════════════════════════════════════════════════
-    const now_d6 = Date.now();
-    const reviewedSols = solutions.filter((s) => s.reviewCount > 0);
 
-    const retentionScores = solutions
-      .filter((s) => s.lastReviewedAt || s.createdAt)
-      .map((s) => {
-        const lastInteraction = s.lastReviewedAt || s.createdAt;
-        const daysSince =
-          (now_d6 - new Date(lastInteraction).getTime()) /
-          (1000 * 60 * 60 * 24);
-        const ef = s.sm2EasinessFactor ?? 2.5;
-        const reps = s.sm2Repetitions ?? 0;
-        const stability = Math.max(1, ef * Math.pow(reps + 1, 0.7));
-        const retention = Math.exp(-daysSince / (stability * 10));
-        const confidenceWeight = s.confidence
-          ? (s.confidence / 5) * 0.3 + 0.7
-          : 1.0;
-        return Math.min(retention * confidenceWeight, 1.0);
-      });
+    // Dedupe to the most-recent successful attempt per solution.
+    const latestSuccessfulBySolution = new Map();
+    for (const attempt of successfulReviewAttempts) {
+      const existing = latestSuccessfulBySolution.get(attempt.solutionId);
+      if (!existing || new Date(attempt.createdAt) > new Date(existing.createdAt)) {
+        latestSuccessfulBySolution.set(attempt.solutionId, attempt);
+      }
+    }
+    const d6Attempts = Array.from(latestSuccessfulBySolution.values());
+    const d6SolutionCount = latestSuccessfulBySolution.size;
 
-    let d6;
-    if (retentionScores.length === 0) {
-      d6 = 0;
+    // Legacy `d6` number kept around only in case any downstream code
+    // still expects it mid-function; the authoritative output is `d6Score`.
+    let d6 = 0;
+    let d6Score;
+    if (d6Attempts.length < 3 || d6SolutionCount < 2) {
+      const need = Math.max(0, 3 - d6Attempts.length);
+      const needSol = Math.max(0, 2 - d6SolutionCount);
+      const msg = needSol > 0
+        ? `Review ${need || "a few"} more problems across ${needSol} more solution${needSol === 1 ? "" : "s"} to unlock retention tracking`
+        : `Need ${need} more successful review${need === 1 ? "" : "s"} to unlock retention tracking`;
+      d6Score = inactiveDim("retention", msg, d6Attempts.length);
     } else {
-      const avgRetention =
-        retentionScores.reduce((a, b) => a + b, 0) / retentionScores.length;
-      const reviewedRate = reviewedSols.length / totalSolutions;
-      const engagementScore = reviewedRate * 40;
-      const retentionScore = avgRetention * 60;
-      d6 = Math.round(engagementScore + retentionScore);
-      const overdueRatio =
-        totalSolutions > 0 ? overdueCount / totalSolutions : 0;
-      const overduePenalty = Math.round(overdueRatio * overdueRatio * 40);
-      d6 = Math.max(d6 - overduePenalty, 0);
+      const now_d6 = Date.now();
+      const retentionValues = d6Attempts.map((a) => {
+        const daysSince =
+          (now_d6 - new Date(a.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+        const reps = a.solution?.sm2Repetitions ?? 1;
+        // Difficulty inferred from EF: lower EF = harder card. Map EF in
+        // [1.3, 2.5+] to difficulty in [8, 3] (rough inverse).
+        const ef = a.solution?.sm2EasinessFactor ?? 2.5;
+        const difficulty = Math.max(1, Math.min(10, 10 - (ef - 1.3) * 3));
+        const stability = stabilityAfterReps(reps, difficulty);
+        return retrievability(daysSince, stability) * 100;
+      });
+      const ci = meanCI(retentionValues);
+      d6 = ci.score;
+      d6Score = activeDim("retention", {
+        score: ci.score,
+        n: d6Attempts.length,
+        ci: ci.ci,
+        basis: [
+          `successful_reviews: ${d6Attempts.length}`,
+          `distinct_solutions: ${d6SolutionCount}`,
+          `overdue: ${overdueCount}`,
+        ],
+      });
     }
 
     // ════════════════════════════════════════════════
-    // OVERALL — weighted average + AI quality gate
+    // ACTIVATION GATES — wrap D1–D5 in DimScore shapes
     // ════════════════════════════════════════════════
-    const WEIGHTS = {
-      patternRecognition: 0.2,
-      solutionDepth: 0.18,
-      communication: 0.12,
-      optimization: 0.22,
-      pressurePerformance: 0.16,
-      retention: 0.12,
+    // D1 active iff ≥ 3 solutions with patterns claimed AND ≥ 1 AI review
+    // (self-reported patterns need external validation to be trusted).
+    let d1Score;
+    {
+      const hasMinPatterns = withPattern >= 3;
+      const hasValidation = reviewedSolutions >= 1;
+      if (!hasMinPatterns || !hasValidation) {
+        const parts = [];
+        if (!hasMinPatterns) {
+          parts.push(`claim patterns on ${3 - withPattern} more solution${3 - withPattern === 1 ? "" : "s"}`);
+        }
+        if (!hasValidation) parts.push("get at least 1 AI review to validate");
+        d1Score = inactiveDim("patternRecognition", parts.join(" and "), withPattern);
+      } else {
+        // CI from Wilson on the pattern-attempt proportion, score from
+        // the existing multi-signal computation (preserves cross-feeds).
+        const { ci } = wilsonCI(withPattern, totalSolutions);
+        d1Score = activeDim("patternRecognition", {
+          score: d1,
+          n: withPattern,
+          ci,
+          basis: [
+            `patterns_claimed: ${withPattern}`,
+            `unique_patterns: ${uniquePatterns.size}`,
+            `ai_reviews: ${reviewedSolutions}`,
+            ...(wrongPatternCount > 0 ? [`wrong_pattern_flags: ${wrongPatternCount}`] : []),
+          ],
+        });
+      }
+    }
+
+    // D2 active iff ≥ 3 solutions with reflective content (insight, Feynman,
+    // or real-world — any of them).
+    let d2Score;
+    {
+      const withAnyReflection = solutions.filter(hasReflectiveContent).length;
+      if (withAnyReflection < 3) {
+        d2Score = inactiveDim(
+          "solutionDepth",
+          `Add reflective content (insight / Feynman / real-world) to ${3 - withAnyReflection} more solution${3 - withAnyReflection === 1 ? "" : "s"}`,
+          withAnyReflection,
+        );
+      } else {
+        const { ci } = wilsonCI(withMeaningfulInsight + withMeaningfulFeynman, totalSolutions * 2);
+        d2Score = activeDim("solutionDepth", {
+          score: d2,
+          n: withAnyReflection,
+          ci,
+          basis: [
+            `reflective_solutions: ${withAnyReflection}`,
+            `meaningful_insights: ${withMeaningfulInsight}`,
+            `feynman_explanations: ${withMeaningfulFeynman}`,
+            ...(avgAiUnderstanding !== null
+              ? [`ai_understanding: ${avgAiUnderstanding.toFixed(1)}/10`]
+              : []),
+            ...(metacognitiveAccuracy !== null
+              ? [`metacognitive_accuracy: ${(metacognitiveAccuracy * 100).toFixed(0)}%`]
+              : []),
+          ],
+        });
+      }
+    }
+
+    // D3 active iff ≥ 2 peer clarity ratings OR ≥ 2 AI explanation scores.
+    // Pure "approach-length" proxy is not a real communication signal and
+    // doesn't activate the dim.
+    let d3Score;
+    {
+      const hasEnoughRatings = clarityRatings.length >= 2;
+      const hasEnoughAI = aiExplanationScores.length >= 2;
+      if (!hasEnoughRatings && !hasEnoughAI) {
+        const ratingsNeeded = Math.max(0, 2 - clarityRatings.length);
+        const aiNeeded = Math.max(0, 2 - aiExplanationScores.length);
+        d3Score = inactiveDim(
+          "communication",
+          `Get ${ratingsNeeded} more peer clarity rating${ratingsNeeded === 1 ? "" : "s"} or ${aiNeeded} more AI review${aiNeeded === 1 ? "" : "s"}`,
+          clarityRatings.length + aiExplanationScores.length,
+        );
+      } else {
+        // Prefer peer ratings for the CI (more directly measures communication).
+        const ci = hasEnoughRatings
+          ? meanCI(clarityRatings.map((r) => (r.rating / 5) * 100)).ci
+          : meanCI(aiExplanationScores.map((s) => (s / 10) * 100)).ci;
+        d3Score = activeDim("communication", {
+          score: d3,
+          n: Math.max(clarityRatings.length, aiExplanationScores.length),
+          ci,
+          basis: [
+            `peer_ratings: ${clarityRatings.length}`,
+            `ai_explanation_scores: ${aiExplanationScores.length}`,
+            ...(communicationFromProxy ? ["source: proxy (no peer ratings)"] : []),
+          ],
+        });
+      }
+    }
+
+    // D4 active iff ≥ 3 CODING solutions with both-approach OR AI correctness.
+    let d4Score;
+    {
+      const hasEnoughCoding = codingTotal >= 3;
+      const hasEnoughApproachOrAI =
+        withBothApproachesCount >= 1 || aiCodeCorrectnessScores.length >= 1;
+      if (!hasEnoughCoding) {
+        d4Score = inactiveDim(
+          "optimization",
+          `Submit ${3 - codingTotal} more CODING solution${3 - codingTotal === 1 ? "" : "s"} to measure optimization`,
+          codingTotal,
+        );
+      } else if (!hasEnoughApproachOrAI) {
+        d4Score = inactiveDim(
+          "optimization",
+          "Add brute-force AND optimized approaches on at least 1 CODING solution, or get an AI review",
+          codingTotal,
+        );
+      } else {
+        const { ci } = wilsonCI(withBothApproachesCount, codingTotal);
+        d4Score = activeDim("optimization", {
+          score: d4,
+          n: codingTotal,
+          ci,
+          basis: [
+            `coding_solutions: ${codingTotal}`,
+            `both_approaches: ${withBothApproachesCount}`,
+            ...(avgAiCodeCorrectness !== null
+              ? [`ai_correctness: ${avgAiCodeCorrectness.toFixed(1)}/10`]
+              : []),
+          ],
+        });
+      }
+    }
+
+    // D5 active iff ≥ 1 sim/interview with scores OR ≥ 3 quizzes. Never
+    // zero-by-default — that's category-insensitive and misleading.
+    let d5Score;
+    {
+      const interviewsWithScoresCount = interviews.filter(
+        (i) => i.scores && typeof i.scores === "object" && Object.keys(i.scores).length > 0,
+      ).length;
+      const pressureDataPoints = sims.length + interviewsWithScoresCount + quizzesForPressure.length;
+      const hasEnough = sims.length + interviewsWithScoresCount >= 1 || quizzesForPressure.length >= 3;
+      if (!hasEnough) {
+        d5Score = inactiveDim(
+          "pressurePerformance",
+          "Complete 1 mock interview or simulation (or 3 quizzes) to unlock pressure performance",
+          pressureDataPoints,
+        );
+      } else {
+        // Wide CI when n is small; narrows with more data.
+        const ci = meanCI(
+          [
+            ...sims.map((s) => ((s.score ?? 0) / 5) * 100),
+            ...quizzesForPressure.map((q) => q.score ?? 0),
+          ],
+          1.96,
+        );
+        d5Score = activeDim("pressurePerformance", {
+          score: d5,
+          n: pressureDataPoints,
+          ci: ci?.ci ?? [Math.max(0, d5 - 20), Math.min(100, d5 + 20)],
+          basis: [
+            `sims: ${sims.length}`,
+            `interviews_scored: ${interviewsWithScoresCount}`,
+            `quizzes: ${quizzesForPressure.length}`,
+          ],
+        });
+      }
+    }
+
+    // ════════════════════════════════════════════════
+    // OVERALL — re-normalized weights over ACTIVE dims only
+    // ════════════════════════════════════════════════
+    const dimensions = [d1Score, d2Score, d3Score, d4Score, d5Score, d6Score];
+    const activeDims = dimensions.filter((d) => d.status === "active");
+    const activeCount = activeDims.length;
+
+    const reportCoverage = {
+      active: activeCount,
+      total: DIM_KEYS.length,
+      pct: Math.round((activeCount / DIM_KEYS.length) * 100),
+      overallComputable: activeCount >= 3,
     };
 
-    const weightedSum =
-      Math.min(d1, 100) * WEIGHTS.patternRecognition +
-      Math.min(d2, 100) * WEIGHTS.solutionDepth +
-      Math.min(d3, 100) * WEIGHTS.communication +
-      Math.min(d4, 100) * WEIGHTS.optimization +
-      Math.min(d5, 100) * WEIGHTS.pressurePerformance +
-      Math.min(d6, 100) * WEIGHTS.retention;
+    let overall = null;
+    if (activeCount >= 3) {
+      const combined = combineCIs(
+        activeDims.map((d) => ({
+          score: d.score,
+          ci: d.ci,
+          weight: DIM_WEIGHTS[d.key],
+        })),
+        DIM_KEYS.length,
+      );
+      if (combined) {
+        overall = { score: combined.score, ci: combined.ci };
 
-    let overall = Math.round(weightedSum);
-
-    if (aiAvgOverall !== null) {
-      const aiQualityCap = Math.round((aiAvgOverall / 10) * 100);
-      const maxAllowed = Math.min(aiQualityCap + 15, 100);
-      overall = Math.min(overall, maxAllowed);
+        // AI quality cap — if the user has real AI reviews and they
+        // average low, cap overall so a cold-start proxy score can't
+        // exceed what AI is actually seeing.
+        if (aiAvgOverall !== null) {
+          const aiQualityCap = Math.round((aiAvgOverall / 10) * 100);
+          const maxAllowed = Math.min(aiQualityCap + 15, 100);
+          if (overall.score > maxAllowed) overall.score = maxAllowed;
+        }
+        // Overconfidence penalty — if >50% of reviews are flagged
+        // overconfident, reduce overall by 15%.
+        if (
+          reviewedSolutions > 0 &&
+          overconfidenceCount / reviewedSolutions > 0.5
+        ) {
+          overall.score = Math.round(overall.score * 0.85);
+        }
+      }
     }
 
-    if (
-      reviewedSolutions > 0 &&
-      overconfidenceCount / reviewedSolutions > 0.5
-    ) {
-      overall = Math.round(overall * 0.85);
-    }
+    // ════════════════════════════════════════════════
+    // TIER CLASSIFICATION
+    // ════════════════════════════════════════════════
+    const dimScoresByKey = Object.fromEntries(
+      dimensions
+        .filter((d) => d.status === "active")
+        .map((d) => [d.key, d.score]),
+    );
+    const tierInfo = classifyReadiness(overall?.score ?? 0, dimScoresByKey);
 
     // ════════════════════════════════════════════════
     // ANALYTICS LAYER
@@ -1631,27 +1937,16 @@ export async function get6DReport(req, res) {
 
     const pointsPerWeek = Math.max(avgWeeklyVelocity * 1.2, 0.5);
 
-    const THRESHOLDS = {
-      phone_screen: 45,
-      technical_screen: 58,
-      onsite: 70,
-      faang: 82,
-    };
-
-    const weeksToThresholds = {};
-    Object.entries(THRESHOLDS).forEach(([tier, threshold]) => {
-      const gap = threshold - Math.min(overall, 100);
-      weeksToThresholds[tier] = gap <= 0 ? 0 : Math.ceil(gap / pointsPerWeek);
-    });
-
-    const finalDimensions = {
-      patternRecognition: Math.min(d1, 100),
-      solutionDepth: Math.min(d2, 100),
-      communication: Math.min(d3, 100),
-      optimization: Math.min(d4, 100),
-      pressurePerformance: Math.min(d5, 100),
-      retention: Math.min(d6, 100),
-    };
+    // Weeks-to-tier extrapolation — keyed by tier.id from the unified
+    // READINESS_TIERS config so client and server never disagree. Null
+    // when overall is not yet computable (too few active dims).
+    const weeksToTiers = {};
+    if (overall) {
+      for (const t of tierInfo.tiers) {
+        const gap = t.threshold - overall.score;
+        weeksToTiers[t.id] = gap <= 0 ? 0 : Math.ceil(gap / pointsPerWeek);
+      }
+    }
 
     const quizDimensionContributions = {
       patternRecognition:
@@ -1686,8 +1981,18 @@ export async function get6DReport(req, res) {
 
     return success(res, {
       report: {
-        dimensions: finalDimensions,
-        overall: Math.min(overall, 100),
+        // New-shape: array of DimScore {key, status, score, n, ci, basis,
+        // activationMessage}. Inactive dims score=null, ci=null, with an
+        // activationMessage telling the user exactly what they need.
+        dimensions,
+        // overall is null when < 3 dims active (i.e. "not yet computable").
+        // Otherwise { score, ci: [lo, hi] } with CI widened by coverage penalty.
+        overall,
+        // Honest "how much of the 6D profile is actually measured" number.
+        reportCoverage,
+        // Tier classification consumed by client ReportPage + Dashboard;
+        // single source of truth from readinessTiers.js.
+        tier: tierInfo,
         totalSolutions,
         quizCount,
         interviewCount: interviews.length,
@@ -1739,7 +2044,7 @@ export async function get6DReport(req, res) {
           confidenceTrend,
           optimizationRate: bothApproachesRate,
           weakQuizSubjects,
-          weeksToThresholds,
+          weeksToTiers,
           pointsPerWeek: Math.round(pointsPerWeek * 10) / 10,
         },
       },
