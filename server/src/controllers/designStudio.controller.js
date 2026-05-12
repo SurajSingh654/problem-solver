@@ -213,16 +213,22 @@ async function bridgeDesignSessionToSolution(session, evaluation) {
 
   try {
     const payload = buildSolutionPayloadFromSession(session, evaluation);
-    const existing = await prisma.solution.findUnique({
-      where: {
-        userId_problemId_teamId: {
-          userId: session.userId,
-          problemId: session.problemId,
-          teamId: session.teamId,
+    const [existing, problem] = await Promise.all([
+      prisma.solution.findUnique({
+        where: {
+          userId_problemId_teamId: {
+            userId: session.userId,
+            problemId: session.problemId,
+            teamId: session.teamId,
+          },
         },
-      },
-      select: { id: true },
-    });
+        select: { id: true },
+      }),
+      prisma.problem.findUnique({
+        where: { id: session.problemId },
+        select: { version: true },
+      }),
+    ]);
 
     if (existing) {
       // Preserve SM-2 history on a re-evaluation; only refresh content + AI feedback.
@@ -241,6 +247,8 @@ async function bridgeDesignSessionToSolution(session, evaluation) {
           userId: session.userId,
           problemId: session.problemId,
           teamId: session.teamId,
+          // Freeze the problem version at bridge time.
+          problemVersion: problem?.version ?? null,
           sm2EasinessFactor: sm2.easinessFactor,
           sm2Interval: sm2.interval,
           sm2Repetitions: sm2.repetitions,

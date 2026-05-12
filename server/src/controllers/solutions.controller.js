@@ -24,7 +24,7 @@ export async function submitSolution(req, res) {
 
     const problem = await prisma.problem.findFirst({
       where: { id: problemId, teamId },
-      select: { id: true, title: true },
+      select: { id: true, title: true, version: true },
     });
     if (!problem) return error(res, "Problem not found in your team.", 404);
 
@@ -75,6 +75,9 @@ export async function submitSolution(req, res) {
           problemId,
           userId,
           teamId,
+          // Freeze the problem version at submission time — lets the client
+          // later detect "problem has been updated since you solved it."
+          problemVersion: problem.version,
           approach,
           code,
           language,

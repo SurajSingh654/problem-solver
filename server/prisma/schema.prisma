@@ -551,6 +551,16 @@ model Problem {
   // they had never seen during practice.
   isAssessmentOnly Boolean @default(false)
 
+  // ── Content version ───────────────────────────────────
+  // Bumped by updateProblem whenever the problem STATEMENT changes
+  // (title, description, categoryData, tags, adminNotes, realWorldContext,
+  // useCases, difficulty, category). NOT bumped by admin-only flags
+  // (isPinned, isHidden, isPublished) — those don't affect what the
+  // candidate saw. Solutions capture the version they were submitted
+  // against, so the client can flag "this problem has been updated
+  // since you solved it."
+  version Int @default(1)
+
 
   assessmentResponses AssessmentResponse[]
   
@@ -690,6 +700,10 @@ model Solution {
   // ── Problem reference ──────────────────────────────
   problemId String
   problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  // Frozen at submission time so the client can detect "problem has been
+  // updated since you solved it." Null on legacy rows (pre-versioning).
+  problemVersion Int?
 
   // ── Author ─────────────────────────────────────────
   userId String

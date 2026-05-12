@@ -78,6 +78,7 @@ export async function listProblems(req, res) {
           isPublished: true,
           isPinned: true,
           isHidden: true,
+          version: true,
           createdById: true,
           createdAt: true,
           createdBy: { select: { id: true, name: true } },
@@ -86,7 +87,7 @@ export async function listProblems(req, res) {
           },
           solutions: {
             where: { userId },
-            select: { id: true, confidence: true },
+            select: { id: true, confidence: true, problemVersion: true },
             take: 1,
           },
         },
@@ -99,11 +100,15 @@ export async function listProblems(req, res) {
 
     const enriched = problems.map((p) => {
       const userSolution = p.solutions[0] || null;
+      const userSolvedVersion = userSolution?.problemVersion ?? null;
       return {
         ...p,
         solutions: undefined,
         isSolved: !!userSolution,
         userConfidence: userSolution?.confidence || null,
+        userSolvedVersion,
+        problemUpdatedSinceSolved:
+          userSolvedVersion != null && p.version > userSolvedVersion,
         solutionCount: p._count.solutions,
         followUpCount: p._count.followUpQuestions,
       };
@@ -147,16 +152,30 @@ export async function getProblem(req, res) {
     const [userSolution, teamSolutions] = await Promise.all([
       prisma.solution.findFirst({
         where: { problemId, userId, teamId },
-        select: { id: true, confidence: true, createdAt: true },
+        select: {
+          id: true,
+          confidence: true,
+          createdAt: true,
+          problemVersion: true,
+        },
       }),
       prisma.solution.count({ where: { problemId, teamId } }),
     ]);
+
+    // Flag whether the problem has been edited since the user's submission.
+    // Truthy only for versioned rows; legacy rows with problemVersion NULL
+    // are treated as "unknown" and don't trip the flag.
+    const userSolvedVersion = userSolution?.problemVersion ?? null;
+    const problemUpdatedSinceSolved =
+      userSolvedVersion != null && problem.version > userSolvedVersion;
 
     return success(res, {
       problem: {
         ...problem,
         isSolved: !!userSolution,
         userSolutionId: userSolution?.id || null,
+        userSolvedVersion,
+        problemUpdatedSinceSolved,
         teamSolutionCount: teamSolutions,
       },
     });
@@ -358,21 +377,34 @@ export async function updateProblem(req, res) {
       isHidden,
     } = req.body;
 
-    const data = {};
-    if (title !== undefined) data.title = title;
-    if (description !== undefined) data.description = description;
-    if (difficulty !== undefined) data.difficulty = difficulty;
-    if (category !== undefined) data.category = category;
-    if (categoryData !== undefined) data.categoryData = categoryData;
-    if (tags !== undefined) data.tags = tags;
+    // Split content fields (bump version) from admin flags (don't).
+    // A pin/hide flip shouldn't inflate the version counter — only
+    // edits to what the candidate actually reads.
+    const contentFields = {};
+    if (title !== undefined) contentFields.title = title;
+    if (description !== undefined) contentFields.description = description;
+    if (difficulty !== undefined) contentFields.difficulty = difficulty;
+    if (category !== undefined) contentFields.category = category;
+    if (categoryData !== undefined) contentFields.categoryData = categoryData;
+    if (tags !== undefined) contentFields.tags = tags;
     if (realWorldContext !== undefined)
-      data.realWorldContext = realWorldContext;
+      contentFields.realWorldContext = realWorldContext;
     if (useCases !== undefined)
-      data.useCases = Array.isArray(useCases) ? useCases.join("\n") : useCases;
-    if (adminNotes !== undefined) data.adminNotes = adminNotes;
-    if (isPublished !== undefined) data.isPublished = isPublished;
-    if (isPinned !== undefined) data.isPinned = isPinned;
-    if (isHidden !== undefined) data.isHidden = isHidden;
+      contentFields.useCases = Array.isArray(useCases)
+        ? useCases.join("\n")
+        : useCases;
+    if (adminNotes !== undefined) contentFields.adminNotes = adminNotes;
+
+    const flagFields = {};
+    if (isPublished !== undefined) flagFields.isPublished = isPublished;
+    if (isPinned !== undefined) flagFields.isPinned = isPinned;
+    if (isHidden !== undefined) flagFields.isHidden = isHidden;
+
+    const data = { ...contentFields, ...flagFields };
+    // Only bump when a content field is actually being set.
+    if (Object.keys(contentFields).length > 0) {
+      data.version = { increment: 1 };
+    }
 
     const problem = await prisma.problem.update({
       where: { id: problemId },
