@@ -13,6 +13,9 @@ export const solutionsApi = {
 
   rateClarity: (id, data) => api.post(`/solutions/${id}/clarity`, data),
 
-  review: (id, confidenceLevel) =>
-    api.post(`/solutions/${id}/review`, { confidenceLevel }),
+  // NOTE: live review submission is in hooks/useSolutions.js::useSubmitReview;
+  // this wrapper is kept for ad-hoc callers. Send `confidence` (1-5) and an
+  // optional `recallText`; the server's submitReviewSchema requires those keys.
+  review: (id, { confidence, recallText } = {}) =>
+    api.post(`/solutions/${id}/review`, { confidence, recallText }),
 };

@@ -63,8 +63,15 @@ export const updateSolutionSchema = createSolutionSchema.partial();
 
 // ── SM-2 review submission ───────────────────────────────
 // POST /solutions/:solutionId/review
+//
+// recallText is the user's retrieval-practice attempt — what they typed
+// from memory during the recall phase before revealing the stored
+// solution. Optional: users can skip typing and still submit a review.
+// Cap at 10k chars to prevent abusive payloads; real recall attempts
+// are typically under 2k.
 export const submitReviewSchema = z.object({
   confidence: z.number().int().min(1).max(5),
+  recallText: z.string().max(10000).nullable().optional(),
 });
 
 // ── Peer clarity rating ──────────────────────────────────

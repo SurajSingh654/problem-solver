@@ -49,11 +49,20 @@ export function useGenerateProblemsAI() {
   });
 }
 
-// Active recall hints — called during review session after user reveals notes
-// Uses existing aiFeedback to generate targeted questions about weak areas
+// Active recall hints — called during review session after user reveals notes.
+// When the user typed a recall attempt, pass it so the AI can tailor its
+// follow-up questions to what specifically was missed instead of asking
+// generic questions every review.
+//
+// Accepts either `solutionId` (legacy) or `{ solutionId, recallText }`.
 export function useReviewHints() {
   return useMutation({
-    mutationFn: (solutionId) => api.post(`/ai/review-hints/${solutionId}`),
+    mutationFn: (arg) => {
+      const { solutionId, recallText } = typeof arg === "string"
+        ? { solutionId: arg, recallText: undefined }
+        : arg;
+      return api.post(`/ai/review-hints/${solutionId}`, { recallText });
+    },
   });
 }
 

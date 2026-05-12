@@ -788,6 +788,7 @@ model Solution {
   // ── Relations ──────────────────────────────────────
   clarityRatings  ClarityRating[]
   followUpAnswers SolutionFollowUpAnswer[]
+  reviewAttempts  ReviewAttempt[]
 
   // ── Constraints ────────────────────────────────────
   // One solution per user per problem per team
@@ -808,6 +809,46 @@ model Solution {
   // HNSW vector index — registered to prevent drift detection
   @@index([embedding], map: "idx_solutions_embedding_hnsw")
   @@map("solutions")
+}
+
+// ============================================================================
+// REVIEW ATTEMPT
+// ============================================================================
+
+/// One row per SM-2 review event. Captures what the user recalled BEFORE
+/// revealing their stored solution — i.e. the retrieval-practice attempt
+/// text. Enables over-time analysis of recall quality, gives the AI
+/// hint-generator the user's actual attempt to react to, and provides a
+/// real audit trail (superseding the `Solution.reviewDates` JSON, which
+/// stores only timestamps).
+///
+/// Research basis: Karpicke & Roediger (2008), "The critical importance
+/// of retrieval for learning." Retrieval attempts are the single most
+/// empirically-validated learning technique; storing them unlocks
+/// feedback loops the timestamp-only log cannot support.
+model ReviewAttempt {
+  id String @id @default(cuid())
+
+  // ── Parent solution ────────────────────────────────
+  solutionId String
+  solution   Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+
+  // ── Recall attempt ─────────────────────────────────
+  // Null when the user skipped typing a recall (timer expired or they
+  // just clicked Reveal). Still a review event, just no attempt text.
+  recallText String?
+
+  // ── Outcome ────────────────────────────────────────
+  confidence Int     // 1-5, user-reported
+  quality    Int     // 0-5, SM-2 quality derived from confidence
+  recalled   Boolean // quality >= 3
+
+  // ── Timing ─────────────────────────────────────────
+  createdAt DateTime @default(now())
+
+  // Most-recent-first lookup for generateReviewHints + recall history UI
+  @@index([solutionId, createdAt(sort: Desc)])
+  @@map("review_attempts")
 }
 
 // ============================================================================

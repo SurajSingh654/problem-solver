@@ -125,11 +125,16 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
         }
     }, [phase])
 
-    // Fetch AI hints when revealing — fire-and-forget, non-blocking
+    // Fetch AI hints when revealing — fire-and-forget, non-blocking.
+    // Pass the recall attempt so the AI can ask targeted follow-ups instead
+    // of generic per-problem questions.
     async function handleReveal() {
         setPhase('reveal')
         try {
-            const res = await reviewHints.mutateAsync(solution.id)
+            const res = await reviewHints.mutateAsync({
+                solutionId: solution.id,
+                recallText: recallText?.trim() || undefined,
+            })
             setAiQuestions(res.data.data)
         } catch {
             // Silent — AI hints are enhancement, not critical path
@@ -594,7 +599,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     fullWidth
                                     disabled={confidence == null}
                                     loading={isSaving}
-                                    onClick={() => onSave(confidence)}
+                                    onClick={() => onSave(confidence, recallText)}
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" strokeWidth="2.5"
@@ -891,14 +896,16 @@ export default function ReviewQueuePage() {
         return groups
     }, [due])
 
-    // Save review — sends only confidence to server
-    // Server computes SM-2 state, returns next interval
-    async function handleSaveReview(confidenceLevel) {
+    // Save review — sends confidence + recall attempt to the server.
+    // Server computes SM-2 state, creates a ReviewAttempt row, returns
+    // next interval.
+    async function handleSaveReview(confidenceLevel, recallText) {
         if (!reviewing) return
 
         await reviewMutation.mutateAsync({
             solutionId: reviewing.id,
             confidence: confidenceLevel,
+            recallText: recallText?.trim() || null,
         })
 
         setReviewed(prev => [...prev, reviewing.id])

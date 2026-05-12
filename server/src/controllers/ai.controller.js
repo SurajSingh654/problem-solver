@@ -1437,8 +1437,11 @@ export async function generateReviewHints(req, res) {
     const { solutionId } = req.params;
     const teamId = req.teamId;
     const userId = req.user.id;
-
-    // Fetch solution with problem and AI feedback history
+    // Client may pass the in-progress recall attempt so the AI can probe
+    // exactly where the user fell short, rather than re-asking the same
+    // generic questions every review. Optional — older clients omit it.
+    const recallText =
+      typeof req.body?.recallText === "string" ? req.body.recallText.trim() : "";
     const solution = await prisma.solution.findFirst({
       where: { id: solutionId, userId, teamId },
       select: {
@@ -1507,7 +1510,9 @@ export async function generateReviewHints(req, res) {
           role: "system",
           content: `You are a spaced repetition coach helping someone review a coding problem they previously solved.
 Generate 2 short, targeted recall questions that probe their understanding.
-Focus on the weak areas identified. Questions should be answerable in 1-2 sentences.
+Focus on the weak areas identified. If a recall attempt is provided, tailor
+the questions to fill in what they missed or got wrong — do NOT re-ask what
+they already demonstrated. Questions should be answerable in 1-2 sentences.
 Do NOT ask them to write code. Ask them to explain concepts, trade-offs, or patterns.
 
 Return JSON:
@@ -1527,8 +1532,8 @@ Previous AI score: ${previousScore !== null ? `${previousScore}/10` : "not revie
 Review count: ${solution.reviewCount}
 ${weakAreas.length > 0 ? `Known weak areas: ${weakAreas.join(", ")}` : ""}
 ${solution.problem.adminNotes ? `Key concept: ${solution.problem.adminNotes.substring(0, 200)}` : ""}
-
-Generate 2 questions that will test if they truly remember and understand this problem.`,
+${recallText ? `\nCandidate's recall attempt (what they remembered from memory, no notes):\n"""\n${recallText.slice(0, 2000)}\n"""\n` : ""}
+Generate 2 questions that will test if they truly remember and understand this problem${recallText ? ", focusing on what their recall attempt above missed or got wrong" : ""}.`,
         },
       ],
     });

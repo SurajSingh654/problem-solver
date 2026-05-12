@@ -157,8 +157,9 @@ export async function submitReview(req, res) {
     const { solutionId } = req.params;
     const userId = req.user.id;
     const teamId = req.teamId;
-    const { confidence } = req.body;
+    const { confidence, recallText } = req.body;
     // Bounds enforced by submitReviewSchema in solutions.routes.js.
+    const trimmedRecall = typeof recallText === "string" ? recallText.trim() : null;
 
     // Load current SM-2 state from DB — never trust client-sent state
     const solution = await prisma.solution.findFirst({
@@ -199,24 +200,37 @@ export async function submitReview(req, res) {
     const newLapseCount = (solution.lapseCount ?? 0) + (isFailure ? 1 : 0);
     const isLeech = newLapseCount >= LEECH_THRESHOLD;
 
-    await prisma.solution.update({
-      where: { id: solutionId },
-      data: {
-        // SM-2 state — always computed server-side
-        sm2EasinessFactor: sm2Result.easinessFactor,
-        sm2Interval: sm2Result.interval,
-        sm2Repetitions: sm2Result.repetitions,
-        nextReviewDate: sm2Result.nextReviewDate,
-        // Review tracking
-        reviewCount: { increment: 1 },
-        lastReviewedAt: new Date(),
-        reviewDates: reviewHistory,
-        // Cumulative failure count — doesn't reset with sm2Repetitions.
-        ...(isFailure ? { lapseCount: { increment: 1 } } : {}),
-        // Update confidence to reflect current review rating
-        confidence,
-      },
-    });
+    // Persist Solution SM-2 state + ReviewAttempt row atomically so the
+    // per-attempt log can never disagree with the rolled-up scheduler state.
+    await prisma.$transaction([
+      prisma.solution.update({
+        where: { id: solutionId },
+        data: {
+          // SM-2 state — always computed server-side
+          sm2EasinessFactor: sm2Result.easinessFactor,
+          sm2Interval: sm2Result.interval,
+          sm2Repetitions: sm2Result.repetitions,
+          nextReviewDate: sm2Result.nextReviewDate,
+          // Review tracking
+          reviewCount: { increment: 1 },
+          lastReviewedAt: new Date(),
+          reviewDates: reviewHistory,
+          // Cumulative failure count — doesn't reset with sm2Repetitions.
+          ...(isFailure ? { lapseCount: { increment: 1 } } : {}),
+          // Update confidence to reflect current review rating
+          confidence,
+        },
+      }),
+      prisma.reviewAttempt.create({
+        data: {
+          solutionId,
+          recallText: trimmedRecall || null,
+          confidence,
+          quality,
+          recalled: !isFailure,
+        },
+      }),
+    ]);
 
     return success(res, {
       message: "Review saved.",

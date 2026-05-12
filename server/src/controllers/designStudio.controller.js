@@ -144,16 +144,27 @@ function buildSolutionPayloadFromSession(session, evaluation) {
     },
   };
 
+  // SD and LLD are non-CODING categories: categorySpecificData is the
+  // canonical store. Generic columns are explicitly nulled so the DB
+  // can't silently desync from the structured payload, mirroring the
+  // HR/Behavioral/TK/SQL invariant enforced by SubmitSolutionPage.
+  const nullGenerics = {
+    approach: null,
+    code: null,
+    language: null,
+    bruteForce: null,
+    optimizedApproach: null,
+    timeComplexity: null,
+    spaceComplexity: null,
+    keyInsight: null,
+    feynmanExplanation: null,
+    realWorldConnection: null,
+  };
+
   if (isSD) {
     return {
       ...base,
-      approach: phases.requirements || null,
-      bruteForce: phases.capacityEstimation || null,
-      optimizedApproach: phases.architecture || null,
-      keyInsight: phases.tradeoffs || null,
-      feynmanExplanation:
-        session.dataFlowDescription || phases.deepDive || null,
-      realWorldConnection: phases.apiDesign || null,
+      ...nullGenerics,
       patterns: [], // SD has no single "pattern" axis
       categorySpecificData: {
         functionalRequirements: phases.requirements || "",
@@ -176,13 +187,7 @@ function buildSolutionPayloadFromSession(session, evaluation) {
   const dominant = extractDominantPattern(phases.designPatterns);
   return {
     ...base,
-    approach: phases.requirements || null,
-    bruteForce: phases.entities || null,
-    optimizedApproach: phases.classHierarchy || null,
-    keyInsight: phases.designPatterns || null,
-    feynmanExplanation: phases.solidAnalysis || null,
-    realWorldConnection: null,
-    code: phases.methodSignatures || null,
+    ...nullGenerics,
     patterns: dominant ? [dominant] : [],
     categorySpecificData: {
       entities: phases.entities || "",
