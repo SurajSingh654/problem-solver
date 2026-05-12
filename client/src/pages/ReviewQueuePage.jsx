@@ -696,6 +696,18 @@ function DueCard({ solution, index, onReview }) {
                         <div className="min-w-0">
                             <h3 className="text-sm font-bold text-text-primary truncate mb-1">
                                 {solution.problem?.title}
+                                {/* Admin edited the statement after this solution
+                                    was submitted — worth flagging before review. */}
+                                {solution.problemVersion != null &&
+                                    solution.problem?.version != null &&
+                                    solution.problem.version > solution.problemVersion && (
+                                        <span
+                                            className="ml-2 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-px rounded-full border bg-warning-soft border-warning-line text-warning-fg align-middle"
+                                            title={`Problem updated since you solved it (you solved v${solution.problemVersion}, now v${solution.problem.version})`}
+                                        >
+                                            ✨ Updated
+                                        </span>
+                                    )}
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap">
                                 <Badge variant={DIFF_VARIANT[solution.problem?.difficulty] || 'brand'} size="xs">

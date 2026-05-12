@@ -246,15 +246,16 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'problem-updated-badge',
-        phase: 'NEXT',
+        phase: 'DONE',
+        shippedAt: '2026-05-12',
         theme: 'Correctness & Data',
         priority: 'MEDIUM',
         effort: 'Small',
         title: 'Problem-Updated Badge in UI',
-        impact: 'On the review queue and solution cards, members see a small "problem updated since you solved it" badge whenever the admin has edited the statement after their submission. Prevents the confusion of solving against a now-changed problem.',
-        description: 'Surface the problemUpdatedSinceSolved flag already returned by GET /problems. Small pill badge on SolutionCard + ReviewQueuePage items. Link to re-read the current problem statement.',
-        why: 'Data layer shipped with problem versioning; UI never caught up. Free win.',
-        technicalNotes: 'No server changes needed. Client: SolutionCard.jsx, ReviewQueuePage.jsx read problem.problemUpdatedSinceSolved and render a pill.',
+        impact: 'Members see a "✨ Updated" pill on problems that have been edited since they solved them — on the Problems list and on due-review cards.',
+        description: 'Surfaced the existing problemUpdatedSinceSolved flag (shipped with problem versioning) into the UI. ReviewQueuePage select extended to pull problem.version so the flag can be derived per due item.',
+        why: 'Data layer was already in place; UI had never caught up.',
+        technicalNotes: 'ProblemsPage list row + ReviewQueuePage due card render a warning-tone pill. getReviewQueue now includes problem.version in its select.',
     },
 
     {
@@ -339,16 +340,17 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'interleaved-practice',
-        phase: 'NEXT',
+        phase: 'DONE',
+        shippedAt: '2026-05-12',
         theme: 'Learning Science',
         priority: 'HIGH',
         effort: 'Small',
         title: 'Interleaved Practice Mode',
-        impact: 'Members who use Mixed Mode remember patterns 43% better at interview time compared to blocked category practice.',
-        description: 'A "Mixed Mode" toggle on the Problems page that serves problems in randomized order across categories. The cognitive discomfort of switching is exactly what produces superior long-term retention.',
-        why: 'Blocked practice feels easier and produces better immediate performance — which is why candidates prefer it. Interleaved feels harder and produces dramatically better long-term retention.',
-        researchBasis: 'Rohrer & Taylor (2007) — interleaved practice produces 43% better retention at test time vs blocked. Kornell & Bjork (2008) — despite feeling harder, interleaving produces superior discrimination learning.',
-        technicalNotes: 'ProblemsPage.jsx: Mixed Mode toggle randomizes order across categories in the filtered set. Client-side only.',
+        impact: 'A "🔀 Mixed Mode" toggle on the Problems page randomizes order across categories so members practice patterns interleaved rather than blocked. Rohrer & Taylor (2007): interleaved practice produces ~43% better retention at test time.',
+        description: 'Deterministic shuffle (djb2 hash of problem id) so the mixed order is stable within a session but interleaves categories. Purely client-side. Factored into `hasFilters` and the Clear button resets it.',
+        why: 'Blocked practice feels easier and produces better immediate performance, which is why candidates prefer it. Interleaved feels harder and produces dramatically better long-term retention.',
+        researchBasis: 'Rohrer & Taylor (2007) — interleaved practice produces 43% better retention at test time. Kornell & Bjork (2008) — despite feeling harder, interleaving produces superior discrimination learning.',
+        technicalNotes: 'ProblemsPage.jsx mixedMode state + stableHash helper. Toggle pill next to the Pinned filter.',
     },
 
     {

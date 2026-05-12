@@ -19,6 +19,16 @@ import { PROBLEM_CATEGORIES, HR_STAKES } from '@utils/constants'
 
 // Get the display label for a difficulty value, considering category.
 // HR problems use stakes labels (Common/Tricky/Sensitive) instead of Easy/Medium/Hard.
+// djb2-lite string hash for deterministic Mixed Mode shuffling.
+// Pure, fast, no external dep. Same input → same hash → stable order.
+function stableHash(str) {
+    let h = 5381
+    for (let i = 0; i < (str?.length ?? 0); i++) {
+        h = ((h << 5) + h) ^ str.charCodeAt(i)
+    }
+    return h >>> 0
+}
+
 function getDifficultyLabel(difficulty, category) {
     if (category === 'HR') {
         return HR_STAKES[difficulty]?.label || difficulty
@@ -118,6 +128,18 @@ function ProblemListRow({ problem, index }) {
             <span className="flex-1 text-sm font-semibold text-text-primary truncate">
                 {problem.isPinned && <span className="mr-1.5">📌</span>}
                 {problem.title}
+                {/* Flags when the problem statement was edited AFTER this
+                    user solved it — their submitted solution references a
+                    prior version. Surfaced from problemUpdatedSinceSolved
+                    on the GET /problems response. */}
+                {problem.problemUpdatedSinceSolved && (
+                    <span
+                        className="ml-2 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-px rounded-full border bg-warning-soft border-warning-line text-warning-fg align-middle"
+                        title="This problem has been updated since you solved it"
+                    >
+                        ✨ Updated
+                    </span>
+                )}
             </span>
 
             {/* Badges */}
@@ -175,6 +197,7 @@ export default function ProblemsPage() {
     const [category, setCategory] = useState('')
     const [tag, setTag] = useState('')
     const [showPinned, setShowPinned] = useState(false)
+    const [mixedMode, setMixedMode] = useState(false)
     const [viewMode, setViewMode] = useState('grid')
 
     const { data, isLoading } = useProblems({ limit: 200 })
@@ -196,8 +219,23 @@ export default function ProblemsPage() {
                 p.tags?.some(t => t.toLowerCase().includes(q))
             )
         }
+        // Mixed Mode — randomize the filtered list so categories interleave
+        // instead of clustering. Research: Rohrer & Taylor (2007) —
+        // interleaved practice produces ~43% better retention at test time
+        // than blocked practice. Feels harder in the moment, works better
+        // in the long run. Uses a stable-ish shuffle seeded by id count so
+        // the order doesn't thrash on unrelated re-renders.
+        if (mixedMode) {
+            list = [...list].sort((a, b) => {
+                // Deterministic pseudo-random based on id hashes — mixes
+                // the order but doesn't shift on every render tick.
+                const ha = stableHash(a.id)
+                const hb = stableHash(b.id)
+                return ha - hb
+            })
+        }
         return list
-    }, [allProblems, search, difficulty, category, tag, showPinned])
+    }, [allProblems, search, difficulty, category, tag, showPinned, mixedMode])
 
     // Available tags from non-HR problems (HR problems don't use algorithmic tags)
     const availableTags = useMemo(() => {
@@ -218,7 +256,7 @@ export default function ProblemsPage() {
     // Whether the current category filter is HR
     const isHRFilter = category === 'HR'
 
-    const hasFilters = difficulty || tag || search || showPinned || category
+    const hasFilters = difficulty || tag || search || showPinned || category || mixedMode
 
     function clearFilters() {
         setSearch('')
@@ -226,6 +264,7 @@ export default function ProblemsPage() {
         setCategory('')
         setTag('')
         setShowPinned(false)
+        setMixedMode(false)
     }
 
     // Difficulty filter options — label changes when HR category is selected
@@ -426,6 +465,27 @@ export default function ProblemsPage() {
                             )}
                         >
                             📌 Pinned
+                        </button>
+                        {/* Mixed Mode — randomizes the filtered list so
+                            categories interleave. Rohrer & Taylor (2007):
+                            interleaved practice produces ~43% better
+                            retention at test time than blocked practice. */}
+                        <button
+                            onClick={() => setMixedMode(v => !v)}
+                            title={
+                                mixedMode
+                                    ? 'Mixed Mode on — problems randomized across categories'
+                                    : 'Mix categories — harder in the moment, better at interview time'
+                            }
+                            className={cn(
+                                'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg',
+                                'text-[11px] font-semibold border transition-all duration-150',
+                                mixedMode
+                                    ? 'bg-purple-400/10 border-purple-400/25 text-purple-300'
+                                    : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                            )}
+                        >
+                            🔀 Mixed Mode
                         </button>
                     </div>
                 </div>
