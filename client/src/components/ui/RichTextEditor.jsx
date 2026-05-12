@@ -1,6 +1,7 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
+// StarterKit bundles Underline as of v2.12 — don't import it separately
+// or Tiptap logs a "duplicate extension names" warning at runtime.
 import Placeholder from '@tiptap/extension-placeholder'
 import { cn } from '@utils/cn'
 
@@ -52,7 +53,6 @@ export function RichTextEditor({
                     },
                 },
             }),
-            Underline,
             Placeholder.configure({
                 placeholder,
                 emptyEditorClass:
