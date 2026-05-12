@@ -73,23 +73,48 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                             {problem.title}
                         </h3>
                         {problem.sourceUrl && (
-                            <a
-                                href={problem.sourceUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-brand-fg-soft hover:text-brand-200 transition-colors
-                               flex items-center gap-1 mb-2"
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2"
-                                    strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                    <polyline points="15 3 21 3 21 9" />
-                                    <line x1="10" y1="14" x2="21" y2="3" />
-                                </svg>
-                                View on {problem.source || 'Source'}
-                            </a>
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                                <a
+                                    href={problem.sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-brand-fg-soft hover:text-brand-200 transition-colors
+                                   flex items-center gap-1"
+                                    onClick={e => e.stopPropagation()}
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                        <polyline points="15 3 21 3 21 9" />
+                                        <line x1="10" y1="14" x2="21" y2="3" />
+                                    </svg>
+                                    View on {problem.source || 'Source'}
+                                </a>
+                                {/* Confidence indicator — admins should manually
+                                    verify medium/low URLs before approving. */}
+                                {problem.urlConfidence === 'high' && (
+                                    <span className="text-[9px] font-bold px-1.5 py-px rounded-full border bg-success-soft border-success-line text-success-fg">
+                                        ✓ URL verified
+                                    </span>
+                                )}
+                                {problem.urlConfidence === 'medium' && (
+                                    <span
+                                        className="text-[9px] font-bold px-1.5 py-px rounded-full border bg-warning-soft border-warning-line text-warning-fg"
+                                        title="AI wasn't 100% sure this is the right URL — verify before approving"
+                                    >
+                                        ⚠ URL unverified
+                                    </span>
+                                )}
+                                {problem.urlConfidence === 'low' && (
+                                    <span
+                                        className="text-[9px] font-bold px-1.5 py-px rounded-full border bg-danger-soft border-danger-line text-danger-fg"
+                                        title="AI was guessing — showing a platform search URL as fallback. Edit before approving."
+                                    >
+                                        ✗ Search fallback — edit before approving
+                                    </span>
+                                )}
+                            </div>
                         )}
                         <div className="flex flex-wrap gap-1.5 mb-2">
                             {problem.tags?.slice(0, 5).map(t => (

@@ -16,6 +16,7 @@ import {
   hasBothApproaches,
   isCodingSolution,
 } from "../utils/solutionSignals.js";
+import { resolveGeneratedSourceUrl } from "../utils/platformSearch.js";
 
 // ============================================================================
 // AI SOLUTION REVIEW (RAG-Enhanced, Team-Scoped)
@@ -1349,12 +1350,17 @@ export async function generateProblemsAI(req, res) {
           difficulty: selection.difficulty,
           category,
           source: selection.platform,
-          // HR problems never have external source URLs
-          sourceUrl: isHRProblem
-            ? ""
-            : selection.urlConfidence === "low"
-              ? ""
-              : selection.url || "",
+          // Policy lives in utils/platformSearch.js. Key behavior:
+          //   low confidence OR missing URL → platform search URL,
+          //   high/medium → the AI-provided URL,
+          //   HR → always empty.
+          sourceUrl: resolveGeneratedSourceUrl({
+            isHRProblem,
+            urlConfidence: selection.urlConfidence,
+            url: selection.url,
+            platform: selection.platform,
+            title: selection.title,
+          }),
           description: content.description || "",
           // HR: realWorldContext and useCases are empty (not applicable)
           realWorldContext: isHRProblem ? "" : content.realWorldContext || "",
@@ -1390,9 +1396,16 @@ export async function generateProblemsAI(req, res) {
           difficulty: selection.difficulty,
           category,
           source: selection.platform,
-          // Clear URL on failure — content generation failure means
-          // we couldn't verify the URL either
-          sourceUrl: "",
+          // Content generation failed, so we can't trust the URL either;
+          // fall back to a platform search so the admin still has
+          // something to click when curating.
+          sourceUrl: resolveGeneratedSourceUrl({
+            isHRProblem: category === "HR",
+            urlConfidence: "low",
+            url: null,
+            platform: selection.platform,
+            title: selection.title,
+          }),
           description: `Problem: ${selection.title}\nPlease look up this problem on LeetCode for the full description.`,
           realWorldContext: "",
           useCases: "",
