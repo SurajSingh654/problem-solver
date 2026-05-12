@@ -17,6 +17,7 @@ import {
   isCodingSolution,
 } from "../utils/solutionSignals.js";
 import { resolveGeneratedSourceUrl } from "../utils/platformSearch.js";
+import { findSimilarTitles } from "../utils/titleSimilarity.js";
 
 // ============================================================================
 // AI SOLUTION REVIEW (RAG-Enhanced, Team-Scoped)
@@ -1279,6 +1280,16 @@ export async function generateProblemsAI(req, res) {
       return error(res, "AI failed to select problems.", 500);
     }
 
+    // Pre-fetch existing team titles ONCE for duplicate detection below.
+    // Cheap — just id + title, no description or embeddings. At 500 problems
+    // this is ~5 KB over the wire; in-memory token-Jaccard per generated
+    // title is microseconds. If a team ever reaches 10k problems, move
+    // this to a raw SQL trigram query instead.
+    const existingTitles = await prisma.problem.findMany({
+      where: { teamId },
+      select: { id: true, title: true },
+    });
+
     // ── STAGE 3: Content Generation (PARALLEL) ──────────
     // One focused call per problem, all running simultaneously.
     // If one fails, that problem returns partial data — others succeed.
@@ -1374,6 +1385,10 @@ export async function generateProblemsAI(req, res) {
           followUpQuestions: content.followUpQuestions || [],
           whySelected: selection.whySelected || "",
           urlConfidence: selection.urlConfidence || "high",
+          // Duplicate detection: token-Jaccard against every existing
+          // team title. Empty array = no likely duplicates. Admin sees
+          // a warning chip on the preview card when this is non-empty.
+          similarTo: findSimilarTitles(selection.title, existingTitles),
           // HR: pass hrQuestionCategory through for categoryData storage
           // Uses content.hrQuestionCategory (from Stage 3 AI response) or
           // falls back to selection.hrQuestionCategory (from Stage 2 selection)
@@ -1415,6 +1430,7 @@ export async function generateProblemsAI(req, res) {
           companyTags: [],
           followUpQuestions: [],
           whySelected: selection.whySelected || "",
+          similarTo: findSimilarTitles(selection.title, existingTitles),
           contentGenerationFailed: true,
         };
       }

@@ -206,15 +206,16 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'duplicate-problem-detection',
-        phase: 'NOW',
+        phase: 'DONE',
+        shippedAt: '2026-05-12',
         theme: 'Admin Experience',
         priority: 'HIGH',
         effort: 'Small',
         title: 'Duplicate Problem Detection at Generation',
-        impact: 'Admins are warned when a newly-generated problem looks like one that already exists in the team — preventing accidental duplicates that dilute practice effectiveness.',
-        description: 'Before approving a batch of AI-generated problems, check each generated title against existing team problems via fuzzy match. Flag candidates with confidence score.',
-        why: 'Duplicates are subtle; AI sometimes regenerates variants of existing problems. Silent duplicates waste admin time and confuse members.',
-        technicalNotes: 'Server: add similarity check using existing embeddings (problems.embedding) — generateProblemsAI fetches top-5 most similar existing problems per generated title. Return alongside the problem payload. Client: show warning badge on GeneratedProblemCard if similarity > threshold.',
+        impact: 'Each AI-generated problem preview card now shows a "⚠️ Possible duplicate" panel listing any existing team problems whose titles share ≥50% of their content words — with an overlap percentage per match. Admins catch "Two Sum II" vs existing "Two Sum" before approving.',
+        description: 'Token-Jaccard similarity over lowercased, stopword-filtered, single-char-filtered title tokens. Existing team titles fetched once per generation batch (id + title only). Top 3 matches above threshold attached to each generated problem as similarTo.',
+        why: 'Silent duplicates waste admin time, confuse members, and dilute practice diversity. Detection costs microseconds in memory — at 10k problems we\'d move it to a raw trigram query, but token-Jaccard is right for the current scale.',
+        technicalNotes: 'server/src/utils/titleSimilarity.js (tokenJaccard + findSimilarTitles). generateProblemsAI prefetches existing titles before Stage 3, attaches similarTo to both success and partial-fail return shapes. Client GeneratedProblemCard renders the warning panel above the URL row.',
     },
 
     {

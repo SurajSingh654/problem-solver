@@ -72,6 +72,27 @@ function GeneratedProblemCard({ problem, index, onApprove, onReject, isApproving
                         <h3 className="text-sm font-bold text-text-primary mb-1">
                             {problem.title}
                         </h3>
+                        {/* Duplicate-candidate warning — token-Jaccard match
+                            against existing team problem titles. Anything
+                            >= 50% word overlap shows up here. */}
+                        {problem.similarTo?.length > 0 && (
+                            <div className="mb-2 p-2 bg-warning-soft border border-warning-line rounded-lg">
+                                <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-1 flex items-center gap-1">
+                                    <span>⚠️</span>
+                                    Possible duplicate
+                                </p>
+                                <ul className="space-y-0.5">
+                                    {problem.similarTo.map(match => (
+                                        <li key={match.id} className="text-[11px] text-text-secondary leading-tight">
+                                            <span className="text-text-primary font-semibold">{match.title}</span>
+                                            <span className="text-text-disabled ml-1.5 tabular-nums">
+                                                ({Math.round(match.score * 100)}% overlap)
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                         {problem.sourceUrl && (
                             <div className="flex items-center gap-2 flex-wrap mb-2">
                                 <a
