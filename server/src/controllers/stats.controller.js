@@ -2699,3 +2699,75 @@ export async function generateReadinessVerdict(req, res) {
     return error(res, "Failed to generate readiness verdict.", 500);
   }
 }
+
+// ============================================================================
+// VERDICT AUDIT (SUPER_ADMIN)
+// ============================================================================
+//
+// Read-only view of the VerdictLog table for spot-checking LLM output
+// quality and prompt health. Two pieces of data matter most:
+//
+//   1. **Fallback rate** over the last 7 days. Spike = prompt regression
+//      (or OpenAI outage). We expect < 5% in steady state.
+//   2. **Individual verdicts** — expand a row to see the exact evidence
+//      the model was given and the JSON it emitted. Catching one clearly-
+//      wrong verdict tells you the prompt needs a rule.
+//
+// Pagination via offset + limit; filter by `usedFallback=true` to focus
+// on the ones that failed validation.
+// ============================================================================
+export async function getVerdictAudit(req, res) {
+  try {
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 25);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const fallbackOnly = req.query.fallbackOnly === "true";
+
+    const where = fallbackOnly ? { usedFallback: true } : {};
+
+    // 7-day fallback rate — two counts in parallel.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [verdicts, totalCount, recentTotal, recentFallback] = await Promise.all([
+      prisma.verdictLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          userId: true,
+          teamId: true,
+          inputHash: true,
+          inputPayload: true,
+          verdictJson: true,
+          usedFallback: true,
+          createdAt: true,
+          user: { select: { id: true, name: true, email: true } },
+          team: { select: { id: true, name: true, isPersonal: true } },
+        },
+      }),
+      prisma.verdictLog.count({ where }),
+      prisma.verdictLog.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      prisma.verdictLog.count({
+        where: { createdAt: { gte: sevenDaysAgo }, usedFallback: true },
+      }),
+    ]);
+
+    const fallbackRate =
+      recentTotal > 0 ? Math.round((recentFallback / recentTotal) * 1000) / 10 : 0;
+
+    return success(res, {
+      verdicts,
+      pagination: { total: totalCount, limit, offset },
+      stats: {
+        windowDays: 7,
+        totalVerdicts: recentTotal,
+        fallbackVerdicts: recentFallback,
+        fallbackRatePct: fallbackRate,
+      },
+    });
+  } catch (err) {
+    console.error("Verdict audit error:", err);
+    return error(res, "Failed to load verdict audit.", 500);
+  }
+}

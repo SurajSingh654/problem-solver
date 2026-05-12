@@ -78,6 +78,7 @@ const SuperAdminAnalyticsPage = lazy(() => import('@pages/superadmin/SuperAdminA
 const TodoPage = lazy(() => import('@pages/superadmin/TodoPage'))
 const FeedbackPage = lazy(() => import('@pages/FeedbackPage'))
 const FeedbackInboxPage = lazy(() => import('@pages/superadmin/FeedbackInboxPage'))
+const VerdictsAuditPage = lazy(() => import('@pages/superadmin/VerdictsAuditPage'))
 
 // ============================================================================
 // QUERY CLIENT
@@ -171,6 +172,7 @@ export default function App() {
             <Route path="/super-admin/users" element={<Lazy><AllUsersPage /></Lazy>} />
             <Route path="/super-admin/analytics" element={<Lazy><SuperAdminAnalyticsPage /></Lazy>} />
             <Route path="/super-admin/feedback" element={<Lazy><FeedbackInboxPage /></Lazy>} />
+            <Route path="/super-admin/verdicts" element={<Lazy><VerdictsAuditPage /></Lazy>} />
             {/* SuperAdmin also needs profile + settings within their layout */}
             <Route path="/super-admin/profile/:userId" element={<ProfilePage />} />
             <Route path="/super-admin/profile" element={<ProfilePage />} />

@@ -9,6 +9,7 @@ import {
   analyzePlatformHealth,
   getLatestAnalysis,
 } from "../controllers/platform.controller.js";
+import { getVerdictAudit } from "../controllers/stats.controller.js";
 
 const router = Router();
 
@@ -18,5 +19,8 @@ router.use(requireSuperAdmin);
 router.get("/health", getPlatformHealth);
 router.post("/health/analyze", analyzePlatformHealth);
 router.get("/health/analysis", getLatestAnalysis);
+
+// Verdict audit viewer — paginated VerdictLog rows + 7-day fallback rate.
+router.get("/verdicts", getVerdictAudit);
 
 export default router;
