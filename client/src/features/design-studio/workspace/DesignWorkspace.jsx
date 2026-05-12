@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
@@ -17,19 +17,38 @@ import ScaleAnalysisView from './ScaleAnalysisView'
 import FlowSimulationView from './FlowSimulationView'
 import EvaluationResultsView from './EvaluationResultsView'
 import { SD_PHASES, LLD_PHASES } from '../constants/phases'
+import { useSaveCoordinator } from '../hooks/useSaveCoordinator'
+import { usePhaseTimer } from '../hooks/usePhaseTimer'
+
+// 30-second heartbeat for long-idle sessions so totalTimeSpent stays fresh
+// even when the user is thinking in a single phase without touching the
+// canvas or textarea. Purely additive — the coordinator also saves
+// timing on every phase switch and on pause/exit.
+const HEARTBEAT_MS = 30_000
 
 // ══════════════════════════════════════════════════════════════════════════
-// MAIN DESIGN WORKSPACE (updated with validate mode)
+// DESIGN WORKSPACE — shell around the five view modes + the save coordinator
 // ══════════════════════════════════════════════════════════════════════════
 export default function DesignWorkspace({ sessionId, onBack }) {
     const navigate = useNavigate()
     const { data: session, isLoading, refetch } = useDesignSession(sessionId)
+
     const savePhase = useSavePhase()
     const saveDiagram = useSaveDiagram()
     const updateTiming = useUpdateTiming()
     const generateScenarios = useGenerateScenarios()
     const updateSessionStatus = useUpdateSessionStatus()
 
+    const coordinator = useSaveCoordinator({
+        sessionId,
+        savePhaseMutation: savePhase,
+        saveDiagramMutation: saveDiagram,
+        updateTimingMutation: updateTiming,
+    })
+
+    // Local editable state — source of truth for what the user is editing
+    // right now. Seeded ONCE from server on first load; refetches don't
+    // clobber it (see seed effect below).
     const [activePhaseIdx, setActivePhaseIdx] = useState(0)
     const [phaseContent, setPhaseContent] = useState({})
     const [diagramData, setDiagramData] = useState(null)
@@ -37,43 +56,43 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     const [dataFlow, setDataFlow] = useState('')
     const [aiResponse, setAiResponse] = useState(null)
     const [panelHeight, setPanelHeight] = useState(35)
-    const [elapsedTime, setElapsedTime] = useState(0)
     const [annotationsCollapsed, setAnnotationsCollapsed] = useState(true)
     const [dataFlowCollapsed, setDataFlowCollapsed] = useState(true)
     const [workspaceMode, setWorkspaceMode] = useState('design') // 'design' | 'scenarios' | 'scale' | 'flow' | 'evaluation'
 
-    const debounceRef = useRef(null)
-    const diagramDebounceRef = useRef(null)
-    const annotationsDebounceRef = useRef(null)
-    const dataFlowDebounceRef = useRef(null)
-    const timerRef = useRef(null)
     const dragRef = useRef(null)
-    const elapsedTimeRef = useRef(0)
-    const diagramDataRef = useRef(null)
-    const dataFlowRef = useRef('')
-    const annotationsRef = useRef([])
-    // Per-phase time tracking — we record the elapsedTime at which the user
-    // entered the current phase, and accumulate deltas into phaseTimingsRef
-    // on every phase switch. This feeds the "time allocation" analysis in
-    // the final evaluation prompt.
-    const phaseEnterTimeRef = useRef(0)
-    const phaseTimingsRef = useRef({})
-    // Tracks whether we've already picked an initial workspace mode for this session.
-    // Without this, every background refetch would snap the user back to a server-chosen view.
     const initializedRef = useRef(false)
+
+    // Mirror refs for the three diagram-scope fields. Handlers write to
+    // the ref EAGERLY (same tick as setState) so a subsequent handler in
+    // the same tick sees the fresh value. Without this, two rapid edits
+    // in different fields (annotations then dataFlow) would have the
+    // second handler read stale `annotations` from closure — its
+    // queueDiagram call would overwrite the store's pending payload with
+    // the stale annotations, silently losing the first edit.
+    const diagramDataRef = useRef(null)
+    const annotationsRef = useRef([])
+    const dataFlowRef = useRef('')
 
     const phases = session?.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES
     const activePhase = phases[activePhaseIdx]
-    // Read-only mode: terminal statuses can't be edited. All user-triggered
-    // saves no-op, text inputs are readOnly, and edit action buttons are hidden.
     const isReadOnly = session?.status === 'COMPLETED' || session?.status === 'ABANDONED'
+
+    // Phase timer owns elapsedTime + phaseTimings. Hooks up AFTER phases
+    // are derived so it knows what phaseId to attribute time to.
+    const initialActiveIdx = Math.min(
+        Math.max(0, session?.currentPhase || 0),
+        phases.length - 1,
+    )
+    const { elapsedTime, recordPhaseExit, setActivePhaseId, buildTimingPayload } = usePhaseTimer({
+        session,
+        phases,
+        initialActiveIdx,
+    })
 
     // Seed local editable state from the server ONCE, on first session load.
     // Subsequent session refetches (triggered by mutations) must NOT overwrite
-    // local state or we'll clobber in-flight keystrokes / diagram edits that
-    // the user made after the last debounced save began. Server-generated
-    // fields (scenarios, evaluation) are read directly from the session prop
-    // by the relevant views — no local mirror needed.
+    // local state or we'll clobber in-flight keystrokes.
     useEffect(() => {
         if (!session || initializedRef.current) return
         initializedRef.current = true
@@ -81,41 +100,33 @@ export default function DesignWorkspace({ sessionId, onBack }) {
         setDiagramData(session.diagramData || null)
         setAnnotations(session.componentAnnotations || [])
         setDataFlow(session.dataFlowDescription || '')
-        setElapsedTime(session.totalTimeSpent || 0)
-        phaseTimingsRef.current = session.phaseTimings || {}
-        // Seed activePhase from server so users resume where they left off.
+        // Seed the mirror refs too so the first edit reads correct values.
+        diagramDataRef.current = session.diagramData || null
+        annotationsRef.current = session.componentAnnotations || []
+        dataFlowRef.current = session.dataFlowDescription || ''
         const startIdx = Math.min(
             Math.max(0, session.currentPhase || 0),
             (session.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES).length - 1,
         )
         setActivePhaseIdx(startIdx)
-        phaseEnterTimeRef.current = session.totalTimeSpent || 0
+        setActivePhaseId(
+            (session.designType === 'SYSTEM_DESIGN' ? SD_PHASES : LLD_PHASES)[startIdx]?.id ?? null,
+        )
         if (session.status === 'COMPLETED' && session.evaluation) {
             setWorkspaceMode('evaluation')
         } else if (session.status === 'VALIDATING' && session.scenarios?.length > 0) {
             setWorkspaceMode('scenarios')
         } else if (session.status === 'COMPLETED') {
-            // Completed without evaluation — show scenarios if any, else design view
             setWorkspaceMode(session.scenarios?.length > 0 ? 'scenarios' : 'design')
         }
-    }, [session])
+    }, [session, setActivePhaseId])
 
-    // beforeunload guard — warn the user if they try to close the tab while
-    // a debounce is still pending or a mutation is in flight. The modern
-    // browser behaviour is to show a generic confirmation; the returnValue
-    // string is mostly ignored but required for compatibility.
+    // beforeunload guard — warn the user if anything is pending. The
+    // coordinator handles `inflightScope` AND pending queues uniformly via
+    // hasPending(); the old code had to OR four debounce refs manually.
     useEffect(() => {
         const handler = (e) => {
-            const pendingDebounce =
-                debounceRef.current ||
-                diagramDebounceRef.current ||
-                annotationsDebounceRef.current ||
-                dataFlowDebounceRef.current
-            const pendingMutation =
-                savePhase.isPending ||
-                saveDiagram.isPending ||
-                updateTiming.isPending
-            if (pendingDebounce || pendingMutation) {
+            if (coordinator.hasPending()) {
                 e.preventDefault()
                 e.returnValue = ''
                 return ''
@@ -123,111 +134,75 @@ export default function DesignWorkspace({ sessionId, onBack }) {
         }
         window.addEventListener('beforeunload', handler)
         return () => window.removeEventListener('beforeunload', handler)
-    }, [savePhase.isPending, saveDiagram.isPending, updateTiming.isPending])
+    }, [coordinator])
 
-    // Mirror elapsedTime / diagramData / dataFlow / annotations into refs so
-    // long-lived intervals and debounced callbacks read fresh values without
-    // re-subscribing.
-    useEffect(() => { elapsedTimeRef.current = elapsedTime }, [elapsedTime])
-    useEffect(() => { diagramDataRef.current = diagramData }, [diagramData])
-    useEffect(() => { dataFlowRef.current = dataFlow }, [dataFlow])
-    useEffect(() => { annotationsRef.current = annotations }, [annotations])
-
-    // Timer — stop when session is terminal so completed sessions don't keep accumulating
-    useEffect(() => {
-        if (session?.status === 'COMPLETED' || session?.status === 'ABANDONED') return
-        timerRef.current = setInterval(() => setElapsedTime(prev => prev + 1), 1000)
-        return () => clearInterval(timerRef.current)
-    }, [session?.status])
-
-    // Save timing every 30s — reads elapsedTime / phaseTimings from refs, so
-    // the interval is created once per session and not torn down on every tick.
-    // phaseTimings is sent too so a tab-close / crash doesn't lose the running
-    // delta for the currently-active phase.
+    // 30-second timing heartbeat so long-idle sessions still persist
+    // totalTimeSpent. Routed through the coordinator (not a direct
+    // mutation) so it queues correctly if another save is in flight.
     useEffect(() => {
         if (!sessionId) return
-        const interval = setInterval(() => {
-            if (elapsedTimeRef.current > 0) {
-                updateTiming.mutate({
-                    sessionId,
-                    totalTimeSpent: elapsedTimeRef.current,
-                    phaseTimings: phaseTimingsRef.current,
-                })
-            }
-        }, 30000)
-        return () => clearInterval(interval)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionId])
+        if (session?.status === 'COMPLETED' || session?.status === 'ABANDONED') return
+        const i = setInterval(() => {
+            coordinator.queueTiming(buildTimingPayload(activePhaseIdx))
+        }, HEARTBEAT_MS)
+        return () => clearInterval(i)
+    }, [sessionId, session?.status, activePhaseIdx, coordinator, buildTimingPayload])
+
+    // ── Edit handlers ────────────────────────────────────────────────────
+    // Each handler updates LOCAL state for instant UI feedback and enqueues
+    // the save into the coordinator. Debouncing, coalescing, in-flight
+    // lock, and flush-on-exit are all handled by the coordinator.
 
     function handlePhaseChange(value) {
         if (isReadOnly) return
-        const newContent = { ...phaseContent, [activePhase.id]: value }
-        setPhaseContent(newContent)
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-        debounceRef.current = setTimeout(() => {
-            savePhase.mutate({ sessionId, phaseId: activePhase.id, content: value })
-        }, 1000)
+        setPhaseContent((prev) => ({ ...prev, [activePhase.id]: value }))
+        coordinator.queuePhase(activePhase.id, value)
     }
 
-    const handleDiagramChange = useCallback((data) => {
+    function handleDiagramChange(data) {
         if (isReadOnly) return
+        diagramDataRef.current = data
         setDiagramData(data)
-        if (diagramDebounceRef.current) clearTimeout(diagramDebounceRef.current)
-        diagramDebounceRef.current = setTimeout(() => {
-            saveDiagram.mutate({ sessionId, diagramData: data, componentAnnotations: annotations, dataFlowDescription: dataFlow })
-        }, 2000)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionId, annotations, dataFlow, isReadOnly])
+        // Always send FULL diagram state — server PATCH overwrites all
+        // three fields, and passing stale/missing ones would wipe them.
+        coordinator.queueDiagram({
+            diagramData: data,
+            annotations: annotationsRef.current,
+            dataFlow: dataFlowRef.current,
+        })
+    }
 
     function handleAnnotationsChange(newAnnotations) {
         if (isReadOnly) return
+        annotationsRef.current = newAnnotations
         setAnnotations(newAnnotations)
-        if (annotationsDebounceRef.current) clearTimeout(annotationsDebounceRef.current)
-        annotationsDebounceRef.current = setTimeout(() => {
-            saveDiagram.mutate({
-                sessionId,
-                diagramData: diagramDataRef.current,
-                componentAnnotations: newAnnotations,
-                dataFlowDescription: dataFlowRef.current,
-            })
-        }, 1500)
+        coordinator.queueDiagram({
+            diagramData: diagramDataRef.current,
+            annotations: newAnnotations,
+            dataFlow: dataFlowRef.current,
+        })
     }
 
     function handleDataFlowChange(newDataFlow) {
         if (isReadOnly) return
+        dataFlowRef.current = newDataFlow
         setDataFlow(newDataFlow)
-        if (dataFlowDebounceRef.current) clearTimeout(dataFlowDebounceRef.current)
-        dataFlowDebounceRef.current = setTimeout(() => {
-            saveDiagram.mutate({
-                sessionId,
-                diagramData: diagramDataRef.current,
-                componentAnnotations: annotationsRef.current,
-                dataFlowDescription: newDataFlow,
-            })
-        }, 1500)
+        coordinator.queueDiagram({
+            diagramData: diagramDataRef.current,
+            annotations: annotationsRef.current,
+            dataFlow: newDataFlow,
+        })
     }
 
-    // Single entry point for changing the active phase. Accumulates time spent
-    // on the phase being left, persists currentPhase + phaseTimings to the
-    // server, clears the AI response panel.
     function handlePhaseSwitch(newIdx) {
-        const prevPhaseId = phases[activePhaseIdx]?.id
-        if (prevPhaseId) {
-            const delta = Math.max(0, elapsedTimeRef.current - phaseEnterTimeRef.current)
-            if (delta > 0) {
-                const prev = phaseTimingsRef.current[prevPhaseId] || 0
-                phaseTimingsRef.current = { ...phaseTimingsRef.current, [prevPhaseId]: prev + delta }
-            }
-        }
-        phaseEnterTimeRef.current = elapsedTimeRef.current
+        // Move the phase-timer sentinel BEFORE changing React state so the
+        // delta is attributed to the correct phaseId.
+        setActivePhaseId(phases[newIdx]?.id ?? null)
         setActivePhaseIdx(newIdx)
         setAiResponse(null)
-        updateTiming.mutate({
-            sessionId,
-            totalTimeSpent: elapsedTimeRef.current,
-            phaseTimings: phaseTimingsRef.current,
-            currentPhase: newIdx,
-        })
+        // Phase switch is a meaningful checkpoint — flush timing right away
+        // so the server knows where the user is if they close the tab.
+        coordinator.queueTiming(buildTimingPayload(newIdx), { immediate: true })
     }
 
     function handleDragStart(e) {
@@ -244,63 +219,31 @@ export default function DesignWorkspace({ sessionId, onBack }) {
 
     async function handleStartValidation() {
         try {
+            await coordinator.flushAll()
             await generateScenarios.mutateAsync(sessionId)
             await refetch()
             setWorkspaceMode('scenarios')
         } catch { /* handled */ }
     }
 
-    // Accumulate the in-flight delta for the currently-active phase into
-    // phaseTimingsRef so the exit save includes it. Idempotent — resets
-    // phaseEnterTimeRef to the current elapsed so a repeat call is a no-op.
-    function accumulateCurrentPhaseTime() {
-        const currentPhaseId = phases[activePhaseIdx]?.id
-        if (!currentPhaseId) return
-        const delta = Math.max(0, elapsedTimeRef.current - phaseEnterTimeRef.current)
-        if (delta > 0) {
-            const prev = phaseTimingsRef.current[currentPhaseId] || 0
-            phaseTimingsRef.current = { ...phaseTimingsRef.current, [currentPhaseId]: prev + delta }
-            phaseEnterTimeRef.current = elapsedTimeRef.current
-        }
-    }
-
     async function handlePauseExit() {
-        // Flush any pending debounced saves before leaving. Auto-save keeps
-        // status at IN_PROGRESS so the session resumes exactly as left.
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-        if (diagramDebounceRef.current) clearTimeout(diagramDebounceRef.current)
-        if (annotationsDebounceRef.current) clearTimeout(annotationsDebounceRef.current)
-        if (dataFlowDebounceRef.current) clearTimeout(dataFlowDebounceRef.current)
-        accumulateCurrentPhaseTime()
-        if (elapsedTimeRef.current > 0) {
-            try {
-                await updateTiming.mutateAsync({
-                    sessionId,
-                    totalTimeSpent: elapsedTimeRef.current,
-                    phaseTimings: phaseTimingsRef.current,
-                    currentPhase: activePhaseIdx,
-                })
-            } catch { /* ignore */ }
-        }
+        // Record the in-flight phase delta so it's included in the final
+        // timing save. Idempotent — safe even if the user clicked
+        // mid-second.
+        recordPhaseExit()
+        coordinator.queueTiming(buildTimingPayload(activePhaseIdx))
+        // Flush everything pending before navigating away. awaits the
+        // coordinator's drain loop.
+        try { await coordinator.flushAll() } catch { /* saveError already set */ }
         onBack()
     }
 
     async function handleCompleteDesign() {
-        // Terminal transition — user chooses to finish without running AI eval.
-        // For the evaluation-backed completion path, they use "Validate Design" → "Get Final Evaluation".
         if (!window.confirm('Mark this design session as complete? You will no longer be able to edit it.')) return
         try {
-            accumulateCurrentPhaseTime()
-            if (elapsedTimeRef.current > 0) {
-                try {
-                    await updateTiming.mutateAsync({
-                        sessionId,
-                        totalTimeSpent: elapsedTimeRef.current,
-                        phaseTimings: phaseTimingsRef.current,
-                        currentPhase: activePhaseIdx,
-                    })
-                } catch { /* ignore */ }
-            }
+            recordPhaseExit()
+            coordinator.queueTiming(buildTimingPayload(activePhaseIdx))
+            await coordinator.flushAll()
             await updateSessionStatus.mutateAsync({ sessionId, status: 'COMPLETED' })
             onBack()
         } catch { /* handled by hook */ }
@@ -314,9 +257,15 @@ export default function DesignWorkspace({ sessionId, onBack }) {
 
     const hasEvaluation = !!session.evaluation
 
-    // Shared "View Problem" nav — rendered in each workspace-mode top bar
-    // when this session is linked to a Problem record. Compact button,
-    // same visual weight as other nav buttons.
+    // Legacy props — DesignView reads `savePhase`/`saveDiagram`/`updateTiming`
+    // `.isPending` to draw the green/warning save-status dot. Replace with a
+    // single `isSaving` derived from the coordinator so the UI matches the
+    // actual in-flight state.
+    const isSaving = coordinator.status === 'saving'
+    const savePhaseShim = { isPending: isSaving }
+    const saveDiagramShim = { isPending: isSaving }
+    const updateTimingShim = { isPending: isSaving }
+
     const viewProblemButton = session.problemId ? (
         <button
             type="button"
@@ -334,7 +283,6 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     if (workspaceMode === 'scenarios') {
         return (
             <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-                {/* Top bar */}
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default bg-surface-1 flex-shrink-0">
                     <div className="flex items-center gap-3">
                         <button onClick={onBack} className="text-text-tertiary hover:text-text-primary transition-colors">
@@ -538,9 +486,9 @@ export default function DesignWorkspace({ sessionId, onBack }) {
             onCompleteDesign={handleCompleteDesign}
             onStartValidation={handleStartValidation}
             onSwitchMode={setWorkspaceMode}
-            savePhase={savePhase}
-            saveDiagram={saveDiagram}
-            updateTiming={updateTiming}
+            savePhase={savePhaseShim}
+            saveDiagram={saveDiagramShim}
+            updateTiming={updateTimingShim}
             generateScenarios={generateScenarios}
             updateSessionStatus={updateSessionStatus}
         />
