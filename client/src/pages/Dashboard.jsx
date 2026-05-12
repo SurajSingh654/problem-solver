@@ -27,9 +27,11 @@ import { useTeamContext } from '@hooks/useTeamContext'
 import { useDashboardData, useTeamActivity } from '@hooks/useReport'
 import { useReviewQueue } from '@hooks/useSolutions'
 import { useRecommendations } from '@hooks/useRecommendations'
+import { useRecallAnalytics } from '@hooks/useRecallAnalytics'
 import { ActivityFeed } from '@components/features/ActivityFeed'
 import { Recommendations } from '@components/features/Recommendations'
 import { ReviewPreview } from '@components/features/ReviewPreview'
+import { RecallSparkline } from '@components/features/charts/RecallSparkline'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { PROBLEM_CATEGORIES, DIMENSIONS } from '@utils/constants'
@@ -191,6 +193,53 @@ function VelocitySparkline({ weekly }) {
         )
       })}
     </div>
+  )
+}
+
+// ── Recall mini-tile ───────────────────────────────────
+// Compact card showing overall recall rate + 12-week sparkline.
+// Hidden until the user has accumulated at least one review attempt so
+// a fresh account doesn't see a vestigial empty card.
+function RecallMiniTile() {
+  const navigate = useNavigate()
+  const { data, isLoading } = useRecallAnalytics()
+  if (isLoading || !data || data.overall.totalAttempts === 0) return null
+
+  const { overall, trend } = data
+  const pct = Math.round(overall.recallRate * 100)
+  const tone =
+    pct >= 80 ? { text: 'text-success-fg', bar: 'bg-success' } :
+      pct >= 50 ? { text: 'text-warning-fg', bar: 'bg-warning' } :
+        { text: 'text-danger-fg', bar: 'bg-danger' }
+
+  return (
+    <motion.button
+      type="button"
+      onClick={() => navigate('/review')}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="w-full text-left bg-surface-1 border border-border-default rounded-xl p-4 relative overflow-hidden hover:bg-surface-2/60 transition-colors"
+    >
+      <div className={cn('absolute top-0 left-0 right-0 h-0.5', tone.bar)} />
+      <div className="flex items-center gap-4">
+        <div className="flex-shrink-0">
+          <div className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-0.5">
+            Recall quality
+          </div>
+          <div className={cn('text-3xl font-extrabold leading-none tabular-nums', tone.text)}>
+            {pct}%
+          </div>
+          <div className="text-[10px] text-text-disabled mt-1">
+            across {overall.totalAttempts} reviews · click to open queue
+          </div>
+        </div>
+        {trend.length >= 2 && (
+          <div className="flex-1 min-w-0">
+            <RecallSparkline data={trend} />
+          </div>
+        )}
+      </div>
+    </motion.button>
   )
 }
 
@@ -490,6 +539,9 @@ export default function Dashboard() {
           )
         })}
       </div>
+
+      {/* ── Recall quality mini-tile ────────────────── */}
+      <RecallMiniTile />
 
       {/* ── SECTION 2: Readiness + 6D Dimensions ────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

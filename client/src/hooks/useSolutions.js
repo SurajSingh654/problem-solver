@@ -87,6 +87,10 @@ export function useSubmitReview() {
       queryClient.invalidateQueries({
         queryKey: [...teamQueryKey, "report"],
       });
+      // Recall analytics recomputes from ReviewAttempt rows
+      queryClient.invalidateQueries({
+        queryKey: [...teamQueryKey, "recall-analytics"],
+      });
     },
   });
 }

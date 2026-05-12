@@ -9,6 +9,7 @@ import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatRelativeDate, formatShortDate } from '@utils/formatters'
 import { CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
+import { RecallAnalyticsPanel } from '@components/features/charts/RecallAnalyticsPanel'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -1018,6 +1019,11 @@ export default function ReviewQueuePage() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Recall-quality analytics — collapsible panel */}
+            <div className="mb-6">
+                <RecallAnalyticsPanel />
+            </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

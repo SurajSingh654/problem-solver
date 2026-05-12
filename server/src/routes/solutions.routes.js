@@ -17,6 +17,7 @@ import {
   getReviewQueue,
   submitReview,
   getSolutionAttempts,
+  getRecallAnalytics,
 } from "../controllers/solutions.controller.js";
 
 const router = Router();
@@ -38,6 +39,8 @@ router.post(
   submitReview,
 );
 router.get("/review/queue", getReviewQueue);
+// Recall-quality analytics: overall + weekly trend + per-pattern
+router.get("/review/analytics", getRecallAnalytics);
 // Per-attempt snapshot history for a solution
 router.get("/:solutionId/attempts", getSolutionAttempts);
 

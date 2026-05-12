@@ -469,6 +469,97 @@ export async function getUserSolutions(req, res) {
 }
 
 // ============================================================================
+// GET RECALL-QUALITY ANALYTICS
+// ============================================================================
+// Returns three rollups over the user's ReviewAttempt rows in this team:
+//   overall: total count, recall rate (fraction with recalled=true),
+//            average confidence.
+//   trend: weekly buckets for the last 12 weeks so the client can draw a
+//          time-series chart of recall rate + avg confidence.
+//   byPattern: top 10 patterns the user reviews, each with attempt count,
+//              recall rate, avg confidence. Patterns come from the parent
+//              Solution.patterns[] column (flattened via unnest).
+//
+// All aggregation happens server-side in raw SQL — doing it in JS would
+// require fetching every ReviewAttempt + Solution, which scales poorly.
+// ============================================================================
+export async function getRecallAnalytics(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+
+    const [overallRows, trendRows, patternRows] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT
+          COUNT(*)::int AS total_attempts,
+          COALESCE(AVG(CASE WHEN ra.recalled THEN 1.0 ELSE 0.0 END), 0)::float AS recall_rate,
+          COALESCE(AVG(ra.confidence), 0)::float AS avg_confidence
+        FROM review_attempts ra
+        JOIN solutions s ON ra."solutionId" = s.id
+        WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
+      `,
+      prisma.$queryRaw`
+        SELECT
+          date_trunc('week', ra."createdAt")::date AS week_start,
+          COUNT(*)::int AS attempts,
+          COALESCE(AVG(CASE WHEN ra.recalled THEN 1.0 ELSE 0.0 END), 0)::float AS recall_rate,
+          COALESCE(AVG(ra.confidence), 0)::float AS avg_confidence
+        FROM review_attempts ra
+        JOIN solutions s ON ra."solutionId" = s.id
+        WHERE s."userId" = ${userId}
+          AND s."teamId" = ${teamId}
+          AND ra."createdAt" >= NOW() - INTERVAL '12 weeks'
+        GROUP BY week_start
+        ORDER BY week_start ASC
+      `,
+      prisma.$queryRaw`
+        SELECT
+          pattern,
+          COUNT(*)::int AS attempts,
+          COALESCE(AVG(CASE WHEN ra.recalled THEN 1.0 ELSE 0.0 END), 0)::float AS recall_rate,
+          COALESCE(AVG(ra.confidence), 0)::float AS avg_confidence
+        FROM review_attempts ra
+        JOIN solutions s ON ra."solutionId" = s.id
+        CROSS JOIN LATERAL unnest(s.patterns) AS pattern
+        WHERE s."userId" = ${userId} AND s."teamId" = ${teamId}
+        GROUP BY pattern
+        ORDER BY attempts DESC
+        LIMIT 10
+      `,
+    ]);
+
+    const overall = overallRows[0] || {
+      total_attempts: 0,
+      recall_rate: 0,
+      avg_confidence: 0,
+    };
+
+    return success(res, {
+      overall: {
+        totalAttempts: overall.total_attempts,
+        recallRate: overall.recall_rate,
+        avgConfidence: overall.avg_confidence,
+      },
+      trend: trendRows.map((r) => ({
+        weekStart: r.week_start,
+        attempts: r.attempts,
+        recallRate: r.recall_rate,
+        avgConfidence: r.avg_confidence,
+      })),
+      byPattern: patternRows.map((r) => ({
+        pattern: r.pattern,
+        attempts: r.attempts,
+        recallRate: r.recall_rate,
+        avgConfidence: r.avg_confidence,
+      })),
+    });
+  } catch (err) {
+    console.error("Recall analytics error:", err);
+    return error(res, "Failed to fetch recall analytics.", 500);
+  }
+}
+
+// ============================================================================
 // GET SOLUTION ATTEMPTS (history)
 // ============================================================================
 // Returns every SolutionAttempt row for a solution, newest first.
