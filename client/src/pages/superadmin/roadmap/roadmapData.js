@@ -259,16 +259,17 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'forgetting-curve-per-item',
-        phase: 'NEXT',
+        phase: 'DONE',
+        shippedAt: '2026-05-12',
         theme: 'Learning Science',
         priority: 'HIGH',
         effort: 'Small',
         title: 'Per-Item Forgetting Curve on Review Queue',
-        impact: 'Each due item in the review queue shows a mini retention curve (100% → current %) so the member sees exactly how much they stand to forget if they skip. Makes the cost of inaction visceral.',
-        description: 'Complements the aggregate recall analytics panel. For each due item compute retention via estimateRetention(daysSince, ef, reps) and render a sparkline. Color coded: green > 70%, yellow 40–70%, red < 40%.',
-        why: 'Aggregate trend answers "am I improving?"; per-item decay answers "which one is about to fall off a cliff?" Both are needed.',
+        impact: 'Each due item shows a filled Ebbinghaus decay sparkline with a dashed projection into the future — the member sees at a glance how much they\'ve already forgotten and how much more they\'ll forget if they skip.',
+        description: 'Replaced the flat "~X% retained" pill with a tiny per-row SVG curve. Past retention is filled; dashed tail projects forward. Color bucket (green >70, yellow 40-70, red <40) mirrors the recall-by-pattern table palette.',
+        why: 'Aggregate trend answers "am I improving?"; per-item decay answers "which one is about to fall off a cliff?"',
         researchBasis: 'Ebbinghaus (1885) forgetting curve. Cepeda et al. (2006) — visualizing retention increases review completion.',
-        technicalNotes: 'In ReviewQueuePage, for each due item compute retention inline (util already exists at server/src/utils/sm2.js::estimateRetention; getReviewQueue already returns retentionEstimate). Render a tiny sparkline per row.',
+        technicalNotes: 'New ForgettingCurve component (plain SVG, not recharts — 20+ per-row instances would be too heavy). Also fixed a retention-math bug in getReviewQueue that used overdueDays instead of daysSinceReview, systematically over-estimating retention for overdue items.',
     },
 
     {

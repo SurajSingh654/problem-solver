@@ -329,16 +329,27 @@ export async function getReviewQueue(req, res) {
       }),
     ]);
 
-    // Compute overdue days, retention estimate, and leech flag for each due item
+    // Compute overdue days, retention estimate, and leech flag for each due item.
+    // `overdueDays` counts from the scheduled next-review date, but the
+    // retention curve is a function of days since the LAST review (or the
+    // submission for never-reviewed items). Using overdueDays here was
+    // systematically over-estimating retention for overdue items.
     const LEECH_THRESHOLD = 8;
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
     const enrichedDue = dueReviews.map((s) => {
-      const daysSince = Math.max(
+      const overdueDays = Math.max(
         0,
-        (now.getTime() - new Date(s.nextReviewDate).getTime()) /
-          (1000 * 60 * 60 * 24),
+        (now.getTime() - new Date(s.nextReviewDate).getTime()) / MS_PER_DAY,
+      );
+      const referenceDate = s.lastReviewedAt
+        ? new Date(s.lastReviewedAt)
+        : new Date(s.createdAt);
+      const daysSinceReview = Math.max(
+        0,
+        (now.getTime() - referenceDate.getTime()) / MS_PER_DAY,
       );
       const retentionEstimate = estimateRetention(
-        daysSince,
+        daysSinceReview,
         s.sm2EasinessFactor ?? 2.5,
         s.sm2Repetitions ?? 0,
       );
@@ -346,7 +357,11 @@ export async function getReviewQueue(req, res) {
 
       return {
         ...s,
-        overdueDays: Math.floor(daysSince),
+        overdueDays: Math.floor(overdueDays),
+        // Days since the review that set this interval — what the client
+        // uses to draw the forgetting curve. Rounded to 2 decimal places
+        // so sparkline sampling is deterministic.
+        daysSinceReview: Math.round(daysSinceReview * 100) / 100,
         retentionEstimate: Math.round(retentionEstimate * 100),
         isLeech,
       };

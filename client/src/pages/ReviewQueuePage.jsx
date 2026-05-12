@@ -10,6 +10,7 @@ import { cn } from '@utils/cn'
 import { formatRelativeDate, formatShortDate } from '@utils/formatters'
 import { CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
 import { RecallAnalyticsPanel } from '@components/features/charts/RecallAnalyticsPanel'
+import { ForgettingCurve } from '@components/features/charts/ForgettingCurve'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -721,17 +722,18 @@ function DueCard({ solution, index, onReview }) {
                                                 : '↓ Fragile'}
                                     </span>
                                 )}
-                                {/* Retention estimate from Ebbinghaus curve */}
+                                {/* Per-item Ebbinghaus forgetting curve — dashed
+                                    tail shows projected decay if skipped */}
                                 {retentionEstimate !== null && (
-                                    <span className={cn(
-                                        'text-[9px] font-mono font-bold px-1.5 py-px rounded-full border',
-                                        retentionEstimate >= 70
-                                            ? 'bg-success-soft text-success-fg border-success-line'
-                                            : retentionEstimate >= 40
-                                                ? 'bg-warning-soft text-warning-fg border-warning-line'
-                                                : 'bg-danger-soft text-danger-fg border-danger-line'
-                                    )}>
-                                        ~{retentionEstimate}% retained
+                                    <span
+                                        className="inline-flex items-center"
+                                        title={`~${retentionEstimate}% estimated retention (Ebbinghaus decay from last review)`}
+                                    >
+                                        <ForgettingCurve
+                                            ef={solution.sm2EasinessFactor ?? 2.5}
+                                            reps={solution.sm2Repetitions ?? 0}
+                                            daysSinceReview={solution.daysSinceReview ?? overdueDays ?? 0}
+                                        />
                                     </span>
                                 )}
                             </div>
