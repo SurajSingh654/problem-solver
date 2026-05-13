@@ -20,6 +20,26 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { broadcastToTeam } from "../services/websocket.service.js";
+import { aiComplete, AIError } from "../services/ai.service.js";
+import {
+  teachingSummaryPrompt,
+  teachingQuizPrompt,
+  teachingTopicCoveragePrompt,
+  TEACHING_SUMMARY_FEWSHOT,
+  TEACHING_QUIZ_FEWSHOT,
+  TEACHING_COVERAGE_FEWSHOT,
+} from "../services/ai.prompts.js";
+import {
+  validateTeachingSummary,
+  validateTeachingQuiz,
+  validateTeachingTopicCoverage,
+} from "../services/ai.validators.js";
+import {
+  buildFallbackTeachingSummary,
+  buildFallbackTeachingQuiz,
+  buildFallbackTeachingTopicCoverage,
+} from "../services/ai.fallbacks.js";
+import { AI_MODEL_FAST } from "../config/env.js";
 
 // Sessions a candidate user can see vs sessions a host/admin can see —
 // non-COMPLETED sessions hide the host's `notes` from non-host viewers.
@@ -932,5 +952,272 @@ export async function leaveTeachingSession(req, res) {
   } catch (err) {
     console.error("Leave teaching session error:", err);
     return error(res, "Failed to leave teaching session.", 500);
+  }
+}
+
+// ============================================================================
+// SUBMIT NOTES — host posts markdown notes; kicks off 3 AI surfaces async
+// ============================================================================
+//
+// Flow:
+//   1. Persist `notes` immediately and return success — the host shouldn't
+//      wait for the AI calls to round-trip.
+//   2. In the background, fire all three AI prompts in parallel via
+//      Promise.allSettled. Each is independently validated; on failure
+//      the matching deterministic fallback is persisted instead.
+//   3. The detail-page poll (3s for 30s after submit) sees the artifacts
+//      appear as they finish.
+//
+// Constraints:
+//   • Host only.
+//   • Session must be COMPLETED (notes are post-session).
+//   • Notes must be 50-20,000 chars (validator + LLM context guards).
+// ============================================================================
+async function runTeachingAiSurfaces({
+  sessionId,
+  topic,
+  notesMarkdown,
+  hostName,
+  hostUserId,
+  teamId,
+}) {
+  const hasNotes = isNonEmptyMarkdown(notesMarkdown);
+
+  // Build the three (system, user) pairs.
+  const summarySys = teachingSummaryPrompt({
+    topic,
+    notesMarkdown,
+    hostName,
+  });
+  const quizSys = teachingQuizPrompt({ topic, notesMarkdown });
+  const coverageSys = teachingTopicCoveragePrompt({ topic, notesMarkdown });
+
+  const callOpts = (system, user, fewShot, surface, temperature) => ({
+    systemPrompt: system,
+    userPrompt: user,
+    userId: hostUserId,
+    teamId,
+    model: AI_MODEL_FAST,
+    temperature,
+    maxTokens: 1500,
+    jsonMode: true,
+    fewShotMessages: fewShot,
+    surface,
+  });
+
+  const [summaryRes, quizRes, coverageRes] = await Promise.allSettled([
+    aiComplete(
+      callOpts(
+        summarySys.system,
+        summarySys.user,
+        TEACHING_SUMMARY_FEWSHOT,
+        "teaching:summary",
+        0.5,
+      ),
+    ),
+    aiComplete(
+      callOpts(
+        quizSys.system,
+        quizSys.user,
+        TEACHING_QUIZ_FEWSHOT,
+        "teaching:quiz",
+        0.6,
+      ),
+    ),
+    aiComplete(
+      callOpts(
+        coverageSys.system,
+        coverageSys.user,
+        TEACHING_COVERAGE_FEWSHOT,
+        "teaching:coverage",
+        0.3,
+      ),
+    ),
+  ]);
+
+  // Validate or fall back per-surface.
+  let summary;
+  if (summaryRes.status === "fulfilled") {
+    const check = validateTeachingSummary(summaryRes.value, { hasNotes });
+    if (check.valid) summary = summaryRes.value;
+    else {
+      console.warn(
+        `[teaching:summary] validation failed for session ${sessionId}: ${check.violations.join(", ")}`,
+      );
+      summary = {
+        ...buildFallbackTeachingSummary({ topic, notesMarkdown }),
+        _fallbackReason: check.violations,
+      };
+    }
+  } else {
+    console.warn(
+      `[teaching:summary] AI failed for session ${sessionId}: ${
+        summaryRes.reason?.code || summaryRes.reason?.message || "unknown"
+      }`,
+    );
+    summary = {
+      ...buildFallbackTeachingSummary({ topic, notesMarkdown }),
+      _fallbackReason: [
+        `llm-error:${summaryRes.reason?.code || summaryRes.reason?.message || "unknown"}`,
+      ],
+    };
+  }
+
+  let quiz;
+  if (quizRes.status === "fulfilled") {
+    const check = validateTeachingQuiz(quizRes.value);
+    if (check.valid) quiz = quizRes.value;
+    else {
+      console.warn(
+        `[teaching:quiz] validation failed for session ${sessionId}: ${check.violations.join(", ")}`,
+      );
+      quiz = {
+        ...buildFallbackTeachingQuiz({ topic }),
+        _fallbackReason: check.violations,
+      };
+    }
+  } else {
+    console.warn(
+      `[teaching:quiz] AI failed for session ${sessionId}: ${
+        quizRes.reason?.code || quizRes.reason?.message || "unknown"
+      }`,
+    );
+    quiz = {
+      ...buildFallbackTeachingQuiz({ topic }),
+      _fallbackReason: [
+        `llm-error:${quizRes.reason?.code || quizRes.reason?.message || "unknown"}`,
+      ],
+    };
+  }
+
+  let topicCoverage;
+  if (coverageRes.status === "fulfilled") {
+    const check = validateTeachingTopicCoverage(coverageRes.value);
+    if (check.valid) topicCoverage = coverageRes.value;
+    else {
+      console.warn(
+        `[teaching:coverage] validation failed for session ${sessionId}: ${check.violations.join(", ")}`,
+      );
+      topicCoverage = {
+        ...buildFallbackTeachingTopicCoverage({ topic, notesMarkdown }),
+        _fallbackReason: check.violations,
+      };
+    }
+  } else {
+    console.warn(
+      `[teaching:coverage] AI failed for session ${sessionId}: ${
+        coverageRes.reason?.code || coverageRes.reason?.message || "unknown"
+      }`,
+    );
+    topicCoverage = {
+      ...buildFallbackTeachingTopicCoverage({ topic, notesMarkdown }),
+      _fallbackReason: [
+        `llm-error:${coverageRes.reason?.code || coverageRes.reason?.message || "unknown"}`,
+      ],
+    };
+  }
+
+  // Persist all three at once. If the session was deleted between
+  // submit and now, updateMany no-ops.
+  await prisma.teachingSession
+    .updateMany({
+      where: { id: sessionId },
+      data: {
+        summary,
+        quiz,
+        topicCoverage,
+        aiGeneratedAt: new Date(),
+      },
+    })
+    .catch((err) => {
+      console.error(
+        `[teaching] failed to persist AI artifacts for ${sessionId}:`,
+        err.message,
+      );
+    });
+}
+
+function isNonEmptyMarkdown(s) {
+  return typeof s === "string" && s.trim().length > 0;
+}
+
+export async function submitTeachingNotes(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { id } = req.params;
+    const notes = typeof req.body?.notes === "string" ? req.body.notes : "";
+
+    const trimmed = notes.trim();
+    if (trimmed.length < 50) {
+      return error(
+        res,
+        "Notes must be at least 50 characters. Add some real content before submitting.",
+        400,
+      );
+    }
+    if (trimmed.length > 20_000) {
+      return error(res, "Notes must be 20,000 characters or fewer.", 400);
+    }
+
+    const session = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      include: {
+        host: { select: { id: true, name: true } },
+      },
+    });
+    if (!session) return error(res, "Teaching session not found.", 404);
+    if (session.hostId !== userId) {
+      return error(res, "Only the host can submit notes.", 403);
+    }
+    if (session.status !== "COMPLETED") {
+      return error(
+        res,
+        "Submit notes after ending the session.",
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    // Persist notes immediately. AI artifacts run in the background.
+    const updated = await prisma.teachingSession.update({
+      where: { id },
+      data: {
+        notes: trimmed,
+        // Clear stale artifacts when notes are re-submitted; the
+        // background job overwrites them shortly.
+        summary: null,
+        quiz: null,
+        topicCoverage: null,
+        aiGeneratedAt: null,
+      },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    // Fire-and-forget AI generation. Errors are logged inside; we never
+    // block the host's notes-submit response on the model.
+    runTeachingAiSurfaces({
+      sessionId: id,
+      topic: session.topic,
+      notesMarkdown: trimmed,
+      hostName: session.host?.name || null,
+      hostUserId: userId,
+      teamId,
+    }).catch((err) => {
+      console.error(`[teaching] AI surfaces dispatch failed for ${id}:`, err);
+    });
+
+    return success(res, {
+      session: dtoForViewer(updated, userId, isTeamAdmin(req)),
+      aiPending: true,
+    });
+  } catch (err) {
+    if (err instanceof AIError && err.code === "RATE_LIMITED") {
+      return error(res, err.message, 429, err.code);
+    }
+    console.error("Submit teaching notes error:", err);
+    return error(res, "Failed to submit notes.", 500);
   }
 }

@@ -306,6 +306,229 @@ export function validateFinalEval(evalOut, { designType } = {}) {
   return { valid: violations.length === 0, violations };
 }
 
+// ── Teaching session validators (P3) ────────────────────────────────
+//
+// Three surfaces, all operating on host-typed markdown notes:
+//   • validateTeachingSummary    — tldr + bullets + definitions + open Qs
+//   • validateTeachingQuiz       — 3-5 review questions for attendees
+//   • validateTeachingTopicCoverage — verdict + score + covered/missing
+//
+// All three follow the verdict pattern: hard rule checks → on any
+// violation the caller must use buildFallbackTeaching*. Refusal
+// detection is shared with the existing helpers.
+const TEACHING_COVERAGE_VERDICTS = new Set(["FULL", "PARTIAL", "OFF_TOPIC"]);
+const TEACHING_QUIZ_TYPES = new Set(["MCQ", "SHORT"]);
+
+function detectTeachingRefusal(text) {
+  if (!isNonEmptyString(text)) return false;
+  const t = text.toLowerCase().trim();
+  return (
+    /^i (cannot|can't|am unable to)/.test(t) ||
+    t.includes("i cannot summarize") ||
+    t.includes("i cannot generate") ||
+    t.includes("i'm unable to evaluate") ||
+    t.includes("i cannot help")
+  );
+}
+
+export function validateTeachingSummary(out, { hasNotes = true } = {}) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  // tldr — single string, ≤ 280 chars, non-empty
+  if (!isNonEmptyString(out.tldr)) violations.push("tldr-empty");
+  else if (out.tldr.length > 280) violations.push("tldr-too-long");
+
+  // keyTakeaways — 3-5 non-empty strings, each ≤ 240 chars
+  if (!Array.isArray(out.keyTakeaways)) {
+    violations.push("keyTakeaways-not-array");
+  } else {
+    if (out.keyTakeaways.length < 3 || out.keyTakeaways.length > 5) {
+      violations.push(
+        `keyTakeaways-count:expected=3-5-got=${out.keyTakeaways.length}`,
+      );
+    }
+    out.keyTakeaways.forEach((b, i) => {
+      if (!isNonEmptyString(b)) violations.push(`keyTakeaways[${i}]-empty`);
+      else if (b.length > 240) violations.push(`keyTakeaways[${i}]-too-long`);
+    });
+  }
+
+  // definitions — 0-5 entries, each {term, definition} both non-empty
+  if (!Array.isArray(out.definitions)) {
+    violations.push("definitions-not-array");
+  } else {
+    if (out.definitions.length > 5) violations.push("definitions-cap-exceeded");
+    out.definitions.forEach((d, i) => {
+      if (!d || typeof d !== "object") {
+        violations.push(`definitions[${i}]-not-object`);
+        return;
+      }
+      if (!isNonEmptyString(d.term)) violations.push(`definitions[${i}].term-empty`);
+      if (!isNonEmptyString(d.definition))
+        violations.push(`definitions[${i}].definition-empty`);
+    });
+  }
+
+  // openQuestions — 0-3 non-empty strings
+  if (!Array.isArray(out.openQuestions)) {
+    violations.push("openQuestions-not-array");
+  } else {
+    if (out.openQuestions.length > 3) violations.push("openQuestions-cap-exceeded");
+    out.openQuestions.forEach((q, i) => {
+      if (!isNonEmptyString(q)) violations.push(`openQuestions[${i}]-empty`);
+    });
+  }
+
+  // Refusal detection on the public-facing fields
+  if (detectTeachingRefusal(out.tldr)) violations.push("refusal-detected");
+
+  // Sanity: don't accept "the notes are empty" claims when notes are non-empty
+  if (hasNotes) {
+    const probe = `${out.tldr || ""} ${(out.keyTakeaways || []).join(" ")}`.toLowerCase();
+    if (
+      probe.includes("notes are empty") ||
+      probe.includes("no notes provided") ||
+      probe.includes("notes were empty")
+    ) {
+      violations.push("notes-emptiness-claim-when-notes-present");
+    }
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
+export function validateTeachingQuiz(out) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!Array.isArray(out.questions)) {
+    return { valid: false, violations: ["questions-not-array"] };
+  }
+  if (out.questions.length < 3 || out.questions.length > 5) {
+    violations.push(
+      `questions-count:expected=3-5-got=${out.questions.length}`,
+    );
+  }
+
+  let allMcqAnswerLetters = [];
+  out.questions.forEach((q, i) => {
+    const tag = `questions[${i}]`;
+    if (!q || typeof q !== "object") {
+      violations.push(`${tag}-not-object`);
+      return;
+    }
+    if (!isNonEmptyString(q.question)) violations.push(`${tag}.question-empty`);
+    else if (q.question.length < 10 || q.question.length > 300) {
+      violations.push(`${tag}.question-length-out-of-range`);
+    }
+    if (!TEACHING_QUIZ_TYPES.has(q.type)) {
+      violations.push(`${tag}.type-unknown`);
+    }
+    if (!isNonEmptyString(q.explanation))
+      violations.push(`${tag}.explanation-empty`);
+
+    if (q.type === "MCQ") {
+      if (!Array.isArray(q.options) || q.options.length !== 4) {
+        violations.push(`${tag}.options-must-be-4`);
+      } else if (q.options.some((o) => !isNonEmptyString(o))) {
+        violations.push(`${tag}.options-empty-item`);
+      } else {
+        // No duplicate options
+        const norm = q.options.map((o) => o.trim().toLowerCase());
+        if (new Set(norm).size !== norm.length) {
+          violations.push(`${tag}.options-duplicate`);
+        }
+        // answer must be one of the options (case-sensitive comparison)
+        if (!q.options.includes(q.answer)) {
+          violations.push(`${tag}.answer-not-in-options`);
+        } else {
+          // Track the option index for "all same letter" laziness check
+          const idx = q.options.indexOf(q.answer);
+          allMcqAnswerLetters.push(idx);
+        }
+      }
+    } else if (q.type === "SHORT") {
+      if (!isNonEmptyString(q.answer)) violations.push(`${tag}.answer-empty`);
+      else if (q.answer.length < 5 || q.answer.length > 200)
+        violations.push(`${tag}.answer-length-out-of-range`);
+      // SHORT shouldn't carry options
+      if (q.options !== undefined && Array.isArray(q.options) && q.options.length > 0) {
+        violations.push(`${tag}.short-with-options`);
+      }
+    }
+  });
+
+  // Laziness: if there are 3+ MCQs and ALL share the same answer index, reject.
+  if (allMcqAnswerLetters.length >= 3) {
+    const set = new Set(allMcqAnswerLetters);
+    if (set.size === 1) {
+      violations.push("mcq-answers-all-same-position");
+    }
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
+export function validateTeachingTopicCoverage(out) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  // coverageScore — integer 0-100
+  const score = out.coverageScore;
+  if (
+    typeof score !== "number" ||
+    !Number.isFinite(score) ||
+    !Number.isInteger(score) ||
+    score < 0 ||
+    score > 100
+  ) {
+    violations.push("coverageScore-out-of-range");
+  }
+
+  // verdict — enum
+  if (!TEACHING_COVERAGE_VERDICTS.has(out.verdict)) {
+    violations.push("verdict-unknown");
+  }
+
+  // verdict ↔ score consistency (matches the prompt's calibration)
+  if (typeof score === "number" && TEACHING_COVERAGE_VERDICTS.has(out.verdict)) {
+    if (out.verdict === "FULL" && score < 75) violations.push("verdict-score-mismatch:FULL<75");
+    if (out.verdict === "PARTIAL" && (score < 35 || score > 74))
+      violations.push("verdict-score-mismatch:PARTIAL-out-of-band");
+    if (out.verdict === "OFF_TOPIC" && score >= 35)
+      violations.push("verdict-score-mismatch:OFF_TOPIC>=35");
+  }
+
+  // coveredAspects + missingAspects — arrays of non-empty strings, ≤ 5
+  for (const arrKey of ["coveredAspects", "missingAspects"]) {
+    const arr = out[arrKey];
+    if (!Array.isArray(arr)) {
+      violations.push(`${arrKey}-not-array`);
+      continue;
+    }
+    if (arr.length > 5) violations.push(`${arrKey}-cap-exceeded`);
+    if (arr.some((s) => !isNonEmptyString(s))) violations.push(`${arrKey}-empty-item`);
+  }
+
+  // rationale — non-empty, ≤ 280 chars, must cite at least one number
+  if (!isNonEmptyString(out.rationale)) violations.push("rationale-empty");
+  else {
+    if (out.rationale.length > 280) violations.push("rationale-too-long");
+    if (!/\d/.test(out.rationale)) violations.push("rationale-no-number");
+  }
+
+  // Refusal detection
+  if (detectTeachingRefusal(out.rationale)) violations.push("refusal-detected");
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ── Quiz validators (generation + analysis) ─────────────────────────
 //
 // Quiz is the only P4 surface without a deterministic fallback object —

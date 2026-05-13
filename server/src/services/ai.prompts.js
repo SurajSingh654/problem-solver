@@ -2006,3 +2006,378 @@ Real-World Connection: This is exactly how compilers validate code blocks — an
 }`,
   },
 ];
+
+// ============================================================================
+// TEAM TEACHING SESSIONS — three AI prompts (P3)
+// ============================================================================
+//
+// All three operate on the host's manually-typed markdown notes (v1
+// has no transcript). System prompts are static per-prompt so the
+// OpenAI prompt cache discount applies; per-call data lives in the
+// user message inside <teaching_notes> / <teaching_topic> tags
+// covered by the existing UNTRUSTED_INPUT_RULE.
+//
+// Output shapes are validated server-side via validate*Teaching* in
+// ai.validators.js; failures fall back to deterministic stubs in
+// ai.fallbacks.js so a bad model day produces a safe artifact instead
+// of a 500.
+// ============================================================================
+
+// ── Summary: tldr + key takeaways from notes ──────────────────────────
+export function teachingSummaryPrompt({ topic, notesMarkdown, hostName }) {
+  const system = `You are summarizing a peer-to-peer teaching session for a software engineering team. The host typed the markdown notes below after teaching the topic live. Your output is shown to attendees who want a quick recap.
+
+OUTPUT RULES (strict):
+- tldr: ONE sentence, ≤ 280 characters. The single most important takeaway.
+- keyTakeaways: 3-5 bullets, each ≤ 240 chars. Specific, actionable, framed as what an attendee should remember.
+- definitions: 0-5 entries, each {term, definition}. Only terms the host actually defined or used technically. Empty array if none.
+- openQuestions: 0-3 entries — questions the notes raised but did not fully answer. Empty array if none.
+
+ANTI-HALLUCINATION:
+- Do not invent technical claims that aren't in the notes.
+- If the notes are short or thin, return shorter lists; do not pad.
+- Quote the host's own framing where possible — the audience already heard them.
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "tldr": "<string, ≤ 280 chars>",
+  "keyTakeaways": ["<string>", ...],
+  "definitions": [{"term": "<string>", "definition": "<string>"}, ...],
+  "openQuestions": ["<string>", ...]
+}`;
+
+  const userParts = [
+    `Summarize this teaching session.`,
+    "",
+    `<teaching_topic>${xmlEscape(topic || "Untitled")}</teaching_topic>`,
+  ];
+  if (hostName) {
+    userParts.push(`<teaching_host>${xmlEscape(hostName)}</teaching_host>`);
+  }
+  userParts.push(
+    "",
+    "<teaching_notes>",
+    xmlEscape(truncated(notesMarkdown || "", 8000)),
+    "</teaching_notes>",
+  );
+  return { system, user: userParts.join("\n") };
+}
+
+export const TEACHING_SUMMARY_FEWSHOT = [
+  {
+    role: "user",
+    content: `Summarize this teaching session.
+
+<teaching_topic>Postgres index basics</teaching_topic>
+<teaching_host>Jane</teaching_host>
+
+<teaching_notes>
+# Postgres Indexes
+
+A B-tree index speeds up equality + range lookups. Default index type.
+GIN indexes for arrays, JSONB, full-text — much slower writes, faster reads.
+Partial indexes: only rows matching a WHERE clause. Reduces size + write cost.
+
+## Trade-offs
+Every index slows down writes (one extra B-tree update per insert).
+Indexes don't help if you SELECT * — heap fetches dominate.
+EXPLAIN ANALYZE reveals whether the planner actually used your index.
+</teaching_notes>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "tldr": "Indexes trade write cost for read speed; pick the right type for your query shape and verify with EXPLAIN ANALYZE.",
+  "keyTakeaways": [
+    "B-tree is the default — handles equality and range queries well.",
+    "GIN suits arrays, JSONB, and full-text but slows down writes more than B-tree.",
+    "Partial indexes shrink size and write cost when you only need a filtered subset.",
+    "Every index adds write overhead — cull indexes that aren't actually used.",
+    "Always confirm the planner uses your index via EXPLAIN ANALYZE."
+  ],
+  "definitions": [
+    {"term": "B-tree index", "definition": "Default Postgres index type; balanced tree supporting equality and range queries."},
+    {"term": "GIN index", "definition": "Generalized inverted index for composite values like arrays, JSONB, or text search."},
+    {"term": "Partial index", "definition": "Index defined with a WHERE clause; only rows matching that predicate are indexed."}
+  ],
+  "openQuestions": [
+    "When should you choose BRIN over B-tree on append-heavy tables?",
+    "What write-amplification cost is acceptable in a hot OLTP table?"
+  ]
+}`,
+  },
+  {
+    role: "user",
+    content: `Summarize this teaching session.
+
+<teaching_topic>Owning bug fixes end to end</teaching_topic>
+<teaching_host>Marcus</teaching_host>
+
+<teaching_notes>
+We talked about treating bugs as full investigations, not just patches.
+
+Steps I covered:
+1. Reproduce locally first — never trust the report alone.
+2. Write a failing test BEFORE the fix.
+3. Fix, then look one level up — what made this bug possible?
+4. Update docs and the postmortem if it shipped.
+
+Don't merge fixes you can't explain to a junior engineer.
+</teaching_notes>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "tldr": "Treat bug fixes as investigations: reproduce, write a failing test first, fix the cause not the symptom, and document what changed.",
+  "keyTakeaways": [
+    "Reproduce the bug locally before touching code — the report is a hypothesis.",
+    "Write the failing test first; it makes the fix concrete and prevents regression.",
+    "After the fix, ask 'what allowed this bug to exist?' and address the root cause.",
+    "Update docs/postmortem when the bug shipped — the next engineer needs the context."
+  ],
+  "definitions": [],
+  "openQuestions": [
+    "What's the threshold for a bug needing a postmortem vs. a one-line note?"
+  ]
+}`,
+  },
+];
+
+// ── Quiz: 3-5 review questions for attendees ────────────────────────
+export function teachingQuizPrompt({ topic, notesMarkdown }) {
+  const system = `You are generating a short post-session quiz for attendees of a peer-to-peer teaching session. The questions reinforce what the host taught — they are NOT a test on adjacent topics.
+
+OUTPUT RULES (strict):
+- 3 to 5 questions total.
+- Mix MCQ and SHORT freely; favor MCQ when there's a clear right answer with plausible distractors.
+- MCQ: exactly 4 options; "answer" must be one of the option strings verbatim.
+- SHORT: "answer" is a 5-200 char ideal answer; "explanation" must clarify why.
+- Every question's "explanation" is required and must reference the notes.
+- Do NOT include questions whose answer isn't supported by the notes.
+- Do NOT make all MCQ answers the same option (laziness signal).
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "questions": [
+    {
+      "question": "<string>",
+      "type": "MCQ" | "SHORT",
+      "options": ["<string>", "<string>", "<string>", "<string>"],
+      "answer": "<string>",
+      "explanation": "<string>"
+    }
+  ]
+}
+For SHORT questions, omit the "options" field entirely.`;
+
+  const user = [
+    `Generate 3-5 review questions for attendees of the teaching session below.`,
+    "",
+    `<teaching_topic>${xmlEscape(topic || "Untitled")}</teaching_topic>`,
+    "",
+    "<teaching_notes>",
+    xmlEscape(truncated(notesMarkdown || "", 8000)),
+    "</teaching_notes>",
+  ].join("\n");
+
+  return { system, user };
+}
+
+export const TEACHING_QUIZ_FEWSHOT = [
+  {
+    role: "user",
+    content: `Generate 3-5 review questions for attendees of the teaching session below.
+
+<teaching_topic>Postgres index basics</teaching_topic>
+
+<teaching_notes>
+# Postgres Indexes
+
+B-tree is the default index type — supports equality and range lookups.
+GIN indexes for arrays / JSONB / full-text — slow writes, fast reads.
+Partial indexes: WHERE-clause filtered. Smaller, cheaper to write.
+
+Every index adds write overhead. SELECT * negates index benefits.
+EXPLAIN ANALYZE confirms whether the planner uses your index.
+</teaching_notes>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "questions": [
+    {
+      "question": "Which index type should you reach for first when querying JSONB documents?",
+      "type": "MCQ",
+      "options": ["B-tree", "GIN", "Hash", "BRIN"],
+      "answer": "GIN",
+      "explanation": "The notes call out GIN as the right choice for arrays, JSONB, and full-text search."
+    },
+    {
+      "question": "Why does adding more indexes slow down writes?",
+      "type": "SHORT",
+      "answer": "Each insert/update has to also update every index, costing one extra B-tree (or equivalent) update per index.",
+      "explanation": "The notes call out that every index adds write overhead — one extra index update per write."
+    },
+    {
+      "question": "Which command tells you whether your query actually used the index you expected?",
+      "type": "MCQ",
+      "options": ["VACUUM ANALYZE", "EXPLAIN ANALYZE", "REINDEX VERBOSE", "PG_STAT_INDEXES"],
+      "answer": "EXPLAIN ANALYZE",
+      "explanation": "The notes specifically call out EXPLAIN ANALYZE as the way to confirm the planner used the index."
+    }
+  ]
+}`,
+  },
+  {
+    role: "user",
+    content: `Generate 3-5 review questions for attendees of the teaching session below.
+
+<teaching_topic>Owning bug fixes end to end</teaching_topic>
+
+<teaching_notes>
+Steps:
+1. Reproduce locally first.
+2. Write a failing test before the fix.
+3. Fix, then ask what allowed the bug.
+4. Update docs / postmortem when the bug shipped.
+
+Rule: don't merge fixes you can't explain to a junior engineer.
+</teaching_notes>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "questions": [
+    {
+      "question": "What is the FIRST step in the bug-fix process the host described?",
+      "type": "MCQ",
+      "options": [
+        "Write a failing test",
+        "Reproduce the bug locally",
+        "Update the documentation",
+        "Ask the reporter to clarify"
+      ],
+      "answer": "Reproduce the bug locally",
+      "explanation": "The notes list reproduction as step 1 — the report is a hypothesis until reproduced."
+    },
+    {
+      "question": "Why does the host recommend writing a failing test before applying the fix?",
+      "type": "SHORT",
+      "answer": "The failing test makes the fix concrete and prevents the same regression from coming back later.",
+      "explanation": "Step 2 in the notes mandates a failing test before the fix; the rationale ties to regression prevention."
+    },
+    {
+      "question": "What heuristic does the host use as the bar for merging a bug fix?",
+      "type": "SHORT",
+      "answer": "You should be able to explain the fix to a junior engineer without hand-waving.",
+      "explanation": "The closing rule in the notes is 'don't merge fixes you can't explain to a junior engineer.'"
+    }
+  ]
+}`,
+  },
+];
+
+// ── Topic coverage: did the notes match the advertised topic? ──────────
+export function teachingTopicCoveragePrompt({ topic, notesMarkdown }) {
+  const system = `You evaluate whether a teaching session's notes actually cover the topic the host advertised. You are an honest editor, not a cheerleader.
+
+OUTPUT RULES (strict):
+- coverageScore: integer 0-100. Calibration: 90+ = thorough, 75-89 = solid, 35-74 = partial, <35 = off-topic.
+- coveredAspects: 0-5 SPECIFIC aspects of the topic the notes addressed. Quote or paraphrase concretely.
+- missingAspects: 0-5 SPECIFIC aspects a reader of the topic title would expect but did not find.
+- verdict: FULL | PARTIAL | OFF_TOPIC. Internally consistent with coverageScore (FULL ≥ 75, PARTIAL 35-74, OFF_TOPIC < 35).
+- rationale: ≤ 280 chars. MUST cite at least one number (score, count of aspects, etc.) — no vague impressions.
+
+ANTI-HALLUCINATION:
+- Do not invent missing aspects you can't justify from the topic name.
+- Do not penalize a note for going deeper on one sub-aspect; that's still on-topic.
+- If the topic is broad ("introduction to X"), expect breadth; if it's narrow, expect depth.
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "coverageScore": <0-100 integer>,
+  "coveredAspects": ["<string>", ...],
+  "missingAspects": ["<string>", ...],
+  "verdict": "FULL" | "PARTIAL" | "OFF_TOPIC",
+  "rationale": "<string, ≤ 280 chars, must cite at least one number>"
+}`;
+
+  const user = [
+    `Evaluate whether the notes below cover the advertised topic.`,
+    "",
+    `<teaching_topic>${xmlEscape(topic || "Untitled")}</teaching_topic>`,
+    "",
+    "<teaching_notes>",
+    xmlEscape(truncated(notesMarkdown || "", 8000)),
+    "</teaching_notes>",
+  ].join("\n");
+
+  return { system, user };
+}
+
+export const TEACHING_COVERAGE_FEWSHOT = [
+  {
+    role: "user",
+    content: `Evaluate whether the notes below cover the advertised topic.
+
+<teaching_topic>Postgres index basics</teaching_topic>
+
+<teaching_notes>
+B-tree is the default. GIN for JSONB. Partial indexes save write cost.
+Every index slows writes. EXPLAIN ANALYZE shows what the planner used.
+</teaching_notes>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "coverageScore": 78,
+  "coveredAspects": [
+    "B-tree as the default index type",
+    "GIN for JSONB and array columns",
+    "Partial indexes for write-cost reduction",
+    "Write-amplification cost of indexing",
+    "EXPLAIN ANALYZE for planner verification"
+  ],
+  "missingAspects": [
+    "Hash and BRIN index types",
+    "Multi-column / composite index ordering",
+    "Index maintenance / bloat / REINDEX"
+  ],
+  "verdict": "FULL",
+  "rationale": "Covers 5 core aspects of Postgres indexing; scores 78/100 because 3 expected sub-topics (BRIN, multi-column, maintenance) are absent."
+}`,
+  },
+  {
+    role: "user",
+    content: `Evaluate whether the notes below cover the advertised topic.
+
+<teaching_topic>Postgres index basics</teaching_topic>
+
+<teaching_notes>
+Today I want to share a story about my first on-call shift. We had an outage at 3am
+and I learned a lot about staying calm under pressure. The team rallied and we
+shipped a fix by morning.
+</teaching_notes>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "coverageScore": 8,
+  "coveredAspects": [],
+  "missingAspects": [
+    "B-tree, GIN, BRIN, or any index type",
+    "Index trade-offs and write cost",
+    "EXPLAIN / query planner mechanics",
+    "Practical examples of when to add or drop an index"
+  ],
+  "verdict": "OFF_TOPIC",
+  "rationale": "Scores 8/100. The notes describe a 1-night on-call story with 0 references to indexes, query planning, or any of the 4 expected aspects of the advertised topic."
+}`,
+  },
+];

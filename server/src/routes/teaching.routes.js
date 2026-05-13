@@ -33,6 +33,7 @@ import {
   listTeachingFlags,
   dismissTeachingFlag,
   upholdTeachingFlag,
+  submitTeachingNotes,
 } from "../controllers/teaching.controller.js";
 
 const router = Router();
@@ -59,5 +60,6 @@ router.post("/:id/join", joinTeachingSession);
 router.post("/:id/leave", leaveTeachingSession);
 router.post("/:id/rate", rateTeachingSession);
 router.post("/:id/flag", flagTeachingSession);
+router.post("/:id/notes", submitTeachingNotes);
 
 export default router;

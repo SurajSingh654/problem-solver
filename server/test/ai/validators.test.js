@@ -14,6 +14,9 @@ import {
     validateScenarioEval,
     validateQuizQuestions,
     validateQuizAnalysis,
+    validateTeachingSummary,
+    validateTeachingQuiz,
+    validateTeachingTopicCoverage,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
@@ -1615,6 +1618,292 @@ describe('validateQuizAnalysis', () => {
         const r = validateQuizAnalysis({ ...VALID_QUIZ_ANALYSIS, encouragement: '' })
         expect(r.valid).toBe(false)
         expect(r.violations).toContain('encouragement-empty')
+    })
+})
+
+// ── validateTeachingSummary ─────────────────────────────────────────
+const VALID_SUMMARY = {
+    tldr: 'B-tree is the default Postgres index — pick the right type per query and verify with EXPLAIN ANALYZE.',
+    keyTakeaways: [
+        'B-tree handles equality and range queries well.',
+        'GIN suits arrays / JSONB / full-text but slows writes.',
+        'Every index adds write overhead — cull the unused ones.',
+    ],
+    definitions: [
+        { term: 'B-tree index', definition: 'Default Postgres index supporting equality + range queries.' },
+    ],
+    openQuestions: ['When does BRIN beat B-tree?'],
+}
+
+describe('validateTeachingSummary', () => {
+    it('accepts a well-formed summary', () => {
+        expect(validateTeachingSummary(VALID_SUMMARY).valid).toBe(true)
+    })
+
+    it('rejects empty tldr', () => {
+        const r = validateTeachingSummary({ ...VALID_SUMMARY, tldr: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('tldr-empty')
+    })
+
+    it('rejects tldr > 280 chars', () => {
+        const long = 'a'.repeat(281)
+        const r = validateTeachingSummary({ ...VALID_SUMMARY, tldr: long })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('tldr-too-long')
+    })
+
+    it('rejects fewer than 3 key takeaways', () => {
+        const r = validateTeachingSummary({
+            ...VALID_SUMMARY,
+            keyTakeaways: ['only one'],
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.startsWith('keyTakeaways-count'))).toBe(true)
+    })
+
+    it('rejects > 5 definitions', () => {
+        const r = validateTeachingSummary({
+            ...VALID_SUMMARY,
+            definitions: Array.from({ length: 6 }, (_, i) => ({
+                term: `t${i}`,
+                definition: `d${i}`,
+            })),
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('definitions-cap-exceeded')
+    })
+
+    it('rejects refusal-style tldr', () => {
+        const r = validateTeachingSummary({
+            ...VALID_SUMMARY,
+            tldr: "I cannot summarize this content.",
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
+    })
+
+    it('rejects "notes are empty" claim when notes were present', () => {
+        const r = validateTeachingSummary(
+            {
+                ...VALID_SUMMARY,
+                tldr: 'The notes are empty so I cannot summarize.',
+            },
+            { hasNotes: true },
+        )
+        expect(r.valid).toBe(false)
+        // The refusal regex doesn't match this exact phrasing, but the
+        // emptiness-claim guard does.
+        expect(
+            r.violations.includes('notes-emptiness-claim-when-notes-present') ||
+                r.violations.includes('refusal-detected'),
+        ).toBe(true)
+    })
+
+    it('allows definitions = []', () => {
+        const r = validateTeachingSummary({
+            ...VALID_SUMMARY,
+            definitions: [],
+            openQuestions: [],
+        })
+        expect(r.valid).toBe(true)
+    })
+})
+
+// ── validateTeachingQuiz ────────────────────────────────────────────
+const VALID_QUIZ_OUT = {
+    questions: [
+        {
+            question: 'Which index type best fits JSONB columns?',
+            type: 'MCQ',
+            options: ['B-tree', 'GIN', 'Hash', 'BRIN'],
+            answer: 'GIN',
+            explanation: 'The notes call out GIN for arrays and JSONB.',
+        },
+        {
+            question: 'Why does each new index slow down writes?',
+            type: 'SHORT',
+            answer: 'Every insert/update has to also update the new index, costing one extra B-tree update.',
+            explanation: 'The notes spell out write-amplification per index.',
+        },
+        {
+            question: 'Which command confirms the planner used your index?',
+            type: 'MCQ',
+            options: ['VACUUM ANALYZE', 'EXPLAIN ANALYZE', 'REINDEX VERBOSE', 'PG_STAT_INDEXES'],
+            answer: 'EXPLAIN ANALYZE',
+            explanation: 'Notes call out EXPLAIN ANALYZE specifically.',
+        },
+    ],
+}
+
+describe('validateTeachingQuiz', () => {
+    it('accepts a well-formed mixed quiz', () => {
+        expect(validateTeachingQuiz(VALID_QUIZ_OUT).valid).toBe(true)
+    })
+
+    it('rejects fewer than 3 questions', () => {
+        const r = validateTeachingQuiz({
+            questions: VALID_QUIZ_OUT.questions.slice(0, 2),
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.startsWith('questions-count'))).toBe(true)
+    })
+
+    it('rejects MCQ with answer not in options', () => {
+        const v = {
+            questions: [
+                {
+                    ...VALID_QUIZ_OUT.questions[0],
+                    answer: 'Not in the list',
+                },
+                ...VALID_QUIZ_OUT.questions.slice(1),
+            ],
+        }
+        const r = validateTeachingQuiz(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.endsWith('.answer-not-in-options'))).toBe(true)
+    })
+
+    it('rejects MCQ with !=4 options', () => {
+        const v = {
+            questions: [
+                {
+                    ...VALID_QUIZ_OUT.questions[0],
+                    options: ['A', 'B', 'C'],
+                },
+                ...VALID_QUIZ_OUT.questions.slice(1),
+            ],
+        }
+        const r = validateTeachingQuiz(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.endsWith('.options-must-be-4'))).toBe(true)
+    })
+
+    it('rejects all 3+ MCQs sharing the same answer position', () => {
+        const v = {
+            questions: [
+                { ...VALID_QUIZ_OUT.questions[0], options: ['A', 'B', 'C', 'D'], answer: 'A' },
+                { ...VALID_QUIZ_OUT.questions[2], options: ['A', 'B', 'C', 'D'], answer: 'A' },
+                { ...VALID_QUIZ_OUT.questions[2], options: ['A', 'B', 'C', 'D'], answer: 'A', question: 'Different question text here?' },
+            ],
+        }
+        const r = validateTeachingQuiz(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('mcq-answers-all-same-position')
+    })
+
+    it('rejects SHORT with answer too short', () => {
+        const v = {
+            questions: [
+                { ...VALID_QUIZ_OUT.questions[1], answer: 'a' },
+                ...VALID_QUIZ_OUT.questions.slice(0, 2),
+            ],
+        }
+        const r = validateTeachingQuiz(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.endsWith('.answer-length-out-of-range'))).toBe(true)
+    })
+})
+
+// ── validateTeachingTopicCoverage ───────────────────────────────────
+const VALID_COVERAGE_FULL = {
+    coverageScore: 80,
+    coveredAspects: ['B-tree default', 'GIN for JSONB', 'Write overhead'],
+    missingAspects: ['BRIN', 'Multi-column indexes'],
+    verdict: 'FULL',
+    rationale: 'Scores 80/100 — covers 3 core aspects but misses 2 sub-topics.',
+}
+
+describe('validateTeachingTopicCoverage', () => {
+    it('accepts a well-formed FULL output', () => {
+        expect(validateTeachingTopicCoverage(VALID_COVERAGE_FULL).valid).toBe(true)
+    })
+
+    it('accepts PARTIAL with score in band', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            coverageScore: 50,
+            verdict: 'PARTIAL',
+            rationale: 'Scores 50/100 across 3 aspects — partial coverage of the topic.',
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts OFF_TOPIC with score < 35', () => {
+        const r = validateTeachingTopicCoverage({
+            coverageScore: 10,
+            coveredAspects: [],
+            missingAspects: ['Topic'],
+            verdict: 'OFF_TOPIC',
+            rationale: 'Scores 10/100 — 0 covered aspects of the advertised topic.',
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects FULL verdict with score < 75', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            coverageScore: 60,
+            verdict: 'FULL',
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('verdict-score-mismatch:FULL<75')
+    })
+
+    it('rejects PARTIAL verdict with score >= 75', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            coverageScore: 80,
+            verdict: 'PARTIAL',
+            rationale: 'Scores 80/100',
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('verdict-score-mismatch:PARTIAL-out-of-band')
+    })
+
+    it('rejects rationale without any digit', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            rationale: 'Mostly good — covers the main areas with some gaps.',
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('rationale-no-number')
+    })
+
+    it('rejects unknown verdict', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            verdict: 'NEUTRAL',
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('verdict-unknown')
+    })
+
+    it('rejects > 5 missing aspects', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            missingAspects: ['a', 'b', 'c', 'd', 'e', 'f'],
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('missingAspects-cap-exceeded')
+    })
+
+    it('rejects out-of-range coverageScore', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            coverageScore: 150,
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('coverageScore-out-of-range')
+    })
+
+    it('rejects refusal-style rationale', () => {
+        const r = validateTeachingTopicCoverage({
+            ...VALID_COVERAGE_FULL,
+            rationale: "I cannot help with this evaluation. Score 0.",
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
     })
 })
 

@@ -614,3 +614,148 @@ export function buildFallbackScenarioEval() {
 export function buildFallbackQuiz() {
   return null;
 }
+
+// ============================================================================
+// TEACHING SESSIONS — three deterministic fallbacks (P3)
+// ============================================================================
+//
+// Used when the LLM call fails OR the output is rejected by the
+// matching validateTeaching* function. Each is shaped so the caller
+// can persist it on TeachingSession.{summary,quiz,topicCoverage} and
+// the existing detail-page renderer keeps working — with a
+// `_fallback: true` tag the UI surfaces as "AI unavailable, retry".
+// ============================================================================
+
+// Tiny utilities — duplicate-free with caller by design (the fallback
+// must work even when the AI substrate is broken).
+function _firstSentence(text, max = 280) {
+  if (!text) return "";
+  const trimmed = String(text).trim().replace(/\s+/g, " ");
+  if (trimmed.length <= max) return trimmed;
+  // Prefer first period within range.
+  const candidate = trimmed.slice(0, max);
+  const dot = candidate.lastIndexOf(". ");
+  if (dot > 80) return candidate.slice(0, dot + 1);
+  return candidate.slice(0, max - 1) + "…";
+}
+
+function _markdownHeadings(text, limit = 5) {
+  if (!text) return [];
+  const lines = String(text).split("\n");
+  const heads = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#")) {
+      const stripped = line.replace(/^#+\s*/, "").trim();
+      if (stripped.length > 0 && stripped.length <= 240) heads.push(stripped);
+      if (heads.length >= limit) break;
+    }
+  }
+  return heads;
+}
+
+export function buildFallbackTeachingSummary({
+  topic = "(unknown topic)",
+  notesMarkdown = "",
+} = {}) {
+  const tldr = _firstSentence(
+    notesMarkdown ||
+      `AI summary unavailable for "${topic}" — retry to generate one.`,
+    280,
+  );
+  // 3 minimum required by validator. Pull markdown headings; if too few,
+  // pad with safe generic prompts so the artifact still renders.
+  const heads = _markdownHeadings(notesMarkdown, 5);
+  const filler = [
+    "AI-generated takeaways unavailable — read the host's full notes above.",
+    "Re-run the AI summary once the service is back online.",
+    "Discuss the session with attendees to surface what stuck.",
+  ];
+  const keyTakeaways = [...heads];
+  while (keyTakeaways.length < 3) keyTakeaways.push(filler[keyTakeaways.length]);
+  return {
+    tldr,
+    keyTakeaways: keyTakeaways.slice(0, 5),
+    definitions: [],
+    openQuestions: [],
+    _fallback: true,
+  };
+}
+
+export function buildFallbackTeachingQuiz({ topic = "" } = {}) {
+  // Validator requires 3-5 questions. We return three SHORT questions
+  // that work regardless of subject. They're tagged via _fallback so
+  // the UI can show "AI unavailable" on this artifact.
+  const t = topic && topic.length > 0 ? topic : "this teaching session";
+  return {
+    questions: [
+      {
+        question: `Summarize the single most important takeaway from ${t} in your own words.`,
+        type: "SHORT",
+        answer:
+          "Open question — the host's own framing should anchor a 1-2 sentence answer.",
+        explanation:
+          "AI quiz unavailable. Use this open question to test your own recall instead.",
+      },
+      {
+        question: `Name one decision in your own work where the ideas from ${t} would change what you do next.`,
+        type: "SHORT",
+        answer:
+          "Open question — answer is necessarily personal; reasoning matters more than a specific answer.",
+        explanation:
+          "AI quiz unavailable. This prompts active recall by tying the topic to your work.",
+      },
+      {
+        question: `What's one thing you're still unsure about after this session, and how would you find out more?`,
+        type: "SHORT",
+        answer:
+          "Open question — surfacing uncertainty + a follow-up action is the goal.",
+        explanation:
+          "AI quiz unavailable. The metacognitive prompt helps consolidate the session.",
+      },
+    ],
+    _fallback: true,
+  };
+}
+
+export function buildFallbackTeachingTopicCoverage({
+  topic = "",
+  notesMarkdown = "",
+} = {}) {
+  // Naive substring keyword check: tokenize the topic, count how many
+  // tokens appear in the notes (case-insensitive). Maps to a coarse
+  // score band and PARTIAL verdict. Validator accepts PARTIAL with
+  // score 35-74; we hardcode 50 and let the rationale cite that.
+  const topicTokens = (topic || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 4);
+  const notesLower = String(notesMarkdown || "").toLowerCase();
+  const hits = topicTokens.filter((t) => notesLower.includes(t)).length;
+  const totalTokens = topicTokens.length || 1;
+  const naiveCoverage = Math.round((hits / totalTokens) * 100);
+
+  // Force the verdict-band invariant — never below 35 (we'd need real AI
+  // to confidently call OFF_TOPIC), never above 74 (we can't claim FULL
+  // without real evaluation).
+  const score = Math.max(35, Math.min(74, naiveCoverage || 50));
+
+  return {
+    coverageScore: score,
+    coveredAspects: [],
+    missingAspects: [
+      "AI evaluation unavailable — re-run topic coverage check when AI is back online.",
+    ],
+    verdict: "PARTIAL",
+    rationale: `Automated check fallback — coverage held at ${score}/100 across ${totalTokens} topic keywords. AI evaluation pending.`,
+    _fallback: true,
+  };
+}
+
+// Backward-compatible alias for any caller that imported the singular
+// stub name from the original scaffolding.
+export const buildFallbackTeachingNotesArtifacts = (input) => ({
+  summary: buildFallbackTeachingSummary(input),
+  quiz: buildFallbackTeachingQuiz(input),
+  topicCoverage: buildFallbackTeachingTopicCoverage(input),
+});
