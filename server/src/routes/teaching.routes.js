@@ -28,6 +28,11 @@ import {
   endTeachingSession,
   joinTeachingSession,
   leaveTeachingSession,
+  rateTeachingSession,
+  flagTeachingSession,
+  listTeachingFlags,
+  dismissTeachingFlag,
+  upholdTeachingFlag,
 } from "../controllers/teaching.controller.js";
 
 const router = Router();
@@ -37,6 +42,13 @@ router.use(requireTeamContext);
 
 router.post("/", createTeachingSession);
 router.get("/", listTeachingSessions);
+
+// Admin queue lives at /teaching/admin/flags*. Mount before the dynamic
+// `/:id` routes so the static path wins routing precedence.
+router.get("/admin/flags", listTeachingFlags);
+router.post("/admin/flags/:flagId/dismiss", dismissTeachingFlag);
+router.post("/admin/flags/:flagId/uphold", upholdTeachingFlag);
+
 router.get("/:id", getTeachingSession);
 router.patch("/:id", updateTeachingSession);
 router.delete("/:id", cancelTeachingSession);
@@ -45,5 +57,7 @@ router.post("/:id/end", endTeachingSession);
 router.post("/:id/cancel", cancelTeachingSession);
 router.post("/:id/join", joinTeachingSession);
 router.post("/:id/leave", leaveTeachingSession);
+router.post("/:id/rate", rateTeachingSession);
+router.post("/:id/flag", flagTeachingSession);
 
 export default router;

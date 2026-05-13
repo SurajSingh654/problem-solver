@@ -573,6 +573,331 @@ export async function joinTeachingSession(req, res) {
   }
 }
 
+// ============================================================================
+// RATE — peer rating after the session
+// ============================================================================
+//
+// Constraints:
+//   • Caller must have attended (TeachingAttendee row exists).
+//   • Host cannot rate themselves.
+//   • Session must be COMPLETED.
+//   • One rating per (sessionId, raterId) — uniqueness enforced by Prisma.
+//   • Rating is 1-5; comment optional; peerLearned defaults false.
+// ============================================================================
+export async function rateTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { rating, comment, peerLearned } = req.body || {};
+
+    const ratingNum = parseInt(rating, 10);
+    if (!Number.isFinite(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+      return error(res, "rating must be an integer 1-5.", 400);
+    }
+
+    const session = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true, hostId: true, status: true },
+    });
+    if (!session) return error(res, "Teaching session not found.", 404);
+    if (session.status !== "COMPLETED") {
+      return error(
+        res,
+        "Ratings unlock once the session is completed.",
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+    if (session.hostId === userId) {
+      return error(res, "Hosts cannot rate their own session.", 403);
+    }
+
+    const attended = await prisma.teachingAttendee.findUnique({
+      where: { sessionId_userId: { sessionId: id, userId } },
+      select: { id: true },
+    });
+    if (!attended) {
+      return error(res, "Only attendees can rate this session.", 403);
+    }
+
+    // Uniqueness — one rating per (session, rater).
+    const existing = await prisma.teachingRating.findUnique({
+      where: { sessionId_raterId: { sessionId: id, raterId: userId } },
+      select: { id: true },
+    });
+    if (existing) {
+      return error(
+        res,
+        "You've already rated this session.",
+        409,
+        "DUPLICATE_RATING",
+      );
+    }
+
+    const created = await prisma.teachingRating.create({
+      data: {
+        sessionId: id,
+        raterId: userId,
+        rating: ratingNum,
+        comment: typeof comment === "string" ? comment.trim() || null : null,
+        peerLearned: !!peerLearned,
+      },
+    });
+
+    return success(
+      res,
+      {
+        rating: {
+          id: created.id,
+          sessionId: created.sessionId,
+          rating: created.rating,
+          comment: created.comment,
+          peerLearned: created.peerLearned,
+          createdAt: created.createdAt,
+        },
+      },
+      201,
+    );
+  } catch (err) {
+    console.error("Rate teaching session error:", err);
+    return error(res, "Failed to submit rating.", 500);
+  }
+}
+
+// ============================================================================
+// FLAG — any team member can flag a session for admin review
+// ============================================================================
+//
+// Increments flagCount on the session for visibility in admin lists +
+// inserts a TeachingFlag row with the reporter's reason. No dedup —
+// multiple members can flag the same session for different reasons.
+// Self-flagging is allowed (a host who realizes their topic was wrong).
+// ============================================================================
+export async function flagTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { id } = req.params;
+    const reason = (req.body?.reason || "").trim();
+
+    if (!reason || reason.length < 3) {
+      return error(res, "reason must be at least 3 characters.", 400);
+    }
+    if (reason.length > 500) {
+      return error(res, "reason must be 500 characters or fewer.", 400);
+    }
+
+    const session = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) return error(res, "Teaching session not found.", 404);
+
+    const flag = await prisma.$transaction(async (tx) => {
+      const created = await tx.teachingFlag.create({
+        data: { sessionId: id, reporterId: userId, reason },
+      });
+      await tx.teachingSession.update({
+        where: { id },
+        data: { flagCount: { increment: 1 } },
+      });
+      return created;
+    });
+
+    return success(
+      res,
+      {
+        flag: {
+          id: flag.id,
+          sessionId: flag.sessionId,
+          reason: flag.reason,
+          status: flag.status,
+          createdAt: flag.createdAt,
+        },
+      },
+      201,
+    );
+  } catch (err) {
+    console.error("Flag teaching session error:", err);
+    return error(res, "Failed to flag teaching session.", 500);
+  }
+}
+
+// ============================================================================
+// ADMIN — list flags / dismiss / uphold
+// ============================================================================
+//
+// Visible to TEAM_ADMIN of the team that owns the flagged session, OR to
+// any SUPER_ADMIN. Default filter: status=OPEN. Pagination via limit + offset.
+// Includes the session + reporter so the admin can see context without an
+// extra fetch.
+// ============================================================================
+export async function listTeachingFlags(req, res) {
+  try {
+    const teamId = req.teamId;
+    if (!isTeamAdmin(req)) {
+      return error(res, "Team admin access required.", 403);
+    }
+
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 25);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const status = req.query.status || "OPEN";
+
+    const where = {
+      session: { teamId, deletedAt: null },
+    };
+    if (status !== "ALL") where.status = status;
+
+    const [flags, total, openCount] = await Promise.all([
+      prisma.teachingFlag.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+        include: {
+          reporter: { select: { id: true, name: true, email: true } },
+          session: {
+            select: {
+              id: true,
+              title: true,
+              topic: true,
+              status: true,
+              hostId: true,
+              host: { select: { id: true, name: true, email: true } },
+              flagCount: true,
+              scheduledAt: true,
+              endedAt: true,
+            },
+          },
+        },
+      }),
+      prisma.teachingFlag.count({ where }),
+      prisma.teachingFlag.count({
+        where: { session: { teamId, deletedAt: null }, status: "OPEN" },
+      }),
+    ]);
+
+    return success(res, {
+      flags,
+      pagination: { total, limit, offset },
+      stats: { openCount },
+    });
+  } catch (err) {
+    console.error("List teaching flags error:", err);
+    return error(res, "Failed to load flags.", 500);
+  }
+}
+
+export async function dismissTeachingFlag(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    if (!isTeamAdmin(req)) {
+      return error(res, "Team admin access required.", 403);
+    }
+    const { flagId } = req.params;
+    const note = (req.body?.resolutionNote || "").trim() || null;
+
+    const flag = await prisma.teachingFlag.findFirst({
+      where: { id: flagId, session: { teamId } },
+      select: { id: true, status: true },
+    });
+    if (!flag) return error(res, "Flag not found.", 404);
+    if (flag.status !== "OPEN") {
+      return error(
+        res,
+        `Flag is already ${flag.status.toLowerCase()}.`,
+        409,
+        "ALREADY_RESOLVED",
+      );
+    }
+
+    const updated = await prisma.teachingFlag.update({
+      where: { id: flagId },
+      data: {
+        status: "DISMISSED",
+        resolvedById: userId,
+        resolvedAt: new Date(),
+        resolutionNote: note,
+      },
+    });
+
+    return success(res, { flag: updated });
+  } catch (err) {
+    console.error("Dismiss teaching flag error:", err);
+    return error(res, "Failed to dismiss flag.", 500);
+  }
+}
+
+// Upholding a flag cancels the underlying session and broadcasts the
+// teaching:ended event so any connected attendees see the room close.
+// Mirrors the controller's `cancel` behavior for the session itself.
+export async function upholdTeachingFlag(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    if (!isTeamAdmin(req)) {
+      return error(res, "Team admin access required.", 403);
+    }
+    const { flagId } = req.params;
+    const note = (req.body?.resolutionNote || "").trim() || null;
+
+    const flag = await prisma.teachingFlag.findFirst({
+      where: { id: flagId, session: { teamId } },
+      include: {
+        session: { select: { id: true, status: true, deletedAt: true } },
+      },
+    });
+    if (!flag) return error(res, "Flag not found.", 404);
+    if (flag.status !== "OPEN") {
+      return error(
+        res,
+        `Flag is already ${flag.status.toLowerCase()}.`,
+        409,
+        "ALREADY_RESOLVED",
+      );
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedFlag = await tx.teachingFlag.update({
+        where: { id: flagId },
+        data: {
+          status: "REVIEWED",
+          resolvedById: userId,
+          resolvedAt: new Date(),
+          resolutionNote: note,
+        },
+      });
+      // Cancel the session if it isn't already terminal.
+      if (
+        flag.session &&
+        !flag.session.deletedAt &&
+        flag.session.status !== "COMPLETED" &&
+        flag.session.status !== "CANCELLED"
+      ) {
+        await tx.teachingSession.update({
+          where: { id: flag.session.id },
+          data: { status: "CANCELLED", deletedAt: new Date() },
+        });
+      }
+      return updatedFlag;
+    });
+
+    // Notify everyone in the team that the session ended (room closes).
+    broadcastToTeam(teamId, {
+      type: "teaching:ended",
+      sessionId: flag.sessionId,
+      reason: "flag_upheld",
+    });
+
+    return success(res, { flag: result });
+  } catch (err) {
+    console.error("Uphold teaching flag error:", err);
+    return error(res, "Failed to uphold flag.", 500);
+  }
+}
+
 export async function leaveTeachingSession(req, res) {
   try {
     const teamId = req.teamId;
