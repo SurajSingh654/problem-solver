@@ -11,13 +11,18 @@ import { cn } from '@utils/cn'
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
 // ── Commands for team members ──────────────────────────
-function useTeamCommands(isTeamAdmin, navigate, close) {
+// Renamed from `use*` — these are pure functions returning command-list
+// data, not React hooks. The `use` prefix was tripping rules-of-hooks
+// because they were called conditionally on isSuperAdmin. Plain function
+// names + conditional call is correct and rules-of-hooks-safe.
+function getTeamCommands(isTeamAdmin, navigate, close) {
   return [
     {
       group: 'Navigate',
       items: [
         { label: 'Dashboard', shortcut: 'G D', icon: '🏠', action: () => { navigate('/'); close() } },
         { label: 'Problems', shortcut: 'G P', icon: '📋', action: () => { navigate('/problems'); close() } },
+        { label: 'Design Studio', shortcut: 'G G', icon: '🏗️', action: () => { navigate('/design-studio'); close() } },
         { label: 'Mock Interview', shortcut: 'G I', icon: '💬', action: () => { navigate('/mock-interview'); close() } },
         { label: 'Review Queue', shortcut: 'G R', icon: '🧠', action: () => { navigate('/review'); close() } },
         { label: 'Quizzes', shortcut: 'G Q', icon: '🧩', action: () => { navigate('/quizzes'); close() } },
@@ -32,6 +37,7 @@ function useTeamCommands(isTeamAdmin, navigate, close) {
       items: [
         { label: 'Admin Panel', icon: '👑', action: () => { navigate('/admin'); close() } },
         { label: 'Add Problem', icon: '➕', action: () => { navigate('/admin/add-problem'); close() } },
+        { label: 'Design References', icon: '🧭', action: () => { navigate('/admin/design-references'); close() } },
         { label: 'Team Analytics', icon: '📊', action: () => { navigate('/admin/analytics'); close() } },
       ],
     }] : []),
@@ -46,7 +52,7 @@ function useTeamCommands(isTeamAdmin, navigate, close) {
 }
 
 // ── Commands for SuperAdmin ────────────────────────────
-function useSuperAdminCommands(navigate, close) {
+function getSuperAdminCommands(navigate, close) {
   return [
     {
       group: 'Platform',
@@ -101,9 +107,12 @@ export function CommandPalette() {
     return () => { cancelled = true }
   }, [shouldLoadProblems])
 
+  // Commands list is recomputed per render; cheap (just object literals).
+  // No memo needed — useMemo dependents below already re-derive when
+  // `commands` reference changes.
   const commands = isSuperAdmin
-    ? useSuperAdminCommands(navigate, closeCommandPalette)
-    : useTeamCommands(isTeamAdmin, navigate, closeCommandPalette)
+    ? getSuperAdminCommands(navigate, closeCommandPalette)
+    : getTeamCommands(isTeamAdmin, navigate, closeCommandPalette)
 
   // Build results — split into nav commands and problem results
   const { navGroups, problemResults } = useMemo(() => {
@@ -144,7 +153,7 @@ export function CommandPalette() {
       action: () => { navigate(`/problems/${p.id}`); closeCommandPalette() },
     }))
     return [...navItems, ...problemItems]
-  }, [navGroups, problemResults])
+  }, [navGroups, problemResults, navigate, closeCommandPalette])
 
   // Reset on open
   useEffect(() => {
