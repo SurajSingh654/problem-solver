@@ -34,6 +34,7 @@ const PAGE_META = {
     '/super-admin/analytics': { title: 'Platform Analytics', crumb: 'Platform' },
     '/super-admin/verdicts': { title: 'Verdict Audit', crumb: 'Platform' },
     '/super-admin/ai-usage': { title: 'AI Usage', crumb: 'Platform' },
+    '/super-admin/teaching-flags': { title: 'Teaching Flags', crumb: 'Platform' },
     '/super-admin/settings': { title: 'Settings', crumb: 'Account' },
     '/super-admin/profile': { title: 'My Profile', crumb: 'Account' },
 }

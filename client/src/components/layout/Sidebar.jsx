@@ -48,6 +48,9 @@ export default function Sidebar() {
             { to: '/super-admin/feedback', icon: '🐛', label: 'Feedback Inbox' },
             { to: '/super-admin/verdicts', icon: '⚖️', label: 'Verdict Audit' },
             { to: '/super-admin/ai-usage', icon: '📡', label: 'AI Usage' },
+            ...(import.meta.env.VITE_FEATURE_TEACHING_SESSIONS === 'true'
+                ? [{ to: '/super-admin/teaching-flags', icon: '🚩', label: 'Teaching Flags' }]
+                : []),
             { to: '/super-admin/settings', icon: '⚙️', label: 'Settings' },
             { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]

@@ -61,6 +61,7 @@ const MockInterviewPage = lazy(() => import('@pages/MockInterviewPage'))
 const TeachingListPage = lazy(() => import('@pages/teaching/TeachingListPage'))
 const TeachingNewPage = lazy(() => import('@pages/teaching/TeachingNewPage'))
 const TeachingDetailPage = lazy(() => import('@pages/teaching/TeachingDetailPage'))
+const TeachingFlagsPage = lazy(() => import('@pages/superadmin/TeachingFlagsPage'))
 const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
@@ -196,6 +197,9 @@ export default function App() {
             <Route path="/super-admin/feedback" element={<Lazy><FeedbackInboxPage /></Lazy>} />
             <Route path="/super-admin/verdicts" element={<Lazy><VerdictsAuditPage /></Lazy>} />
             <Route path="/super-admin/ai-usage" element={<Lazy><AIUsagePage /></Lazy>} />
+            {import.meta.env.VITE_FEATURE_TEACHING_SESSIONS === 'true' && (
+              <Route path="/super-admin/teaching-flags" element={<Lazy><TeachingFlagsPage /></Lazy>} />
+            )}
             {/* SuperAdmin also needs profile + settings within their layout */}
             <Route path="/super-admin/profile/:userId" element={<ProfilePage />} />
             <Route path="/super-admin/profile" element={<ProfilePage />} />

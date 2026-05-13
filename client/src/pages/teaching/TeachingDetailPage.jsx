@@ -27,6 +27,8 @@ import { Spinner } from '@components/ui/Spinner'
 import { useConfirm } from '@hooks/useConfirm'
 import { cn } from '@utils/cn'
 import LiveTeachingRoom from '@components/teaching/LiveTeachingRoom'
+import TeachingRatingForm from '@components/teaching/TeachingRatingForm'
+import TeachingFlagModal from '@components/teaching/TeachingFlagModal'
 
 const STATUS_PILL = {
     DRAFT: 'bg-surface-3 text-text-disabled border-border-default',
@@ -63,6 +65,8 @@ export default function TeachingDetailPage() {
     const confirm = useConfirm()
     const user = useAuthStore((s) => s.user)
     const [activeTab, setActiveTab] = useState('notes')
+    const [showRate, setShowRate] = useState(false)
+    const [showFlag, setShowFlag] = useState(false)
 
     const { data: session, isLoading, isError } = useTeachingSession(id)
     const start = useStartTeachingSession()
@@ -90,8 +94,19 @@ export default function TeachingDetailPage() {
     const isHost = session.hostId === user?.id
     const isLive = session.status === 'LIVE'
     const isScheduled = session.status === 'SCHEDULED' || session.status === 'DRAFT'
-    const isPast =
-        session.status === 'COMPLETED' || session.status === 'CANCELLED'
+    const isCompleted = session.status === 'COMPLETED'
+    const isPast = isCompleted || session.status === 'CANCELLED'
+
+    // Rating eligibility: completed session + viewer is not the host +
+    // viewer is in the attendee list + hasn't already rated.
+    const myAttendeeRow = (session.attendees || []).find(
+        (a) => a.userId === user?.id,
+    )
+    const myExistingRating = (session.ratings || []).find(
+        (r) => r.raterId === user?.id,
+    )
+    const canRate =
+        isCompleted && !isHost && !!myAttendeeRow && !myExistingRating
 
     async function onCancel() {
         const ok = await confirm({
@@ -167,6 +182,23 @@ export default function TeachingDetailPage() {
                                 className="bg-danger-soft text-danger-fg border border-danger-line rounded-lg px-3 py-2 text-xs font-bold hover:bg-danger-soft/80 transition-colors"
                             >
                                 Cancel
+                            </button>
+                        )}
+                        {canRate && (
+                            <button
+                                onClick={() => setShowRate(true)}
+                                className="bg-brand-soft text-brand-fg-soft border border-brand-line rounded-lg px-3 py-2 text-xs font-bold hover:bg-brand-soft/80 transition-colors"
+                            >
+                                ⭐ Rate
+                            </button>
+                        )}
+                        {!isHost && !isPast && (
+                            <button
+                                onClick={() => setShowFlag(true)}
+                                className="text-xs font-bold text-text-tertiary hover:text-warning-fg px-2 py-2 transition-colors"
+                                title="Flag for admin review"
+                            >
+                                🚩 Flag
                             </button>
                         )}
                     </div>
@@ -257,6 +289,19 @@ export default function TeachingDetailPage() {
                     )}
                 </div>
             </div>
+
+            {showRate && (
+                <TeachingRatingForm
+                    sessionId={session.id}
+                    onClose={() => setShowRate(false)}
+                />
+            )}
+            {showFlag && (
+                <TeachingFlagModal
+                    sessionId={session.id}
+                    onClose={() => setShowFlag(false)}
+                />
+            )}
         </div>
     )
 }

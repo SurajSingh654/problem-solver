@@ -147,3 +147,87 @@ export function useLeaveTeachingSession() {
         },
     });
 }
+
+// ── Rate (post-session) ─────────────────────────────────────
+// Mutation arg shape: { id, data: { rating, comment, peerLearned } }
+export function useRateTeachingSession() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, data }) => teachingApi.rate(id, data),
+        onSuccess: (_, { id }) => {
+            qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
+            qc.invalidateQueries({ queryKey: ["teaching", "list"] });
+            toast.success("Rating submitted. Thanks!");
+        },
+        onError: (err) => {
+            const msg =
+                err?.response?.data?.error?.message ||
+                "Failed to submit rating.";
+            toast.error(msg);
+        },
+    });
+}
+
+// ── Flag a session ──────────────────────────────────────────
+// Mutation arg shape: { id, data: { reason } }
+export function useFlagTeachingSession() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, data }) => teachingApi.flag(id, data),
+        onSuccess: (_, { id }) => {
+            qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
+            toast.success("Flagged for admin review.");
+        },
+        onError: (err) => {
+            toast.error(
+                err?.response?.data?.error?.message || "Failed to flag session.",
+            );
+        },
+    });
+}
+
+// ── Admin flag queue ────────────────────────────────────────
+const ADMIN_KEYS = {
+    FLAGS: (params) => ["teaching", "admin", "flags", params],
+};
+
+export function useTeachingFlags(params = {}) {
+    return useQuery({
+        queryKey: ADMIN_KEYS.FLAGS(params),
+        queryFn: () => teachingApi.listFlags(params).then((r) => r.data.data),
+        staleTime: 1000 * 30,
+    });
+}
+
+export function useDismissTeachingFlag() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ flagId, data }) => teachingApi.dismissFlag(flagId, data),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["teaching", "admin", "flags"] });
+            toast.success("Flag dismissed.");
+        },
+        onError: (err) => {
+            toast.error(
+                err?.response?.data?.error?.message || "Failed to dismiss flag.",
+            );
+        },
+    });
+}
+
+export function useUpholdTeachingFlag() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ flagId, data }) => teachingApi.upholdFlag(flagId, data),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["teaching", "admin", "flags"] });
+            qc.invalidateQueries({ queryKey: ["teaching", "list"] });
+            toast.success("Flag upheld. Session cancelled.");
+        },
+        onError: (err) => {
+            toast.error(
+                err?.response?.data?.error?.message || "Failed to uphold flag.",
+            );
+        },
+    });
+}

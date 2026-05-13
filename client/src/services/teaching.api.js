@@ -18,4 +18,13 @@ export const teachingApi = {
     end: (id) => api.post(`/teaching/${id}/end`),
     join: (id) => api.post(`/teaching/${id}/join`),
     leave: (id) => api.post(`/teaching/${id}/leave`),
+    rate: (id, data) => api.post(`/teaching/${id}/rate`, data),
+    flag: (id, data) => api.post(`/teaching/${id}/flag`, data),
+
+    // Admin
+    listFlags: (params = {}) => api.get("/teaching/admin/flags", { params }),
+    dismissFlag: (flagId, data = {}) =>
+        api.post(`/teaching/admin/flags/${flagId}/dismiss`, data),
+    upholdFlag: (flagId, data = {}) =>
+        api.post(`/teaching/admin/flags/${flagId}/uphold`, data),
 };
