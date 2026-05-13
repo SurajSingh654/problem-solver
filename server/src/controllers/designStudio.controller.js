@@ -490,6 +490,28 @@ export async function getSession(req, res) {
             adminNotes: true,
           },
         },
+        // Surface the latest active paired interview so the client can route
+        // straight into the InterviewWorkspace when mode === 'INTERVIEW'.
+        // Take 1 — there's only ever one IN_PROGRESS interview per design
+        // session at a time (idempotency in startDesignInterview enforces
+        // that). `orderBy createdAt desc` is a safety net for the unlikely
+        // case that an older row is still flagged IN_PROGRESS.
+        interviewSessions: {
+          where: { status: "IN_PROGRESS" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            category: true,
+            difficulty: true,
+            interviewStyle: true,
+            status: true,
+            phases: true,
+            workspace: true,
+            startedAt: true,
+            designSessionId: true,
+          },
+        },
       },
     });
 
@@ -1230,5 +1252,161 @@ export async function requestFinalEvaluation(req, res) {
     }
     console.error("Final evaluation error:", err);
     return error(res, "Failed to generate evaluation.", 500);
+  }
+}
+
+// ============================================================================
+// START DESIGN INTERVIEW (Design Studio ↔ AI Interviewer pairing)
+// ============================================================================
+//
+// Creates a new InterviewSession paired with this DesignSession via
+// `designSessionId`. The InterviewSession's `category` is derived from
+// the DesignSession's `designType` so the interviewer engine picks the
+// right rubric (SYSTEM_DESIGN / LOW_LEVEL_DESIGN). The DesignSession's
+// `mode` flips to INTERVIEW so the client renders the interview workspace
+// instead of the self-paced views.
+//
+// The actual conversation lives on the existing /interview WebSocket —
+// nothing new there. The only difference at runtime is that
+// interview.engine.js detects `session.designSessionId` and switches its
+// hint ladder + stage block to the design variants, plus exposes the
+// `getDesignWorkspace` and `askCandidateForClarification` tools.
+//
+// Idempotency: if the session is already in INTERVIEW mode and has an
+// active paired interview, return that one instead of creating a duplicate.
+// ============================================================================
+export async function startDesignInterview(req, res) {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user.id;
+    const { interviewStyle, interviewMode } = req.body || {};
+
+    const ds = await prisma.designSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        userId: true,
+        teamId: true,
+        problemId: true,
+        designType: true,
+        difficulty: true,
+        title: true,
+        status: true,
+        mode: true,
+      },
+    });
+    if (!ds) return error(res, "Design session not found.", 404);
+    if (ds.userId !== userId) return error(res, "Not authorized.", 403);
+    if (ds.status === "COMPLETED" || ds.status === "ABANDONED") {
+      return error(
+        res,
+        `Cannot start an interview on a ${ds.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    // Idempotent reuse — if there's already an active paired interview,
+    // return it. Prevents duplicate sessions from a refresh during setup.
+    if (ds.mode === "INTERVIEW") {
+      const existing = await prisma.interviewSession.findFirst({
+        where: {
+          designSessionId: sessionId,
+          status: "IN_PROGRESS",
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          category: true,
+          difficulty: true,
+          interviewStyle: true,
+          status: true,
+          phases: true,
+          workspace: true,
+          startedAt: true,
+        },
+      });
+      if (existing) {
+        return success(res, {
+          designSession: { id: ds.id, mode: "INTERVIEW" },
+          interviewSession: { ...existing, designSessionId: sessionId },
+          reused: true,
+        });
+      }
+    }
+
+    // Phases come from the same getDefaultPhases helper Mock Interview
+    // uses — duplicated here to avoid importing across controllers. SD/LLD
+    // phase lists are stable.
+    const phasesByCategory = {
+      SYSTEM_DESIGN: [
+        "Requirements",
+        "High-Level Design",
+        "Deep Dive",
+        "Scaling",
+        "Trade-offs",
+      ],
+      LOW_LEVEL_DESIGN: [
+        "Requirements",
+        "Entity Identification",
+        "Class Design",
+        "Design Patterns",
+        "Extensibility",
+      ],
+    };
+    const category = ds.designType; // SYSTEM_DESIGN | LOW_LEVEL_DESIGN
+
+    const result = await prisma.$transaction(async (tx) => {
+      const interview = await tx.interviewSession.create({
+        data: {
+          userId,
+          teamId: ds.teamId,
+          problemId: ds.problemId,
+          designSessionId: sessionId,
+          category,
+          difficulty: ds.difficulty,
+          interviewStyle: interviewStyle || null,
+          status: "IN_PROGRESS",
+          phases: phasesByCategory[category] || [],
+          workspace: {
+            // The "real" workspace lives in the DesignSession; the
+            // interview engine reads it via getDesignWorkspace tool.
+            // This stub workspace exists so the engine's stale-fallback
+            // path doesn't error.
+            thinking: "",
+            notes: "",
+            interviewMode: interviewMode || "text",
+          },
+        },
+        select: {
+          id: true,
+          category: true,
+          difficulty: true,
+          interviewStyle: true,
+          status: true,
+          phases: true,
+          workspace: true,
+          startedAt: true,
+        },
+      });
+      await tx.designSession.update({
+        where: { id: sessionId },
+        data: { mode: "INTERVIEW" },
+      });
+      return interview;
+    });
+
+    return success(
+      res,
+      {
+        designSession: { id: ds.id, mode: "INTERVIEW" },
+        interviewSession: { ...result, designSessionId: sessionId },
+        reused: false,
+      },
+      201,
+    );
+  } catch (err) {
+    console.error("Start design interview error:", err);
+    return error(res, "Failed to start interview.", 500);
   }
 }

@@ -208,6 +208,16 @@ enum DesignSessionStatus {
   ABANDONED
 }
 
+/// Design Studio session modality.
+/// SELF_PACED is the default — user works at their own speed with on-demand AI coaching.
+/// INTERVIEW pairs the session with a real-time AI-interviewer InterviewSession via
+/// `interviewSessions` and adds time pressure. The interviewer can read the live
+/// workspace (phases, annotations, dataFlow) via the `getDesignWorkspace` tool.
+enum DesignSessionMode {
+  SELF_PACED
+  INTERVIEW
+}
+
 // ============================================================================
 // USER
 // ============================================================================
@@ -1109,6 +1119,17 @@ model InterviewSession {
   problemId String?
   problem   Problem? @relation(fields: [problemId], references: [id], onDelete: SetNull)
 
+  // ── Paired Design Studio session (INTERVIEW mode only) ─
+  // When set, this InterviewSession is the AI-interviewer half of a
+  // Design Studio session running in INTERVIEW mode. The interviewer's
+  // system prompt branches on this — DESIGN_INTERVIEW_STAGE_BEHAVIOR is
+  // injected, the `getDesignWorkspace` tool becomes available, and the
+  // hint ladder switches from CODING-shaped to design-shaped.
+  // SetNull on delete — the InterviewSession's transcript outlives the
+  // DS session for audit even if the DS row is removed.
+  designSessionId String?
+  designSession   DesignSession? @relation(fields: [designSessionId], references: [id], onDelete: SetNull)
+
   // ── Interview configuration ────────────────────────
   category       ProblemCategory @default(CODING)
   difficulty     Difficulty      @default(MEDIUM)
@@ -1139,6 +1160,8 @@ model InterviewSession {
   @@index([teamId, createdAt])
   // Active sessions (for cleanup/monitoring)
   @@index([status, createdAt])
+  // Lookup the paired interview for a Design Studio session
+  @@index([designSessionId])
   @@map("interview_sessions")
 }
 
@@ -1256,6 +1279,14 @@ model DesignSession {
   difficulty Difficulty @default(MEDIUM)
   title      String // User-facing title: problem title or custom name
 
+  // ── Modality ───────────────────────────────────────
+  // SELF_PACED (default): work at your own speed with on-demand AI coaching.
+  // INTERVIEW: paired with a real-time AI-interviewer InterviewSession (see
+  // `interviewSessions`) — countdown timer, interviewer can read the live
+  // workspace via the `getDesignWorkspace` tool. Set on creation by the
+  // POST /design-studio/sessions/:id/interview endpoint.
+  mode DesignSessionMode @default(SELF_PACED)
+
   // ── Session lifecycle ──────────────────────────────
   status DesignSessionStatus @default(IN_PROGRESS)
 
@@ -1346,6 +1377,12 @@ model DesignSession {
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
+  // ── Paired interview sessions (mode=INTERVIEW only) ──
+  // A DesignSession in INTERVIEW mode is paired with one or more
+  // InterviewSession rows (typically one — the active interview;
+  // historical re-runs would create new InterviewSession rows).
+  interviewSessions InterviewSession[]
+
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1412,7 +1449,7 @@ model DesignReference {
   tradeoffs Json
   // sources: [{ label, url }] — papers, talks, blog posts the reference
   // draws from. Gives the learner a trail to go deeper.
-  sources Json
+  sources   Json
 
   // ── Authorship ─────────────────────────────────────
   // Nullable so seeded/curated references can ship without tying them
@@ -1425,10 +1462,10 @@ model DesignReference {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Lookup "references for this problem of this type"
-  @@index([problemId, designType])
   // Prevent duplicate variants per problem
   @@unique([problemId, variant])
+  // Lookup "references for this problem of this type"
+  @@index([problemId, designType])
   @@map("design_references")
 }
 

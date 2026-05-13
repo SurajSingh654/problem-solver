@@ -431,8 +431,12 @@ function SetupScreen({ onStart }) {
                 >
                     <h2 className="text-sm font-bold text-text-primary mb-3">Interview type</h2>
                     <div className="space-y-1.5">
+                        {/* SYSTEM_DESIGN and LOW_LEVEL_DESIGN deliberately omitted —
+                            design practice (interview mode included) lives in
+                            Design Studio, where the interviewer can see the live
+                            canvas. The note below points users there. */}
                         {PROBLEM_CATEGORIES.filter(c =>
-                            ['CODING', 'SYSTEM_DESIGN', 'BEHAVIORAL', 'CS_FUNDAMENTALS', 'SQL'].includes(c.id)
+                            ['CODING', 'BEHAVIORAL', 'CS_FUNDAMENTALS', 'SQL', 'HR'].includes(c.id)
                         ).map(cat => (
                             <button
                                 key={cat.id}
@@ -450,6 +454,13 @@ function SetupScreen({ onStart }) {
                             </button>
                         ))}
                     </div>
+                    <p className="text-[10px] text-text-disabled mt-3 leading-relaxed">
+                        🧭 For System Design or Low-Level Design practice, head to{' '}
+                        <a href="/design-studio" className="text-brand-fg-soft hover:underline font-semibold">
+                            Design Studio
+                        </a>
+                        {' '}— the canvas-aware workspace handles both self-paced and interview modes.
+                    </p>
                 </motion.div>
 
                 <motion.div

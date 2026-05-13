@@ -37,6 +37,7 @@ import {
   deleteFlowSimulation,
   saveScaleAnalysis,
   requestFinalEvaluation,
+  startDesignInterview,
 } from "../controllers/designStudio.controller.js";
 import {
   createDesignSessionSchema,
@@ -167,6 +168,15 @@ router.post(
   "/:sessionId/ai/evaluate",
   aiLimiter,
   requestFinalEvaluation,
+);
+
+// ── Interview mode (Design Studio ↔ AI Interviewer) ──────
+// Creates a paired InterviewSession and flips DesignSession.mode to
+// INTERVIEW. The actual conversation runs over the existing /interview
+// WebSocket — this endpoint just sets up the pairing.
+router.post(
+  "/:sessionId/interview",
+  startDesignInterview,
 );
 
 export default router;

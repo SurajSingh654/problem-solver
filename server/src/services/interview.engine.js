@@ -136,6 +136,46 @@ const TOOL_DEFINITIONS = [
       },
     },
   },
+  // ── Design Studio interview mode tools ────────────────────────────
+  // Available only when the InterviewSession is paired with a DesignSession.
+  // The tool handlers gate-check on context.designSessionId so they no-op
+  // for non-design interviews.
+  {
+    type: "function",
+    function: {
+      name: "getDesignWorkspace",
+      description:
+        "Read the candidate's current design canvas: phase content, component annotations, data flow description, and a diagram summary (element kinds + counts). Use this whenever you need to reference what the candidate has actually drawn or written. Only available in design interviews (SD/LLD).",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "askCandidateForClarification",
+      description:
+        "Record a formal clarification probe — a moment where you explicitly asked the candidate to clarify a requirement, scale assumption, or trade-off. Used by the debrief to score `requirementsClarification` accurately.",
+      parameters: {
+        type: "object",
+        properties: {
+          probeText: { type: "string", description: "What you asked" },
+          topic: {
+            type: "string",
+            enum: [
+              "functional_requirement",
+              "non_functional_requirement",
+              "scale",
+              "tradeoff",
+              "failure_mode",
+              "data_model",
+              "responsibility",
+            ],
+          },
+        },
+        required: ["probeText", "topic"],
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -368,6 +408,71 @@ const toolHandlers = {
     });
     return { saved: true };
   },
+
+  // ── Design Studio interview tools ────────────────────────────────
+  // Both gate-check on designSessionId so a CODING interview can't call
+  // them. Returns a structured payload the model can reference back to
+  // the candidate's actual canvas content.
+  async getDesignWorkspace(_, context) {
+    if (!context.designSessionId) {
+      return { error: "Not a design interview." };
+    }
+    const ds = await prisma.designSession.findUnique({
+      where: { id: context.designSessionId },
+      select: {
+        designType: true,
+        phases: true,
+        componentAnnotations: true,
+        dataFlowDescription: true,
+        diagramData: true,
+      },
+    });
+    if (!ds) return { error: "Design session not found." };
+
+    // Diagram summary: element kinds + count. Sending the full Excalidraw
+    // JSON would balloon prompt size and most of it (positions, IDs) is
+    // noise to the model. Kinds + count is enough to ask "I see 2
+    // databases — which one is which?"
+    let diagramSummary = null;
+    try {
+      const parsed =
+        typeof ds.diagramData === "string"
+          ? JSON.parse(ds.diagramData)
+          : ds.diagramData;
+      const elements = parsed?.elements || [];
+      const kindCounts = {};
+      for (const el of elements) {
+        const kind = el?.type || "unknown";
+        kindCounts[kind] = (kindCounts[kind] || 0) + 1;
+      }
+      diagramSummary = {
+        totalElements: elements.length,
+        byKind: kindCounts,
+      };
+    } catch {
+      diagramSummary = { totalElements: 0, byKind: {} };
+    }
+
+    return {
+      designType: ds.designType,
+      phases: ds.phases || {},
+      componentAnnotations: ds.componentAnnotations || [],
+      dataFlowDescription: ds.dataFlowDescription || "",
+      diagramSummary,
+    };
+  },
+
+  async askCandidateForClarification({ probeText, topic }, context) {
+    await prisma.interviewMessage.create({
+      data: {
+        sessionId: context.sessionId,
+        role: "SYSTEM",
+        content: `[CLARIFICATION_PROBE/${topic}] ${probeText}`,
+        phase: "clarification",
+      },
+    });
+    return { recorded: true };
+  },
 };
 
 // ============================================================================
@@ -400,11 +505,22 @@ export async function handleInterviewMessage(ws, message) {
         workspace: true,
         phases: true,
         startedAt: true,
+        // Paired Design Studio session id — when set, this is a
+        // design-mode interview. Branches: stage block, hint ladder,
+        // and the new getDesignWorkspace / askCandidateForClarification
+        // tools become available.
+        designSessionId: true,
         problem: {
           select: { title: true, description: true, category: true },
         },
       },
     });
+
+    // Augment toolContext with the paired DS id so tool handlers
+    // (getDesignWorkspace, askCandidateForClarification) can scope.
+    if (session?.designSessionId) {
+      toolContext.designSessionId = session.designSessionId;
+    }
 
     // Phase 1 fix: stage detection from phases array, not message count
     // This is how real interviewers track where they are — by phase, not by
@@ -1054,6 +1170,19 @@ async function generateDebrief(ws, toolContext) {
         focusAreas:
           "system architecture, scale, reliability, trade-off reasoning",
       },
+      LOW_LEVEL_DESIGN: {
+        scoreFields: `
+  "requirementsClarification": <1-10: did they clarify use cases and behavioural expectations before designing?>,
+  "entityIdentification": <1-10: did they pick the right entities with single, clear responsibilities?>,
+  "hierarchySoundness": <1-10: composition vs inheritance choices, LSP-respecting hierarchies?>,
+  "patternFit": <1-10: each pattern justified by a real force, no pattern-for-pattern-sake?>,
+  "solidAwareness": <1-10: walked through SOLID; named violations honestly?>,
+  "concurrencyAwareness": <1-10: thought about thread-safety, atomicity, race conditions where relevant?>,
+  "extensibilityReasoning": <1-10: where does this design break under realistic future change?>,
+  "communicationClarity": <1-10: explained design decisions clearly?>`,
+        focusAreas:
+          "OOP entities, SOLID principles, pattern fit, extensibility",
+      },
       BEHAVIORAL: {
         scoreFields: `
   "starStructure": <1-10: did they follow Situation-Task-Action-Result?>,
@@ -1220,6 +1349,12 @@ function buildSystemPrompt({
 }) {
   const category = session?.category || "CODING";
   const problem = session?.problem;
+  // Design-mode interviews: paired with a DesignSession. The interviewer
+  // can read the live canvas via getDesignWorkspace, and the hint ladder
+  // / stage block / workspace guidance switch from CODING-shaped to
+  // design-shaped variants below.
+  const isDesignInterview = !!session?.designSessionId;
+  const isLLD = isDesignInterview && category === "LOW_LEVEL_DESIGN";
 
   const persona = getCompanyPersona(interviewStyle || session?.interviewStyle);
   const styleConfig =
@@ -1231,13 +1366,25 @@ function buildSystemPrompt({
     ] ||
     INTERVIEW_STYLES.ALGORITHM_FOCUSED;
 
-  // Current workspace context
-  const workspaceContext =
-    workspace &&
-    (workspace.thinking ||
-      workspace.code ||
-      workspace.response ||
-      workspace.notes)
+  // Current workspace context. Two paths:
+  //   Coding/etc: read static workspace fields from the WS message.
+  //   Design: tell the model to call getDesignWorkspace tool to read the
+  //   live canvas + phases + annotations. We DON'T inline the design
+  //   content here because it can be huge and stale; the tool gives
+  //   a fresh DB read on demand.
+  const workspaceContext = isDesignInterview
+    ? `
+CANDIDATE'S WORKSPACE: A live design canvas (Excalidraw) plus phase notes.
+Use the \`getDesignWorkspace\` tool whenever you need to reference what the
+candidate has actually drawn or written. Read it BEFORE probing about a
+specific component — never invent components or assume they wrote things
+they didn't. After reading, quote specific component names or phase text
+in your probe so the candidate knows you're reacting to their work.`
+    : workspace &&
+        (workspace.thinking ||
+          workspace.code ||
+          workspace.response ||
+          workspace.notes)
       ? `
 CANDIDATE'S CURRENT WORKSPACE (what they are actively writing):
 ${workspace.thinking ? `Thinking/Approach:\n${workspace.thinking.substring(0, 600)}` : ""}
@@ -1259,7 +1406,7 @@ Do NOT ask them to repeat what is already written in the workspace.`
   // This is how real interviewers help without giving answers.
   // Each level is deployed ONLY after the previous level failed to unstick the candidate.
   // The AI tracks which hints have been given via saveInterviewNote.
-  const hintLadder = `
+  const codingHintLadder = `
 THE HINT LADDER — deploy in sequence, never skip levels:
 Level 0 (ALWAYS first): SILENCE. Wait 60+ seconds before doing anything. The candidate often unsticks themselves.
 Level 1: Echo their own words. "You mentioned [X] — what does that suggest?" Nothing new, just reflect.
@@ -1270,6 +1417,38 @@ Level 5: ONLY if completely stuck with <5 minutes left: "Consider how a HashMap 
 
 CRITICAL: Only move to the next level if the previous level produced no progress after 60 seconds.
 Track which hints you've given using saveInterviewNote so you don't repeat them.`;
+
+  // Design-shaped hint ladder. Different axis: the candidate isn't
+  // searching for an algorithm — they're making architecture/abstraction
+  // decisions. Hints probe rubric items (requirements, scale, trade-offs,
+  // SOLID) instead of data structures.
+  const sdHintLadder = `
+THE HINT LADDER — deploy in sequence, never skip levels:
+Level 0 (ALWAYS first): SILENCE. Wait 60+ seconds. Designers often unstick themselves once they hear the problem out loud.
+Level 1: Echo. "You mentioned [their phrase] — what assumption does that bake in?" Reflect, don't add.
+Level 2: Quantify probe. "What read:write ratio are you assuming?" or "What's your QPS target?" — forces them to commit to numbers.
+Level 3: Failure-mode probe. "What happens to that component when the network partitions?" Don't suggest the answer.
+Level 4: Trade-off probe (time-critical). "What did you give up by choosing [X]?" Still no solution.
+Level 5: ONLY if <5 min left and they're frozen: name the architectural axis they need to pick on (e.g. "consistency vs availability").
+
+CRITICAL: Each level only after the previous failed for 60+ seconds. Track via saveInterviewNote.`;
+
+  const lldHintLadder = `
+THE HINT LADDER — deploy in sequence, never skip levels:
+Level 0 (ALWAYS first): SILENCE. Wait 60+ seconds. Designers often see their own missing abstraction once they restate it.
+Level 1: Echo. "You named [class] — what's its single responsibility?" Reflect, don't add.
+Level 2: Responsibility probe. "What does [class] know that another class shouldn't?" — surfaces SRP violations.
+Level 3: Variation-point probe. "Which behaviour will change between two implementations of this?" — surfaces the abstraction the design is missing.
+Level 4: Pattern probe (time-critical). "Have you considered separating [responsibility A] from [responsibility B]?" Still no solution.
+Level 5: ONLY if <5 min left: name the SOLID principle being violated (e.g. "this is open/closed").
+
+CRITICAL: Each level only after the previous failed for 60+ seconds. Track via saveInterviewNote.`;
+
+  const hintLadder = isDesignInterview
+    ? isLLD
+      ? lldHintLadder
+      : sdHintLadder
+    : codingHintLadder;
 
   // ── Phase 2: Probing question bank ─────────────────────
   // Real interviewers probe after every substantive candidate action.
@@ -1309,6 +1488,109 @@ WORKSPACE OBSERVATION RULES:
     : "";
 
   // ── Stage-specific behavior ─────────────────────────────
+  // Two variants: coding-shaped (the original) and design-shaped (new).
+  // Pick at the bottom based on isDesignInterview.
+  const designStageBehavior = {
+    OPENING: `
+STAGE: OPENING — Problem Delivery with Deliberate Ambiguity (Design Interview)
+
+Your job in this stage:
+1. Greet the candidate as ${persona.name} in one sentence.
+2. Present ONLY the title + a 1-sentence scenario. Do NOT give scale numbers, constraints, or examples. WAIT.
+3. The candidate has a Design Studio canvas open. Tell them: "The whiteboard is yours — use it however helps you think."
+4. After presenting: SILENCE.
+
+What you are evaluating right now:
+- Do they ask functional vs non-functional clarifying questions BEFORE drawing? (STRONG signal if yes)
+- Do they ask about scale/QPS/storage targets? (STRONG signal — the most predictive question for an SD candidate)
+- Do they jump straight to drawing boxes? (WEAK signal — note via saveInterviewNote)
+- Do they restate the problem in their own words? (STRONG signal)
+
+When they ask a clarifying question: answer concisely with a NUMBER if applicable ("Assume 100M users globally, 50:1 read:write"). Then call askCandidateForClarification to record the probe topic.
+
+DO NOT:
+- Volunteer requirements they didn't ask for
+- Say "Good question" or any positive feedback
+- Suggest a specific architecture`,
+
+    EARLY: `
+STAGE: EARLY — Requirements + High-Level Sketch (Design Interview)
+
+Candidate should be filling the Requirements phase + starting to sketch components.
+Use getDesignWorkspace to read what they've written so far. Probe SPECIFICALLY:
+
+If their requirements list lacks scale numbers:
+→ "What QPS are you targeting?" — record via askCandidateForClarification.
+
+If they jump to drawing without quantifying:
+→ "Before we go further — what are the non-functional requirements?" Then WAIT.
+
+When they propose a high-level component (load balancer, queue, cache):
+→ "What does that component cost you in failure modes?" Don't accept hand-waving.
+
+DO NOT say "good" or "right". Keep face neutral.`,
+
+    MIDDLE: `
+STAGE: MIDDLE — Deep Dive (Design Interview)
+
+THE CANDIDATE IS DRAWING / WRITING. YOU ARE WATCHING.
+
+Default action: SILENCE. Use getDesignWorkspace periodically to see what they've added.
+
+Triggers to break silence:
+TRIGGER 1 — They commit a specific technology (Redis, Kafka, Postgres):
+→ "Why [tech] over [reasonable alternative]?" then WAIT.
+
+TRIGGER 2 — They draw a component but don't annotate its purpose:
+→ getDesignWorkspace, then: "What's the role of [component name] in your design?"
+
+TRIGGER 3 — Their data flow has an obvious gap (e.g. write path missing replication):
+→ "Walk me through what happens when [the missing scenario]." Don't point out the gap directly.
+
+TRIGGER 4 — They've been silent on canvas for 3+ min:
+→ "What are you weighing right now?"
+
+What you're evaluating silently (save via saveInterviewNote):
+- Are they thinking out loud as they draw?
+- Do they name trade-offs unprompted?
+- Do they pick depth (one component drilled 3 levels) or breadth (many shallow boxes)?
+- Are their numbers consistent (capacity matches QPS)?`,
+
+    LATE: `
+STAGE: LATE — Scale + Failure (Design Interview)
+
+The candidate has a working design. Stress-test it.
+
+SEQUENCE (in this order, ONE at a time, wait between):
+1. "Walk me through how a write flows through your system end-to-end."
+2. "Now scale your numbers 10x. What breaks first?"
+3. "What if [component] dies — what does the user see?"
+4. "What's the consistency model on [the data store]? When would a user notice?"
+5. If time allows: "What would you redesign if you knew this was going to 100x next year?"
+
+What you're evaluating:
+- Can they trace their own design? (Critical — many people can't read their own diagram back)
+- Do they identify failure modes themselves before you ask?
+- Do they know the limits of their architecture?
+Note everything via saveInterviewNote.`,
+
+    WRAPPING_UP: `
+STAGE: WRAPPING UP (Design Interview)
+
+1. "We're coming up on time. Summarize your design in 2 sentences."
+   [Evaluate: Can they articulate the architecture concisely?]
+
+2. "If you had 30 more minutes, what would you deepen?"
+   [Evaluate: Self-awareness — do they know what's underspecified?]
+
+3. "Do you have any questions for me?"
+   [Evaluate: Specific architecture questions vs generic role questions.]
+
+4. Close: "Thanks — that's all from my end. You'll hear back."
+
+Save final summary observation via saveInterviewNote before closing.`,
+  };
+
   const stageBehavior = {
     OPENING: `
 STAGE: OPENING — Problem Delivery with Deliberate Ambiguity
@@ -1449,7 +1731,7 @@ INTERVIEW STATE:
 Category: ${category}  |  Difficulty: ${session?.difficulty || "MEDIUM"}
 ${phaseGuidance}
 
-${stageBehavior[stage] || stageBehavior.MIDDLE}
+${(isDesignInterview ? designStageBehavior : stageBehavior)[stage] || (isDesignInterview ? designStageBehavior : stageBehavior).MIDDLE}
 
 ${workspaceContext}
 

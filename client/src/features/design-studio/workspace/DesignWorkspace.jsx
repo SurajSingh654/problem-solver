@@ -18,6 +18,8 @@ import FlowSimulationView from './FlowSimulationView'
 import EvaluationResultsView from './EvaluationResultsView'
 import ReferenceCompareView from './ReferenceCompareView'
 import SessionErrorView from '../views/SessionErrorView'
+import InterviewWorkspace from '../interview/InterviewWorkspace'
+import InterviewModeSetup from '../interview/InterviewModeSetup'
 import { SD_PHASES, LLD_PHASES } from '../constants/phases'
 import { useSaveCoordinator } from '../hooks/useSaveCoordinator'
 import { usePhaseTimer } from '../hooks/usePhaseTimer'
@@ -62,6 +64,11 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     const [panelHeight, setPanelHeight] = useState(35)
     const [annotationsCollapsed, setAnnotationsCollapsed] = useState(true)
     const [dataFlowCollapsed, setDataFlowCollapsed] = useState(true)
+    // Setup modal for "Practice as Interview" — opened from the DesignView
+    // top bar, closed via cancel or success. On success we refetch the
+    // session, which now has mode='INTERVIEW' so the next render falls
+    // through to the InterviewWorkspace branch below.
+    const [showInterviewSetup, setShowInterviewSetup] = useState(false)
     // View lives in the URL (?view=design|scenarios|scale|flow|evaluation)
     // so deep-links and browser back/forward work. Gating is done via
     // the sessionPhase reducer — requests for views not allowed in the
@@ -296,6 +303,29 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     if (isError) return <SessionErrorView error={fetchError} onRetry={() => refetch()} onBack={onBack} />
     if (!session) return <div className="flex flex-col items-center justify-center h-[60vh] gap-4"><p className="text-text-secondary">Session not found.</p><Button variant="secondary" onClick={onBack}>Back</Button></div>
 
+    // ── INTERVIEW MODE BRANCH ────────────────────────────
+    // When the session is paired with an active AI interview, the canvas-aware
+    // InterviewWorkspace replaces the entire view-switching block below. The
+    // server's getSession includes the active `interviewSessions[0]` so we
+    // can hand it straight to the workspace without a second fetch.
+    if (session.mode === 'INTERVIEW') {
+        const activeInterview = (session.interviewSessions || [])[0] || null
+        return (
+            <InterviewWorkspace
+                session={session}
+                interviewSession={activeInterview}
+                onEnd={async () => {
+                    // Refetch so the design session reflects whatever the
+                    // server did with mode/status on debrief, then back out
+                    // to the session list for now (debrief surface lives in
+                    // the existing /interview-history flow).
+                    try { await refetch() } catch { /* non-blocking */ }
+                    onBack()
+                }}
+            />
+        )
+    }
+
     const filledPhases = Object.values(phaseContent).filter(v => v && v.trim().length > 30).length
     const canValidate = filledPhases >= 3
 
@@ -523,46 +553,71 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     }
 
     // ── DESIGN VIEW (default) ────────────────────────────
+    // Interview mode is offered only when the session is still self-paced,
+    // editable, and has a problem (the interviewer needs one). The modal
+    // handles the API call; on success we refetch and the INTERVIEW branch
+    // above takes over the next render.
+    const canStartInterview =
+        session.mode === 'SELF_PACED' &&
+        !isReadOnly &&
+        !!session.problemId
     return (
-        <DesignView
-            session={session}
-            sessionId={sessionId}
-            phases={phases}
-            activePhase={activePhase}
-            activePhaseIdx={activePhaseIdx}
-            phaseContent={phaseContent}
-            diagramData={diagramData}
-            annotations={annotations}
-            dataFlow={dataFlow}
-            aiResponse={aiResponse}
-            setAiResponse={setAiResponse}
-            elapsedTime={elapsedTime}
-            panelHeight={panelHeight}
-            annotationsCollapsed={annotationsCollapsed}
-            setAnnotationsCollapsed={setAnnotationsCollapsed}
-            dataFlowCollapsed={dataFlowCollapsed}
-            setDataFlowCollapsed={setDataFlowCollapsed}
-            isReadOnly={isReadOnly}
-            hasEvaluation={hasEvaluation}
-            canValidate={canValidate}
-            canSeeReference={canSeeReference}
-            stuck={stuck}
-            onBack={onBack}
-            onPhaseChange={handlePhaseChange}
-            onDiagramChange={handleDiagramChange}
-            onAnnotationsChange={handleAnnotationsChange}
-            onDataFlowChange={handleDataFlowChange}
-            onPhaseSwitch={handlePhaseSwitch}
-            onDragStart={handleDragStart}
-            onPauseExit={handlePauseExit}
-            onCompleteDesign={handleCompleteDesign}
-            onStartValidation={handleStartValidation}
-            onSwitchMode={setView}
-            savePhase={savePhaseShim}
-            saveDiagram={saveDiagramShim}
-            updateTiming={updateTimingShim}
-            generateScenarios={generateScenarios}
-            updateSessionStatus={updateSessionStatus}
-        />
+        <>
+            <DesignView
+                session={session}
+                sessionId={sessionId}
+                phases={phases}
+                activePhase={activePhase}
+                activePhaseIdx={activePhaseIdx}
+                phaseContent={phaseContent}
+                diagramData={diagramData}
+                annotations={annotations}
+                dataFlow={dataFlow}
+                aiResponse={aiResponse}
+                setAiResponse={setAiResponse}
+                elapsedTime={elapsedTime}
+                panelHeight={panelHeight}
+                annotationsCollapsed={annotationsCollapsed}
+                setAnnotationsCollapsed={setAnnotationsCollapsed}
+                dataFlowCollapsed={dataFlowCollapsed}
+                setDataFlowCollapsed={setDataFlowCollapsed}
+                isReadOnly={isReadOnly}
+                hasEvaluation={hasEvaluation}
+                canValidate={canValidate}
+                canSeeReference={canSeeReference}
+                stuck={stuck}
+                onBack={onBack}
+                onPhaseChange={handlePhaseChange}
+                onDiagramChange={handleDiagramChange}
+                onAnnotationsChange={handleAnnotationsChange}
+                onDataFlowChange={handleDataFlowChange}
+                onPhaseSwitch={handlePhaseSwitch}
+                onDragStart={handleDragStart}
+                onPauseExit={handlePauseExit}
+                onCompleteDesign={handleCompleteDesign}
+                onStartValidation={handleStartValidation}
+                onSwitchMode={setView}
+                savePhase={savePhaseShim}
+                saveDiagram={saveDiagramShim}
+                updateTiming={updateTimingShim}
+                generateScenarios={generateScenarios}
+                updateSessionStatus={updateSessionStatus}
+                canStartInterview={canStartInterview}
+                onStartInterview={() => setShowInterviewSetup(true)}
+            />
+            {showInterviewSetup && (
+                <InterviewModeSetup
+                    sessionId={sessionId}
+                    onCancel={() => setShowInterviewSetup(false)}
+                    onStarted={async () => {
+                        setShowInterviewSetup(false)
+                        // Refetch so session.mode flips to INTERVIEW and the
+                        // workspace routes into InterviewWorkspace on the
+                        // next render.
+                        try { await refetch() } catch { /* surfaced via toast in modal */ }
+                    }}
+                />
+            )}
+        </>
     )
 }

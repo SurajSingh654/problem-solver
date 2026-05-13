@@ -61,6 +61,8 @@ export default function DesignView({
     updateTiming,
     generateScenarios,
     updateSessionStatus,
+    canStartInterview,
+    onStartInterview,
 }) {
     const navigate = useNavigate()
 
@@ -121,6 +123,16 @@ export default function DesignView({
                     <Button variant="ghost" size="sm" onClick={() => onSwitchMode('flow')}>
                         Flows
                     </Button>
+                    {canStartInterview && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onStartInterview}
+                            title="Flip this session into a timed AI interview — the interviewer sees your live canvas"
+                        >
+                            🎤 Practice as Interview
+                        </Button>
+                    )}
                     {canSeeReference && session.problemId && (
                         <Button variant="ghost" size="sm" onClick={() => onSwitchMode('reference')}
                             title="Compare your design against the curated reference architecture">
