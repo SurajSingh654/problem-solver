@@ -225,6 +225,16 @@ export const DIMENSIONS = [
     color: "#a855f7",
     desc: "How well you recall solutions during spaced repetition reviews",
   },
+  {
+    // D7 — opt-in dimension. The radar filters DIMENSIONS to keys
+    // present in the `dimensions` prop, so this axis only appears for
+    // users who have hosted ≥1 teaching session.
+    id: "teachingContributions",
+    label: "Teaching Contributions",
+    short: "Teaching",
+    color: "#f97316",
+    desc: "Peer ratings and depth of teaching sessions hosted for the team",
+  },
 ];
 
 // ── AI features config (ready for later integration) ──

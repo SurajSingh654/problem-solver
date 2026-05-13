@@ -74,6 +74,20 @@ const DIMENSIONS = [
     actionWhenLow: 'Review your overdue solutions — the Ebbinghaus curve means unreviewed knowledge fades by 70% in a week.',
     actionWhenHigh: 'Stay consistent with the review queue. Even 10 minutes per day compounds significantly.',
   },
+  {
+    // D7 — opt-in dimension. Only appears in the dimensions array
+    // returned by /stats/report when the user has hosted ≥1 teaching
+    // session. Below the activation threshold (3 peer ratings) the
+    // status is 'inactive' and the activation message is shown.
+    key: 'teachingContributions',
+    label: 'Teaching Contributions',
+    color: '#f97316',
+    icon: '📚',
+    weight: 'MEDIUM',
+    interviewRelevance: 'Senior+ roles weigh teaching and mentoring heavily. Hosting peer-teaching sessions and getting positive ratings is a direct signal.',
+    actionWhenLow: 'Schedule a teaching session on your strongest topic; aim for ≥3 peer ratings to activate this dimension.',
+    actionWhenHigh: 'Mentor more juniors; capture lessons in repeatable docs.',
+  },
 ]
 
 // Icon + label hints keyed on server tier.id. Server's readinessTiers.js
@@ -498,9 +512,16 @@ function CriticalGapCard({ criticalGap, criticalScore, analytics }) {
 
 // ── Dimension cards (contextual) ───────────────────────
 function DimensionCards({ dimByKey, communicationFromProxy }) {
+  // teachingContributions (D7) is opt-in — the server only includes it
+  // in dimensions[] once the user has hosted ≥1 session. Hide its card
+  // until then so non-teachers don't see a mysterious extra dimension.
+  const visibleDimensions = DIMENSIONS.filter((d) => {
+    if (d.key === 'teachingContributions') return !!dimByKey[d.key]
+    return true
+  })
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-      {DIMENSIONS.map((dim, i) => {
+      {visibleDimensions.map((dim, i) => {
         const info = dimByKey[dim.key]
         const isInactive = !info || info.status !== 'active'
         const score = info?.score ?? 0

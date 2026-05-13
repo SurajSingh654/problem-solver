@@ -1,14 +1,26 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { cn } from '@utils/cn'
-import { DIMENSIONS } from '@utils/constants'
+import { DIMENSIONS as ALL_DIMENSIONS } from '@utils/constants'
 
 // Pure SVG radar — no recharts dependency needed for this shape
 export function RadarChart({ dimensions = {}, overall = null, size = 280 }) {
     const cx = size / 2
     const cy = size / 2
     const radius = size * 0.38
-    const count = DIMENSIONS.length
+
+    // Only render axes for dimensions present in the prop. This makes
+    // the radar adapt automatically when the server adds an opt-in
+    // dimension (e.g. teachingContributions for users who've hosted
+    // a teaching session) without forcing every existing user to see
+    // a phantom 7th axis pinned at zero.
+    const DIMENSIONS = useMemo(
+        () =>
+            ALL_DIMENSIONS.filter((d) =>
+                Object.prototype.hasOwnProperty.call(dimensions, d.id),
+            ),
+        [dimensions],
+    )
+    const count = DIMENSIONS.length || 1
 
     // Polygon points for a given scale factor (0–1)
     function getPoints(scale) {
@@ -44,7 +56,10 @@ export function RadarChart({ dimensions = {}, overall = null, size = 280 }) {
             }
         })
         return toPath(pts)
-    }, [dimensions])
+        // Path geometry depends on the dimensions object + size; radius/cx/cy
+        // are pure derivatives of size so they're transitively covered.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dimensions, size])
 
     // Axis label positions (slightly outside the ring)
     const labelRadius = radius + 22
