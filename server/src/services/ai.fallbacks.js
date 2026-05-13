@@ -400,9 +400,110 @@ export function buildFallbackInterviewDebrief({
   };
 }
 
-export function buildFallbackProblem(/* slot */) {
-  return null;
+// Problem generation fallbacks. Two pieces, composing:
+//   buildFallbackProblemSelection  — replaces a Stage 2 (selection) result
+//   buildFallbackProblemContent    — replaces a Stage 3 (per-problem) result
+//
+// Each stub is *clearly marked* so an admin scanning the preview cards
+// cannot miss that the AI output failed and manual editing is required.
+// The "[AI Unavailable]" prefix on titles + the warning banner in
+// description/adminNotes is the failsafe — silent approval would put a
+// useless problem in front of team members.
+
+const PLACEHOLDER_TITLE_PREFIX = "[AI Unavailable — Replace Title]";
+const PLACEHOLDER_DESCRIPTION =
+  "⚠️ AI generation unavailable. Replace this with a real problem description before approving.";
+const PLACEHOLDER_ADMIN_NOTES =
+  "⚠️ AI teaching notes unavailable. Replace with real teaching content before approving.";
+
+function placeholderHrCategoryFor(category, slotIdx = 0) {
+  if (category !== "HR") return null;
+  // Rotate through valid categories so a multi-slot fallback doesn't
+  // produce six identical HR slots.
+  const rotation = [
+    "CAREER_NARRATIVE",
+    "MOTIVATION_AND_FIT",
+    "SELF_ASSESSMENT",
+    "WORK_STYLE",
+    "LOGISTICS",
+    "QUESTIONS_FOR_THEM",
+  ];
+  return rotation[slotIdx % rotation.length];
 }
+
+export function buildFallbackProblemSelection({
+  count = 1,
+  category = "CODING",
+  platformAssignments = [],
+} = {}) {
+  const selections = [];
+  for (let i = 0; i < count; i++) {
+    const slot = platformAssignments[i] || {};
+    const platform =
+      slot.platform || (category === "CODING" || category === "SQL" ? "LEETCODE" : "OTHER");
+    const difficulty =
+      slot.difficulty && slot.difficulty !== "auto" ? slot.difficulty : "MEDIUM";
+    selections.push({
+      title: `${PLACEHOLDER_TITLE_PREFIX} #${i + 1}`,
+      difficulty,
+      platform,
+      url: "",
+      urlConfidence: "low",
+      pattern: "Not specified",
+      whySelected:
+        "AI selection failed — replace with a real problem before approving.",
+      hrQuestionCategory: placeholderHrCategoryFor(category, i),
+    });
+  }
+  return {
+    selections,
+    learningPath:
+      "AI selection unavailable — replace each slot with a real problem before approving.",
+    _fallback: true,
+  };
+}
+
+export function buildFallbackProblemContent({
+  title = "[AI Unavailable]",
+  category = "CODING",
+} = {}) {
+  const isHR = category === "HR";
+  return {
+    description: `${PLACEHOLDER_DESCRIPTION}\n\nIntended title: "${title}"`,
+    realWorldContext: isHR
+      ? ""
+      : "AI-generated context unavailable. Add real context before approving.",
+    useCases: isHR
+      ? ""
+      : "AI-generated use cases unavailable. Add 3-5 real use cases before approving.",
+    adminNotes: PLACEHOLDER_ADMIN_NOTES,
+    tags: [],
+    companyTags: [],
+    hrQuestionCategory: placeholderHrCategoryFor(category, 0),
+    followUpQuestions: [
+      {
+        question: "[Replace with real EASY follow-up before approving]",
+        difficulty: "EASY",
+        hint: "AI hint unavailable — write a real hint here.",
+      },
+      {
+        question: "[Replace with real MEDIUM follow-up before approving]",
+        difficulty: "MEDIUM",
+        hint: "AI hint unavailable — write a real hint here.",
+      },
+      {
+        question: "[Replace with real HARD follow-up before approving]",
+        difficulty: "HARD",
+        hint: "AI hint unavailable — write a real hint here.",
+      },
+    ],
+    _fallback: true,
+  };
+}
+
+// Backward-compatible alias — the original stub in this file was named
+// buildFallbackProblem singular. Some future caller might still expect it.
+export const buildFallbackProblem = buildFallbackProblemContent;
 
 export function buildFallbackCoaching(/* { phase, content, mode } */) {
   return null;

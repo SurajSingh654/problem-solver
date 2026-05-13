@@ -7,6 +7,8 @@ import {
     validateReview,
     validateFinalEval,
     validateInterviewDebrief,
+    validateProblemSelection,
+    validateProblemContent,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
@@ -15,6 +17,8 @@ import {
     buildFallbackReview,
     buildFallbackFinalEval,
     buildFallbackInterviewDebrief,
+    buildFallbackProblemSelection,
+    buildFallbackProblemContent,
     prettyDimName,
 } from '../../src/services/ai.fallbacks.js'
 
@@ -847,6 +851,300 @@ describe('buildFallbackInterviewDebrief', () => {
     it('marks itself with _fallback=true', () => {
         const fb = buildFallbackInterviewDebrief()
         expect(fb._fallback).toBe(true)
+    })
+})
+
+// ── validateProblemSelection ────────────────────────────────────────
+const VALID_CODING_SELECTION = {
+    selections: [
+        {
+            title: 'Two Sum',
+            difficulty: 'EASY',
+            platform: 'LEETCODE',
+            url: 'https://leetcode.com/problems/two-sum/',
+            urlConfidence: 'high',
+            pattern: 'Hash Map',
+            whySelected: 'Foundational hashmap pattern for new team members.',
+            hrQuestionCategory: null,
+        },
+        {
+            title: 'Valid Parentheses',
+            difficulty: 'EASY',
+            platform: 'LEETCODE',
+            url: 'https://leetcode.com/problems/valid-parentheses/',
+            urlConfidence: 'high',
+            pattern: 'Stack',
+            whySelected: 'Builds on the previous pattern with stack mechanics.',
+            hrQuestionCategory: null,
+        },
+    ],
+    learningPath: 'Two foundational patterns: hashing then stacks.',
+}
+
+const VALID_HR_SELECTION = {
+    selections: [
+        {
+            title: 'Walk me through your resume',
+            difficulty: 'EASY',
+            platform: 'OTHER',
+            url: '',
+            urlConfidence: 'low',
+            pattern: 'Career Narrative',
+            whySelected: 'Standard opener for any HR round.',
+            hrQuestionCategory: 'CAREER_NARRATIVE',
+        },
+    ],
+    learningPath: 'Foundational HR opener.',
+}
+
+describe('validateProblemSelection — happy paths', () => {
+    it('accepts a valid CODING selection list', () => {
+        const r = validateProblemSelection(VALID_CODING_SELECTION, {
+            count: 2,
+            category: 'CODING',
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts a valid HR selection list', () => {
+        const r = validateProblemSelection(VALID_HR_SELECTION, {
+            count: 1,
+            category: 'HR',
+        })
+        expect(r.valid).toBe(true)
+    })
+})
+
+describe('validateProblemSelection — rejections', () => {
+    it('rejects count mismatch', () => {
+        const r = validateProblemSelection(VALID_CODING_SELECTION, {
+            count: 5,
+            category: 'CODING',
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.startsWith('selections-count-mismatch'))).toBe(true)
+    })
+
+    it('rejects unknown urlConfidence value', () => {
+        const v = {
+            ...VALID_CODING_SELECTION,
+            selections: [
+                { ...VALID_CODING_SELECTION.selections[0], urlConfidence: 'unsure' },
+                VALID_CODING_SELECTION.selections[1],
+            ],
+        }
+        const r = validateProblemSelection(v, { count: 2, category: 'CODING' })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.urlConfidence-unknown'))).toBe(true)
+    })
+
+    it('rejects malformed URL', () => {
+        const v = {
+            ...VALID_CODING_SELECTION,
+            selections: [
+                { ...VALID_CODING_SELECTION.selections[0], url: 'not a url' },
+                VALID_CODING_SELECTION.selections[1],
+            ],
+        }
+        const r = validateProblemSelection(v, { count: 2, category: 'CODING' })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.url-malformed'))).toBe(true)
+    })
+
+    it('rejects HR selection missing hrQuestionCategory', () => {
+        const v = {
+            ...VALID_HR_SELECTION,
+            selections: [{ ...VALID_HR_SELECTION.selections[0], hrQuestionCategory: null }],
+        }
+        const r = validateProblemSelection(v, { count: 1, category: 'HR' })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.hrQuestionCategory-required-for-HR'))).toBe(true)
+    })
+
+    it('rejects unknown difficulty', () => {
+        const v = {
+            ...VALID_CODING_SELECTION,
+            selections: [
+                { ...VALID_CODING_SELECTION.selections[0], difficulty: 'TRIVIAL' },
+                VALID_CODING_SELECTION.selections[1],
+            ],
+        }
+        const r = validateProblemSelection(v, { count: 2, category: 'CODING' })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.difficulty-unknown'))).toBe(true)
+    })
+
+    it('rejects empty learningPath', () => {
+        const r = validateProblemSelection(
+            { ...VALID_CODING_SELECTION, learningPath: '' },
+            { count: 2, category: 'CODING' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('learningPath-empty')
+    })
+
+    it('rejects when selections is not an array', () => {
+        const r = validateProblemSelection({ selections: 'oops', learningPath: 'x' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('selections-not-array')
+    })
+})
+
+// ── validateProblemContent ──────────────────────────────────────────
+const VALID_CODING_CONTENT = {
+    description: 'Given an array of integers, return indices of two numbers that add up to a target.',
+    realWorldContext: 'This pattern shows up in financial reconciliation and pair-matching scenarios.',
+    useCases: 'Stripe — duplicate detection in transaction streams\nGoogle Drive — file deduplication',
+    adminNotes: 'Brute force: O(n^2) nested loop. Optimal: O(n) hashmap. Key insight: trade space for time. Top mistakes: forgetting duplicate values, off-by-one indices.',
+    tags: ['array', 'hashmap'],
+    companyTags: ['Google', 'Amazon'],
+    hrQuestionCategory: null,
+    followUpQuestions: [
+        { question: 'What is the time complexity?', difficulty: 'EASY', hint: 'Count operations per element.' },
+        { question: 'How would you parallelize across N workers?', difficulty: 'MEDIUM', hint: 'Think partitioning.' },
+        { question: 'What if input fits 10^18?', difficulty: 'HARD', hint: 'Standard ints overflow.' },
+    ],
+}
+
+const VALID_HR_CONTENT = {
+    description: 'Walk me through your resume.',
+    realWorldContext: '',
+    useCases: '',
+    adminNotes: 'Look for narrative coherence. Red flag: gaps without explanation. Strong signal: each role led intentionally to the next.',
+    tags: ['career-narrative'],
+    companyTags: [],
+    hrQuestionCategory: 'CAREER_NARRATIVE',
+    followUpQuestions: [
+        { question: 'What was the hardest decision in that period?', difficulty: 'EASY', hint: 'Probe authenticity.' },
+        { question: 'Why did you make that move specifically?', difficulty: 'MEDIUM', hint: 'Probe motivation.' },
+        { question: 'Knowing what you know now, would you change anything?', difficulty: 'HARD', hint: 'Probe self-awareness.' },
+    ],
+}
+
+describe('validateProblemContent — happy paths', () => {
+    it('accepts valid CODING content', () => {
+        const r = validateProblemContent(VALID_CODING_CONTENT, { category: 'CODING' })
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts valid HR content with empty real-world fields', () => {
+        const r = validateProblemContent(VALID_HR_CONTENT, { category: 'HR' })
+        expect(r.valid).toBe(true)
+    })
+})
+
+describe('validateProblemContent — rejections', () => {
+    it('rejects missing description', () => {
+        const r = validateProblemContent(
+            { ...VALID_CODING_CONTENT, description: '' },
+            { category: 'CODING' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('description-empty')
+    })
+
+    it('rejects fewer than 3 follow-ups', () => {
+        const v = {
+            ...VALID_CODING_CONTENT,
+            followUpQuestions: VALID_CODING_CONTENT.followUpQuestions.slice(0, 2),
+        }
+        const r = validateProblemContent(v, { category: 'CODING' })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.startsWith('followUpQuestions-count'))).toBe(true)
+    })
+
+    it('rejects out-of-order follow-up difficulties', () => {
+        const v = {
+            ...VALID_CODING_CONTENT,
+            followUpQuestions: [
+                { question: 'q', difficulty: 'HARD', hint: 'h' },
+                { question: 'q', difficulty: 'MEDIUM', hint: 'h' },
+                { question: 'q', difficulty: 'EASY', hint: 'h' },
+            ],
+        }
+        const r = validateProblemContent(v, { category: 'CODING' })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.includes('difficulty-out-of-order'))).toBe(true)
+    })
+
+    it('rejects HR content missing hrQuestionCategory', () => {
+        const r = validateProblemContent(
+            { ...VALID_HR_CONTENT, hrQuestionCategory: null },
+            { category: 'HR' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('hrQuestionCategory-required-for-HR')
+    })
+
+    it('rejects empty hint in follow-up', () => {
+        const v = {
+            ...VALID_CODING_CONTENT,
+            followUpQuestions: [
+                { question: 'q1', difficulty: 'EASY', hint: '' },
+                ...VALID_CODING_CONTENT.followUpQuestions.slice(1),
+            ],
+        }
+        const r = validateProblemContent(v, { category: 'CODING' })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.hint-empty'))).toBe(true)
+    })
+})
+
+// ── buildFallbackProblemSelection / buildFallbackProblemContent ─────
+describe('buildFallbackProblemSelection', () => {
+    it('produces a CODING fallback that satisfies its own validator', () => {
+        const fb = buildFallbackProblemSelection({
+            count: 3,
+            category: 'CODING',
+            platformAssignments: [
+                { platform: 'LEETCODE', difficulty: 'EASY' },
+                { platform: 'LEETCODE', difficulty: 'MEDIUM' },
+                { platform: 'LEETCODE', difficulty: 'HARD' },
+            ],
+        })
+        const r = validateProblemSelection(fb, { count: 3, category: 'CODING' })
+        expect(r.valid).toBe(true)
+        expect(fb._fallback).toBe(true)
+    })
+
+    it('produces an HR fallback with rotating hrQuestionCategory', () => {
+        const fb = buildFallbackProblemSelection({ count: 3, category: 'HR' })
+        const r = validateProblemSelection(fb, { count: 3, category: 'HR' })
+        expect(r.valid).toBe(true)
+        const hrCats = fb.selections.map(s => s.hrQuestionCategory)
+        expect(new Set(hrCats).size).toBe(3) // all different
+    })
+
+    it('marks every title with the [AI Unavailable] prefix', () => {
+        const fb = buildFallbackProblemSelection({ count: 2 })
+        for (const sel of fb.selections) {
+            expect(sel.title).toContain('[AI Unavailable')
+        }
+    })
+})
+
+describe('buildFallbackProblemContent', () => {
+    it('produces valid CODING content stub', () => {
+        const fb = buildFallbackProblemContent({ title: 'Two Sum', category: 'CODING' })
+        const r = validateProblemContent(fb, { category: 'CODING' })
+        expect(r.valid).toBe(true)
+        expect(fb._fallback).toBe(true)
+    })
+
+    it('produces valid HR content stub with hrQuestionCategory', () => {
+        const fb = buildFallbackProblemContent({ title: 'Resume walk', category: 'HR' })
+        const r = validateProblemContent(fb, { category: 'HR' })
+        expect(r.valid).toBe(true)
+    })
+
+    it('always uses an admin warning prefix in description', () => {
+        const fb = buildFallbackProblemContent({ title: 'X', category: 'CODING' })
+        expect(fb.description).toContain('AI generation unavailable')
+    })
+
+    it('produces 3 follow-ups in EASY/MEDIUM/HARD order', () => {
+        const fb = buildFallbackProblemContent({ category: 'CODING' })
+        expect(fb.followUpQuestions.map(f => f.difficulty)).toEqual(['EASY', 'MEDIUM', 'HARD'])
     })
 })
 

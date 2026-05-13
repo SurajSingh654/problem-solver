@@ -306,6 +306,163 @@ export function validateFinalEval(evalOut, { designType } = {}) {
   return { valid: violations.length === 0, violations };
 }
 
+// ── Problem generation validators (selection + content) ─────────────
+//
+// Stage 2 of generateProblemsAI returns { selections: [...], learningPath }.
+// Stage 3 (per-problem, parallel) returns the per-problem content object.
+// Both prompts emit category-specific fields, so the validator takes a
+// `category` hint and switches its rules accordingly.
+//
+// On any violation the controller MUST replace that slot/content with the
+// matching buildFallback*. Crucially, fallback output is *clearly marked*
+// (titled "[AI Unavailable]") so admins never silently approve a stub —
+// see ai.fallbacks.js for the placeholder strings.
+const DIFFICULTY_VALUES = new Set(["EASY", "MEDIUM", "HARD"]);
+const PLATFORM_VALUES = new Set(["LEETCODE", "OTHER"]);
+const URL_CONFIDENCE_VALUES = new Set(["high", "medium", "low"]);
+const HR_CATEGORY_VALUES = new Set([
+  "CAREER_NARRATIVE",
+  "MOTIVATION_AND_FIT",
+  "SELF_ASSESSMENT",
+  "WORK_STYLE",
+  "LOGISTICS",
+  "QUESTIONS_FOR_THEM",
+]);
+
+// Lenient URL well-formedness — empty string allowed (non-CODING),
+// otherwise must parse via URL constructor and use http(s).
+function isWellFormedUrlOrEmpty(url) {
+  if (typeof url !== "string") return false;
+  if (url.trim() === "") return true;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function validateProblemSelection(result, { count, category } = {}) {
+  const violations = [];
+  if (!result || typeof result !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  if (!Array.isArray(result.selections)) {
+    return { valid: false, violations: ["selections-not-array"] };
+  }
+  if (typeof count === "number" && result.selections.length !== count) {
+    violations.push(
+      `selections-count-mismatch:expected=${count}-got=${result.selections.length}`,
+    );
+  }
+  if (typeof result.learningPath !== "string" || result.learningPath.length === 0) {
+    violations.push("learningPath-empty");
+  }
+
+  result.selections.forEach((sel, i) => {
+    const tag = `selections[${i}]`;
+    if (!sel || typeof sel !== "object") {
+      violations.push(`${tag}-not-object`);
+      return;
+    }
+    if (!isNonEmptyString(sel.title)) violations.push(`${tag}.title-empty`);
+    if (!DIFFICULTY_VALUES.has(sel.difficulty))
+      violations.push(`${tag}.difficulty-unknown`);
+    if (!PLATFORM_VALUES.has(sel.platform))
+      violations.push(`${tag}.platform-unknown`);
+    if (!URL_CONFIDENCE_VALUES.has(sel.urlConfidence))
+      violations.push(`${tag}.urlConfidence-unknown`);
+    if (!isWellFormedUrlOrEmpty(sel.url)) violations.push(`${tag}.url-malformed`);
+    if (!isNonEmptyString(sel.whySelected)) violations.push(`${tag}.whySelected-empty`);
+    // pattern allowed to be loose ("Not specified" is fine), just must be a string.
+    if (typeof sel.pattern !== "string") violations.push(`${tag}.pattern-not-string`);
+    // HR category: required-non-null for HR, must be null/missing for others.
+    if (category === "HR") {
+      if (!HR_CATEGORY_VALUES.has(sel.hrQuestionCategory)) {
+        violations.push(`${tag}.hrQuestionCategory-required-for-HR`);
+      }
+    } else if (
+      sel.hrQuestionCategory != null &&
+      !HR_CATEGORY_VALUES.has(sel.hrQuestionCategory)
+    ) {
+      // Allow null/missing; only fail on a present-but-invalid value.
+      violations.push(`${tag}.hrQuestionCategory-unknown`);
+    }
+  });
+
+  return { valid: violations.length === 0, violations };
+}
+
+const FOLLOWUP_DIFFICULTIES_REQUIRED = ["EASY", "MEDIUM", "HARD"];
+
+export function validateProblemContent(content, { category } = {}) {
+  const violations = [];
+  if (!content || typeof content !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  if (!isNonEmptyString(content.description)) violations.push("description-empty");
+  if (!isNonEmptyString(content.adminNotes)) violations.push("adminNotes-empty");
+
+  // For non-HR, realWorldContext + useCases must be non-empty strings.
+  // For HR, both are intentionally allowed empty.
+  if (category !== "HR") {
+    if (typeof content.realWorldContext !== "string")
+      violations.push("realWorldContext-not-string");
+    if (typeof content.useCases !== "string") violations.push("useCases-not-string");
+  }
+
+  if (!Array.isArray(content.tags)) violations.push("tags-not-array");
+  else if (content.tags.some((t) => !isNonEmptyString(t)))
+    violations.push("tags-empty-item");
+
+  // companyTags optional — but when present must be array of strings.
+  if (content.companyTags !== undefined) {
+    if (!Array.isArray(content.companyTags)) violations.push("companyTags-not-array");
+    else if (content.companyTags.some((t) => !isNonEmptyString(t)))
+      violations.push("companyTags-empty-item");
+  }
+
+  // HR category: required for HR, must be null/absent otherwise.
+  if (category === "HR") {
+    if (!HR_CATEGORY_VALUES.has(content.hrQuestionCategory)) {
+      violations.push("hrQuestionCategory-required-for-HR");
+    }
+  } else if (
+    content.hrQuestionCategory != null &&
+    !HR_CATEGORY_VALUES.has(content.hrQuestionCategory)
+  ) {
+    violations.push("hrQuestionCategory-unknown");
+  }
+
+  // followUpQuestions: exactly 3, in EASY/MEDIUM/HARD order, each well-formed.
+  if (!Array.isArray(content.followUpQuestions)) {
+    violations.push("followUpQuestions-not-array");
+  } else {
+    if (content.followUpQuestions.length !== 3)
+      violations.push(
+        `followUpQuestions-count:expected=3-got=${content.followUpQuestions.length}`,
+      );
+    content.followUpQuestions.forEach((fu, i) => {
+      const tag = `followUpQuestions[${i}]`;
+      if (!fu || typeof fu !== "object") {
+        violations.push(`${tag}-not-object`);
+        return;
+      }
+      if (!isNonEmptyString(fu.question)) violations.push(`${tag}.question-empty`);
+      if (!isNonEmptyString(fu.hint)) violations.push(`${tag}.hint-empty`);
+      if (!DIFFICULTY_VALUES.has(fu.difficulty))
+        violations.push(`${tag}.difficulty-unknown`);
+      const expectedDifficulty = FOLLOWUP_DIFFICULTIES_REQUIRED[i];
+      if (expectedDifficulty && fu.difficulty !== expectedDifficulty)
+        violations.push(`${tag}.difficulty-out-of-order:expected=${expectedDifficulty}`);
+    });
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ── Mock Interview debrief validator ────────────────────────────────
 //
 // Validates generateDebrief output. The prompt declares a category-specific

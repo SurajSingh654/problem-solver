@@ -13,8 +13,15 @@ import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
 import { aiComplete, AIError } from "../services/ai.service.js";
-import { validateReview } from "../services/ai.validators.js";
-import { buildFallbackReview } from "../services/ai.fallbacks.js";
+import {
+  validateReview,
+  validateProblemSelection,
+  validateProblemContent,
+} from "../services/ai.validators.js";
+import {
+  buildFallbackReview,
+  buildFallbackProblemContent,
+} from "../services/ai.fallbacks.js";
 import {
   hasBothApproaches,
   isCodingSolution,
@@ -992,6 +999,8 @@ export async function generateProblemContent(req, res) {
     };
 
     let content;
+    let usedContentFallback = false;
+    let contentViolations = [];
     try {
       content = await aiComplete({
         systemPrompt: `You are an expert interview problem designer. Generate complete problem content.
@@ -1016,11 +1025,32 @@ Return JSON:
         jsonMode: true,
         surface: "problem-content",
       });
+      const check = validateProblemContent(content, { category });
+      if (!check.valid) {
+        contentViolations = check.violations;
+        console.warn(
+          `[problem-content] validation failed: ${contentViolations.join(", ")}`,
+        );
+        content = buildFallbackProblemContent({ title, category });
+        usedContentFallback = true;
+      }
     } catch (aiErr) {
-      return aiErrorResponse(res, aiErr, "Failed to generate problem content.");
+      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
+        return aiErrorResponse(res, aiErr, "Failed to generate problem content.");
+      }
+      console.warn(
+        `[problem-content] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+      );
+      content = buildFallbackProblemContent({ title, category });
+      usedContentFallback = true;
+      contentViolations = [`llm-error:${aiErr?.code || aiErr?.message || "unknown"}`];
     }
 
-    return success(res, { content });
+    return success(res, {
+      content,
+      usedFallback: usedContentFallback,
+      ...(usedContentFallback ? { fallbackReason: contentViolations } : {}),
+    });
   } catch (err) {
     console.error("Generate content error:", err);
     return error(res, "Failed to generate problem content.", 500);
@@ -1282,6 +1312,24 @@ export async function generateProblemsAI(req, res) {
         surface: "problem-selection",
       });
 
+      // Validate the AI's selection against hard rules: array length,
+      // urlConfidence enum, well-formed URLs, HR category required for HR.
+      // Any violation → throw to trigger the existing legacy single-call
+      // fallback below. The fallback path already exists and handles
+      // both AI errors and validation failures with one branch.
+      const selectionCheck = validateProblemSelection(selectionResult, {
+        count: problemCount,
+        category,
+      });
+      if (!selectionCheck.valid) {
+        console.warn(
+          `[problem-selection] validation failed: ${selectionCheck.violations.join(", ")}`,
+        );
+        throw new Error(
+          `selection-validation-failed:${selectionCheck.violations.join(",")}`,
+        );
+      }
+
       selections = selectionResult.selections || [];
       learningPath = selectionResult.learningPath || "";
 
@@ -1407,7 +1455,7 @@ export async function generateProblemsAI(req, res) {
         const contentMaxTokens = categoryTokenBudget[category] || 2000;
         const contentModel = categoryModel[category] || AI_MODEL_FAST;
 
-        const content = await aiComplete({
+        let content = await aiComplete({
           systemPrompt: contentSystem,
           userPrompt: contentUser,
           userId: req.user.id,
@@ -1417,6 +1465,23 @@ export async function generateProblemsAI(req, res) {
           jsonMode: true,
           surface: "problem-content-stage3",
         });
+
+        // Validate per-problem content. On any violation, swap in a
+        // clearly-marked stub for THIS problem only — the other parallel
+        // generations are unaffected. Admin sees a "[AI Unavailable]" tag
+        // on the preview so they can't silently approve a bad row.
+        const contentCheck = validateProblemContent(content, { category });
+        let usedContentFallback = false;
+        if (!contentCheck.valid) {
+          console.warn(
+            `[problem-content] validation failed for "${selection.title}": ${contentCheck.violations.join(", ")}`,
+          );
+          content = buildFallbackProblemContent({
+            title: selection.title,
+            category,
+          });
+          usedContentFallback = true;
+        }
 
         const isHRProblem = category === "HR";
 
@@ -1462,6 +1527,12 @@ export async function generateProblemsAI(req, res) {
               selection.hrQuestionCategory ||
               null,
           }),
+          // Marker for the admin UI — the preview card renders an
+          // "AI unavailable, edit before approving" warning when this
+          // is true. Distinct from contentGenerationFailed below
+          // (which is the hard-throw path); usedFallback covers BOTH
+          // hard fails and validation rejects.
+          usedFallback: usedContentFallback,
         };
       } catch (err) {
         console.error(
@@ -1469,7 +1540,15 @@ export async function generateProblemsAI(req, res) {
           err.message,
         );
 
-        // Return partial problem — better than nothing
+        // Build a deterministic stub for this slot — clearly marked so
+        // the admin must edit before approving. Reuses the same
+        // fallback shape as the validation-failure path above.
+        const fallbackContent = buildFallbackProblemContent({
+          title: selection.title,
+          category,
+        });
+        const isHRProblem = category === "HR";
+
         return {
           title: selection.title,
           difficulty: selection.difficulty,
@@ -1479,22 +1558,26 @@ export async function generateProblemsAI(req, res) {
           // fall back to a platform search so the admin still has
           // something to click when curating.
           sourceUrl: resolveGeneratedSourceUrl({
-            isHRProblem: category === "HR",
+            isHRProblem,
             urlConfidence: "low",
             url: null,
             platform: selection.platform,
             title: selection.title,
           }),
-          description: `Problem: ${selection.title}\nPlease look up this problem on LeetCode for the full description.`,
-          realWorldContext: "",
-          useCases: "",
-          adminNotes:
-            `Pattern: ${selection.pattern || ""}. ${selection.whySelected || ""}`.trim(),
-          tags: [selection.pattern].filter(Boolean),
-          companyTags: [],
-          followUpQuestions: [],
+          description: fallbackContent.description,
+          realWorldContext: fallbackContent.realWorldContext,
+          useCases: fallbackContent.useCases,
+          adminNotes: fallbackContent.adminNotes,
+          tags: fallbackContent.tags,
+          companyTags: fallbackContent.companyTags,
+          followUpQuestions: fallbackContent.followUpQuestions,
           whySelected: selection.whySelected || "",
+          urlConfidence: "low",
           similarTo: findSimilarTitles(selection.title, existingTitles),
+          ...(isHRProblem && {
+            hrQuestionCategory: fallbackContent.hrQuestionCategory,
+          }),
+          usedFallback: true,
           contentGenerationFailed: true,
         };
       }
