@@ -17,6 +17,7 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { AI_MODEL_PRIMARY } from "../config/env.js";
+import { aiStream, aiComplete } from "./ai.service.js";
 
 // Phase 1 fix: import persona system that was previously dead code
 import { INTERVIEW_STYLES, getCompanyPersona } from "./interview.phases.js";
@@ -480,8 +481,6 @@ const toolHandlers = {
 // ============================================================================
 export async function handleInterviewMessage(ws, message) {
   try {
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
     const { toolContext } = message;
 
     // ── Load conversation history ────────────────────────
@@ -588,13 +587,13 @@ export async function handleInterviewMessage(ws, message) {
     });
 
     // ── Build messages array ─────────────────────────────
-    const messages = [
-      { role: "system", content: systemPrompt },
-      ...history.map((m) => ({
-        role: m.role.toLowerCase(),
-        content: m.content,
-      })),
-    ];
+    // System prompt is passed separately via aiStream — keep this array
+    // free of the system role so we don't double-up when the helper
+    // prepends it.
+    const messages = history.map((m) => ({
+      role: m.role.toLowerCase(),
+      content: m.content,
+    }));
 
     if (message.type === "user_message") {
       messages.push({ role: "user", content: message.content });
@@ -633,13 +632,15 @@ export async function handleInterviewMessage(ws, message) {
     }
 
     // ── Call GPT-4o with streaming + tools ────────────────
-    const stream = await openai.chat.completions.create({
-      model: AI_MODEL_PRIMARY,
+    const stream = await aiStream({
+      systemPrompt,
       messages,
+      userId: toolContext.userId,
+      model: AI_MODEL_PRIMARY,
       tools: TOOL_DEFINITIONS,
       temperature: 0.7, // reduced from 0.85 — more consistent interviewer behavior
-      max_tokens: maxTokens,
-      stream: true,
+      maxTokens,
+      surface: "interview-stream",
     });
 
     let fullContent = "";
@@ -676,6 +677,7 @@ export async function handleInterviewMessage(ws, message) {
       if (chunk.choices[0]?.finish_reason === "tool_calls") {
         await executeToolsAndRespond(
           ws,
+          systemPrompt,
           messages,
           toolCalls,
           toolContext,
@@ -720,15 +722,13 @@ export async function handleInterviewMessage(ws, message) {
 // ============================================================================
 async function executeToolsAndRespond(
   ws,
+  systemPrompt,
   messages,
   toolCalls,
   toolContext,
   currentWorkspace,
 ) {
   try {
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
     const toolResults = [];
     for (const tc of toolCalls) {
       if (!tc?.function?.name) continue;
@@ -792,12 +792,14 @@ async function executeToolsAndRespond(
     ];
 
     // Phase 1 fix: pass currentWorkspace to maintain context in follow-up
-    const stream = await openai.chat.completions.create({
-      model: AI_MODEL_PRIMARY,
+    const stream = await aiStream({
+      systemPrompt,
       messages: followUpMessages,
+      userId: toolContext.userId,
+      model: AI_MODEL_PRIMARY,
       temperature: 0.7,
-      max_tokens: 400,
-      stream: true,
+      maxTokens: 400,
+      surface: "interview-stream-followup",
     });
 
     let fullContent = "";
@@ -853,9 +855,6 @@ async function executeToolsAndRespond(
 // ============================================================================
 async function generateDebrief(ws, toolContext) {
   try {
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
     // ── Load full conversation ───────────────────────────
     const messages = await prisma.interviewMessage.findMany({
       where: { sessionId: toolContext.sessionId },
@@ -1231,15 +1230,7 @@ async function generateDebrief(ws, toolContext) {
     // ════════════════════════════════════════════════════
     // AI DEBRIEF GENERATION
     // ════════════════════════════════════════════════════
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_PRIMARY,
-      temperature: 0.6, // lower temp for more consistent evaluation
-      response_format: { type: "json_object" },
-      max_tokens: 2500,
-      messages: [
-        {
-          role: "system",
-          content: `You are writing a structured post-interview evaluation for a ${category} interview.
+    const debriefSystem = `You are writing a structured post-interview evaluation for a ${category} interview.
 Style: ${session.interviewStyle || "Standard"}.
 Difficulty: ${session.difficulty}.
 Duration: ${elapsed} minutes.
@@ -1302,16 +1293,18 @@ Return JSON:
     "<another key moment>"
   ],
   "summary": "<2-3 sentences referencing specific things they said or did — honest assessment>"
-}`,
-        },
-        {
-          role: "user",
-          content: `Interview transcript:\n${transcript}\n\nInterviewer observations:\n${interviewerNotes || "None recorded"}`,
-        },
-      ],
-    });
+}`;
 
-    const debrief = JSON.parse(response.choices[0].message.content);
+    const debrief = await aiComplete({
+      systemPrompt: debriefSystem,
+      userPrompt: `Interview transcript:\n${transcript}\n\nInterviewer observations:\n${interviewerNotes || "None recorded"}`,
+      userId: toolContext.userId,
+      model: AI_MODEL_PRIMARY,
+      temperature: 0.6, // lower temp for more consistent evaluation
+      maxTokens: 2500,
+      jsonMode: true,
+      surface: "interview-debrief",
+    });
 
     // ── Store debrief ────────────────────────────────────
     await prisma.interviewSession.update({

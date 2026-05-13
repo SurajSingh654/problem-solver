@@ -5,6 +5,26 @@ import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_FAST } from "../config/env.js";
 import { recomputeSkillsFromQuiz } from "../services/skillComputation.service.js";
+import { aiComplete, AIError } from "../services/ai.service.js";
+
+// Map AIError → HTTP envelope. Mirrors the helper in ai.controller.js so
+// every AI controller surfaces failure modes consistently.
+function aiErrorResponse(res, err, defaultMessage) {
+  if (err instanceof AIError) {
+    if (err.code === "RATE_LIMITED")
+      return error(res, err.message, 429, err.code);
+    if (err.code === "OPENAI_RATE_LIMITED")
+      return error(res, "AI is temporarily rate-limited. Please retry shortly.", 503, err.code);
+    if (err.code === "OPENAI_DOWN" || err.code === "OPENAI_TIMEOUT")
+      return error(res, "AI is temporarily unavailable.", 503, err.code);
+    if (err.code === "INVALID_API_KEY")
+      return error(res, "AI is not configured correctly.", 500, err.code);
+    if (err.code === "PARSE_ERROR")
+      return error(res, defaultMessage, 500, err.code);
+  }
+  console.error(`Quiz controller AI error: ${err?.message || err}`);
+  return error(res, defaultMessage, 500);
+}
 
 // ============================================================================
 // GENERATE QUIZ — with past-attempt intelligence
@@ -119,9 +139,6 @@ export async function generateQuiz(req, res) {
     }
 
     // ── Stage 2: Build intelligent prompt ─────────────
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
     let deduplicationInstruction = "";
     if (pastIntelligence && pastIntelligence.askedQuestions.length > 0) {
       const sampleAsked = pastIntelligence.askedQuestions.slice(0, 30);
@@ -206,30 +223,25 @@ Return JSON:
   ]
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.8,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Generate a ${difficulty || "MEDIUM"} difficulty quiz on: ${subject}${
-            pastIntelligence
-              ? ` (Attempt #${pastIntelligence.attemptCount + 1} for this user)`
-              : ""
-          }`,
-        },
-      ],
-    });
-
-    let questions;
+    let parsed;
     try {
-      const parsed = JSON.parse(response.choices[0].message.content);
-      questions = parsed.questions;
-    } catch {
-      return error(res, "Failed to parse AI response. Please try again.", 500);
+      parsed = await aiComplete({
+        systemPrompt,
+        userPrompt: `Generate a ${difficulty || "MEDIUM"} difficulty quiz on: ${subject}${
+          pastIntelligence
+            ? ` (Attempt #${pastIntelligence.attemptCount + 1} for this user)`
+            : ""
+        }`,
+        userId,
+        model: AI_MODEL_FAST,
+        temperature: 0.8,
+        jsonMode: true,
+        surface: "quiz-generation",
+      });
+    } catch (aiErr) {
+      return aiErrorResponse(res, aiErr, "Failed to generate quiz. Please try again.");
     }
+    const questions = parsed?.questions;
 
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return error(
@@ -546,7 +558,13 @@ async function generateQuizAnalysis(quizId) {
   try {
     const quiz = await prisma.quizAttempt.findUnique({
       where: { id: quizId },
-      select: { subject: true, score: true, answers: true, difficulty: true },
+      select: {
+        userId: true,
+        subject: true,
+        score: true,
+        answers: true,
+        difficulty: true,
+      },
     });
 
     if (!quiz || !quiz.answers) return;
@@ -571,17 +589,11 @@ async function generateQuizAnalysis(quizId) {
       return;
     }
 
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.7,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You are an interview coach analyzing quiz results to give targeted study advice.
+    // Background job — failures already swallowed by the outer catch.
+    // If aiComplete throws (rate limit, OpenAI down, parse fail), the
+    // analysis silently doesn't happen, which matches prior behavior.
+    const analysis = await aiComplete({
+      systemPrompt: `You are an interview coach analyzing quiz results to give targeted study advice.
 Identify specific knowledge gaps from the wrong answers.
 Return JSON:
 {
@@ -590,10 +602,7 @@ Return JSON:
   "studyAdvice": ["specific actionable advice 1", "specific actionable advice 2", "specific actionable advice 3"],
   "encouragement": "one motivating sentence"
 }`,
-        },
-        {
-          role: "user",
-          content: `Subject: ${quiz.subject}. Difficulty: ${quiz.difficulty}. Score: ${quiz.score}%.
+      userPrompt: `Subject: ${quiz.subject}. Difficulty: ${quiz.difficulty}. Score: ${quiz.score}%.
 Wrong answers (${wrongAnswers.length} of ${quiz.answers.length}):
 ${wrongAnswers
   .map(
@@ -601,11 +610,12 @@ ${wrongAnswers
       `Q: ${a.question}\nSelected: ${a.userAnswer}, Correct: ${a.correctAnswer}\nExplanation: ${a.explanation || "N/A"}`,
   )
   .join("\n\n")}`,
-        },
-      ],
+      userId: quiz.userId,
+      model: AI_MODEL_FAST,
+      temperature: 0.7,
+      jsonMode: true,
+      surface: "quiz-analysis",
     });
-
-    const analysis = JSON.parse(response.choices[0].message.content);
 
     await prisma.quizAttempt.update({
       where: { id: quizId },
