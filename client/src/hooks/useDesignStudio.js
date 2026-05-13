@@ -149,8 +149,8 @@ export function useUpdateSessionStatus() {
 // ── AI Coaching (validate / guide / teach) ────────────────
 export function useAICoach() {
   return useMutation({
-    mutationFn: ({ sessionId, mode, phaseId, userQuery }) =>
-      designStudioApi.askCoach(sessionId, { mode, phaseId, userQuery }),
+    mutationFn: ({ sessionId, mode, phaseId, userQuery, stuckContext }) =>
+      designStudioApi.askCoach(sessionId, { mode, phaseId, userQuery, stuckContext }),
     onError: (err) => {
       const message = err?.response?.data?.error?.message || err?.message || "";
       if (message.includes("rate") || message.includes("limit")) {

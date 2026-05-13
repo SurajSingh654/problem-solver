@@ -682,7 +682,7 @@ export async function askAICoach(req, res) {
   try {
     const { sessionId } = req.params;
     const userId = req.user.id;
-    const { mode, phaseId, userQuery } = req.body;
+    const { mode, phaseId, userQuery, stuckContext } = req.body;
 
     const session = await prisma.designSession.findUnique({
       where: { id: sessionId },
@@ -727,6 +727,7 @@ export async function askAICoach(req, res) {
       componentAnnotations: annotations,
       dataFlowDescription: dataFlow,
       previousInteractions,
+      stuckContext,
     });
 
     const aiResponse = await aiComplete({

@@ -10,6 +10,7 @@ import {
     interactionPreview,
     interactionTimeLabel,
 } from '../../hooks/useCoachingHistory'
+import StuckNudgeCard from './StuckNudgeCard'
 
 // ══════════════════════════════════════════════════════════════════════════
 // AI COACH SECTION — rail variant, Coach + History tabs
@@ -28,12 +29,15 @@ import {
 export default function AICoachSection({
     sessionId,
     phaseId,
+    phaseLabel,
+    designType,
     phases = [],
     aiInteractions = [],
     response,
     onResponse,
     onDismiss,
     isReadOnly = false,
+    stuck = null,
 }) {
     const askCoach = useAICoach()
     const [teachQuery, setTeachQuery] = useState('')
@@ -53,7 +57,7 @@ export default function AICoachSection({
         { phaseFilter: historyFilter === 'current' ? phaseId : null },
     )
 
-    async function handleAsk(mode) {
+    async function handleAsk(mode, opts = {}) {
         if (mode === 'teach' && !teachQuery.trim()) {
             toast.error('Type what you want to learn')
             return
@@ -64,8 +68,13 @@ export default function AICoachSection({
                 mode,
                 phaseId,
                 userQuery: mode === 'teach' ? teachQuery.trim() : '',
+                stuckContext: opts.stuckContext,
             })
             onResponse(res.data.data.coaching)
+            // Always switch to the Coach tab so the response is visible —
+            // matters for the "Show in Coach" pin path AND the
+            // stuck-nudge "Ask for hint" path.
+            setTab('coach')
             if (mode === 'teach') {
                 setTeachQuery('')
                 setShowTeachInput(false)
@@ -73,6 +82,14 @@ export default function AICoachSection({
         } catch {
             /* handled by hook */
         }
+    }
+
+    function handleStuckHintRequest() {
+        if (!stuck) return
+        const ctx = stuck.buildStuckContext?.()
+        // Fire `guide` mode with the stuck context — server prompt switches
+        // its system addendum on this signal.
+        handleAsk('guide', { stuckContext: ctx })
     }
 
     function handlePinFromHistory(item) {
@@ -135,6 +152,21 @@ export default function AICoachSection({
                 </div>
                 {tab === 'coach' && askCoach.isPending && <Spinner size="sm" />}
             </div>
+
+            {/* Stuck nudge — only on the Coach tab, only when the detector
+                says all four idle signals agree. The card sits above the
+                ask buttons so it's the first thing the user sees when they
+                come back to a phase they were idle on. */}
+            {stuck?.isStuck && tab === 'coach' && (
+                <StuckNudgeCard
+                    designType={designType}
+                    phaseId={phaseId}
+                    phaseLabel={phaseLabel}
+                    onAskForHint={handleStuckHintRequest}
+                    onDismiss={stuck.dismissForCurrentPhase}
+                    isAsking={askCoach.isPending}
+                />
+            )}
 
             {tab === 'coach' ? (
                 <CoachTab

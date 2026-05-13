@@ -21,6 +21,7 @@ import SessionErrorView from '../views/SessionErrorView'
 import { SD_PHASES, LLD_PHASES } from '../constants/phases'
 import { useSaveCoordinator } from '../hooks/useSaveCoordinator'
 import { usePhaseTimer } from '../hooks/usePhaseTimer'
+import { useStuckDetector } from '../hooks/useStuckDetector'
 import { getSessionPhase, resolveView, defaultViewFor, isTerminal } from '../state/sessionPhase'
 
 // 30-second heartbeat for long-idle sessions so totalTimeSpent stays fresh
@@ -112,7 +113,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
         Math.max(0, session?.currentPhase || 0),
         phases.length - 1,
     )
-    const { elapsedTime, recordPhaseExit, setActivePhaseId, buildTimingPayload } = usePhaseTimer({
+    const { elapsedTime, elapsedInCurrentPhase, recordPhaseExit, setActivePhaseId, buildTimingPayload } = usePhaseTimer({
         session,
         phases,
         initialActiveIdx,
@@ -271,6 +272,22 @@ export default function DesignWorkspace({ sessionId, onBack }) {
             onBack()
         } catch { /* handled by hook */ }
     }
+
+    // Stuck-detector — proactive nudge when the user is idle on a phase.
+    // Must be called UNCONDITIONALLY (before early returns) per
+    // rules-of-hooks. Inputs all tolerate undefined session — the hook
+    // produces isStuck=false until session loads.
+    const stuck = useStuckDetector({
+        designType: session?.designType,
+        phaseId: activePhase?.id,
+        phaseContent: activePhase ? phaseContent[activePhase.id] : '',
+        diagramData,
+        elapsedTimeInPhaseSec: elapsedInCurrentPhase,
+        aiInteractions: session?.aiInteractions || [],
+        coordinatorIsSaving: coordinator.status === 'saving',
+        isReadOnly: isTerminal(sessionPhase),
+        enabled: view === 'design',
+    })
 
     if (isLoading) return <div className="flex items-center justify-center h-[60vh]"><Spinner size="lg" /></div>
     // Fetch error branch — replaces the old infinite-spinner behaviour on
@@ -529,6 +546,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
             hasEvaluation={hasEvaluation}
             canValidate={canValidate}
             canSeeReference={canSeeReference}
+            stuck={stuck}
             onBack={onBack}
             onPhaseChange={handlePhaseChange}
             onDiagramChange={handleDiagramChange}

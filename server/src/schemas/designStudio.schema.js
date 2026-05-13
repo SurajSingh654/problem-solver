@@ -80,6 +80,17 @@ export const aiCoachingSchema = z.object({
     .max(1000, "Query too long — keep it under 1000 characters")
     .optional()
     .default(""),
+  // Optional client-detected idle signal. When present, the prompt
+  // injects a <stuck_signal> block so `guide` mode prioritises rubric
+  // items the candidate hasn't addressed yet.
+  stuckContext: z
+    .object({
+      timeInPhaseSec: z.number().int().nonnegative().max(24 * 60 * 60),
+      charsSinceLastEdit: z.number().int().nonnegative().max(10000),
+      quietForSec: z.number().int().nonnegative().max(24 * 60 * 60),
+      phaseId: z.string().min(1).max(50),
+    })
+    .optional(),
 });
 
 // ── Submit scenario responses ────────────────────────────

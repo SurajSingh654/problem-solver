@@ -44,6 +44,7 @@ export default function DesignView({
     hasEvaluation,
     canValidate,
     canSeeReference,
+    stuck,
     onBack,
     onPhaseChange,
     onDiagramChange,
@@ -217,12 +218,15 @@ export default function DesignView({
                         <AICoachSection
                             sessionId={sessionId}
                             phaseId={activePhase.id}
+                            phaseLabel={activePhase.label}
+                            designType={session.designType}
                             phases={phases}
                             aiInteractions={session.aiInteractions || []}
                             response={aiResponse}
                             onResponse={setAiResponse}
                             onDismiss={() => setAiResponse(null)}
                             isReadOnly={isReadOnly}
+                            stuck={stuck}
                         />
                     </div>
 

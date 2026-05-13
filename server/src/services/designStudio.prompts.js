@@ -129,6 +129,7 @@ export function designStudioCoachingPrompt({
   componentAnnotations,
   dataFlowDescription,
   previousInteractions,
+  stuckContext,
 }) {
   const phaseMap =
     designType === "SYSTEM_DESIGN" ? SYSTEM_DESIGN_PHASES : LLD_PHASES;
@@ -210,11 +211,20 @@ A 500-word essay on CAP theorem = WRONG
 }`;
   }
 
+  // Optional stuck-context addendum: only injected for guide mode when
+  // the client-side detector confirms the user has been idle on this
+  // phase for the rubric threshold. The model uses it to focus
+  // questioning on the rubric bullets the candidate hasn't touched yet.
+  const stuckAddendum =
+    stuckContext && mode === "guide"
+      ? `\nSTUCK CONTEXT: The candidate has been idle on this phase for ~${Math.round(stuckContext.quietForSec / 60)} minute(s) (no content edits, no canvas changes, no recent coaching). They are not stalling — they are stuck. Read the <stuck_signal> block carefully and prioritise questions that surface the rubric bullets they have NOT yet addressed in <candidate_response>. Be patient; one well-placed question is better than five.\n`
+      : "";
+
   // ── SYSTEM PROMPT: static per (mode, designType). Cache-friendly. ────
   const system = `You are a principal systems architect with 20+ years of experience at Google, Netflix, and Uber. You are coaching an engineer who is practicing ${isSD ? "system design" : "low-level design (OOP)"}.
 
 ${modeInstruction}
-
+${stuckAddendum}
 ANTI-REPETITION RULE: If <previous_coaching> already addressed a point, do NOT repeat it. Build on it or move to the next gap.
 
 ${UNTRUSTED_INPUT_RULE}
@@ -296,6 +306,17 @@ ${responseSchema}`;
     // validate/guide can also carry free-form context
     userParts.push("");
     userParts.push(`<user_question>${xmlEscape(userQuery)}</user_question>`);
+  }
+
+  if (stuckContext) {
+    // Trusted client-side telemetry — emitted as a sibling of
+    // <candidate_input> rather than nested inside it, because it's
+    // measured by the system, not authored by the candidate. The
+    // UNTRUSTED_INPUT_RULE doesn't need to apply here.
+    userParts.push("");
+    userParts.push(
+      `<stuck_signal phase="${xmlEscape(stuckContext.phaseId || phaseId)}" quietForSec="${Number(stuckContext.quietForSec) || 0}" timeInPhaseSec="${Number(stuckContext.timeInPhaseSec) || 0}"/>`,
+    );
   }
 
   const user = userParts.join("\n");

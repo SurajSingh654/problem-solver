@@ -93,8 +93,13 @@ export function usePhaseTimer({ session, phases, initialActiveIdx }) {
         ...(currentPhase != null ? { currentPhase } : {}),
     }), [])
 
+    // Seconds the user has been on the currently-tracked phase. Used by
+    // the stuck-detector to compare against the per-phase rubric threshold.
+    const elapsedInCurrentPhase = Math.max(0, elapsedTime - phaseEnterTimeRef.current)
+
     return {
         elapsedTime,
+        elapsedInCurrentPhase,
         recordPhaseExit,
         setActivePhaseId,
         buildTimingPayload,
