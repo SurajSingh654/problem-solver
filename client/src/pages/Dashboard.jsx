@@ -635,10 +635,23 @@ export default function Dashboard() {
           )}
 
           {report?.overall == null && (
-            <p className="text-[11px] text-text-disabled leading-relaxed">
-              Submit solutions with AI review to start building your readiness score.
-              Scores unlock as each dimension collects enough evidence.
-            </p>
+            <div className="space-y-2">
+              <p className="text-[11px] text-text-disabled leading-relaxed">
+                Submit solutions with AI review to start building your readiness score.
+                Scores unlock as each dimension collects enough evidence.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/problems')}
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors"
+              >
+                Submit your first solution
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
           )}
 
           <button
@@ -677,14 +690,27 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <span className="text-3xl mb-3">📈</span>
-              <p className="text-sm font-semibold text-text-primary mb-1">
-                No readiness data yet
-              </p>
-              <p className="text-xs text-text-tertiary max-w-[200px] leading-relaxed">
-                Submit solutions and request AI review to build your 6D profile
-              </p>
+            <div className="flex flex-col items-center justify-center py-8 text-center gap-2.5">
+              <span className="text-3xl">📈</span>
+              <div>
+                <p className="text-sm font-semibold text-text-primary mb-1">
+                  No readiness data yet
+                </p>
+                <p className="text-xs text-text-tertiary max-w-[220px] leading-relaxed">
+                  Submit solutions and request AI review to build your 6D profile.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/problems')}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors"
+              >
+                Browse problems
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
             </div>
           )}
 

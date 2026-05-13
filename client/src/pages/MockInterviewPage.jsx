@@ -343,7 +343,7 @@ function SetupScreen({ onStart }) {
                 className="mb-8"
             >
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-400 to-blue-500
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600
                           flex items-center justify-center text-xl flex-shrink-0 shadow-glow-sm">
                         💬
                     </div>
@@ -1082,8 +1082,31 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
                         )}
                     </div>
 
+                    {/* Connection lost banner — shows when the WS drops mid-interview.
+                        The interviewer can't hear the candidate during a disconnect; without
+                        this banner the user just sees silence and assumes the AI is thinking. */}
+                    {!connected && messages.length > 0 && (
+                        <div
+                            role="status"
+                            aria-live="polite"
+                            className="flex items-center gap-2 px-4 py-2 bg-warning-soft border-b border-warning-line"
+                        >
+                            <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+                            <p className="text-[11px] font-bold text-warning-fg flex-1">
+                                Connection lost — your interviewer can&apos;t hear you. Reconnecting…
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => window.location.reload()}
+                                className="text-[10px] font-bold text-warning-fg underline hover:no-underline"
+                            >
+                                Reload
+                            </button>
+                        </div>
+                    )}
+
                     {/* Messages */}
-                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" aria-live="polite">
                         {messages.map((msg, i) => (
                             <MessageBubble key={i} message={msg} />
                         ))}

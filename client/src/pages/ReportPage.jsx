@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useTeamContext } from '@hooks/useTeamContext'
 import { use6DReport, useReadinessVerdict } from '@hooks/useReport'
+import { Skeleton } from '@components/ui/Skeleton'
 import { Spinner } from '@components/ui/Spinner'
 import { RadarChart } from '@components/charts/RadarChart'
 import { cn } from '@utils/cn'
@@ -1179,13 +1180,33 @@ function CoachingPlanCard() {
 // "protection" against overclaim is needed (and adding one would just
 // fight the server).
 function AIVerdictCard({ verdict, usedFallback, cached, isLoading, isError }) {
+  // Progressive loading — render the card SHAPE while the verdict is
+  // being generated (3–5s server round-trip on a cold call). Users see
+  // the page populated immediately rather than a delayed pop-in. The
+  // skeleton matches the real card's dimensions to avoid layout shift
+  // when the content arrives.
   if (isLoading) {
     return (
       <div className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-4 h-4 rounded-full border-2 border-brand-400 border-t-transparent animate-spin" />
-          <p className="text-xs text-text-tertiary">Generating grounded verdict from your evidence...</p>
+        <div className="flex items-center gap-2 mb-3">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-16 rounded-full" />
         </div>
+        <Skeleton className="h-4 w-full mb-2" />
+        <Skeleton className="h-4 w-5/6 mb-4" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Skeleton className="h-3 w-20 mb-2" />
+            <Skeleton.Card lines={2} />
+          </div>
+          <div>
+            <Skeleton className="h-3 w-16 mb-2" />
+            <Skeleton.Card lines={2} />
+          </div>
+        </div>
+        <p className="text-[10px] text-text-disabled mt-4 italic" aria-live="polite">
+          Generating grounded verdict from your evidence…
+        </p>
       </div>
     )
   }
