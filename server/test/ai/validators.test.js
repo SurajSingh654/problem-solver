@@ -9,6 +9,9 @@ import {
     validateInterviewDebrief,
     validateProblemSelection,
     validateProblemContent,
+    validateCoaching,
+    validateScenarioGen,
+    validateScenarioEval,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
@@ -19,6 +22,9 @@ import {
     buildFallbackInterviewDebrief,
     buildFallbackProblemSelection,
     buildFallbackProblemContent,
+    buildFallbackCoaching,
+    buildFallbackScenarioGen,
+    buildFallbackScenarioEval,
     prettyDimName,
 } from '../../src/services/ai.fallbacks.js'
 
@@ -1145,6 +1151,270 @@ describe('buildFallbackProblemContent', () => {
     it('produces 3 follow-ups in EASY/MEDIUM/HARD order', () => {
         const fb = buildFallbackProblemContent({ category: 'CODING' })
         expect(fb.followUpQuestions.map(f => f.difficulty)).toEqual(['EASY', 'MEDIUM', 'HARD'])
+    })
+})
+
+// ── validateCoaching ────────────────────────────────────────────────
+describe('validateCoaching — validate mode', () => {
+    const VALIDATE_OK = {
+        response: 'You listed 5 functional requirements but missed non-functional — what is your latency target?',
+        verdict: 'needs_work',
+        specificStrength: 'Strong functional requirements list with concrete numbers.',
+        specificGap: 'Missing non-functional requirements (latency, availability).',
+    }
+
+    it('accepts a well-formed validate response', () => {
+        expect(validateCoaching(VALIDATE_OK, { mode: 'validate' }).valid).toBe(true)
+    })
+
+    it('accepts null specificGap', () => {
+        const r = validateCoaching({ ...VALIDATE_OK, specificGap: null }, { mode: 'validate' })
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects unknown verdict', () => {
+        const r = validateCoaching({ ...VALIDATE_OK, verdict: 'mid' }, { mode: 'validate' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('verdict-unknown')
+    })
+
+    it('rejects empty response', () => {
+        const r = validateCoaching({ ...VALIDATE_OK, response: '' }, { mode: 'validate' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('response-empty')
+    })
+
+    it('rejects refusal-style response', () => {
+        const r = validateCoaching(
+            { ...VALIDATE_OK, response: "I cannot help with this." },
+            { mode: 'validate' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
+    })
+})
+
+describe('validateCoaching — guide mode', () => {
+    const GUIDE_OK = {
+        response: 'You seem stuck on the data flow — let me ask a few questions.',
+        guidingQuestions: [
+            'What is the primary purpose of this component?',
+            'Which database access pattern matters most here?',
+            'What happens when this component is unavailable?',
+        ],
+        thinkAbout: 'Trace one read request end-to-end before adding more components.',
+    }
+
+    it('accepts a well-formed guide response', () => {
+        expect(validateCoaching(GUIDE_OK, { mode: 'guide' }).valid).toBe(true)
+    })
+
+    it('rejects fewer than 3 guiding questions', () => {
+        const r = validateCoaching(
+            { ...GUIDE_OK, guidingQuestions: GUIDE_OK.guidingQuestions.slice(0, 2) },
+            { mode: 'guide' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.startsWith('guidingQuestions-count'))).toBe(true)
+    })
+
+    it('rejects more than 5 guiding questions', () => {
+        const r = validateCoaching(
+            { ...GUIDE_OK, guidingQuestions: ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'] },
+            { mode: 'guide' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.startsWith('guidingQuestions-count'))).toBe(true)
+    })
+
+    it('rejects empty thinkAbout', () => {
+        const r = validateCoaching({ ...GUIDE_OK, thinkAbout: '' }, { mode: 'guide' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('thinkAbout-empty')
+    })
+})
+
+describe('validateCoaching — teach mode', () => {
+    const TEACH_OK = {
+        response: 'CAP theorem in your messaging system means: during a network split, do users see stale messages or get errors? AP is usually correct.',
+        conceptExplanation: 'CAP says you cannot have all three of consistency, availability, and partition tolerance.',
+        exampleInContext: 'Your chat system would prefer AP — slightly delayed messages beat no service.',
+        relatedDecision: 'Use this to decide whether to allow stale reads from replicas during a network split.',
+    }
+
+    it('accepts a well-formed teach response', () => {
+        expect(validateCoaching(TEACH_OK, { mode: 'teach' }).valid).toBe(true)
+    })
+
+    it('rejects empty conceptExplanation', () => {
+        const r = validateCoaching(
+            { ...TEACH_OK, conceptExplanation: '' },
+            { mode: 'teach' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('conceptExplanation-empty')
+    })
+
+    it('rejects unknown mode', () => {
+        const r = validateCoaching(TEACH_OK, { mode: 'evaluate' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('mode-unknown')
+    })
+})
+
+// ── validateScenarioGen ─────────────────────────────────────────────
+const VALID_SCENARIO_GEN = {
+    scenarios: [
+        {
+            scenario: 'Your Redis cluster loses one primary at peak traffic. Walk through how the system degrades.',
+            category: 'failure',
+            difficulty: 'medium',
+            expectedComponents: ['Redis', 'API Server'],
+        },
+        {
+            scenario: 'Two requests modify the same URL mapping at the exact same instant. What happens?',
+            category: 'consistency',
+            difficulty: 'hard',
+            expectedComponents: ['Postgres'],
+        },
+    ],
+}
+
+describe('validateScenarioGen', () => {
+    it('accepts a well-formed scenario list', () => {
+        expect(validateScenarioGen(VALID_SCENARIO_GEN).valid).toBe(true)
+    })
+
+    it('rejects unknown category', () => {
+        const v = {
+            scenarios: [{ ...VALID_SCENARIO_GEN.scenarios[0], category: 'novel' }],
+        }
+        const r = validateScenarioGen(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.category-unknown'))).toBe(true)
+    })
+
+    it('rejects unknown difficulty', () => {
+        const v = {
+            scenarios: [{ ...VALID_SCENARIO_GEN.scenarios[0], difficulty: 'EASY' }], // wrong case
+        }
+        const r = validateScenarioGen(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.difficulty-unknown'))).toBe(true)
+    })
+
+    it('rejects empty expectedComponents item', () => {
+        const v = {
+            scenarios: [{ ...VALID_SCENARIO_GEN.scenarios[0], expectedComponents: ['Redis', ''] }],
+        }
+        const r = validateScenarioGen(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.expectedComponents-empty-item'))).toBe(true)
+    })
+
+    it('rejects too few scenarios when minCount > received', () => {
+        const r = validateScenarioGen({ scenarios: [] }, { minCount: 1 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.startsWith('scenarios-too-few'))).toBe(true)
+    })
+
+    it('rejects when scenarios is not an array', () => {
+        const r = validateScenarioGen({ scenarios: 'oops' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('scenarios-not-array')
+    })
+})
+
+// ── validateScenarioEval ────────────────────────────────────────────
+const VALID_SCENARIO_EVAL = {
+    verdict: 'PARTIAL',
+    explanation: 'They identified the cache miss path but did not address the thundering-herd problem.',
+    missedPoints: ['Thundering herd on cache miss'],
+    suggestions: ['Add request coalescing at the API layer'],
+}
+
+describe('validateScenarioEval', () => {
+    it('accepts a well-formed evaluation', () => {
+        expect(validateScenarioEval(VALID_SCENARIO_EVAL).valid).toBe(true)
+    })
+
+    it('accepts PASS verdict with empty arrays', () => {
+        const r = validateScenarioEval({
+            verdict: 'PASS',
+            explanation: 'Correctly traced read path through their architecture.',
+            missedPoints: [],
+            suggestions: [],
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects unknown verdict', () => {
+        const r = validateScenarioEval({ ...VALID_SCENARIO_EVAL, verdict: 'OK' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('verdict-unknown')
+    })
+
+    it('rejects empty explanation', () => {
+        const r = validateScenarioEval({ ...VALID_SCENARIO_EVAL, explanation: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('explanation-empty')
+    })
+
+    it('rejects refusal-style explanation', () => {
+        const r = validateScenarioEval({
+            ...VALID_SCENARIO_EVAL,
+            explanation: "I cannot help with this evaluation.",
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
+    })
+})
+
+// ── buildFallbackCoaching / buildFallbackScenario* ──────────────────
+describe('buildFallbackCoaching', () => {
+    it('produces validate-mode output that passes its own validator', () => {
+        const fb = buildFallbackCoaching({ mode: 'validate' })
+        expect(validateCoaching(fb, { mode: 'validate' }).valid).toBe(true)
+        expect(fb._fallback).toBe(true)
+    })
+
+    it('produces guide-mode output with 3-5 questions', () => {
+        const fb = buildFallbackCoaching({ mode: 'guide' })
+        expect(validateCoaching(fb, { mode: 'guide' }).valid).toBe(true)
+        expect(fb.guidingQuestions.length).toBeGreaterThanOrEqual(3)
+        expect(fb.guidingQuestions.length).toBeLessThanOrEqual(5)
+    })
+
+    it('produces teach-mode output with all required fields', () => {
+        const fb = buildFallbackCoaching({ mode: 'teach' })
+        expect(validateCoaching(fb, { mode: 'teach' }).valid).toBe(true)
+        expect(fb.conceptExplanation).toBeTruthy()
+        expect(fb.exampleInContext).toBeTruthy()
+        expect(fb.relatedDecision).toBeTruthy()
+    })
+})
+
+describe('buildFallbackScenarioGen', () => {
+    it('produces output that passes the validator', () => {
+        const fb = buildFallbackScenarioGen({ count: 3 })
+        expect(validateScenarioGen(fb).valid).toBe(true)
+        expect(fb._fallback).toBe(true)
+    })
+
+    it('marks every scenario with the [AI Unavailable] prefix', () => {
+        const fb = buildFallbackScenarioGen()
+        for (const s of fb.scenarios) {
+            expect(s.scenario).toContain('[AI Unavailable')
+        }
+    })
+})
+
+describe('buildFallbackScenarioEval', () => {
+    it('produces PARTIAL verdict that passes its validator', () => {
+        const fb = buildFallbackScenarioEval()
+        expect(validateScenarioEval(fb).valid).toBe(true)
+        expect(fb.verdict).toBe('PARTIAL')
+        expect(fb._fallback).toBe(true)
     })
 })
 

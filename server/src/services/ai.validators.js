@@ -306,6 +306,139 @@ export function validateFinalEval(evalOut, { designType } = {}) {
   return { valid: violations.length === 0, violations };
 }
 
+// ── Design Studio coaching / scenario validators ────────────────────
+//
+// Three surfaces, three validators:
+//   • validateCoaching        — validate / guide / teach modes (different schemas)
+//   • validateScenarioGen     — scenario generation (challenge bank)
+//   • validateScenarioEval    — per-scenario response evaluation
+//
+// Lower stakes than verdict / final-eval, but the same defense applies:
+// reject "I cannot help" deflections, malformed enums, empty critical
+// fields. Fallback responses live in ai.fallbacks.js.
+const COACHING_VERDICT_VALUES = new Set(["on_track", "needs_work", "strong"]);
+const SCENARIO_CATEGORIES = new Set([
+  "scale",
+  "failure",
+  "edge_case",
+  "consistency",
+  "cost",
+  "extensibility",
+  "concurrency",
+]);
+const SCENARIO_DIFFICULTIES = new Set(["easy", "medium", "hard"]);
+const SCENARIO_EVAL_VERDICTS = new Set(["PASS", "PARTIAL", "FAIL"]);
+
+function detectCoachingRefusal(text) {
+  if (!isNonEmptyString(text)) return false;
+  const t = text.toLowerCase().trim();
+  return (
+    /^i (cannot|can't|am unable to)/.test(t) ||
+    t.includes("i cannot help with") ||
+    t.includes("i'm unable to help") ||
+    t.includes("i cannot assist")
+  );
+}
+
+export function validateCoaching(coaching, { mode } = {}) {
+  const violations = [];
+  if (!coaching || typeof coaching !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!isNonEmptyString(coaching.response)) violations.push("response-empty");
+  if (detectCoachingRefusal(coaching.response)) violations.push("refusal-detected");
+
+  if (mode === "validate") {
+    if (!COACHING_VERDICT_VALUES.has(coaching.verdict)) violations.push("verdict-unknown");
+    if (!isNonEmptyString(coaching.specificStrength))
+      violations.push("specificStrength-empty");
+    // specificGap: allow null but reject other falsy types
+    if (coaching.specificGap != null && !isNonEmptyString(coaching.specificGap)) {
+      violations.push("specificGap-shape");
+    }
+  } else if (mode === "guide") {
+    if (!Array.isArray(coaching.guidingQuestions)) {
+      violations.push("guidingQuestions-not-array");
+    } else {
+      if (coaching.guidingQuestions.length < 3 || coaching.guidingQuestions.length > 5) {
+        violations.push(
+          `guidingQuestions-count:expected=3-5-got=${coaching.guidingQuestions.length}`,
+        );
+      }
+      if (coaching.guidingQuestions.some((q) => !isNonEmptyString(q))) {
+        violations.push("guidingQuestions-empty-item");
+      }
+    }
+    if (!isNonEmptyString(coaching.thinkAbout)) violations.push("thinkAbout-empty");
+  } else if (mode === "teach") {
+    if (!isNonEmptyString(coaching.conceptExplanation))
+      violations.push("conceptExplanation-empty");
+    if (!isNonEmptyString(coaching.exampleInContext))
+      violations.push("exampleInContext-empty");
+    if (!isNonEmptyString(coaching.relatedDecision))
+      violations.push("relatedDecision-empty");
+  } else {
+    violations.push("mode-unknown");
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
+export function validateScenarioGen(result, { minCount = 1 } = {}) {
+  const violations = [];
+  if (!result || typeof result !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!Array.isArray(result.scenarios)) {
+    return { valid: false, violations: ["scenarios-not-array"] };
+  }
+  if (result.scenarios.length < minCount) {
+    violations.push(`scenarios-too-few:min=${minCount}-got=${result.scenarios.length}`);
+  }
+  result.scenarios.forEach((s, i) => {
+    const tag = `scenarios[${i}]`;
+    if (!s || typeof s !== "object") {
+      violations.push(`${tag}-not-object`);
+      return;
+    }
+    if (!isNonEmptyString(s.scenario)) violations.push(`${tag}.scenario-empty`);
+    if (!SCENARIO_CATEGORIES.has(s.category)) violations.push(`${tag}.category-unknown`);
+    if (!SCENARIO_DIFFICULTIES.has(s.difficulty))
+      violations.push(`${tag}.difficulty-unknown`);
+    if (!Array.isArray(s.expectedComponents)) {
+      violations.push(`${tag}.expectedComponents-not-array`);
+    } else if (s.expectedComponents.some((c) => !isNonEmptyString(c))) {
+      violations.push(`${tag}.expectedComponents-empty-item`);
+    }
+  });
+  return { valid: violations.length === 0, violations };
+}
+
+export function validateScenarioEval(evalOut) {
+  const violations = [];
+  if (!evalOut || typeof evalOut !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!SCENARIO_EVAL_VERDICTS.has(evalOut.verdict)) violations.push("verdict-unknown");
+  if (!isNonEmptyString(evalOut.explanation)) violations.push("explanation-empty");
+
+  if (!Array.isArray(evalOut.missedPoints)) {
+    violations.push("missedPoints-not-array");
+  } else if (evalOut.missedPoints.some((p) => !isNonEmptyString(p))) {
+    violations.push("missedPoints-empty-item");
+  }
+  if (!Array.isArray(evalOut.suggestions)) {
+    violations.push("suggestions-not-array");
+  } else if (evalOut.suggestions.some((s) => !isNonEmptyString(s))) {
+    violations.push("suggestions-empty-item");
+  }
+
+  // Refusal detection on explanation.
+  if (detectCoachingRefusal(evalOut.explanation)) violations.push("refusal-detected");
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ── Problem generation validators (selection + content) ─────────────
 //
 // Stage 2 of generateProblemsAI returns { selections: [...], learningPath }.

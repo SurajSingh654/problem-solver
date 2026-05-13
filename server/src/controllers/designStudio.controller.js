@@ -33,9 +33,19 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { aiComplete, AIError } from "../services/ai.service.js";
-import { validateFinalEval } from "../services/ai.validators.js";
-import { buildFallbackFinalEval } from "../services/ai.fallbacks.js";
-import { AI_MODEL_PRIMARY } from "../config/env.js";
+import {
+  validateFinalEval,
+  validateCoaching,
+  validateScenarioGen,
+  validateScenarioEval,
+} from "../services/ai.validators.js";
+import {
+  buildFallbackFinalEval,
+  buildFallbackCoaching,
+  buildFallbackScenarioGen,
+  buildFallbackScenarioEval,
+} from "../services/ai.fallbacks.js";
+import { AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
 import { initialSM2State } from "../utils/sm2.js";
 import {
   designStudioCoachingPrompt,
@@ -755,15 +765,47 @@ export async function askAICoach(req, res) {
       stuckContext,
     });
 
-    const aiResponse = await aiComplete({
-      systemPrompt: system,
-      userPrompt: user,
-      userId,
-      model: "gpt-4o-mini",
-      temperature: 0.7,
-      maxTokens: 800,
-      jsonMode: true,
-    });
+    // ── AI call → validate → fallback if needed ───────────
+    let aiResponse;
+    let usedCoachingFallback = false;
+    let coachingViolations = [];
+    try {
+      aiResponse = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        model: AI_MODEL_FAST,
+        temperature: 0.7,
+        maxTokens: 800,
+        jsonMode: true,
+        surface: "design-coaching",
+      });
+      const check = validateCoaching(aiResponse, { mode });
+      if (!check.valid) {
+        coachingViolations = check.violations;
+        console.warn(
+          `[design-coaching] validation failed for session ${sessionId} mode=${mode}: ${coachingViolations.join(", ")}`,
+        );
+        aiResponse = buildFallbackCoaching({ mode });
+        usedCoachingFallback = true;
+      }
+    } catch (aiErr) {
+      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
+        return error(res, aiErr.message, 429, aiErr.code);
+      }
+      console.warn(
+        `[design-coaching] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+      );
+      aiResponse = buildFallbackCoaching({ mode });
+      usedCoachingFallback = true;
+      coachingViolations = [`llm-error:${aiErr?.code || aiErr?.message || "unknown"}`];
+    }
+
+    // Tag the response so the UI can render a "coach unavailable, retry"
+    // banner. Stays attached to the persisted interaction for history.
+    if (usedCoachingFallback) {
+      aiResponse = { ...aiResponse, usedFallback: true, fallbackReason: coachingViolations };
+    }
 
     // Log the interaction. We now store the FULL `aiResponse` object (not
     // just extracted fields) so the client-side history drawer can
@@ -861,15 +903,37 @@ export async function generateScenarios(req, res) {
       dataFlowDescription: dataFlow,
     });
 
-    const aiResponse = await aiComplete({
-      systemPrompt: system,
-      userPrompt: user,
-      userId,
-      model: "gpt-4o-mini",
-      temperature: 0.8,
-      maxTokens: 2500,
-      jsonMode: true,
-    });
+    let aiResponse;
+    let usedScenarioGenFallback = false;
+    try {
+      aiResponse = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        model: AI_MODEL_FAST,
+        temperature: 0.8,
+        maxTokens: 2500,
+        jsonMode: true,
+        surface: "design-scenario-gen",
+      });
+      const check = validateScenarioGen(aiResponse, { minCount: 1 });
+      if (!check.valid) {
+        console.warn(
+          `[design-scenario-gen] validation failed for session ${sessionId}: ${check.violations.join(", ")}`,
+        );
+        aiResponse = buildFallbackScenarioGen({ count: 3 });
+        usedScenarioGenFallback = true;
+      }
+    } catch (aiErr) {
+      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
+        return error(res, aiErr.message, 429, aiErr.code);
+      }
+      console.warn(
+        `[design-scenario-gen] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+      );
+      aiResponse = buildFallbackScenarioGen({ count: 3 });
+      usedScenarioGenFallback = true;
+    }
 
     // Structure scenarios with IDs and pending status
     const scenarios = (aiResponse.scenarios || []).map((s, i) => ({
@@ -880,6 +944,10 @@ export async function generateScenarios(req, res) {
       userResponse: null,
       aiVerdict: null,
       status: "pending",
+      // Tag fallback scenarios so the UI can show "AI unavailable —
+      // retry for design-specific scenarios" rather than treating these
+      // generic stubs as real challenges.
+      ...(usedScenarioGenFallback ? { _fallback: true } : {}),
     }));
 
     // Persist scenarios + transition status to VALIDATING atomically.
@@ -912,7 +980,10 @@ export async function generateScenarios(req, res) {
       throw txErr;
     }
 
-    return success(res, { scenarios });
+    return success(res, {
+      scenarios,
+      usedFallback: usedScenarioGenFallback,
+    });
   } catch (err) {
     if (err.code === "RATE_LIMITED" || err.code === "OPENAI_RATE_LIMITED") {
       return error(res, err.message, 429, err.code);
@@ -1003,15 +1074,37 @@ export async function evaluateScenario(req, res) {
       dataFlowDescription: session.dataFlowDescription || "",
     });
 
-    const aiResponse = await aiComplete({
-      systemPrompt: system,
-      userPrompt: user,
-      userId,
-      model: "gpt-4o-mini",
-      temperature: 0.5,
-      maxTokens: 1000,
-      jsonMode: true,
-    });
+    let aiResponse;
+    let usedScenarioEvalFallback = false;
+    try {
+      aiResponse = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        model: AI_MODEL_FAST,
+        temperature: 0.5,
+        maxTokens: 1000,
+        jsonMode: true,
+        surface: "design-scenario-eval",
+      });
+      const check = validateScenarioEval(aiResponse);
+      if (!check.valid) {
+        console.warn(
+          `[design-scenario-eval] validation failed for session ${sessionId} scenario ${scenarioId}: ${check.violations.join(", ")}`,
+        );
+        aiResponse = buildFallbackScenarioEval();
+        usedScenarioEvalFallback = true;
+      }
+    } catch (aiErr) {
+      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
+        return error(res, aiErr.message, 429, aiErr.code);
+      }
+      console.warn(
+        `[design-scenario-eval] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+      );
+      aiResponse = buildFallbackScenarioEval();
+      usedScenarioEvalFallback = true;
+    }
 
     // Update scenario with verdict
     scenarios[scenarioIdx].aiVerdict = {
@@ -1019,6 +1112,7 @@ export async function evaluateScenario(req, res) {
       explanation: aiResponse.explanation || "",
       missedPoints: aiResponse.missedPoints || [],
       suggestions: aiResponse.suggestions || [],
+      ...(usedScenarioEvalFallback ? { usedFallback: true } : {}),
     };
     scenarios[scenarioIdx].status = "evaluated";
 

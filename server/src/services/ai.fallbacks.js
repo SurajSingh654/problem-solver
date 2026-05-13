@@ -505,8 +505,104 @@ export function buildFallbackProblemContent({
 // buildFallbackProblem singular. Some future caller might still expect it.
 export const buildFallbackProblem = buildFallbackProblemContent;
 
-export function buildFallbackCoaching(/* { phase, content, mode } */) {
-  return null;
+// Design Studio coaching fallback. Mode-shaped — the AI Coach UI expects
+// different fields per mode (validate / guide / teach), so the fallback
+// returns the matching shape for each.
+//
+// All variants pass their own validator (validateCoaching) so the caller
+// can use `usedFallback: true` without further checks.
+export function buildFallbackCoaching({ mode = "validate" } = {}) {
+  const baseResponse =
+    "AI coach unavailable right now — please retry. In the meantime, re-read your phase content and check it against the rubric.";
+
+  if (mode === "guide") {
+    return {
+      response: baseResponse,
+      guidingQuestions: [
+        "What is the primary purpose of this phase in your design?",
+        "Which constraints from the problem statement most directly shape your decisions here?",
+        "What's the most important trade-off you've made — and what did you give up?",
+      ],
+      thinkAbout:
+        "Walk through what your design does on the most common request path, then on the worst-case path.",
+      _fallback: true,
+    };
+  }
+
+  if (mode === "teach") {
+    return {
+      response: baseResponse,
+      conceptExplanation:
+        "AI explanation unavailable — please retry. Consult the admin reference notes if available.",
+      exampleInContext:
+        "AI example unavailable — please retry to get an example tailored to your design.",
+      relatedDecision:
+        "AI guidance unavailable — please retry to learn what decision this concept unlocks.",
+      _fallback: true,
+    };
+  }
+
+  // default: validate
+  return {
+    response: baseResponse,
+    verdict: "needs_work",
+    specificStrength: "AI coach unavailable — please retry to get specific feedback.",
+    specificGap: null,
+    _fallback: true,
+  };
+}
+
+// Scenario generation fallback. The AI produces design-specific scenarios
+// tied to the candidate's components, which we cannot replicate without
+// the model. We return generic but valid stub scenarios per category so
+// the UI has something to render — clearly marked as fallbacks.
+export function buildFallbackScenarioGen({ count = 3 } = {}) {
+  const STUB_SCENARIOS = [
+    {
+      scenario:
+        "[AI Unavailable — Retry For Specific Scenarios] Generic scale challenge: traffic to your system grows 10× overnight. Walk through which component breaks first and how you'd mitigate it.",
+      category: "scale",
+      difficulty: "medium",
+      expectedComponents: ["Replace with components from your design"],
+    },
+    {
+      scenario:
+        "[AI Unavailable — Retry For Specific Scenarios] Generic failure challenge: your primary database becomes unreachable for 60 seconds. Trace the request path and explain what users experience.",
+      category: "failure",
+      difficulty: "medium",
+      expectedComponents: ["Replace with components from your design"],
+    },
+    {
+      scenario:
+        "[AI Unavailable — Retry For Specific Scenarios] Generic consistency challenge: two requests modify the same record at the exact same instant. What does your design guarantee, and what does it give up?",
+      category: "consistency",
+      difficulty: "hard",
+      expectedComponents: ["Replace with components from your design"],
+    },
+  ];
+  return {
+    scenarios: STUB_SCENARIOS.slice(0, Math.max(1, Math.min(count, STUB_SCENARIOS.length))),
+    _fallback: true,
+  };
+}
+
+// Scenario evaluation fallback. We can't judge correctness without the
+// model, so we return PARTIAL with a retry hint — neither rewarding the
+// candidate (which would inflate scenarioResilience in the final eval)
+// nor failing them (which would unfairly drop their score).
+export function buildFallbackScenarioEval() {
+  return {
+    verdict: "PARTIAL",
+    explanation:
+      "AI scenario evaluation unavailable — please retry. Your response was recorded but not scored.",
+    missedPoints: [
+      "AI evaluation pending — re-run evaluation when AI is back online for specific feedback.",
+    ],
+    suggestions: [
+      "Retry scenario evaluation. If the issue persists, move to the next scenario and revisit.",
+    ],
+    _fallback: true,
+  };
 }
 
 export function buildFallbackQuiz(/* { subject, count, difficulty } */) {
