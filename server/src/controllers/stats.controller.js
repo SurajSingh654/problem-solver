@@ -761,6 +761,11 @@ export async function getLeaderboard(req, res) {
 
 // Weight of each dimension in the overall score. Re-normalized across
 // active dimensions only (inactive dims don't drag the average to zero).
+//
+// teachingContributions (D7) ships with a conservative 0.10 weight and
+// only enters the dimensions array when the user has hosted ≥1 session.
+// Users who never hosted continue to see byte-identical 6D reports —
+// no D7 axis on their radar, no widened CI from a 7th total-dim count.
 const DIM_WEIGHTS = {
   patternRecognition: 0.2,
   solutionDepth: 0.18,
@@ -768,9 +773,15 @@ const DIM_WEIGHTS = {
   optimization: 0.22,
   pressurePerformance: 0.16,
   retention: 0.12,
+  teachingContributions: 0.1,
 };
 
 const DIM_KEYS = Object.keys(DIM_WEIGHTS);
+
+// Subset that always applies — the 6 baseline dimensions every user sees.
+// teachingContributions is opt-in (per host hosting a session) and is
+// pushed onto the dimensions array dynamically in get6DReport.
+const BASELINE_DIM_KEYS = DIM_KEYS.filter((k) => k !== "teachingContributions");
 
 function inactiveDim(key, reason, n = 0) {
   return {
@@ -797,7 +808,9 @@ function activeDim(key, { score, n, ci, basis }) {
 }
 
 function buildInactiveReport({ message } = {}) {
-  const dimensions = DIM_KEYS.map((key) =>
+  // Always 6 baseline dims for the empty report — D7 only appears once
+  // the user has actually hosted a teaching session.
+  const dimensions = BASELINE_DIM_KEYS.map((key) =>
     inactiveDim(key, "Submit solutions to unlock this dimension"),
   );
   return {
@@ -805,7 +818,7 @@ function buildInactiveReport({ message } = {}) {
     overall: null,
     reportCoverage: {
       active: 0,
-      total: DIM_KEYS.length,
+      total: BASELINE_DIM_KEYS.length,
       pct: 0,
       overallComputable: false,
     },
@@ -872,6 +885,7 @@ export async function get6DReport(req, res) {
       interviews,
       quizzesForPressure,
       clarityRatings,
+      teachingSessionsHosted,
       allQuizzesForDimensions,
       overdueCount,
       successfulReviewAttempts,
@@ -893,6 +907,17 @@ export async function get6DReport(req, res) {
       prisma.clarityRating.findMany({
         where: { solution: { userId, teamId } },
         select: { rating: true },
+      }),
+      // Teaching sessions hosted (D7 — opt-in dimension). Only completed
+      // sessions count; ratings on cancelled/abandoned sessions are
+      // ignored. Rows include the peer ratings inline so we can compute
+      // the score in-memory.
+      prisma.teachingSession.findMany({
+        where: { hostId: userId, teamId, status: "COMPLETED" },
+        select: {
+          id: true,
+          ratings: { select: { rating: true, peerLearned: true } },
+        },
       }),
       prisma.quizAttempt.findMany({
         where: {
@@ -1771,16 +1796,76 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
+    // D7 — TEACHING CONTRIBUTIONS (opt-in dimension)
+    // ════════════════════════════════════════════════
+    // Only enters the dimensions array when the user has hosted ≥1
+    // completed teaching session. Existing users who have never hosted
+    // see byte-identical 6D reports — no D7 axis, no widened CI.
+    //
+    // Activation gate: ≥1 session AND ≥3 peer ratings across all sessions.
+    // Score formula:
+    //   0.5 * (avgRating / 5)*100  +  0.3 * min(100, sessionsHosted*20)
+    //   + 0.2 * peerLearnedRate*100
+    // The 0.5 anchor on average rating prevents a single high rating
+    // from unilaterally activating the dimension — peers vote on it.
+    const sessionsHostedCount = teachingSessionsHosted.length;
+    const teachingApplies = sessionsHostedCount >= 1;
+    let d7Score = null;
+    if (teachingApplies) {
+      const allTeachingRatings = teachingSessionsHosted.flatMap(
+        (s) => s.ratings,
+      );
+      const ratingsCount = allTeachingRatings.length;
+      if (ratingsCount < 3) {
+        const need = 3 - ratingsCount;
+        d7Score = inactiveDim(
+          "teachingContributions",
+          `${need} more peer rating${need === 1 ? "" : "s"} unlock this dimension`,
+          ratingsCount,
+        );
+      } else {
+        const avgRating =
+          allTeachingRatings.reduce((a, r) => a + r.rating, 0) / ratingsCount;
+        const peerLearnedRate =
+          allTeachingRatings.filter((r) => r.peerLearned).length / ratingsCount;
+        const score = Math.round(
+          50 * (avgRating / 5) +
+            30 * Math.min(1, sessionsHostedCount / 5) +
+            20 * peerLearnedRate,
+        );
+        // CI from rating distribution; meanCI handles small-n widening.
+        const ratingsAs100 = allTeachingRatings.map((r) => (r.rating / 5) * 100);
+        const ci = meanCI(ratingsAs100);
+        d7Score = activeDim("teachingContributions", {
+          score,
+          n: ratingsCount,
+          ci: ci?.ci ?? [Math.max(0, score - 20), Math.min(100, score + 20)],
+          basis: [
+            `sessions: ${sessionsHostedCount}`,
+            `ratings: ${ratingsCount}`,
+            `avg_rating: ${avgRating.toFixed(1)}`,
+            `peer_learned_rate: ${peerLearnedRate.toFixed(2)}`,
+          ],
+        });
+      }
+    }
+
+    // ════════════════════════════════════════════════
     // OVERALL — re-normalized weights over ACTIVE dims only
     // ════════════════════════════════════════════════
     const dimensions = [d1Score, d2Score, d3Score, d4Score, d5Score, d6Score];
+    if (d7Score) dimensions.push(d7Score);
     const activeDims = dimensions.filter((d) => d.status === "active");
     const activeCount = activeDims.length;
 
+    // totalDims grows to 7 only when the user opted into teaching.
+    // Users who haven't keep the original 6D coverage math.
+    const totalDimsForUser = dimensions.length;
+
     const reportCoverage = {
       active: activeCount,
-      total: DIM_KEYS.length,
-      pct: Math.round((activeCount / DIM_KEYS.length) * 100),
+      total: totalDimsForUser,
+      pct: Math.round((activeCount / totalDimsForUser) * 100),
       overallComputable: activeCount >= 3,
     };
 
@@ -1792,7 +1877,7 @@ export async function get6DReport(req, res) {
           ci: d.ci,
           weight: DIM_WEIGHTS[d.key],
         })),
-        DIM_KEYS.length,
+        totalDimsForUser,
       );
       if (combined) {
         overall = { score: combined.score, ci: combined.ci };

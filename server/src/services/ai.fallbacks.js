@@ -28,6 +28,7 @@ export function prettyDimName(key) {
       optimization: "Optimization",
       pressurePerformance: "Pressure Performance",
       retention: "Retention",
+      teachingContributions: "Teaching Contributions",
     }[key] || key
   );
 }

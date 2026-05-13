@@ -1623,7 +1623,7 @@ RESPOND WITH EXACT JSON:
 //   - Anthropic prompting best practices (explicit rules, examples, CoT)
 //   - OpenAI cookbook "Techniques to improve reliability"
 export function readinessVerdictPrompt(evidence) {
-  const system = `You are a calibrated interview-readiness assessor. Your job is to produce a JSON verdict from the structured 6D evidence block below.
+  const system = `You are a calibrated interview-readiness assessor. Your job is to produce a JSON verdict from the structured evidence block below. The candidate has 6 baseline dimensions (Pattern Recognition, Solution Depth, Communication, Optimization, Pressure Performance, Retention); a 7th opt-in dimension (Teaching Contributions) appears once they have hosted a peer-teaching session.
 
 THE STAKES: users who see a "ready" verdict they have not earned will fail real interviews. Under-claim when uncertain. Over-claiming is the failure mode you are engineered against.
 

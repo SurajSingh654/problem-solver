@@ -89,6 +89,12 @@ export function extractJSON(text) {
 // name (e.g. "pattern recognition" or just "pattern").
 const KEY_LABELS = {
   patternrecognition: ["pattern recognition", "pattern", "patterns"],
+  teachingcontributions: [
+    "teaching contributions",
+    "teaching",
+    "knowledge sharing",
+    "peer teaching",
+  ],
   solutiondepth: ["solution depth", "depth"],
   communication: ["communication"],
   optimization: ["optimization", "optimize"],
