@@ -20,6 +20,7 @@ export const teachingApi = {
     leave: (id) => api.post(`/teaching/${id}/leave`),
     rate: (id, data) => api.post(`/teaching/${id}/rate`, data),
     flag: (id, data) => api.post(`/teaching/${id}/flag`, data),
+    submitNotes: (id, data) => api.post(`/teaching/${id}/notes`, data),
 
     // Admin
     listFlags: (params = {}) => api.get("/teaching/admin/flags", { params }),

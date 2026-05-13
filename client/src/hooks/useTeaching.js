@@ -186,6 +186,25 @@ export function useFlagTeachingSession() {
     });
 }
 
+// ── Submit notes (kicks off AI artifacts on the server) ────
+// Mutation arg shape: { id, notes }
+export function useSubmitTeachingNotes() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, notes }) => teachingApi.submitNotes(id, { notes }),
+        onSuccess: (_, { id }) => {
+            qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
+            qc.invalidateQueries({ queryKey: ["teaching", "list"] });
+            toast.success("Notes saved. AI artifacts will appear shortly.");
+        },
+        onError: (err) => {
+            toast.error(
+                err?.response?.data?.error?.message || "Failed to submit notes.",
+            );
+        },
+    });
+}
+
 // ── Admin flag queue ────────────────────────────────────────
 const ADMIN_KEYS = {
     FLAGS: (params) => ["teaching", "admin", "flags", params],
