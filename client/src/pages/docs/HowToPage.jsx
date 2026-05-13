@@ -11,7 +11,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
     DocsLayout, DocsHero, Section, SectionTitle, SectionDesc,
-    StepCard, Callout, ArchBlock, SbLink,
+    StepCard, Callout, SbLink,
 } from './components'
 
 // ── Screenshot base path ────────────────────────────────────────────
@@ -127,6 +127,13 @@ const NAV = [
         group: 'Problems', items: [
             { id: 'solve', label: 'Solve a Problem' },
             { id: 'edit-solution', label: 'Edit Your Solution' },
+            { id: 'history', label: 'Attempt History' },
+            { id: 'review', label: 'Review Queue + Recall' },
+        ]
+    },
+    {
+        group: 'Insights', items: [
+            { id: 'report', label: '📊 Intelligence Report' },
         ]
     },
     {
@@ -287,10 +294,10 @@ export default function HowToPage() {
     return (
         <DocsLayout sidebar={sidebar}>
             <DocsHero
-                eyebrow="📘 Walkthroughs · v3.0"
+                eyebrow="📘 Walkthroughs · v4.0"
                 title="How-To —"
                 titleGradient="Use Every Tool"
-                desc="Concrete, copy-pasteable walkthroughs for each feature in ProbSolver. Start with Design Studio if you're new — the two demo sessions (System Design + Low-Level Design) cover the end-to-end shape of every feature. Then pick the section that matches what you want to do."
+                desc="Concrete, copy-pasteable walkthroughs for each tool. Start with Design Studio if you're new — the two demo sessions cover most of the app's shape. Then check the Intelligence Report section for how readiness is calculated, and the Review Queue section for the recall-before-reveal flow. Each section ends with one paste-ready example."
             />
 
             {/* ══════════════════════════════════════════════════════════════ */}
@@ -299,22 +306,32 @@ export default function HowToPage() {
             <Section id="overview">
                 <SectionTitle icon="🗺️">Overview</SectionTitle>
                 <SectionDesc>
-                    Five tools to know. Pick based on what you want to practice:
+                    Six surfaces to know. Pick based on what you want to do:
                 </SectionDesc>
 
                 <div className="grid md:grid-cols-2 gap-3 mb-4">
                     <div className="bg-surface-2 border border-border-default rounded-xl p-4">
                         <div className="text-lg mb-1">🏗️ Design Studio</div>
                         <p className="text-xs text-text-tertiary">
-                            Phased, AI-coached practice for System Design & Low-Level Design. Whiteboard,
-                            scenarios, scale analysis, flow simulation, final evaluation.
+                            Phased, AI-coached practice for System Design & Low-Level Design. Excalidraw canvas
+                            on the left, pinned right rail with AI Coach (Coach + History tabs), Stuck Detector,
+                            and curated reference architectures unlocked after your final eval.
                         </p>
                     </div>
                     <div className="bg-surface-2 border border-border-default rounded-xl p-4">
-                        <div className="text-lg mb-1">📝 Problems</div>
+                        <div className="text-lg mb-1">📝 Problems + Recall</div>
                         <p className="text-xs text-text-tertiary">
-                            Solve team-curated problems. Submit code or structured answers across 7 categories.
-                            Get AI review across 5 dimensions.
+                            Solve team-curated problems across 7 categories. Editing appends a SolutionAttempt
+                            snapshot — your history is preserved. Review Queue uses recall-before-reveal with a
+                            word-level diff and per-row forgetting curves.
+                        </p>
+                    </div>
+                    <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                        <div className="text-lg mb-1">📊 Intelligence Report</div>
+                        <p className="text-xs text-text-tertiary">
+                            Calibrated 6D readiness signal with a grounded AI verdict, 95% confidence interval,
+                            and tier-readiness grid. Dimensions with too little data show — and an activation
+                            message instead of a fabricated score.
                         </p>
                     </div>
                     <div className="bg-surface-2 border border-border-default rounded-xl p-4">
@@ -327,8 +344,15 @@ export default function HowToPage() {
                     <div className="bg-surface-2 border border-border-default rounded-xl p-4">
                         <div className="text-lg mb-1">🎙️ Mock Interview</div>
                         <p className="text-xs text-text-tertiary">
-                            Live AI interviewer over WebSocket — text or voice mode. Structured phases,
-                            hints, final debrief.
+                            Live AI interviewer over WebSocket — text or voice mode. SD/LLD types route into
+                            Design Studio's Interview Mode so the AI can read your live diagram via tool calls.
+                        </p>
+                    </div>
+                    <div className="bg-surface-2 border border-border-default rounded-xl p-4">
+                        <div className="text-lg mb-1">💬 Feedback</div>
+                        <p className="text-xs text-text-tertiary">
+                            Bug reports and feature requests with similar-report dedup. Status pipeline tracked
+                            to resolution from a shared admin inbox.
                         </p>
                     </div>
                 </div>
@@ -366,7 +390,7 @@ export default function HowToPage() {
                         <strong>Freeform:</strong> pick <strong>🏗️ System Design</strong>, title <K>Design URL Shortener</K>, difficulty <K>MEDIUM</K>, click <strong>Start Design Session</strong>.
                     </p>
                     <p className="text-xs text-text-secondary leading-relaxed mt-2">
-                        Either way you land in the same workspace: Excalidraw canvas on top, phase editor below. Seven phases are dots in the top bar: Requirements → Estimation → API → Data Model → Architecture → Deep Dive → Trade-offs.
+                        <strong>Workspace layout:</strong> two columns. <strong>Left</strong> is the Excalidraw canvas on top with a horizontal resize handle, phase-text editor below. <strong>Right rail (pinned, ~360px)</strong>: AI Coach always visible at the top with <strong>Coach / History</strong> tabs, then collapsible <strong>🔀 Data Flow</strong> and <strong>🧩 Component Annotations</strong> panels. Seven phases are dots in the top bar: Requirements → Estimation → API → Data Model → Architecture → Deep Dive → Trade-offs.
                     </p>
                     <HowToImage
                         file="ds-sd-00-create-session.png"
@@ -394,18 +418,19 @@ Non-functional:
 - Availability: 99.9% (redirects can't go down)
 - Consistency: eventual for analytics, strong for redirect mapping`}</PasteBlock>
                     <HowToImage
-                        file="ds-sd-01-workspace.png"
-                        alt="Design workspace — top bar with phase dots, Excalidraw canvas, bottom phase editor"
-                        caption="Full workspace layout: phase dots (top), Excalidraw canvas, resizable phase editor with AI coach bar"
+                        file="ds-sd-01-rail-layout.png"
+                        alt="Design workspace — phase dots top, canvas + textarea left column, AI Coach + Data Flow + Annotations rail on the right"
+                        caption="Full workspace: phase dots (top), canvas + phase editor (left), pinned right rail with Coach + collapsible panels"
                     />
                     <Callout type="info">
-                        Try the <strong>🤖 AI Coach → Am I on track?</strong> button now. It should quote your text
+                        In the right rail&apos;s <strong>Coach</strong> tab, click <strong>Am I on track?</strong> now. It should quote your text
                         back and name one missing thing (e.g. &ldquo;rate limiting&rdquo; or &ldquo;URL validation&rdquo;).
+                        The response stays pinned until you ask again or dismiss it — no more scrolling away from the canvas to find feedback.
                     </Callout>
                     <HowToImage
-                        file="ds-sd-01-ai-coach.png"
-                        alt="AI coach response panel with verdict pill, specific strength, and specific gap sections"
-                        caption="AI coach Validate response — verdict pill + Strength + Gap sections"
+                        file="ds-sd-01-coach-tab.png"
+                        alt="AI Coach tab pinned in the right rail showing verdict pill, Strength and Gap sections"
+                        caption="AI Coach response pinned in the right rail — verdict pill + Strength + Gap"
                     />
                 </StepCard>
 
@@ -465,7 +490,7 @@ Cassandra/ClickHouse for click_events (append-only, massive volume).`}</PasteBlo
 
                 <StepCard num="5" {...BRAND} title="Architecture 🏗️" sub="Diagram + component annotations + data flow">
                     <p className="text-xs text-text-secondary leading-relaxed mb-2">
-                        Draw on the <strong>Excalidraw canvas</strong> (top half of workspace): Client → CDN →
+                        Draw on the <strong>Excalidraw canvas</strong> (left column, top): Client → CDN →
                         Load Balancer → API Server → Redis → Postgres, plus Kafka + Worker + ClickHouse for click events.
                     </p>
                     <HowToImage
@@ -474,10 +499,10 @@ Cassandra/ClickHouse for click_events (append-only, massive volume).`}</PasteBlo
                         caption="Architecture drawn on the Excalidraw canvas"
                     />
                     <p className="text-xs text-text-secondary leading-relaxed mb-2">
-                        The AI <strong>can&apos;t see the diagram</strong>. Two panels below translate it for the AI —
-                        both are critical:
+                        The AI <strong>can&apos;t see the diagram</strong>. Two panels in the <strong>right rail</strong>
+                        (collapsed by default — click to expand) translate it into text for the AI. Both are critical:
                     </p>
-                    <PasteBlock label="🧩 Component Annotations (open the panel)">{`LoadBalancer — HTTP routing, SSL termination (AWS ALB)
+                    <PasteBlock label="🧩 Component Annotations (right rail, expand)">{`LoadBalancer — HTTP routing, SSL termination (AWS ALB)
 API Server — Shorten + redirect logic (Node.js, stateless)
 Redis — Hot URL cache, rate limiting (Redis Cluster 7.x)
 Postgres — Source of truth for url mappings (RDS Postgres 15)
@@ -485,11 +510,11 @@ Kafka — Async click event stream (MSK)
 ClickWorker — Consumes click events → analytics (Node.js consumer)
 ClickHouse — Analytics storage`}</PasteBlock>
                     <HowToImage
-                        file="ds-sd-05-annotations.png"
-                        alt="Expanded Component Annotations panel showing component name, purpose, technology, and notes fields"
-                        caption="🧩 Component Annotations panel expanded"
+                        file="ds-sd-05-rail-annotations.png"
+                        alt="Right-rail Component Annotations panel expanded showing per-row component name, purpose, technology, notes"
+                        caption="🧩 Component Annotations panel expanded in the right rail"
                     />
-                    <PasteBlock label="🔀 Data Flow (open the panel)">{`Redirect (read path):
+                    <PasteBlock label="🔀 Data Flow (right rail, expand)">{`Redirect (read path):
 Client → CDN (5 min edge cache) → LB → API → Redis (90% hit) → redirect
   cache miss → API → Postgres → populate Redis → redirect
   every redirect → async ClickEvent → Kafka → Worker → ClickHouse
@@ -498,9 +523,9 @@ Shorten (write path):
 Client → LB → API → validate → generate 7-char code (base62 of snowflake)
   → INSERT Postgres → populate Redis → return shortUrl`}</PasteBlock>
                     <HowToImage
-                        file="ds-sd-05-data-flow.png"
-                        alt="Expanded Data Flow panel with read-path and write-path traced through the components"
-                        caption="🔀 Data Flow panel expanded — AI uses this text, not the diagram"
+                        file="ds-sd-05-rail-data-flow.png"
+                        alt="Right-rail Data Flow panel expanded with read-path and write-path traced through the components"
+                        caption="🔀 Data Flow panel expanded in the right rail — AI uses this text, not the diagram"
                     />
                 </StepCard>
 
@@ -528,6 +553,42 @@ Chose eventual consistency on click counts:
 What breaks first at 10x (400K RPS read):
 - Redis cluster CPU — mitigation: 2-tier cache (local LRU in API)
 - Postgres on cache miss storm — mitigation: request coalescing`}</PasteBlock>
+                </StepCard>
+
+                <StepCard num="7a" {...INFO} title="Use the Coach + History tabs" sub="Right-rail AI Coach, two tabs">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        The <strong>Coach</strong> tab is where you ask. Three buttons — <strong>Am I on track?</strong>,
+                        <strong> I&apos;m stuck</strong>, <strong>Teach me…</strong> — plus a free-text follow-up.
+                        Each response stays pinned until you ask again.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        The <strong>History</strong> tab shows every coaching response from this session (capped at 50,
+                        persisted on the server). Filter to <K>Current phase</K> or <K>All phases</K>. Click
+                        <strong> Show in Coach</strong> on a past response to pin it back into the Coach tab — useful for
+                        comparing your earlier feedback against your current work without losing context.
+                    </p>
+                    <HowToImage
+                        file="ds-sd-coach-history.png"
+                        alt="Right-rail AI Coach with History tab active — list of past responses, phase filter, Show in Coach button per row"
+                        caption="History tab — past responses with per-phase filter and Show in Coach pin-back"
+                    />
+                </StepCard>
+
+                <StepCard num="7b" {...INFO} title="Stuck Detector — proactive nudges" sub="The rail nudges you when you've been idle too long">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        After ~3 minutes of idle (no canvas edits, no textarea typing) on a phase with empty or thin
+                        content, a <strong>Stuck Nudge</strong> card surfaces in the right rail. One click runs an
+                        <strong> Ask for hint</strong> request shaped by the current phase&apos;s rubric — so the hint is
+                        Architecture-flavoured on Architecture, Trade-offs-flavoured on Trade-offs.
+                    </p>
+                    <Callout type="info">
+                        Dismiss the nudge to ignore it; the detector resets after activity. Designed to break thrash, not nag.
+                    </Callout>
+                    <HowToImage
+                        file="ds-sd-stuck-nudge.png"
+                        alt="Stuck Nudge card in the right rail with idle reason and Ask for hint button"
+                        caption="Stuck Nudge — appears after idle, one-click hint shaped by phase rubric"
+                    />
                 </StepCard>
 
                 <StepCard num="8" {...SUCCESS} title="Validate Design →" sub="AI generates 6 scenarios tailored to your design">
@@ -595,6 +656,44 @@ Total: 29ms · Bottleneck: CDN → ALB`}</PasteBlock>
                         becomes read-only. Re-open it anytime from the session list.
                     </Callout>
                 </StepCard>
+
+                <StepCard num="11" {...INFO} title="🧭 Reference Architectures (post-eval)" sub="Compare your attempt to a curated worked example">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        After your final evaluation, a <strong>🧭 Reference</strong> button appears in the top bar.
+                        Opens a side-by-side <strong>ReferenceCompareView</strong>: your attempt on the left, a curated
+                        reference on the right, with a <strong>key-term diff</strong> highlighting concepts you used,
+                        missed, or used differently.
+                    </p>
+                    <Callout type="info">
+                        <strong>Why post-eval, not before?</strong> Worked examples accelerate learning <em>after</em> retrieval —
+                        peeking before you&apos;ve attempted short-circuits the practice (Sweller, Karpicke). The gate
+                        is intentional.
+                    </Callout>
+                    <HowToImage
+                        file="ds-sd-reference-compare.png"
+                        alt="Reference compare side-by-side view with user attempt left, curated reference right, key-term diff highlights"
+                        caption="Reference Compare — side-by-side with key-term diff, gated until after final evaluation"
+                    />
+                </StepCard>
+
+                <StepCard num="12" {...WARN} title="🎤 Practice as Interview" sub="Same canvas, AI plays interviewer, can read your diagram">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        The <strong>🎤 Practice as Interview</strong> button (top bar) pairs the design workspace
+                        with an AI interviewer. Same canvas, same phases, but now the AI drives the conversation,
+                        probes weak spots, and can <strong>read your live diagram via tool calls</strong> — the
+                        canvas-aware path that text-only Mock Interview can&apos;t do.
+                    </p>
+                    <ul className="text-xs text-text-secondary space-y-1 list-disc pl-4">
+                        <li>Best run after one self-paced pass — it&apos;s a stress test, not a tutorial.</li>
+                        <li>SD/LLD Mock Interviews now route here automatically; the chat-only path is gone.</li>
+                        <li>Setup modal lets you pick interview style + target company, same as Mock Interview.</li>
+                    </ul>
+                    <HowToImage
+                        file="ds-sd-interview-mode.png"
+                        alt="Design Studio Interview mode with chat panel beside the canvas and a phase-stage indicator"
+                        caption="Practice as Interview — AI interviewer runs alongside the same canvas + phase rail"
+                    />
+                </StepCard>
             </Section>
 
             {/* ══════════════════════════════════════════════════════════════ */}
@@ -616,6 +715,13 @@ Total: 29ms · Bottleneck: CDN → ALB`}</PasteBlock>
                     </p>
                     <p className="text-xs text-text-secondary leading-relaxed mt-2">
                         Six phases instead of seven: Requirements → Entities → Hierarchy → Patterns → Methods → SOLID.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed mt-2">
+                        <strong>Workspace layout is identical to SD:</strong> Excalidraw canvas + phase editor on the
+                        left (resizable), pinned right rail with AI Coach (Coach + History tabs), Data Flow, and
+                        Component Annotations panels. The Stuck Detector, Reference Compare (post-eval), and
+                        Practice as Interview entry points all behave the same way — see steps 7a, 7b, 11, 12 in the
+                        System Design section above.
                     </p>
                     <HowToImage
                         file="ds-lld-00-create-session.png"
@@ -742,7 +848,7 @@ Honest violation I admit:
   Better: CAS on individual spots. Acceptable V1, documented.`}</PasteBlock>
                 </StepCard>
 
-                <StepCard num="7" {...BRAND} title="Components + Data Flow" sub="Bottom panel, same as SD">
+                <StepCard num="7" {...BRAND} title="Components + Data Flow" sub="Right-rail panels, same as SD">
                     <PasteBlock label="🧩 Component Annotations">{`ParkingLot — Orchestrator (Java class)
 FeeStrategy — Pricing abstraction (interface + impls)
 SpotAssignmentStrategy — Finds free spot (interface + impls)
@@ -776,6 +882,14 @@ Exit: Scanner reads ticket → ParkingLot.exit(ticket, payment)
                 <Callout type="info">
                     <strong>Tip for both tracks:</strong> don&apos;t skip the Data Flow panel — the AI can&apos;t see
                     your Excalidraw. Without it, scenario and evaluation quality drops a lot.
+                </Callout>
+
+                <Callout type="success">
+                    <strong>Post-eval, both tracks unlock:</strong>
+                    <ul className="mt-2 space-y-1 list-disc pl-4">
+                        <li><strong>🧭 Reference</strong> — side-by-side compare against a curated worked example with key-term diff (gated until evaluation completes; see SD step 11).</li>
+                        <li><strong>🎤 Practice as Interview</strong> — same canvas, AI plays interviewer, can read your live diagram via tool calls (see SD step 12). Best after one self-paced attempt.</li>
+                    </ul>
                 </Callout>
             </Section>
 
@@ -885,9 +999,15 @@ Real-World Connection: where this pattern shows up in production`}</PasteBlock>
                     <p className="text-xs text-text-secondary leading-relaxed">
                         Your solution will resurface in <strong>Review Queue</strong> when SM-2 decides it&apos;s time
                         (could be tomorrow, 3 days, or 2 weeks depending on confidence). Rate your next
-                        attempt and the interval adjusts automatically.
+                        attempt and the interval adjusts automatically — see the <a href="#review" className="text-brand-fg-soft underline">Review Queue + Recall</a> section
+                        for the full recall→reveal→rate flow.
                     </p>
                 </StepCard>
+
+                <Callout type="info">
+                    Every submit appends an immutable snapshot — see <a href="#history" className="text-brand-fg-soft underline">Attempt History</a>.
+                    You can compare any two attempts side-by-side later, no matter how many times you&apos;ve edited.
+                </Callout>
             </Section>
 
             {/* ══════════════════════════════════════════════════════════════ */}
@@ -914,16 +1034,254 @@ Real-World Connection: where this pattern shows up in production`}</PasteBlock>
                     </p>
                 </StepCard>
 
-                <StepCard num="3" {...SUCCESS} title="Re-submit → new AI review" sub="New scores overwrite the old">
-                    <p className="text-xs text-text-secondary leading-relaxed">
+                <StepCard num="3" {...SUCCESS} title="Re-submit → new AI review" sub="New scores overwrite the old; old attempts are preserved">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
                         Scores, dimension breakdown, strengths, gaps — all replaced. Pattern baseline
                         tracking stays intact: the AI compares this attempt to your historical average
                         on this pattern and calls out improvement or regression explicitly in the review.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        <strong>Editing no longer overwrites your previous answer.</strong> Every submit, edit, and
+                        Design Studio bridge appends a <K>SolutionAttempt</K> snapshot — see <a href="#history" className="text-brand-fg-soft underline">Attempt History</a> to
+                        diff any two attempts side-by-side.
                     </p>
                     <Callout type="info">
                         SM-2 resets: the next review date is recomputed based on the new confidence rating.
                     </Callout>
                 </StepCard>
+            </Section>
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* ATTEMPT HISTORY                                                */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            <Section id="history">
+                <SectionTitle icon="🕓">Attempt History</SectionTitle>
+                <SectionDesc>
+                    Every submit, edit, and Design Studio bridge appends an immutable <K>SolutionAttempt</K> snapshot.
+                    The history page shows your trajectory and lets you diff any two attempts.
+                </SectionDesc>
+
+                <StepCard num="1" {...BRAND} title="Open the history page" sub="Edit Solution → View history (or Profile → Solutions)">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        Each solution has a <strong>View history</strong> link. Direct route is{' '}
+                        <K>/solutions/:id/history</K>. The page is read-only — editing still happens on the Edit Solution page.
+                    </p>
+                </StepCard>
+
+                <StepCard num="2" {...BRAND} title="Confidence trajectory" sub="Recharts line — oldest → newest">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        Top of the page: a confidence chart over attempt number. See whether you&apos;re trending up,
+                        flat, or regressing across re-attempts. Pulled directly from each <K>SolutionAttempt.confidence</K>{' '}
+                        — no extra recompute.
+                    </p>
+                    <HowToImage
+                        file="history-02-trajectory.png"
+                        alt="Confidence trajectory line chart with attempt-number x-axis and 1-5 confidence y-axis"
+                        caption="Confidence trajectory — answers 'am I improving on this problem?'"
+                    />
+                </StepCard>
+
+                <StepCard num="3" {...BRAND} title="Timeline + trigger badges" sub="Newest first, badged by what created the snapshot">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        Each row shows the attempt number, timestamp, confidence, and a trigger badge:
+                    </p>
+                    <ul className="text-xs text-text-secondary space-y-1 list-disc pl-4">
+                        <li><K>SUBMIT</K> — created from Submit Solution.</li>
+                        <li><K>EDIT</K> — created when you re-saved on Edit Solution.</li>
+                        <li><K>DESIGN_BRIDGE</K> — created when a Design Studio session was bridged into this solution.</li>
+                    </ul>
+                </StepCard>
+
+                <StepCard num="4" {...SUCCESS} title="A/B picker → side-by-side diff" sub="Pick any two attempts to compare">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        Pick attempt <strong>A</strong> and attempt <strong>B</strong> from the timeline. The right pane diffs:
+                    </p>
+                    <ul className="text-xs text-text-secondary space-y-1 list-disc pl-4">
+                        <li><strong>Code:</strong> line-level diff via the <K>diff</K> npm package.</li>
+                        <li><strong>Prose:</strong> character-level diff across Approach / Brute / Optimized / Key Insight / Feynman.</li>
+                        <li><strong>AI feedback:</strong> snapshot of the review at that attempt — see how your scores moved.</li>
+                    </ul>
+                    <HowToImage
+                        file="history-04-diff.png"
+                        alt="A/B picker with two attempts selected and a side-by-side diff view of code and prose changes"
+                        caption="A/B diff — pick any two attempts, line-level code + character-level prose"
+                    />
+                </StepCard>
+
+                <Callout type="info">
+                    All snapshots are immutable. The currently-displayed answer on Submit Solution is always the
+                    latest <K>SolutionAttempt</K>; the timeline is your full provenance.
+                </Callout>
+            </Section>
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* REVIEW QUEUE + RECALL                                          */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            <Section id="review">
+                <SectionTitle icon="🔁">Review Queue + Recall</SectionTitle>
+                <SectionDesc>
+                    Spaced repetition over your solved problems. The flow is{' '}
+                    <strong>recall → reveal → rate</strong> — type what you remember <em>before</em> seeing your stored
+                    answer. The gap between what you wrote and what was stored is the learning signal.
+                </SectionDesc>
+
+                <Callout type="info">
+                    <strong>Why recall first?</strong> Karpicke & Roediger (2008): retrieval practice is among the most
+                    replicated findings in cognitive psychology. Reading your old solution feels productive but doesn&apos;t
+                    move retention. Typing what you remember <em>does</em>.
+                </Callout>
+
+                <StepCard num="1" {...BRAND} title="Open the queue" sub="Sidebar → Review Queue">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        Top of the page: a stats bar (Due / Done this session / Coming 14d / Tracked total). Below it,
+                        a collapsible <strong>Recall Quality Analytics</strong> panel — overall recall rate trend across
+                        the last 12 weeks plus a per-pattern table of strongest / weakest patterns.
+                    </p>
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        Below that, due cards. Each card shows title, pattern, and a per-row{' '}
+                        <strong>forgetting curve sparkline</strong>: filled past retention, dashed projection forward,
+                        color bucket green &gt; 70% / yellow 40-70% / red &lt; 40%. A{' '}
+                        <strong>✨ Updated</strong> pill appears when the problem statement changed since you solved it.
+                    </p>
+                    <HowToImage
+                        file="review-01-queue.png"
+                        alt="Review queue page with stats bar, collapsible Recall Quality Analytics panel, and due cards each with a forgetting-curve sparkline"
+                        caption="Review queue — analytics panel + due cards with per-row forgetting curves"
+                    />
+                </StepCard>
+
+                <StepCard num="2" {...BRAND} title="Recall phase" sub="Type before you reveal — 90-second timer">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        Click a due card → recall view. Empty textarea + 90-second timer. Don&apos;t aim for the
+                        original word-for-word — aim for the <em>structure</em>: pattern, brute, optimized, complexity,
+                        key insight. The timer is informational, not a hard cutoff.
+                    </p>
+                    <Callout type="warning">
+                        Reveal without typing and the diff view will be unavailable on the next phase. Skip recall
+                        once and you&apos;ve thrown away the highest-fidelity learning signal in the app.
+                    </Callout>
+                </StepCard>
+
+                <StepCard num="3" {...BRAND} title="Reveal phase — Side-by-Side / Diff toggle" sub="See the gap">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        Two views, toggle on top:
+                    </p>
+                    <ul className="text-xs text-text-secondary space-y-1 list-disc pl-4">
+                        <li><strong>Side-by-Side:</strong> your recall on the left, the stored solution on the right. Best for code.</li>
+                        <li><strong>Diff:</strong> word-level coloring across recall vs stored — green = recalled, red = missed, yellow = invented. Coverage % at the top quantifies the gap.</li>
+                    </ul>
+                    <p className="text-xs text-text-secondary leading-relaxed mt-2">
+                        AI recall hints render in both views — they&apos;re shaped by what you actually wrote, not
+                        a generic prompt.
+                    </p>
+                    <HowToImage
+                        file="review-03-diff.png"
+                        alt="Reveal-phase Diff view with green/red/yellow word-level coloring and a coverage percentage banner"
+                        caption="Diff view — green=recalled, red=missed, yellow=invented, plus coverage %"
+                    />
+                </StepCard>
+
+                <StepCard num="4" {...SUCCESS} title="Rate phase" sub="1-5 confidence → SM-2 reschedules">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        Pick 1 (forgot it) through 5 (crystal clear). The SM-2 scheduler — FSRS soon — uses this to
+                        compute the next review date. Rate honestly: under-rating bunches your queue, over-rating
+                        means you forget before the next review.
+                    </p>
+                </StepCard>
+
+                <StepCard num="5" {...INFO} title="🔀 Mixed Mode on Problems" sub="Interleaved practice across categories">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        On the <K>Problems</K> page there&apos;s a <strong>🔀 Mixed Mode</strong> toggle pill in the
+                        filter row. Turning it on randomizes problem order across categories — a deterministic
+                        shuffle (djb2 hash of problem id) that&apos;s stable within a session but interleaves patterns.
+                        Rohrer & Taylor (2007): interleaved practice produces ~43% better retention at test time.
+                    </p>
+                    <Callout type="info">
+                        Blocked practice (all DP problems together) feels easier and produces better immediate
+                        performance. Interleaved (DP / Graphs / Trees mixed) feels harder and produces dramatically
+                        better long-term retention. Lean into the harder feel.
+                    </Callout>
+                </StepCard>
+            </Section>
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* INTELLIGENCE REPORT                                            */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            <Section id="report">
+                <SectionTitle icon="📊">Intelligence Report</SectionTitle>
+                <SectionDesc>
+                    Calibrated 6-dimension readiness signal with a grounded AI verdict and tier-readiness grid.
+                    The dashboard you check before claiming you&apos;re &ldquo;ready&rdquo; for an interview.
+                </SectionDesc>
+
+                <Callout type="info">
+                    <strong>Hard rule:</strong> if a dimension has too few data points, we show <K>—</K> and an
+                    activation message instead of a number. We refuse to fabricate a score from one solve. That&apos;s
+                    a feature — overclaim is the failure mode we explicitly engineered against.
+                </Callout>
+
+                <StepCard num="1" {...BRAND} title="Open the report" sub="Sidebar → Intelligence Report (or Dashboard tile)">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        Top: overall score (0-100) with a <strong>95% confidence interval</strong> (Wilson + meanCI),
+                        readiness tier badge (Building profile / Junior / Tier 3 / Tier 2 / FAANG), and a coverage
+                        strip — &ldquo;Partial profile — X of 6 dimensions measured&rdquo; when below 50%.
+                    </p>
+                    <HowToImage
+                        file="report-01-overview.png"
+                        alt="Intelligence Report top: overall score with 95% CI, tier readiness badge, coverage strip"
+                        caption="Top of the report — overall score with CI, tier badge, coverage strip"
+                    />
+                </StepCard>
+
+                <StepCard num="2" {...BRAND} title="Six dimensions" sub="Radar + per-dimension cards">
+                    <ul className="text-xs text-text-secondary space-y-1 list-disc pl-4">
+                        <li><strong>D1 — Pattern Recognition:</strong> can you name and apply the right pattern?</li>
+                        <li><strong>D2 — Solution Depth:</strong> brute → optimized → complexity reasoning quality.</li>
+                        <li><strong>D3 — Communication:</strong> Feynman explanation + interview-tip clarity.</li>
+                        <li><strong>D4 — Optimization:</strong> recognize and execute optimization opportunities.</li>
+                        <li><strong>D5 — Pressure Performance:</strong> Mock Interview signal under timed pressure.</li>
+                        <li><strong>D6 — Knowledge Retention:</strong> FSRS retrievability across your tracked items.</li>
+                    </ul>
+                    <p className="text-xs text-text-secondary leading-relaxed mt-2">
+                        Each dimension card shows score + range bar. <strong>Activation gating</strong>: if the
+                        dimension hasn&apos;t hit its data floor, the score is hidden behind an activation message
+                        like &ldquo;Solve 3+ problems with confidence ratings to activate.&rdquo;
+                    </p>
+                </StepCard>
+
+                <StepCard num="3" {...BRAND} title="AI verdict card" sub="Grounded, anti-hallucination, validator-checked">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        Below the radar: a written verdict from the AI. Seven hard rules in the system prompt prevent
+                        overclaim — the verdict refuses to say &ldquo;ready&rdquo; without evidence, won&apos;t cite
+                        dimensions that haven&apos;t activated, and falls through to a deterministic fallback if it
+                        violates any rule. Cached for 5 minutes; full audit trail in the super-admin{' '}
+                        <K>/super-admin/verdicts</K> page.
+                    </p>
+                    <HowToImage
+                        file="report-02-verdict.png"
+                        alt="AI verdict card with grounded summary, evidence list, and structural anti-hallucination markers"
+                        caption="AI verdict — grounded, structured, evidence-cited, fallback-safe"
+                    />
+                </StepCard>
+
+                <StepCard num="4" {...SUCCESS} title="Company tier grid" sub="Ready / Close / Not yet per tier">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        Bottom of the page: a tier-readiness grid covering FAANG / Tier 2 / Tier 3 / Junior. Each row
+                        shows a verdict (✅ Ready / 🟡 Close / ❌ Not yet) and the <strong>specific failing dimension</strong>{' '}
+                        if not ready — so &ldquo;Not yet&rdquo; comes with a concrete next step, not a generic shrug.
+                    </p>
+                    <HowToImage
+                        file="report-03-tiers.png"
+                        alt="Company tier grid with per-tier readiness verdict and failing-dimension callout"
+                        caption="Tier grid — concrete failing dimension per non-ready tier"
+                    />
+                </StepCard>
+
+                <Callout type="success">
+                    The whole report is grounded in research: Wilson 1927 + Agresti & Coull 1998 (proportion CIs),
+                    FSRS v4+ retrievability formula (D6), Anthropic prompting + OpenAI cookbook reliability
+                    techniques (validator + fallback). Every threshold has a citation in the source.
+                </Callout>
             </Section>
 
             {/* ══════════════════════════════════════════════════════════════ */}
@@ -995,10 +1353,44 @@ SQL                  — Query or schema-design problems`}</PasteBlock>
                         <strong>Approve</strong> to publish it to your team, or <strong>Reject</strong> to
                         discard. Approved problems appear in your team&apos;s problem list immediately.
                     </p>
-                    <Callout type="warning">
-                        Check LeetCode URLs before approving — the AI reports <K>urlConfidence</K> per problem.
-                        Low-confidence URLs should be verified manually (open in a new tab) or stripped.
-                    </Callout>
+                </StepCard>
+
+                <StepCard num="6" {...WARN} title="Three admin aids on every preview card" sub="URL confidence · Search fallback · Duplicate detection">
+                    <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                        Each generated card surfaces three signals so you don&apos;t silently approve broken or
+                        redundant content:
+                    </p>
+                    <ul className="text-xs text-text-secondary space-y-1 list-disc pl-4">
+                        <li>
+                            <strong>URL Confidence pill</strong> next to the source link:
+                            <K>✓ verified</K> (AI confident, link should work) /
+                            <K>⚠ unverified</K> (best guess) /
+                            <K>✗ Search fallback</K> (AI couldn&apos;t generate a real URL — see below).
+                            Always sanity-check ⚠ and ✗ before approving.
+                        </li>
+                        <li>
+                            <strong>Search-fallback URL</strong> — when the AI can&apos;t produce a confident link,
+                            instead of leaving it blank we drop in a platform search URL like{' '}
+                            <K>leetcode.com/problemset/?search=…</K> or <K>geeksforgeeks.org/?s=…</K>.
+                            The user lands somewhere useful instead of a dead page; you fix it before approval.
+                        </li>
+                        <li>
+                            <strong>⚠️ Possible Duplicate panel</strong> appears above the source link when the
+                            generated title overlaps an existing team problem ≥ 50% (token-Jaccard, stopword filtered).
+                            Up to 3 matches with overlap %. Catches &ldquo;Two Sum II&rdquo; vs existing &ldquo;Two Sum&rdquo;
+                            before it lands in the team&apos;s queue.
+                        </li>
+                    </ul>
+                    <HowToImage
+                        file="add-ai-04-confidence.png"
+                        alt="Generated problem card with URL confidence pill next to source link and search-fallback indicator"
+                        caption="URL confidence pill + search fallback — admin sees instantly which links to verify"
+                    />
+                    <HowToImage
+                        file="add-ai-04-duplicate.png"
+                        alt="Generated problem card with Possible Duplicate panel listing similar existing problems and their overlap percentages"
+                        caption="Duplicate-detection panel — listed similar titles with token-Jaccard overlap %"
+                    />
                 </StepCard>
             </Section>
 
@@ -1157,6 +1549,13 @@ Context:     "I'm preparing for an L5 systems interview at a FAANG."
                     real interviews — intro, problem probe, solution walkthrough, follow-ups, debrief.
                 </SectionDesc>
 
+                <Callout type="info">
+                    <strong>SD &amp; LLD route to Design Studio.</strong> Picking <K>SYSTEM_DESIGN</K> or{' '}
+                    <K>LOW_LEVEL_DESIGN</K> launches the Design Studio <strong>Practice as Interview</strong> mode
+                    instead of the chat-only path — the AI can read your live diagram via tool calls. See the
+                    <a href="#ds-sd" className="text-brand-fg-soft underline ml-1">Design Studio</a> section, step 12.
+                </Callout>
+
                 <StepCard num="1" {...BRAND} title="Go to Mock Interview" sub="Sidebar → Mock Interview">
                     <p className="text-xs text-text-secondary leading-relaxed">
                         Setup screen asks for interview style, type, and mode. Takes ~30s to configure,
@@ -1210,7 +1609,15 @@ Single deep-dive — one problem, 45 minutes             — simulation of real 
                     />
                 </StepCard>
 
-                <StepCard num="6" {...INFO} title="Review the transcript later" sub="Sidebar → Interview History">
+                <StepCard num="6" {...INFO} title="Connection drops? You'll see a banner." sub="Reconnect-and-resume, no lost messages">
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                        If the WebSocket drops mid-interview, a <strong>&ldquo;Connection lost — reconnecting…&rdquo;</strong>{' '}
+                        banner appears at the top of the chat. Messages buffer locally; on reconnect the session
+                        resumes where it left off. No need to refresh — refreshing actually loses the in-flight turn.
+                    </p>
+                </StepCard>
+
+                <StepCard num="7" {...INFO} title="Review the transcript later" sub="Sidebar → Interview History">
                     <p className="text-xs text-text-secondary leading-relaxed">
                         All sessions are saved. Re-read the full transcript, review the debrief, or start
                         a new session on the same type to compare.
