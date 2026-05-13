@@ -6,6 +6,10 @@ import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_FAST } from "../config/env.js";
 import { recomputeSkillsFromQuiz } from "../services/skillComputation.service.js";
 import { aiComplete, AIError } from "../services/ai.service.js";
+import {
+  validateQuizQuestions,
+  validateQuizAnalysis,
+} from "../services/ai.validators.js";
 
 // Map AIError → HTTP envelope. Mirrors the helper in ai.controller.js so
 // every AI controller surfaces failure modes consistently.
@@ -241,15 +245,25 @@ Return JSON:
     } catch (aiErr) {
       return aiErrorResponse(res, aiErr, "Failed to generate quiz. Please try again.");
     }
-    const questions = parsed?.questions;
 
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    // Validate AI output: 4 distinct options per question, correctAnswer in
+    // {A,B,C,D}, no extra keys, no duplicate distractors. Bad output here
+    // returns a 503 retry response instead of writing a malformed quiz —
+    // unlike other surfaces, quiz has no usable fallback (fake questions
+    // would mislead the user). The user sees a clean retry prompt.
+    const quizCheck = validateQuizQuestions(parsed, { count });
+    if (!quizCheck.valid) {
+      console.warn(
+        `[quiz-generation] validation failed: ${quizCheck.violations.join(", ")}`,
+      );
       return error(
         res,
-        "AI failed to generate questions. Please try again.",
-        500,
+        "Quiz generator returned an invalid response. Please retry.",
+        503,
+        "QUIZ_VALIDATION_FAILED",
       );
     }
+    const questions = parsed.questions;
 
     const quiz = await prisma.quizAttempt.create({
       data: {
@@ -616,6 +630,17 @@ ${wrongAnswers
       jsonMode: true,
       surface: "quiz-analysis",
     });
+
+    // Validate analysis shape. On any violation, skip the DB write —
+    // matches the behavior of the existing AI-throw catch (analysis is
+    // best-effort, the user sees their score either way).
+    const analysisCheck = validateQuizAnalysis(analysis);
+    if (!analysisCheck.valid) {
+      console.warn(
+        `[quiz-analysis] validation failed for quiz ${quizId}: ${analysisCheck.violations.join(", ")}`,
+      );
+      return;
+    }
 
     await prisma.quizAttempt.update({
       where: { id: quizId },

@@ -12,6 +12,8 @@ import {
     validateCoaching,
     validateScenarioGen,
     validateScenarioEval,
+    validateQuizQuestions,
+    validateQuizAnalysis,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
@@ -1415,6 +1417,204 @@ describe('buildFallbackScenarioEval', () => {
         expect(validateScenarioEval(fb).valid).toBe(true)
         expect(fb.verdict).toBe('PARTIAL')
         expect(fb._fallback).toBe(true)
+    })
+})
+
+// ── validateQuizQuestions ───────────────────────────────────────────
+const VALID_QUIZ = {
+    questions: [
+        {
+            id: 1,
+            question: 'What is the time complexity of binary search?',
+            options: {
+                A: 'O(n)',
+                B: 'O(log n)',
+                C: 'O(n log n)',
+                D: 'O(1)',
+            },
+            correctAnswer: 'B',
+            explanation: 'Binary search halves the search space each step, giving O(log n).',
+            difficulty: 'EASY',
+        },
+        {
+            id: 2,
+            question: 'Which data structure has O(1) average insertion?',
+            options: {
+                A: 'Sorted array',
+                B: 'Linked list at tail without tail pointer',
+                C: 'Hash map',
+                D: 'Balanced BST',
+            },
+            correctAnswer: 'C',
+            explanation: 'Hash maps offer O(1) average insertion via hashing.',
+            difficulty: 'MEDIUM',
+        },
+    ],
+}
+
+describe('validateQuizQuestions — happy paths', () => {
+    it('accepts a well-formed quiz', () => {
+        expect(validateQuizQuestions(VALID_QUIZ, { count: 2 }).valid).toBe(true)
+    })
+
+    it('accepts without count check when count not provided', () => {
+        expect(validateQuizQuestions(VALID_QUIZ).valid).toBe(true)
+    })
+})
+
+describe('validateQuizQuestions — rejections', () => {
+    it('rejects count mismatch', () => {
+        const r = validateQuizQuestions(VALID_QUIZ, { count: 5 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.startsWith('questions-count-mismatch'))).toBe(true)
+    })
+
+    it('rejects empty questions array', () => {
+        const r = validateQuizQuestions({ questions: [] })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('questions-empty')
+    })
+
+    it('rejects non-array questions', () => {
+        const r = validateQuizQuestions({ questions: 'oops' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('questions-not-array')
+    })
+
+    it('rejects unknown correctAnswer', () => {
+        const v = {
+            questions: [
+                { ...VALID_QUIZ.questions[0], correctAnswer: 'E' },
+                VALID_QUIZ.questions[1],
+            ],
+        }
+        const r = validateQuizQuestions(v, { count: 2 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.correctAnswer-unknown'))).toBe(true)
+    })
+
+    it('rejects missing option key', () => {
+        const v = {
+            questions: [
+                {
+                    ...VALID_QUIZ.questions[0],
+                    options: { A: 'O(n)', B: 'O(log n)', C: 'O(n log n)' /* D missing */ },
+                },
+            ],
+        }
+        const r = validateQuizQuestions(v, { count: 1 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.options.D-empty'))).toBe(true)
+    })
+
+    it('rejects extra option keys', () => {
+        const v = {
+            questions: [
+                {
+                    ...VALID_QUIZ.questions[0],
+                    options: { ...VALID_QUIZ.questions[0].options, E: 'fifth' },
+                },
+            ],
+        }
+        const r = validateQuizQuestions(v, { count: 1 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.includes('options-extra-keys'))).toBe(true)
+    })
+
+    it('rejects duplicate distractors', () => {
+        const v = {
+            questions: [
+                {
+                    ...VALID_QUIZ.questions[0],
+                    options: { A: 'O(n)', B: 'O(log n)', C: 'O(n)', D: 'O(1)' },
+                },
+            ],
+        }
+        const r = validateQuizQuestions(v, { count: 1 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.options-duplicate'))).toBe(true)
+    })
+
+    it('rejects unknown difficulty', () => {
+        const v = {
+            questions: [{ ...VALID_QUIZ.questions[0], difficulty: 'TRIVIAL' }],
+        }
+        const r = validateQuizQuestions(v, { count: 1 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.difficulty-unknown'))).toBe(true)
+    })
+
+    it('rejects empty question text', () => {
+        const v = {
+            questions: [{ ...VALID_QUIZ.questions[0], question: '' }],
+        }
+        const r = validateQuizQuestions(v, { count: 1 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.question-empty'))).toBe(true)
+    })
+
+    it('rejects empty explanation', () => {
+        const v = {
+            questions: [{ ...VALID_QUIZ.questions[0], explanation: '' }],
+        }
+        const r = validateQuizQuestions(v, { count: 1 })
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(s => s.endsWith('.explanation-empty'))).toBe(true)
+    })
+})
+
+// ── validateQuizAnalysis ────────────────────────────────────────────
+const VALID_QUIZ_ANALYSIS = {
+    summary: 'You scored 60% with consistent gaps in time complexity reasoning.',
+    weakTopics: ['Time complexity', 'Hash map collisions'],
+    studyAdvice: [
+        'Practice deriving O(log n) from halving recurrences.',
+        'Read about chaining vs open addressing.',
+        'Drill 5 binary search variations.',
+    ],
+    encouragement: 'Solid foundation — focus on the analysis side and you will close the gap quickly.',
+}
+
+describe('validateQuizAnalysis', () => {
+    it('accepts a well-formed analysis', () => {
+        expect(validateQuizAnalysis(VALID_QUIZ_ANALYSIS).valid).toBe(true)
+    })
+
+    it('accepts empty arrays for weakTopics/studyAdvice', () => {
+        const r = validateQuizAnalysis({
+            summary: 'Perfect score.',
+            weakTopics: [],
+            studyAdvice: [],
+            encouragement: 'Outstanding.',
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects empty summary', () => {
+        const r = validateQuizAnalysis({ ...VALID_QUIZ_ANALYSIS, summary: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('summary-empty')
+    })
+
+    it('rejects non-array weakTopics', () => {
+        const r = validateQuizAnalysis({ ...VALID_QUIZ_ANALYSIS, weakTopics: 'topics' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('weakTopics-not-array')
+    })
+
+    it('rejects empty-string studyAdvice item', () => {
+        const r = validateQuizAnalysis({
+            ...VALID_QUIZ_ANALYSIS,
+            studyAdvice: ['Real advice', ''],
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('studyAdvice-empty-item')
+    })
+
+    it('rejects empty encouragement', () => {
+        const r = validateQuizAnalysis({ ...VALID_QUIZ_ANALYSIS, encouragement: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('encouragement-empty')
     })
 })
 

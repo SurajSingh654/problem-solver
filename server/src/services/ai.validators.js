@@ -306,6 +306,96 @@ export function validateFinalEval(evalOut, { designType } = {}) {
   return { valid: violations.length === 0, violations };
 }
 
+// ── Quiz validators (generation + analysis) ─────────────────────────
+//
+// Quiz is the only P4 surface without a deterministic fallback object —
+// fake questions would mislead the user worse than an error toast. The
+// controller uses these validators to gate the success path; if the AI
+// output is malformed, the request returns 503 with a "please retry"
+// message instead of writing useless rows to the database.
+const QUIZ_OPTION_KEYS = ["A", "B", "C", "D"];
+
+export function validateQuizQuestions(result, { count } = {}) {
+  const violations = [];
+  if (!result || typeof result !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!Array.isArray(result.questions)) {
+    return { valid: false, violations: ["questions-not-array"] };
+  }
+  if (typeof count === "number" && result.questions.length !== count) {
+    violations.push(
+      `questions-count-mismatch:expected=${count}-got=${result.questions.length}`,
+    );
+  }
+  if (result.questions.length === 0) {
+    violations.push("questions-empty");
+  }
+
+  result.questions.forEach((q, i) => {
+    const tag = `questions[${i}]`;
+    if (!q || typeof q !== "object") {
+      violations.push(`${tag}-not-object`);
+      return;
+    }
+    if (!isNonEmptyString(q.question)) violations.push(`${tag}.question-empty`);
+    if (!isNonEmptyString(q.explanation)) violations.push(`${tag}.explanation-empty`);
+    if (!DIFFICULTY_VALUES.has(q.difficulty)) violations.push(`${tag}.difficulty-unknown`);
+
+    // ── options: object with exactly A/B/C/D, all non-empty + distinct ──
+    if (!q.options || typeof q.options !== "object" || Array.isArray(q.options)) {
+      violations.push(`${tag}.options-shape`);
+    } else {
+      for (const k of QUIZ_OPTION_KEYS) {
+        if (!isNonEmptyString(q.options[k])) {
+          violations.push(`${tag}.options.${k}-empty`);
+        }
+      }
+      // No fabricated keys
+      const extraKeys = Object.keys(q.options).filter(
+        (k) => !QUIZ_OPTION_KEYS.includes(k),
+      );
+      if (extraKeys.length > 0) {
+        violations.push(`${tag}.options-extra-keys:${extraKeys.join(",")}`);
+      }
+      // Options must be distinct (case-insensitive trim) — duplicate
+      // distractors are the most common AI failure mode here.
+      const normalized = QUIZ_OPTION_KEYS
+        .map((k) => (typeof q.options[k] === "string" ? q.options[k].trim().toLowerCase() : null))
+        .filter((v) => v != null && v.length > 0);
+      if (new Set(normalized).size !== normalized.length) {
+        violations.push(`${tag}.options-duplicate`);
+      }
+    }
+
+    // ── correctAnswer in {A,B,C,D} ──
+    if (!QUIZ_OPTION_KEYS.includes(q.correctAnswer)) {
+      violations.push(`${tag}.correctAnswer-unknown`);
+    }
+  });
+
+  return { valid: violations.length === 0, violations };
+}
+
+export function validateQuizAnalysis(analysis) {
+  const violations = [];
+  if (!analysis || typeof analysis !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!isNonEmptyString(analysis.summary)) violations.push("summary-empty");
+  if (!isNonEmptyString(analysis.encouragement)) violations.push("encouragement-empty");
+
+  if (!Array.isArray(analysis.weakTopics)) violations.push("weakTopics-not-array");
+  else if (analysis.weakTopics.some((t) => !isNonEmptyString(t)))
+    violations.push("weakTopics-empty-item");
+
+  if (!Array.isArray(analysis.studyAdvice)) violations.push("studyAdvice-not-array");
+  else if (analysis.studyAdvice.some((a) => !isNonEmptyString(a)))
+    violations.push("studyAdvice-empty-item");
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ── Design Studio coaching / scenario validators ────────────────────
 //
 // Three surfaces, three validators:

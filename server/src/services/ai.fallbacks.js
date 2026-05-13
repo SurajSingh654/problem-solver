@@ -605,6 +605,12 @@ export function buildFallbackScenarioEval() {
   };
 }
 
-export function buildFallbackQuiz(/* { subject, count, difficulty } */) {
+// Quiz has no deterministic fallback by design — fake questions would
+// mislead the user worse than a clear "AI is busy, please retry"
+// message. The quiz controller validates AI output and returns a 503
+// retry response when the output is malformed instead of writing
+// useless rows. Kept as a stub returning null so callers that import
+// this name still resolve cleanly.
+export function buildFallbackQuiz() {
   return null;
 }
