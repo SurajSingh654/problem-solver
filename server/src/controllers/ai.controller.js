@@ -12,12 +12,44 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
+import { aiComplete, AIError } from "../services/ai.service.js";
 import {
   hasBothApproaches,
   isCodingSolution,
 } from "../utils/solutionSignals.js";
 import { resolveGeneratedSourceUrl } from "../utils/platformSearch.js";
 import { findSimilarTitles } from "../utils/titleSimilarity.js";
+
+// Map AIError codes (rate limit, OpenAI down, parse fail, …) to HTTP
+// responses so every controller in this file returns the same envelope
+// shape on AI failure. Caller-visible error text matches what the
+// pre-migration controllers produced for the same conditions.
+function aiErrorResponse(res, err, defaultMessage) {
+  if (err instanceof AIError) {
+    if (err.code === "RATE_LIMITED") {
+      return error(res, err.message, 429, err.code);
+    }
+    if (err.code === "OPENAI_RATE_LIMITED") {
+      return error(
+        res,
+        "AI is temporarily rate-limited. Please retry shortly.",
+        503,
+        err.code,
+      );
+    }
+    if (err.code === "OPENAI_DOWN" || err.code === "OPENAI_TIMEOUT") {
+      return error(res, "AI is temporarily unavailable.", 503, err.code);
+    }
+    if (err.code === "INVALID_API_KEY") {
+      return error(res, "AI is not configured correctly.", 500, err.code);
+    }
+    if (err.code === "PARSE_ERROR") {
+      return error(res, defaultMessage, 500, err.code);
+    }
+  }
+  console.error(`AI controller error: ${err?.message || err}`);
+  return error(res, defaultMessage, 500);
+}
 
 // ============================================================================
 // AI SOLUTION REVIEW (RAG-Enhanced, Team-Scoped)
@@ -262,24 +294,20 @@ export async function reviewSolution(req, res) {
       categorySpecificData: solution.categorySpecificData || null, // ADD THIS
     });
 
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.6,
-      response_format: { type: "json_object" },
-      max_tokens: 2000,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    });
-
     let aiResponse;
     try {
-      aiResponse = JSON.parse(response.choices[0].message.content);
-    } catch {
-      return error(res, "Failed to parse AI feedback.", 500);
+      aiResponse = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        model: AI_MODEL_FAST,
+        temperature: 0.6,
+        maxTokens: 2000,
+        jsonMode: true,
+        surface: "solution-review",
+      });
+    } catch (aiErr) {
+      return aiErrorResponse(res, aiErr, "Failed to generate AI feedback.");
     }
 
     // ── Compute weighted score ─────────────────────────
@@ -464,31 +492,28 @@ export async function getHint(req, res) {
       3: "Name the specific technique and give a brief outline of the first step. Still do NOT give the full solution.",
     };
 
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.7,
-      max_tokens: 200,
-      messages: [
-        {
-          role: "system",
-          content: `You are an interview coach giving a Level ${hintLevel}/3 hint.
+    let hintText;
+    try {
+      hintText = await aiComplete({
+        systemPrompt: `You are an interview coach giving a Level ${hintLevel}/3 hint.
 ${levelInstructions[hintLevel]}
 Keep it to 1-2 sentences maximum.`,
-        },
-        {
-          role: "user",
-          content: `Problem: ${problem.title}\nDescription: ${problem.description || "N/A"}\nCategory: ${problem.category}\nTags: ${problem.tags?.join(", ") || "none"}`,
-        },
-      ],
-    });
+        userPrompt: `Problem: ${problem.title}\nDescription: ${problem.description || "N/A"}\nCategory: ${problem.category}\nTags: ${problem.tags?.join(", ") || "none"}`,
+        userId: req.user.id,
+        model: AI_MODEL_FAST,
+        temperature: 0.7,
+        maxTokens: 200,
+        jsonMode: false,
+        surface: "problem-hint",
+      });
+    } catch (aiErr) {
+      return aiErrorResponse(res, aiErr, "Failed to generate hint.");
+    }
 
     return success(res, {
       hint: {
         level: hintLevel,
-        text: response.choices[0].message.content.trim(),
+        text: (hintText || "").trim(),
       },
     });
   } catch (err) {
@@ -762,18 +787,7 @@ export async function getWeeklyPlan(req, res) {
       : null;
 
     // ── Build the AI prompt with full diagnostic context ──
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.65,
-      response_format: { type: "json_object" },
-      max_tokens: 2000,
-      messages: [
-        {
-          role: "system",
-          content: `You are a personal interview coach creating a specific 7-day study plan.
+    const weeklyPlanSystem = `You are a personal interview coach creating a specific 7-day study plan.
 You have been given a detailed diagnostic report of the candidate's strengths, gaps, and knowledge state.
 Use this data to create a plan that directly addresses their specific weaknesses — not generic advice.
 
@@ -803,11 +817,9 @@ Return JSON:
   ],
   "keyInsight": "One specific, honest insight about the biggest gap in their preparation",
   "interviewReadinessAssessment": "One sentence on where they stand right now"
-}`,
-        },
-        {
-          role: "user",
-          content: `CANDIDATE: ${user?.name || "Candidate"}
+}`;
+
+    const weeklyPlanUser = `CANDIDATE: ${user?.name || "Candidate"}
 TARGET COMPANY: ${user?.targetCompany || "Not specified"}
 DAYS UNTIL INTERVIEW: ${daysUntilInterview !== null ? daysUntilInterview : "Not set"}
 CURRENT STREAK: ${user?.streak || 0} days
@@ -864,12 +876,23 @@ ${interviewWeakAreas
     : "No interview history yet."
 }
 
-Build a specific 7-day plan that turns this data into daily actions.`,
-        },
-      ],
-    });
+Build a specific 7-day plan that turns this data into daily actions.`;
 
-    const plan = JSON.parse(response.choices[0].message.content);
+    let plan;
+    try {
+      plan = await aiComplete({
+        systemPrompt: weeklyPlanSystem,
+        userPrompt: weeklyPlanUser,
+        userId,
+        model: AI_MODEL_FAST,
+        temperature: 0.65,
+        maxTokens: 2000,
+        jsonMode: true,
+        surface: "weekly-plan",
+      });
+    } catch (aiErr) {
+      return aiErrorResponse(res, aiErr, "Failed to generate coaching plan.");
+    }
 
     // Attach the diagnostic context so the UI can show what drove the plan
     plan.diagnosticSummary = {
@@ -906,9 +929,6 @@ export async function generateProblemContent(req, res) {
 
     const { title, category, difficulty } = req.body;
 
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
     const contentTokenBudget = {
       SYSTEM_DESIGN: 3500,
       LOW_LEVEL_DESIGN: 2800,
@@ -922,15 +942,11 @@ export async function generateProblemContent(req, res) {
       SYSTEM_DESIGN: AI_MODEL_PRIMARY,
       LOW_LEVEL_DESIGN: AI_MODEL_PRIMARY,
     };
-    const response = await openai.chat.completions.create({
-      model: contentModelMap[category] || AI_MODEL_FAST,
-      temperature: 0.8,
-      response_format: { type: "json_object" },
-      max_tokens: contentTokenBudget[category] || 2000,
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert interview problem designer. Generate complete problem content.
+
+    let content;
+    try {
+      content = await aiComplete({
+        systemPrompt: `You are an expert interview problem designer. Generate complete problem content.
 Return JSON:
 {
   "description": "Full problem description with examples",
@@ -944,15 +960,18 @@ Return JSON:
     { "question": "...", "difficulty": "HARD", "hint": "..." }
   ]
 }`,
-        },
-        {
-          role: "user",
-          content: `Generate content for: "${title}"\nCategory: ${category || "CODING"}\nDifficulty: ${difficulty || "MEDIUM"}`,
-        },
-      ],
-    });
+        userPrompt: `Generate content for: "${title}"\nCategory: ${category || "CODING"}\nDifficulty: ${difficulty || "MEDIUM"}`,
+        userId: req.user.id,
+        model: contentModelMap[category] || AI_MODEL_FAST,
+        temperature: 0.8,
+        maxTokens: contentTokenBudget[category] || 2000,
+        jsonMode: true,
+        surface: "problem-content",
+      });
+    } catch (aiErr) {
+      return aiErrorResponse(res, aiErr, "Failed to generate problem content.");
+    }
 
-    const content = JSON.parse(response.choices[0].message.content);
     return success(res, { content });
   } catch (err) {
     console.error("Generate content error:", err);
@@ -1157,9 +1176,6 @@ export async function generateProblemsAI(req, res) {
             : `${difficultyPref} difficulty.`;
     }
 
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
     // ── STAGE 2: Problem Selection ──────────────────────
     // Platform assignments computed HERE in code — not left to AI.
     // This guarantees reliable URLs (LeetCode-only for now).
@@ -1207,20 +1223,17 @@ export async function generateProblemsAI(req, res) {
     let learningPath = "";
 
     try {
-      const selectionResponse = await openai.chat.completions.create({
+      const selectionResult = await aiComplete({
+        systemPrompt: selSystem,
+        userPrompt: selUser,
+        userId: req.user.id,
         model: AI_MODEL_FAST,
         temperature: 0.7,
-        response_format: { type: "json_object" },
-        max_tokens: 1200,
-        messages: [
-          { role: "system", content: selSystem },
-          { role: "user", content: selUser },
-        ],
+        maxTokens: 1200,
+        jsonMode: true,
+        surface: "problem-selection",
       });
 
-      const selectionResult = JSON.parse(
-        selectionResponse.choices[0].message.content,
-      );
       selections = selectionResult.selections || [];
       learningPath = selectionResult.learningPath || "";
 
@@ -1247,20 +1260,25 @@ export async function generateProblemsAI(req, res) {
 
       const maxTokens = Math.min(problemCount * 1800, 8000);
 
-      const fallbackResponse = await openai.chat.completions.create({
-        model: AI_MODEL_FAST,
-        temperature: 0.8,
-        response_format: { type: "json_object" },
-        max_tokens: maxTokens,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      });
-
-      const fallbackResult = JSON.parse(
-        fallbackResponse.choices[0].message.content,
-      );
+      let fallbackResult;
+      try {
+        fallbackResult = await aiComplete({
+          systemPrompt: system,
+          userPrompt: user,
+          userId: req.user.id,
+          model: AI_MODEL_FAST,
+          temperature: 0.8,
+          maxTokens,
+          jsonMode: true,
+          surface: "problem-generation-legacy",
+        });
+      } catch (fallbackErr) {
+        return aiErrorResponse(
+          res,
+          fallbackErr,
+          "AI failed to generate problems.",
+        );
+      }
 
       if (!fallbackResult.problems?.length) {
         return error(res, "AI failed to generate problems.", 500);
@@ -1341,18 +1359,16 @@ export async function generateProblemsAI(req, res) {
         const contentMaxTokens = categoryTokenBudget[category] || 2000;
         const contentModel = categoryModel[category] || AI_MODEL_FAST;
 
-        const contentResponse = await openai.chat.completions.create({
+        const content = await aiComplete({
+          systemPrompt: contentSystem,
+          userPrompt: contentUser,
+          userId: req.user.id,
           model: contentModel,
           temperature: 0.75,
-          response_format: { type: "json_object" },
-          max_tokens: contentMaxTokens,
-          messages: [
-            { role: "system", content: contentSystem },
-            { role: "user", content: contentUser },
-          ],
+          maxTokens: contentMaxTokens,
+          jsonMode: true,
+          surface: "problem-content-stage3",
         });
-
-        const content = JSON.parse(contentResponse.choices[0].message.content);
 
         const isHRProblem = category === "HR";
 
@@ -1543,18 +1559,7 @@ export async function generateReviewHints(req, res) {
       weakAreas.push(...previousGaps.slice(0, 2));
     }
 
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
-
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL_FAST,
-      temperature: 0.7,
-      response_format: { type: "json_object" },
-      max_tokens: 500,
-      messages: [
-        {
-          role: "system",
-          content: `You are a spaced repetition coach helping someone review a coding problem they previously solved.
+    const reviewHintsSystem = `You are a spaced repetition coach helping someone review a coding problem they previously solved.
 Generate 2 short, targeted recall questions that probe their understanding.
 Focus on the weak areas identified. If a recall attempt is provided, tailor
 the questions to fill in what they missed or got wrong — do NOT re-ask what
@@ -1568,23 +1573,32 @@ Return JSON:
     { "question": "...", "focus": "..." }
   ],
   "hint": "One short encouraging hint if they're struggling — not the answer"
-}`,
-        },
-        {
-          role: "user",
-          content: `Problem: ${solution.problem.title} (${solution.problem.difficulty} ${solution.problem.category})
+}`;
+
+    const reviewHintsUser = `Problem: ${solution.problem.title} (${solution.problem.difficulty} ${solution.problem.category})
 Pattern: ${(solution.patterns ?? []).join(", ") || "not identified"}
 Previous AI score: ${previousScore !== null ? `${previousScore}/10` : "not reviewed"}
 Review count: ${solution.reviewCount}
 ${weakAreas.length > 0 ? `Known weak areas: ${weakAreas.join(", ")}` : ""}
 ${solution.problem.adminNotes ? `Key concept: ${solution.problem.adminNotes.substring(0, 200)}` : ""}
 ${recallText ? `\nCandidate's recall attempt (what they remembered from memory, no notes):\n"""\n${recallText.slice(0, 2000)}\n"""\n` : ""}
-Generate 2 questions that will test if they truly remember and understand this problem${recallText ? ", focusing on what their recall attempt above missed or got wrong" : ""}.`,
-        },
-      ],
-    });
+Generate 2 questions that will test if they truly remember and understand this problem${recallText ? ", focusing on what their recall attempt above missed or got wrong" : ""}.`;
 
-    const parsed = JSON.parse(response.choices[0].message.content);
+    let parsed;
+    try {
+      parsed = await aiComplete({
+        systemPrompt: reviewHintsSystem,
+        userPrompt: reviewHintsUser,
+        userId: req.user.id,
+        model: AI_MODEL_FAST,
+        temperature: 0.7,
+        maxTokens: 500,
+        jsonMode: true,
+        surface: "review-hints",
+      });
+    } catch (aiErr) {
+      return aiErrorResponse(res, aiErr, "Failed to generate review hints.");
+    }
 
     return success(res, {
       questions: parsed.questions || [],
