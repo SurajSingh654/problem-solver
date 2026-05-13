@@ -1,0 +1,54 @@
+{
+  "problemTitle": "Parking Lot",
+  "designType": "LOW_LEVEL_DESIGN",
+  "difficulty": "EASY",
+  "variant": "strategy-pattern-oop",
+  "title": "Parking Lot — Strategy pattern for pricing + slot selection",
+  "summary": "Classic LLD parking-lot exercise implemented with a clean domain model and Strategy for pluggable pricing + slot-allocation policies. Favors composition over inheritance and keeps the ParkingLot aggregate free of fee-calculation logic.",
+  "phases": {
+    "requirements": "Functional: (1) vehicle of type {Motorcycle, Car, Truck} arrives; (2) system allocates a spot of the smallest compatible type available; (3) issue a Ticket with issueTime; (4) on exit, compute fee based on duration and vehicle type; (5) pay and release the spot. Non-functional: (a) thread-safe for concurrent arrivals/exits at one lot; (b) pricing strategy swappable (flat vs tiered vs day/night); (c) slot selection policy swappable (nearest, random, type-first). Out of scope: multiple floors with elevators, reservations, license-plate OCR, valet handoff.",
+    "entities": "Core entities: Vehicle (abstract) with subclasses Motorcycle/Car/Truck — each exposes a `vehicleType` for compatibility checks. ParkingSpot (abstract) with subclasses MotorcycleSpot/CarSpot/TruckSpot — each defines `canFit(vehicle)`. Ticket — value object issued on entry: {ticketId, spotId, vehicleId, issueTime, expectedExitTime?}. ParkingLot — aggregate root holding a collection of spots, a SpotAllocator (strategy), a PricingStrategy (strategy), and a TicketRegistry. PaymentProcessor — handles payment methods; abstracted behind an interface so unit tests don't need a real gateway. Fee — {baseAmount, currency, breakdownItems[]}.",
+    "classHierarchy": "Vehicle is an abstract class exposing `getType()`, `getLicensePlate()`. Concrete subclasses (Motorcycle, Car, Truck) differ only by type. ParkingSpot is also abstract with `canFit(Vehicle)` — not subclassed per vehicle type of a car (one class hierarchy, not two). Instead the canFit check compares Vehicle.type against Spot.type. Strategies are interfaces: SpotAllocator { Optional<ParkingSpot> allocate(Vehicle, List<ParkingSpot>) }, PricingStrategy { Fee computeFee(Ticket, Duration) }. ParkingLot composes both — it doesn't inherit from anything, uses composition to get behavior from the strategies.",
+    "designPatterns": "Strategy for SpotAllocator (NearestFirstAllocator, RandomAllocator, SmallestFitAllocator) and PricingStrategy (FlatHourlyPricing, TieredPricing, WeekendSurgePricing). Factory for Vehicle (from an enum) and for PricingStrategy (from config). Singleton for PaymentProcessor client (one gateway instance per process). Observer/Event for lot events (spot-freed, spot-filled) used to update a public occupancy dashboard. Not used: Decorator (no cross-cutting behaviour to stack), Chain of Responsibility (pricing decisions are single-strategy), Visitor (overkill for this small domain).",
+    "methodSignatures": "ParkingLot: Ticket checkIn(Vehicle); Fee checkOut(Ticket ticket, Instant exitTime); List<ParkingSpot> freeSpotsByType(VehicleType type); int occupancyPct(); // percent full. SpotAllocator: Optional<ParkingSpot> allocate(Vehicle v, List<ParkingSpot> freeSpots). PricingStrategy: Fee computeFee(Ticket t, Duration stayed). Concurrency: checkIn/checkOut synchronise on a per-lot lock (ReentrantLock) — spot allocation and ticket issuance must be atomic.",
+    "solidAnalysis": "SRP: ParkingLot is the aggregate root; it orchestrates but does not compute fees or allocate spots itself — those are delegated. Violation (honest): ParkingLot.checkIn also issues the ticket AND updates occupancy metrics; arguably a TicketFactory should issue tickets. Acceptable because the two operations are atomic. OCP: adding a new pricing policy is a new PricingStrategy implementation; no existing class is modified. LSP: all Vehicle subclasses are substitutable for Vehicle (they only carry data). ISP: SpotAllocator and PricingStrategy are small single-method interfaces; no client is forced to implement unused methods. DIP: ParkingLot depends on SpotAllocator and PricingStrategy abstractions, not concretions — they're passed in by a factory. Tests use fakes (FixedFeePricing) without touching the real implementations."
+  },
+  "diagramData": null,
+  "componentAnnotations": [
+    { "componentName": "ParkingLot", "purpose": "Aggregate root; orchestrates entry/exit", "technology": "POJO / plain class", "notes": "Holds per-lot ReentrantLock for checkIn/checkOut atomicity" },
+    { "componentName": "Vehicle (abstract)", "purpose": "Common vehicle interface with type + plate", "technology": "Abstract class with 3 subclasses", "notes": "Subclasses differ only by type — keeps hierarchy shallow" },
+    { "componentName": "ParkingSpot (abstract)", "purpose": "Common spot interface with canFit(Vehicle)", "technology": "Abstract class with 3 subclasses", "notes": "canFit is a simple type comparison" },
+    { "componentName": "SpotAllocator (strategy)", "purpose": "Policy for which free spot to pick", "technology": "Interface + 3 impls", "notes": "Defaults to NearestFirst for real lots" },
+    { "componentName": "PricingStrategy (strategy)", "purpose": "Policy for fee computation", "technology": "Interface + 3 impls", "notes": "Injected via config at ParkingLot construction" },
+    { "componentName": "TicketRegistry", "purpose": "Lookup ticket by id, mark paid", "technology": "ConcurrentHashMap<id, Ticket>", "notes": "Source of truth for active tickets" },
+    { "componentName": "PaymentProcessor", "purpose": "Abstraction over a payment gateway", "technology": "Interface; production uses Stripe adapter", "notes": "FakePaymentProcessor for tests" }
+  ],
+  "dataFlowDescription": "Entry: Vehicle arrives → ParkingLot.checkIn(vehicle) acquires lock → SpotAllocator picks a compatible spot → mark spot occupied → issue Ticket → unlock → return Ticket to caller. Exit: caller calls ParkingLot.checkOut(ticket, exitTime) → lock → PricingStrategy.computeFee(ticket, stayed) → PaymentProcessor.charge(fee, paymentMethod) → mark spot free → update ticket paid=true → emit spot-freed event → unlock → return Fee receipt.",
+  "tradeoffs": [
+    {
+      "choice": "Strategy pattern for pricing + allocation",
+      "alternative": "If/else in ParkingLot based on a pricingMode enum",
+      "reason": "Strategy makes adding a new pricing policy a new class with zero changes to ParkingLot (OCP). The if/else version would grow quadratically: every pricing variant interacts with every surge/discount combo inside one method, getting unmaintainable fast."
+    },
+    {
+      "choice": "Single Vehicle hierarchy with type-driven canFit",
+      "alternative": "Parallel hierarchies — MotorcycleSpot/CarSpot/TruckSpot each knowing their vehicle type by generic parameter",
+      "reason": "Parallel hierarchies explode to N×M classes for N vehicle types and M spot variants. Type-driven canFit stays linear. Loses some compile-time safety (a Motorcycle could hypothetically be passed to canFit of a TruckSpot), but that's trivially correct anyway."
+    },
+    {
+      "choice": "Composition over inheritance",
+      "alternative": "ParkingLot as a base class with SurgePricingParkingLot subclass etc.",
+      "reason": "Inheritance couples behaviour variations to the aggregate root — adding a surge parking lot that ALSO picks random spots would require multiple inheritance or mixin hacks. Composition lets strategies be swapped independently."
+    },
+    {
+      "choice": "Per-lot ReentrantLock",
+      "alternative": "Lock-free (CAS on a free-list) or per-spot locks",
+      "reason": "Per-lot lock is simple, correct, and for a single parking lot's arrival rate (seconds between arrivals) contention is negligible. Lock-free would be overkill. Per-spot locks win only when arrivals are concurrent AND both the allocator and ticket issuance can be split — out of scope here."
+    }
+  ],
+  "sources": [
+    { "label": "Gamma, Helm, Johnson, Vlissides — Design Patterns (GoF)", "url": "https://en.wikipedia.org/wiki/Design_Patterns" },
+    { "label": "Grokking the Object Oriented Design Interview — Parking Lot chapter", "url": "https://www.educative.io/courses/grokking-the-object-oriented-design-interview" },
+    { "label": "Martin — Clean Architecture (on SOLID)", "url": "https://www.amazon.com/Clean-Architecture-Craftsmans-Software-Structure/dp/0134494164" }
+  ]
+}

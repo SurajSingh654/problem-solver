@@ -59,6 +59,7 @@ const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
 const AddProblemPage = lazy(() => import('@pages/admin/AddProblemPage'))
+const DesignReferencesAdmin = lazy(() => import('@pages/admin/DesignReferencesAdmin'))
 const EditProblemPage = lazy(() => import('@pages/admin/EditProblemPage'))
 const ProductHealthPage = lazy(() => import('@pages/admin/ProductHealthPage'))
 const ShowcasePage = lazy(() => import('@pages/admin/showcase/ShowcasePage'))
@@ -246,6 +247,14 @@ export default function App() {
               element={
                 <ProtectedRoute requireTeamAdmin>
                   <Lazy><EditProblemPage /></Lazy>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/design-references"
+              element={
+                <ProtectedRoute requireTeamAdmin>
+                  <Lazy><DesignReferencesAdmin /></Lazy>
                 </ProtectedRoute>
               }
             />

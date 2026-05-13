@@ -59,6 +59,7 @@ import { setupWebSocket } from "./services/websocket.service.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 
 import designStudioRoutes from "./routes/designStudio.routes.js";
+import designReferencesRoutes from "./routes/designReferences.routes.js";
 
 // ============================================================================
 // APP SETUP
@@ -175,6 +176,8 @@ function mountRoutes(prefix) {
 
   // ── Design Studio (self-paced design practice) ─────────
   app.use(`${prefix}/design-studio`, apiLimiter, designStudioRoutes);
+  // Reference architectures — worked examples shown post-attempt.
+  app.use(`${prefix}/design-references`, apiLimiter, designReferencesRoutes);
 }
 
 // Canonical versioned routes

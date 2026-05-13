@@ -43,6 +43,7 @@ export default function DesignView({
     isReadOnly,
     hasEvaluation,
     canValidate,
+    canSeeReference,
     onBack,
     onPhaseChange,
     onDiagramChange,
@@ -119,6 +120,12 @@ export default function DesignView({
                     <Button variant="ghost" size="sm" onClick={() => onSwitchMode('flow')}>
                         Flows
                     </Button>
+                    {canSeeReference && session.problemId && (
+                        <Button variant="ghost" size="sm" onClick={() => onSwitchMode('reference')}
+                            title="Compare your design against the curated reference architecture">
+                            🧭 Reference
+                        </Button>
+                    )}
                     {!isReadOnly && (
                         <Button variant="secondary" size="sm" onClick={onCompleteDesign} loading={updateSessionStatus.isPending}>
                             Complete Design

@@ -303,6 +303,8 @@ model User {
 
   verdictLogs VerdictLog[]
 
+  authoredDesignReferences DesignReference[] @relation("DesignReferenceAuthor")
+
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
   @@index([currentTeamId, activityStatus])
@@ -554,7 +556,8 @@ model Problem {
 
   assessmentResponses AssessmentResponse[]
 
-  designSessions DesignSession[]
+  designSessions   DesignSession[]
+  designReferences DesignReference[]
 
   // ── Vector embedding ───────────────────────────────
   // Column + HNSW index created via raw SQL migration:
@@ -1359,6 +1362,74 @@ model DesignSession {
   // Filter by design type
   @@index([userId, designType, createdAt(sort: Desc)])
   @@map("design_sessions")
+}
+
+// ============================================================================
+// DESIGN REFERENCE
+// ============================================================================
+
+/// Curated worked-example architecture for a design problem.
+///
+/// Rationale (Sweller — cognitive load, worked examples): novices benefit
+/// from studying expert solutions AFTER attempting a problem themselves.
+/// The client gates access to the reference until the learner has filled
+/// ≥ 4 phases or entered validation — preserves retrieval practice and
+/// avoids the premature-exposure failure mode where the reference
+/// becomes a spoiler.
+///
+/// One problem can have multiple references (variant column) because
+/// there's rarely one "right" SD/LLD answer — e.g. a URL shortener can
+/// be a single-region sharded-KV OR a globally-distributed CRDT design,
+/// both valid with different trade-offs. `variant` disambiguates them.
+///
+/// Curated by admins (authorId nullable so seeded references can ship
+/// without a synthetic user). Version is bumped on meaningful edits for
+/// future change-tracking; not currently surfaced to users.
+model DesignReference {
+  id String @id @default(cuid())
+
+  // ── Problem linkage ────────────────────────────────
+  problemId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  // ── Classification ─────────────────────────────────
+  designType DesignType
+  difficulty Difficulty
+  variant    String // e.g. "single-region-sharded-kv"
+  title      String
+  summary    String     @db.Text
+
+  // ── Content (mirrors DesignSession shape) ──────────
+  phases               Json // { [phaseId]: content }
+  diagramData          String? @db.Text
+  componentAnnotations Json? // [{ componentName, purpose, technology, notes }]
+  dataFlowDescription  String? @db.Text
+
+  // ── Pedagogy ───────────────────────────────────────
+  // tradeoffs: [{ choice, alternative, reason }] — named alternatives
+  // the reference did NOT take, to prevent "book says X is right"
+  // framing.
+  tradeoffs Json
+  // sources: [{ label, url }] — papers, talks, blog posts the reference
+  // draws from. Gives the learner a trail to go deeper.
+  sources Json
+
+  // ── Authorship ─────────────────────────────────────
+  // Nullable so seeded/curated references can ship without tying them
+  // to a real user. Edits bump version so clients can detect change.
+  authorId String?
+  author   User?   @relation("DesignReferenceAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  version  Int     @default(1)
+
+  // ── Timestamps ─────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Lookup "references for this problem of this type"
+  @@index([problemId, designType])
+  // Prevent duplicate variants per problem
+  @@unique([problemId, variant])
+  @@map("design_references")
 }
 
 // ============================================================================

@@ -1,0 +1,61 @@
+{
+  "problemTitle": "URL Shortener",
+  "designType": "SYSTEM_DESIGN",
+  "difficulty": "MEDIUM",
+  "variant": "single-region-sharded-kv",
+  "title": "Single-region sharded KV shortener",
+  "summary": "A pragmatic URL shortener optimised for a single region, trading global low-latency reads for operational simplicity. Uses a Base62 id generator + sharded key-value store + edge cache. Targets ~100M shortens/day and 10:1 read:write ratio.",
+  "phases": {
+    "requirements": "Functional: (1) shorten a long URL to a short alias; (2) redirect on GET of alias; (3) optional custom alias; (4) per-owner analytics (click count, referrer, country). Non-functional: (a) redirect p99 < 100ms regionally; (b) 99.95% availability; (c) aliases are immutable and globally unique; (d) analytics is eventually consistent. Out of scope: multi-region active-active, spam/phishing detection (delegated to a separate classifier), custom domains, enterprise SSO.",
+    "capacityEstimation": "Writes: 100M shortens/day ≈ 1,200 QPS avg, 3,600 QPS peak (3x factor). Reads: 1B redirects/day ≈ 12,000 QPS avg, 36,000 QPS peak. Storage for 5 years at 100M/day = 180B entries, ~100 bytes each (alias + url + ownerId + createdAt + counters) = ~18 TB, plus indexes ≈ 30 TB. Bandwidth: redirects return a 301/302 header, ~500 bytes egress × 12k QPS ≈ 6 MB/s. Cacheable hot tail (top 1% of aliases) serves ~50% of traffic per Zipf distribution.",
+    "apiDesign": "POST /shorten { url, customAlias?, ownerId } → { alias, shortUrl, createdAt }. GET /{alias} → 302 to the long URL (edge-cacheable with short TTL). GET /api/analytics/{alias} → { alias, clicks, topReferrers[], topCountries[], byDay[] }. DELETE /api/{alias} (owner only). All write APIs require a JWT; short-code resolution is public. Idempotency-Key header on POST /shorten to make shortens retry-safe.",
+    "dataModel": "Primary table `links` keyed on alias (Base62 7-char string, ~3.5T keyspace). Columns: alias PK, long_url (TEXT), owner_id (FK), created_at, expires_at (nullable). Sharded by alias hash → 64 shards initially, pre-split for online resharding. Analytics: append-only `clicks` events stream → Kafka → rolled up into `alias_stats_daily` table via a batch job. Separate from the hot redirect path so analytics load never hurts redirect latency.",
+    "architecture": "Client → CDN (edge) → regional LB → read-path and write-path services. Write path: Shorten Service generates alias (centralised sequence or SnowflakeID → Base62), writes to primary shard, publishes an event to Kafka for downstream (cache warming, analytics metadata). Read path: Redirect Service looks up alias in Redis (hot cache) → falls through to sharded KV (e.g. DynamoDB / Cassandra). Click events are fire-and-forget posted to Kafka from the redirect service so they never block the 302.",
+    "deepDive": "Alias generation: a centralised 64-bit counter (Redis INCR) chunked into 1,000-key ranges per service instance to amortise the round-trip, Base62-encoded. Collision-free by construction. Alternative: SnowflakeID+hash, but then custom aliases need a separate collision check. Cache strategy: LRU in Redis, TTL 1 hour for reads, warmup on write. On Redis miss → read-through KV → write back to Redis asynchronously. Hot-alias stampede protected by request coalescing (singleflight) at the redirect service. Analytics: Kafka → Flink streaming job computes daily rollups + top-K into `alias_stats_daily`; the read API serves from there, not from raw events.",
+    "tradeoffs": "Chose single region for simplicity — readers outside the region pay the RTT. Could add CloudFront/Fastly edge with long TTL on the 302 to mitigate, at the cost of slightly stale expires_at. Chose centralised counter over SnowflakeID to avoid the 'random alias has embedded timestamp' leak and to keep aliases short. The cost: the counter is a single point of contention; mitigated by per-instance ranges. Chose Kafka for analytics events even though the redirect path doesn't strictly need durable logging — picked it because the cost of losing a few clicks is low but the value of retry/replay during downstream incidents is high. Custom aliases share the keyspace with generated ones; a Bloom filter up front rejects dupes fast before a full lookup."
+  },
+  "diagramData": null,
+  "componentAnnotations": [
+    { "componentName": "CDN / Edge", "purpose": "Cache 302 redirects and static API error pages", "technology": "CloudFront or Fastly", "notes": "TTL short (60s) so revoke/delete propagates quickly" },
+    { "componentName": "Shorten Service", "purpose": "Handle POST /shorten, generate alias, persist", "technology": "Stateless service, autoscaled", "notes": "Per-instance Base62 range cache reduces counter contention" },
+    { "componentName": "Redirect Service", "purpose": "Handle GET /{alias} on the hot path", "technology": "Stateless, p99 <100ms budget", "notes": "Cache-first; fire-and-forget click events" },
+    { "componentName": "Redis (hot cache)", "purpose": "Serve ~90% of redirects without hitting KV", "technology": "Redis cluster, 2-of-3 replication", "notes": "LRU eviction, singleflight for stampede protection" },
+    { "componentName": "Sharded KV", "purpose": "Authoritative alias → long URL mapping", "technology": "DynamoDB or Cassandra, 64 shards", "notes": "Partition by alias hash; pre-split for online resharding" },
+    { "componentName": "Kafka", "purpose": "Click events + shorten events stream", "technology": "3-broker Kafka, 7-day retention", "notes": "Decouples analytics from hot path" },
+    { "componentName": "Analytics Rollup", "purpose": "Stream-compute daily stats", "technology": "Flink or Spark Streaming", "notes": "Writes to alias_stats_daily table" }
+  ],
+  "dataFlowDescription": "Write: Client → CDN (passthrough for writes) → LB → Shorten Service → (alias gen via Redis counter range) → writes to Sharded KV → emits event to Kafka. Read: Client → CDN (cache hit = 302 immediately) → on miss → LB → Redirect Service → Redis GET (90% hit). On miss → Sharded KV GET → Redis SET (async) → 302. Click event fire-and-forget to Kafka. Analytics: Kafka → Flink daily rollup → alias_stats_daily → Analytics API reads from rollup, never from raw events.",
+  "tradeoffs": [
+    {
+      "choice": "Single region",
+      "alternative": "Multi-region active-active with CRDT-based alias reservation",
+      "reason": "Picked single region for 100M writes/day scale where the operational cost of an active-active setup outweighs the latency benefit for most users. Multi-region becomes worthwhile past ~1B writes/day or when legal requirements force data residency."
+    },
+    {
+      "choice": "Centralised Base62 counter",
+      "alternative": "SnowflakeID with random suffix",
+      "reason": "Centralised counter keeps aliases short (7 chars) and contiguous, which is a UX win. SnowflakeID leaks creation-time and would push aliases to ~11 chars. Counter contention mitigated with per-instance range allocation."
+    },
+    {
+      "choice": "Redis write-through, not write-behind",
+      "alternative": "Write-behind cache for lower write latency",
+      "reason": "Write-through trades ~5ms write latency for durability — we can't have a Redis restart lose aliases that have already been handed out to users. Shortens are low QPS compared to reads so the write path can absorb the write-through cost."
+    },
+    {
+      "choice": "Kafka for analytics events",
+      "alternative": "Direct writes from Redirect Service to an analytics DB",
+      "reason": "Kafka decouples the redirect path from analytics. An analytics DB incident can't take down redirects. Cost: one more operational system; worth it for isolation."
+    },
+    {
+      "choice": "Analytics served from rollup, not raw",
+      "alternative": "OLAP query over raw click events",
+      "reason": "Rollup-based read path is ~100x faster for typical analytics dashboards. Loses ability to ad-hoc slice by arbitrary dimensions; mitigated by shipping raw events to a data warehouse for analysts."
+    }
+  ],
+  "sources": [
+    { "label": "Designing Data-Intensive Applications (Kleppmann, 2017)", "url": "https://dataintensive.net/" },
+    { "label": "System Design Interview — An Insider's Guide (Alex Xu, Ch. 8: URL Shortener)", "url": "https://www.amazon.com/System-Design-Interview-insiders-Second/dp/B08CMF2CQF" },
+    { "label": "Snowflake: Twitter's id generation at scale (engineering blog)", "url": "https://blog.twitter.com/engineering/en_us/a/2010/announcing-snowflake" },
+    { "label": "Redis clustering + singleflight pattern", "url": "https://redis.io/docs/management/scaling/" }
+  ]
+}

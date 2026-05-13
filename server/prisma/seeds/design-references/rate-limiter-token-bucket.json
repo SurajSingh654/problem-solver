@@ -1,0 +1,55 @@
+{
+  "problemTitle": "Rate Limiter",
+  "designType": "SYSTEM_DESIGN",
+  "difficulty": "MEDIUM",
+  "variant": "token-bucket-with-sliding-window",
+  "title": "Token-bucket rate limiter with sliding-window fallback",
+  "summary": "A distributed rate limiter for API gateways built on token bucket semantics, stored in Redis with local-process fallback. Supports per-user, per-IP, and per-API-key limits with burst allowance. Targets 50k+ gateway QPS with rate-check added latency <1ms p99.",
+  "phases": {
+    "requirements": "Functional: (1) allow or reject a request based on an identifier (userId / apiKey / IP) against a configured limit; (2) multiple limits per identifier (per-second, per-minute, per-hour, per-day); (3) support burst = capacity above steady rate; (4) admin UI to view current limits and violations. Non-functional: (a) rate-check adds <1ms p99 to gateway path; (b) graceful degradation — if Redis is down, fail open (with logging) rather than reject everything; (c) accurate to within 1% under typical load; (d) horizontally scalable to 50k+ QPS. Out of scope: per-endpoint quotas (handled upstream), tarpitting slow responses.",
+    "capacityEstimation": "Gateway QPS: 50k steady, 150k peak. Each request = 1 rate-check call to Redis. Redis ops: 150k ops/sec peak (well within single-cluster capacity). Memory: ~100 bytes per active bucket × 10M active identifiers = 1 GB + replicas. Configured limits: ~100k rules (per user/apiKey/IP tier × time window), stored in a config table + in-process LRU. Violations log: ~0.5% of traffic = 750/sec peak, streamed to analytics.",
+    "apiDesign": "Internal (SDK): rateLimiter.check(identifier, rule) → { allowed: boolean, remaining: number, resetAt: timestamp, retryAfter?: number }. Used by API gateway middleware before forwarding to upstream service. Admin HTTP: GET /admin/limits/{id} → current bucket state; POST /admin/limits/rules → set/update a rule; GET /admin/violations?since=X → recent violations. Rate-limit response headers on rejected requests: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After.",
+    "dataModel": "Redis keys: `rl:{id}:{window}` storing a token bucket as a HASH { tokens: float, lastRefill: epoch_ms }. TTL = max configured window + buffer. Rule config table (Postgres): (rule_id, identifier_type, identifier_pattern, window, capacity, refill_rate, priority). Violations stream (Kafka → data warehouse): { identifier, rule_id, allowed, tokens_remaining, timestamp }. In-process LRU cache on the rate limiter client holds rules (TTL 60s) to avoid DB lookup on every check.",
+    "architecture": "API Gateway → Rate Limiter Client (SDK, in-process) → Redis (token bucket state) — with local-process fallback on Redis failure. Control plane: Admin API → Rules DB → Kafka topic `rate-limit-rules` → all Rate Limiter Clients subscribe to rule changes (push-based invalidation). Observability: Rate Limiter Client emits metrics (checks/sec, rejections/sec, Redis latency) and violations events. A background reconciler job rebuilds the LRU from Rules DB every 60s as a fallback for missed invalidations.",
+    "deepDive": "Token bucket algorithm: on check, compute `tokens = min(capacity, tokens_at_last_refill + (now - lastRefill) * refill_rate)`. If tokens >= cost, decrement and allow; else reject and return retryAfter. Implemented as a Lua script on Redis so the refill+check is atomic — two nodes checking the same bucket see a consistent state. Script pinned by SHA; deployed via redis-cli SCRIPT LOAD on startup. Sliding-window fallback: when a customer needs stricter accuracy than token bucket's burst tolerance, the Lua script switches to a count of (now - window) to now, using a sorted set — O(log n) per check but exact. Fail-open policy: if Redis times out (>5ms), the Rate Limiter Client allows the request, logs a warning, and flags the instance for degraded mode. Admin is paged if degradation exceeds 1% of checks for >30s.",
+    "tradeoffs": "Token bucket vs sliding window: bucket is O(1) memory and fast but allows bursts; sliding window is exact but slower and uses more memory. We default to bucket and expose sliding-window as an opt-in per rule. Centralised Redis vs local-only counter: centralised is the source of truth across gateway instances; local-only would be faster but wrong under multi-instance gateways. Fail-open vs fail-closed: we fail-open because rate limiting is a cost-control and abuse-mitigation feature, not a security boundary. For auth, a separate system fails closed."
+  },
+  "diagramData": null,
+  "componentAnnotations": [
+    { "componentName": "API Gateway", "purpose": "Entry point; calls the rate limiter before forwarding", "technology": "Envoy or Nginx + custom WASM/Lua plugin", "notes": "Rate check on the hot path — every added ms matters" },
+    { "componentName": "Rate Limiter SDK", "purpose": "In-process client that runs the Lua script on Redis", "technology": "Go/Rust library with LRU rule cache", "notes": "Local fallback: in-process counter during Redis outage" },
+    { "componentName": "Redis (bucket state)", "purpose": "Authoritative token bucket state across all gateway instances", "technology": "Redis cluster, 3-of-6 replication", "notes": "Atomic Lua script avoids race conditions" },
+    { "componentName": "Rules DB", "purpose": "Configured limits per identifier type + tier", "technology": "Postgres", "notes": "Read-heavy; served from LRU cache in SDK" },
+    { "componentName": "Rule invalidation topic", "purpose": "Push rule changes to SDK instances", "technology": "Kafka or Redis pub/sub", "notes": "60s reconciler as backstop" },
+    { "componentName": "Violations stream", "purpose": "Log rejected requests for analytics / abuse team", "technology": "Kafka → data warehouse", "notes": "Fire-and-forget from SDK" }
+  ],
+  "dataFlowDescription": "Hot path: Request → Gateway → SDK.check(id, rule) → Redis EVALSHA (atomic refill + decrement) → allowed/rejected (<1ms p99). On allow, gateway forwards upstream. On reject, gateway returns 429 with headers. Rule changes: Admin UI → Rules DB → emit to Kafka topic → all SDK instances invalidate their LRU entry. Violations: SDK emits fire-and-forget event on each rejection → Kafka → Warehouse for analytics. Redis outage: SDK times out at 5ms → marks instance degraded → falls back to in-process counter with best-effort rate limiting until Redis recovers.",
+  "tradeoffs": [
+    {
+      "choice": "Token bucket as default algorithm",
+      "alternative": "Fixed-window counter or sliding-window log",
+      "reason": "Token bucket handles bursts naturally (important for latency-sensitive APIs with irregular traffic) at O(1) time and space. Fixed-window has the boundary-effect problem where 2× the limit can be served in the same second across a boundary. Sliding-window is more accurate but costs O(log n) memory per key."
+    },
+    {
+      "choice": "Centralised Redis, atomic Lua script",
+      "alternative": "Local in-memory counters per gateway instance",
+      "reason": "Horizontal gateway scaling requires a shared state; local counters would let each instance independently allow N, so N instances = N×limit effectively. Lua script gives us atomicity without distributed locks."
+    },
+    {
+      "choice": "Fail-open on Redis outage",
+      "alternative": "Fail-closed — reject all requests during Redis outage",
+      "reason": "Rate limiting is cost-control, not security. Rejecting all traffic during a Redis blip is a much bigger customer-impact incident than letting rate limits briefly not apply. Auth / WAF decisions are independent systems that do fail-closed."
+    },
+    {
+      "choice": "Per-instance LRU cache of rules + 60s reconciler",
+      "alternative": "Every check hits Rules DB",
+      "reason": "Rules change rarely (seconds to minutes) so caching them in-process is safe. Without the cache, every API request = one Postgres query — unacceptable at 50k QPS."
+    }
+  ],
+  "sources": [
+    { "label": "Stripe engineering: scaling rate limiting", "url": "https://stripe.com/blog/rate-limiters" },
+    { "label": "Cloudflare: how we built rate limiting capable of scaling to millions of domains", "url": "https://blog.cloudflare.com/counting-things-a-lot-of-different-things/" },
+    { "label": "System Design Interview (Alex Xu), Ch. 4: Rate Limiter", "url": "https://www.amazon.com/System-Design-Interview-insiders-Second/dp/B08CMF2CQF" },
+    { "label": "Redis Lua scripting + EVALSHA reference", "url": "https://redis.io/commands/eval/" }
+  ]
+}

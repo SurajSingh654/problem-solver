@@ -75,6 +75,7 @@ export default function Sidebar() {
             adminNav = [
                 { to: '/admin', icon: '👑', label: 'Team Admin' },
                 { to: '/admin/add-problem', icon: '➕', label: 'Add Problem' },
+                { to: '/admin/design-references', icon: '🧭', label: 'Design References' },
                 { to: '/admin/analytics', icon: '📊', label: 'Team Analytics' },
             ]
         }

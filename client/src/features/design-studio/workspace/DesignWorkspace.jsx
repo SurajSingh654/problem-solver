@@ -16,6 +16,7 @@ import ScenarioTestingView from './ScenarioTestingView'
 import ScaleAnalysisView from './ScaleAnalysisView'
 import FlowSimulationView from './FlowSimulationView'
 import EvaluationResultsView from './EvaluationResultsView'
+import ReferenceCompareView from './ReferenceCompareView'
 import SessionErrorView from '../views/SessionErrorView'
 import { SD_PHASES, LLD_PHASES } from '../constants/phases'
 import { useSaveCoordinator } from '../hooks/useSaveCoordinator'
@@ -281,6 +282,12 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     const filledPhases = Object.values(phaseContent).filter(v => v && v.trim().length > 30).length
     const canValidate = filledPhases >= 3
 
+    // Reference architecture gate — Sweller's worked-example principle.
+    // Accessible once the learner has filled ≥ 4 phases OR has reached
+    // the validation phase. Before that, showing the reference turns the
+    // exercise into transcription.
+    const canSeeReference = filledPhases >= 4 || sessionPhase.kind !== 'designing'
+
     const hasEvaluation = !!session.evaluation
 
     // Legacy props — DesignView reads `savePhase`/`saveDiagram`/`updateTiming`
@@ -478,6 +485,26 @@ export default function DesignWorkspace({ sessionId, onBack }) {
         )
     }
 
+    // ── REFERENCE COMPARE VIEW ────────────────────────────
+    if (view === 'reference') {
+        // If user deep-linked here before the gate, route them back to
+        // design. The gate message (in the "View Reference" button) tells
+        // them what's needed.
+        if (!canSeeReference) {
+            setView('design')
+            return null
+        }
+        return (
+            <ReferenceCompareView
+                session={session}
+                phases={phases}
+                phaseContent={phaseContent}
+                onBack={() => setView('design')}
+                viewProblemButton={viewProblemButton}
+            />
+        )
+    }
+
     // ── DESIGN VIEW (default) ────────────────────────────
     return (
         <DesignView
@@ -501,6 +528,7 @@ export default function DesignWorkspace({ sessionId, onBack }) {
             isReadOnly={isReadOnly}
             hasEvaluation={hasEvaluation}
             canValidate={canValidate}
+            canSeeReference={canSeeReference}
             onBack={onBack}
             onPhaseChange={handlePhaseChange}
             onDiagramChange={handleDiagramChange}

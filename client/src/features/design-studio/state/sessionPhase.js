@@ -63,12 +63,18 @@ export function getSessionPhase(session) {
 // (design canvas, scenario testing, scale analysis, flow simulation,
 // evaluation results). Not all views are reachable in every phase — e.g.
 // a 'designing' session has no scenarios to render yet.
+// `reference` is conditionally accessible: always allowed once the
+// session has reached validating/evaluated/completed-no-eval/abandoned,
+// and conditionally allowed in `designing` only if filledPhases >= 4
+// (gated at the DesignWorkspace level since it needs phase content).
+// Allowing it in ALLOWED_VIEWS means deep-links to ?view=reference work
+// once unlocked without throwing the user back to the default view.
 const ALLOWED_VIEWS = {
-    designing:         ['design', 'scale', 'flow'],
-    validating:        ['design', 'scenarios', 'scale', 'flow'],
-    evaluated:         ['design', 'scenarios', 'scale', 'flow', 'evaluation'],
-    'completed-no-eval': ['design', 'scenarios', 'scale', 'flow'],
-    abandoned:         ['design', 'scenarios', 'scale', 'flow'],
+    designing:           ['design', 'scale', 'flow', 'reference'],
+    validating:          ['design', 'scenarios', 'scale', 'flow', 'reference'],
+    evaluated:           ['design', 'scenarios', 'scale', 'flow', 'evaluation', 'reference'],
+    'completed-no-eval': ['design', 'scenarios', 'scale', 'flow', 'reference'],
+    abandoned:           ['design', 'scenarios', 'scale', 'flow', 'reference'],
 }
 
 /**
