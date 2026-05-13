@@ -115,7 +115,53 @@ export const EFFORT_CONFIG = {
 
 export const ROADMAP_ITEMS = [
 
-    // ── SHIPPED (this arc) ───────────────────────────────────────────────
+    // ── SHIPPED (May 2026 — Intelligence Report + Design Studio + Polish) ─
+
+    {
+        id: 'intelligence-report-rebuild',
+        phase: 'DONE',
+        shippedAt: '2026-05-12',
+        theme: 'AI Intelligence',
+        priority: 'HIGH',
+        effort: 'XLarge',
+        title: 'Intelligence Report Rebuild — Calibrated 6D + Grounded AI Verdict',
+        impact: 'A user with one partial submission used to see Overall=30 yet "Knowledge Retention=89, your strongest signal is Knowledge Retention." Now: dimensions with insufficient data show "—" + an activation message; the AI verdict refuses to claim readiness without evidence; every score carries a 95% confidence interval; tier readiness comes from a single source of truth used by client + server.',
+        description: 'Four-layer rebuild. L1 (deterministic stats): wilsonCI / meanCI / combineCIs utilities. L2 (calibration): per-dimension activation floors, FSRS-based D6 retrievability, READINESS_TIERS unified, reportCoverage stat. L3 (AI verdict): structured JSON with 7 hard anti-hallucination rules, validator with deterministic fallback, stored in VerdictLog. L4 (audit): superadmin /super-admin/verdicts page showing 7-day fallback rate + per-row evidence/output diff.',
+        why: 'Users who see "ready" and fail real interviews is the failure mode we explicitly engineered against. Every threshold and rule is now grounded in research (FSRS, IRT, Wilson). Overclaim fails noisily — fallback rate is observable.',
+        researchBasis: 'Wilson 1927 (proportion intervals); Agresti & Coull 1998 (small-n CI recommendation); FSRS v4+ retrievability formula (R(t,S) = (1+19/81 · t/S)^-0.5); Anthropic prompting best practices (hard rules + few-shot); OpenAI cookbook reliability techniques (validator + fallback).',
+        technicalNotes: 'server/src/utils/{dimensionStats,fsrsRetention,readinessTiers}.js · stats.controller.js::generateReadinessVerdict + getVerdictAudit · ai.prompts.js::readinessVerdictPrompt + READINESS_VERDICT_FEWSHOT · prisma model VerdictLog (5-min cache + audit) · client ReportPage rebuilt with DimScore[] shape + AIVerdictCard.',
+    },
+
+    {
+        id: 'design-studio-rebuild',
+        phase: 'DONE',
+        shippedAt: '2026-05-13',
+        theme: 'Learning Science',
+        priority: 'HIGH',
+        effort: 'XLarge',
+        title: 'Design Studio Workspace Rebuild',
+        impact: 'The 2,239-line monolith with hidden AI Coach (users had to scroll past the canvas to find it) became a feature-folder split with a pinned right rail — the coach is the first thing visible. Adds: lifecycle state machine (no more workspaceMode/status drift), unified save coordinator (4 debounce loops collapsed, no more dropped saves on rapid edits), proactive stuck-detector with phase-rubric nudges, coaching history tab to revisit past feedback, curated reference architectures gated post-attempt (Sweller), and a new Interview mode where the AI plays interviewer and can read the live canvas via tool calls.',
+        description: '8 commits across server + client. Schema additions: DesignReference (worked examples), DesignSessionMode enum, InterviewSession.designSessionId pairing. Server: state-machine guards on transitions, stuckContext + design-aware stage block in interview.engine.js, LOW_LEVEL_DESIGN rubric added. Client: features/design-studio/* feature folder, useSaveCoordinator + useDesignSessionStore (Zustand outbox with promise-mutex), useStuckDetector with 4-signal idle check, AICoachSection with Coach/History tabs, ReferenceCompareView with key-term diff, InterviewWorkspace + paired Mock Interview UI trim.',
+        why: 'SD/LLD practice was the weakest surface in the app. Mock Interview SD/LLD was CODING-shaped (wrong rubric, no LLD rubric at all, AI couldn\'t see diagrams). Design Studio was self-paced with great pedagogy but the UI hid its best feature (AI coach). Rebuild unifies SD/LLD practice in one canvas-aware tool with two modes.',
+        researchBasis: 'Sweller (cognitive load + worked examples after retrieval); Bjork (desirable difficulty — practice harder than reality); Ericsson (deliberate practice + immediate specific feedback); Karpicke & Roediger (retrieval practice); FSRS retrievability formula reused for stuck-thresholds.',
+        technicalNotes: 'See client/src/features/design-studio/ tree. Migrations 20260920000000_add_design_reference and 20260925000000_add_design_interview_link. Seed JSONs in server/prisma/seeds/design-references/ + standalone scripts/seed-design-references.js.',
+    },
+
+    {
+        id: 'ui-polish-design-foundation',
+        phase: 'DONE',
+        shippedAt: '2026-05-13',
+        theme: 'Admin Experience',
+        priority: 'MEDIUM',
+        effort: 'Medium',
+        title: 'UI Polish + Design-System Foundation',
+        impact: 'Reusable Skeleton (card/row/text/avatar variants), ErrorBoundary at every route (a crash on one page no longer blanks the whole app), styled ConfirmModal replacing window.confirm() across 11 sites, WAI-ARIA focus trap on modals, prefers-reduced-motion honored everywhere, aria-live regions on streaming AI responses, page-level empty states with explicit CTAs, hardcoded color audit + token migration. Fixes a real CommandPalette hooks-rules-of-hooks crash.',
+        description: '4 commits. Phase 3.1: hotfix CommandPalette useTeamCommands/useSuperAdminCommands rename (rules-of-hooks compliance) + missing nav entries. Phase 3.2: components/ui/Skeleton, ErrorBoundary, hooks/useToastingMutation, MotionConfig reducedMotion="user". Phase 3.3: ReportPage progressive loading (skeleton matching final shape — no layout shift), Dashboard empty-state CTAs, MockInterview WS disconnect banner, color-token sweep. Phase 3.4: useFocusTrap, useConfirm + ConfirmProvider, modal a11y (role/aria-modal/aria-labelledby/aria-describedby), aria-live on verdict + chat regions.',
+        why: 'Quality bar mandate: clean / elegant / modern / user-friendly. Foundation pieces also unblock future work (Skeleton + ConfirmModal will be reused by every new feature).',
+        technicalNotes: 'Audit punch list saved as memory project_ui_polish_punchlist.md. CommandPalette functions renamed get* (not use* — they are not hooks).',
+    },
+
+    // ── SHIPPED (earlier this arc) ───────────────────────────────────────
 
     {
         id: 'retrieval-practice-persistence',
@@ -370,7 +416,49 @@ export const ROADMAP_ITEMS = [
         technicalNotes: 'commitmentGoal JSON on User. Settings page UI. sendCommitmentReminderEmail at 8pm if goal not met.',
     },
 
+    {
+        id: 'ai-prompts-overhaul',
+        phase: 'NEXT',
+        theme: 'AI Intelligence',
+        priority: 'HIGH',
+        effort: 'Large',
+        title: 'AI Prompts & Service Overhaul',
+        impact: 'Every AI surface (solution review, scenario generation, weekly plan, mock interview, design coaching, readiness verdict, problem generation, debrief) gets the same anti-hallucination treatment the new readiness verdict has — hard rules in system prompt + validator + deterministic fallback + few-shot calibration where stakes are high. ai.service.js gains usage tracking, model fallback, retry-on-rate-limit, and standardized error envelopes so callers stop reinventing those patterns.',
+        description: 'Cross-cutting refactor of every prompt in server/src/services/{ai.prompts,designStudio.prompts,interview.engine}.js plus the central ai.service.js. Standardize: (1) system prompts cache-friendly (static per category/mode), user prompts carry dynamic fields, untrusted content always XML-tagged with the security rule; (2) structured JSON outputs with shared validators in a new server/src/services/ai.validators.js; (3) deterministic fallbacks for every JSON-returning prompt; (4) few-shot examples for high-stakes outputs. Audit existing prompts for token efficiency and drift from current best practices.',
+        why: 'Prompts are load-bearing. The verdict prompt rebuild proved that grounded-with-validator beats unverified LLM output. Applying that pattern across the surface raises the AI quality floor everywhere instead of one-off improvements.',
+        researchBasis: 'Anthropic prompting best practices (explicit rules, examples, CoT). OpenAI cookbook reliability techniques (techniques_to_improve_reliability). Treisman 2023 study on prompt-cache tokens — keeping system prompts static across calls is now a real cost lever.',
+        technicalNotes: 'Per the user\'s ordering this comes after UI polish (Phase 3) and before Database Practice (Phase 1). Track work in audit + 4-5 commits. Reference: existing readinessVerdictPrompt + validateVerdict + buildFallbackVerdict pattern in stats.controller.js.',
+    },
+
     // ── LATER — 3-9 months ─────────────────────────────────────────────
+
+    {
+        id: 'database-practice-section',
+        phase: 'LATER',
+        theme: 'Content & Problems',
+        priority: 'HIGH',
+        effort: 'XLarge',
+        title: 'Database Practice Section (SQL Workspace)',
+        impact: 'A first-class SQL/database practice surface parallel to Design Studio. Real schema + seed data, query workspace with execution + result preview, AI evaluation against expected output and explain plan. Currently SQL is a Mock Interview category but has no dedicated workspace — users either reason about queries in their head or run them in a separate tool.',
+        description: 'New top-level feature: schema-aware query editor (Monaco with SQL mode), per-problem seed schemas + sample rows, sandboxed query execution (Postgres in a worker container or Judge0-style), result-set comparison against expected output, query-plan analysis. AI evaluation rubric: queryCorrectness, schemaUnderstanding, optimizationAwareness, edgeCaseHandling. Bridges to Solutions like Design Studio does.',
+        why: 'SQL is a recognized interview category we don\'t serve well. The Mock Interview category is text-only — users can\'t actually run queries. Real practice requires real execution against a real schema.',
+        researchBasis: 'Same deliberate-practice frame as the Design Studio rebuild (Ericsson, Karpicke). For schema sandboxing: use the Postgres docker-in-worker pattern from open-source SQL training tools (Hasura, sqlpad).',
+        technicalNotes: 'Will need: SqlSession Prisma model, SqlSchema seed table, sandboxed Postgres execution path. Open question: managed (Judge0/Piston) vs self-hosted single-container reset-per-query.',
+    },
+
+    {
+        id: 'team-teaching-sessions',
+        phase: 'LATER',
+        theme: 'Team & Community',
+        priority: 'HIGH',
+        effort: 'XLarge',
+        title: 'Team Teaching Sessions (Knowledge Sharing)',
+        impact: 'Team members can schedule + run teaching sessions where one member teaches a topic (e.g. "I\'ll walk through my System Design for a URL shortener"). Everyone has access to recordings, notes, and shared docs. Teachers earn intelligence-report points based on the topic + their peer ratings — surfacing the team\'s actual subject-matter experts and creating a self-reinforcing knowledge-sharing loop.',
+        description: 'Big feature requiring research and discussion before scoping. Initial concept: TeachingSession model (host, topic, scheduledAt, status, attachments, peerRatings), session library page, integration with Intelligence Report\'s D3 (Communication) — teaching IS the highest-fidelity communication signal we have. AI angle: auto-summarize uploaded recordings into structured notes, validate that the topic was actually covered, generate quiz questions for attendees. Open: scheduling UX, recording vs live-only, points formula, moderation.',
+        why: 'The app currently treats every member as a solo learner. Teams thrive on knowledge sharing; the feedback loop of "explain it to teach" is one of the strongest learning interventions known (Feynman technique, protégé effect). Recognizing teachers in the same currency the app already values (intelligence-report points) makes it self-sustaining.',
+        researchBasis: 'Roscoe & Chi (2007) — meta-review showing tutors learn more than tutees in peer-teaching settings (the "protégé effect"). Fiorella & Mayer (2013) — teaching expectancy alone produces ~30% better retention than control. Bloom\'s 2-sigma problem (Bloom 1984) — peer tutoring is one of the few replicated mechanisms that produces sigma-level gains.',
+        technicalNotes: 'NOT YET DESIGNED. To research: scheduling primitives (Cal.com integration vs in-app), recording storage (Mux / AWS / self-hosted), points formula (peer rating × topic tier × duration?), moderation (teacher approval flow), AI summarization pipeline, integration with Intelligence Report D3 + a new D7 "Teaching Contributions" axis or a separate Communicator track.',
+    },
 
     {
         id: 'test-case-execution',
