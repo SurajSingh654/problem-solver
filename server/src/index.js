@@ -60,6 +60,10 @@ import feedbackRoutes from "./routes/feedback.routes.js";
 
 import designStudioRoutes from "./routes/designStudio.routes.js";
 import designReferencesRoutes from "./routes/designReferences.routes.js";
+import teachingRoutes from "./routes/teaching.routes.js";
+
+// ── Feature flags ────────────────────────────────────────────
+import { FEATURE_TEACHING_SESSIONS } from "./config/env.js";
 
 // ============================================================================
 // APP SETUP
@@ -183,6 +187,11 @@ function mountRoutes(prefix) {
   app.use(`${prefix}/design-studio`, apiLimiter, designStudioRoutes);
   // Reference architectures — worked examples shown post-attempt.
   app.use(`${prefix}/design-references`, apiLimiter, designReferencesRoutes);
+
+  // ── Team Teaching Sessions (gated until P6 flag flip) ────
+  if (FEATURE_TEACHING_SESSIONS) {
+    app.use(`${prefix}/teaching`, apiLimiter, teachingRoutes);
+  }
 }
 
 // Canonical versioned routes

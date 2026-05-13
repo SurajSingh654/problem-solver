@@ -58,6 +58,8 @@ import TeamPendingPage from '@pages/team/TeamPendingPage'
 import SuperAdminDashboard from '@pages/superadmin/SuperAdminDashboard'
 // ── Heavy pages (lazy — loaded on demand) ────────────────────
 const MockInterviewPage = lazy(() => import('@pages/MockInterviewPage'))
+const TeachingListPage = lazy(() => import('@pages/teaching/TeachingListPage'))
+const TeachingNewPage = lazy(() => import('@pages/teaching/TeachingNewPage'))
 const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
@@ -230,6 +232,13 @@ export default function App() {
             <Route path="design-studio" element={<Lazy><DesignStudioPage /></Lazy>} />
             {/* ── Interview History ─────────────────────────────────── */}
             <Route path="interview-history" element={<InterviewHistoryPage />} />
+            {/* ── Team Teaching (gated — VITE_FEATURE_TEACHING_SESSIONS) */}
+            {import.meta.env.VITE_FEATURE_TEACHING_SESSIONS === 'true' && (
+              <>
+                <Route path="teaching" element={<Lazy><TeachingListPage /></Lazy>} />
+                <Route path="teaching/new" element={<Lazy><TeachingNewPage /></Lazy>} />
+              </>
+            )}
             {/* ── Leaderboard ───────────────────────────────────────── */}
             <Route path="leaderboard" element={<LeaderboardPage />} />
             {/* ── Intelligence Report ───────────────────────────────── */}

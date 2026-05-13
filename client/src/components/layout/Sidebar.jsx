@@ -71,6 +71,16 @@ export default function Sidebar() {
             mainNav.push({ to: '/leaderboard', icon: '🏆', label: 'Leaderboard' })
         }
 
+        // Team Teaching — gated by feature flag, hidden until P6 flip.
+        // Hidden in personal mode too: a one-person team has no peers
+        // to teach.
+        if (
+            !isPersonal &&
+            import.meta.env.VITE_FEATURE_TEACHING_SESSIONS === 'true'
+        ) {
+            mainNav.push({ to: '/teaching', icon: '📚', label: 'Teaching' })
+        }
+
         // Team admin tools
         if (isTeamAdmin) {
             adminNav = [

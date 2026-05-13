@@ -1,0 +1,500 @@
+// ============================================================================
+// ProbSolver — Team Teaching Sessions Controller
+// ============================================================================
+//
+// Members of an ACTIVE team schedule peer-to-peer knowledge-sharing
+// sessions. v1 scope = link-only (host supplies an external meeting URL)
+// + post-session markdown notes. The in-app live room (P1) is presence
+// + Q&A only over the existing WebSocket; no recording.
+//
+// Every endpoint here is gated by `requireTeamContext` upstream so
+// `req.teamId` is the canonical scope. Personal teams (isPersonal) are
+// not blocked at the controller level — they get the feature too, the
+// session list will just always be empty (no peers).
+//
+// This file ships in P0: create / list / detail / patch / delete /
+// transition (start, end, cancel). Notes-submit (P3), rating (P2),
+// flag (P2), join/leave (P1) live in their own commits but follow the
+// same controller conventions established here.
+// ============================================================================
+import prisma from "../lib/prisma.js";
+import { success, error } from "../utils/response.js";
+
+// Sessions a candidate user can see vs sessions a host/admin can see —
+// non-COMPLETED sessions hide the host's `notes` from non-host viewers.
+function dtoForViewer(session, viewerId, isAdmin) {
+  if (!session) return null;
+  const isHost = session.hostId === viewerId;
+  const exposeNotes = isHost || isAdmin || session.status === "COMPLETED";
+  return {
+    id: session.id,
+    teamId: session.teamId,
+    hostId: session.hostId,
+    host: session.host
+      ? {
+          id: session.host.id,
+          name: session.host.name,
+          email: session.host.email,
+        }
+      : null,
+    title: session.title,
+    topic: session.topic,
+    description: session.description,
+    externalMeetingLink: session.externalMeetingLink,
+    capacity: session.capacity,
+    status: session.status,
+    scheduledAt: session.scheduledAt,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    notes: exposeNotes ? session.notes : null,
+    summary: session.status === "COMPLETED" ? session.summary : null,
+    quiz: session.status === "COMPLETED" ? session.quiz : null,
+    topicCoverage: session.status === "COMPLETED" ? session.topicCoverage : null,
+    aiGeneratedAt: session.aiGeneratedAt,
+    flagCount: isAdmin ? session.flagCount : undefined,
+    attendeesCount: session.attendees?.length ?? undefined,
+    ratingsCount: session.ratings?.length ?? undefined,
+    avgRating:
+      session.ratings && session.ratings.length > 0
+        ? Math.round(
+            (session.ratings.reduce((s, r) => s + r.rating, 0) /
+              session.ratings.length) * 10,
+          ) / 10
+        : null,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
+function isTeamAdmin(req) {
+  return (
+    req.user.teamRole === "TEAM_ADMIN" || req.user.globalRole === "SUPER_ADMIN"
+  );
+}
+
+// ============================================================================
+// CREATE
+// ============================================================================
+//
+// Open creation — any member of an ACTIVE team can schedule a session.
+// `scheduledAt` must be in the future. The cron lifts the row to LIVE
+// at the scheduled time; the host can also start manually via
+// POST /teaching/:id/start.
+// ============================================================================
+export async function createTeachingSession(req, res) {
+  try {
+    const userId = req.user.id;
+    const teamId = req.teamId;
+    const {
+      title,
+      topic,
+      description,
+      externalMeetingLink,
+      capacity,
+      scheduledAt,
+    } = req.body || {};
+
+    if (!title || typeof title !== "string" || title.trim().length === 0) {
+      return error(res, "Title is required.", 400);
+    }
+    if (!topic || typeof topic !== "string" || topic.trim().length === 0) {
+      return error(res, "Topic is required.", 400);
+    }
+    if (!scheduledAt) {
+      return error(res, "scheduledAt is required (ISO date).", 400);
+    }
+    const scheduledDate = new Date(scheduledAt);
+    if (Number.isNaN(scheduledDate.getTime())) {
+      return error(res, "scheduledAt must be a valid ISO date.", 400);
+    }
+    if (scheduledDate.getTime() <= Date.now()) {
+      return error(res, "scheduledAt must be in the future.", 400);
+    }
+
+    const cap = Number.isFinite(parseInt(capacity, 10))
+      ? Math.max(2, Math.min(parseInt(capacity, 10), 200))
+      : 20;
+
+    const created = await prisma.teachingSession.create({
+      data: {
+        teamId,
+        hostId: userId,
+        title: title.trim(),
+        topic: topic.trim(),
+        description: description?.trim() || null,
+        externalMeetingLink: externalMeetingLink?.trim() || null,
+        capacity: cap,
+        scheduledAt: scheduledDate,
+        status: "SCHEDULED",
+      },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return success(
+      res,
+      { session: dtoForViewer(created, userId, isTeamAdmin(req)) },
+      201,
+    );
+  } catch (err) {
+    console.error("Create teaching session error:", err);
+    return error(res, "Failed to create teaching session.", 500);
+  }
+}
+
+// ============================================================================
+// LIST
+// ============================================================================
+//
+// Filterable + paginated. Default ordering: upcoming first (scheduledAt
+// asc) then past (scheduledAt desc) — the calendar component splits
+// these client-side. The hot-path index (teamId, status, scheduledAt)
+// covers both halves.
+// ============================================================================
+export async function listTeachingSessions(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const isAdmin = isTeamAdmin(req);
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 50);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const { status, hostId, topic, from, to } = req.query;
+
+    const where = { teamId, deletedAt: null };
+    if (status) where.status = status;
+    if (hostId) where.hostId = hostId;
+    if (topic) where.topic = { contains: topic, mode: "insensitive" };
+    if (from || to) {
+      where.scheduledAt = {};
+      if (from) where.scheduledAt.gte = new Date(from);
+      if (to) where.scheduledAt.lte = new Date(to);
+    }
+
+    const [rows, total] = await Promise.all([
+      prisma.teachingSession.findMany({
+        where,
+        orderBy: [{ scheduledAt: "desc" }],
+        take: limit,
+        skip: offset,
+        include: {
+          host: { select: { id: true, name: true, email: true } },
+          ratings: { select: { rating: true } },
+          attendees: { select: { id: true } },
+        },
+      }),
+      prisma.teachingSession.count({ where }),
+    ]);
+
+    const sessions = rows.map((s) => dtoForViewer(s, userId, isAdmin));
+    return success(res, {
+      sessions,
+      pagination: { total, limit, offset },
+    });
+  } catch (err) {
+    console.error("List teaching sessions error:", err);
+    return error(res, "Failed to list teaching sessions.", 500);
+  }
+}
+
+// ============================================================================
+// DETAIL
+// ============================================================================
+//
+// Includes ratings + attendees for the detail page tabs. Returns 404 if
+// the session isn't in the caller's team — never leaks cross-team data.
+// ============================================================================
+export async function getTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const isAdmin = isTeamAdmin(req);
+    const { id } = req.params;
+
+    const session = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+        ratings: {
+          include: {
+            rater: { select: { id: true, name: true, email: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        },
+        attendees: {
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+          },
+          orderBy: { joinedAt: "asc" },
+        },
+        // Flags hidden from non-admin viewers — DTO function strips
+        // flagCount too. Keep flags off the include for non-admins.
+        ...(isAdmin
+          ? {
+              flags: {
+                where: { status: "OPEN" },
+                orderBy: { createdAt: "desc" },
+              },
+            }
+          : {}),
+      },
+    });
+
+    if (!session) {
+      return error(res, "Teaching session not found.", 404);
+    }
+
+    // Detail DTO carries more than the list DTO — ratings + attendees.
+    const dto = dtoForViewer(session, userId, isAdmin);
+    dto.ratings = session.ratings.map((r) => ({
+      id: r.id,
+      rating: r.rating,
+      comment: r.comment,
+      peerLearned: r.peerLearned,
+      raterId: r.raterId,
+      raterName: r.rater?.name || null,
+      // Email exposure: admins always; non-admins only see their own
+      // rater email (privacy nuance — peers shouldn't doxx each other).
+      raterEmail: isAdmin || r.raterId === userId ? r.rater?.email : null,
+      createdAt: r.createdAt,
+    }));
+    dto.attendees = session.attendees.map((a) => ({
+      id: a.id,
+      userId: a.userId,
+      userName: a.user?.name || null,
+      userEmail: isAdmin || a.userId === userId ? a.user?.email : null,
+      joinedAt: a.joinedAt,
+      leftAt: a.leftAt,
+      durationMs: a.durationMs,
+    }));
+    if (isAdmin) {
+      dto.flags = (session.flags || []).map((f) => ({
+        id: f.id,
+        reason: f.reason,
+        status: f.status,
+        reporterId: f.reporterId,
+        createdAt: f.createdAt,
+      }));
+    }
+
+    return success(res, { session: dto });
+  } catch (err) {
+    console.error("Get teaching session error:", err);
+    return error(res, "Failed to load teaching session.", 500);
+  }
+}
+
+// ============================================================================
+// PATCH (host or admin, only before LIVE)
+// ============================================================================
+export async function updateTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const isAdmin = isTeamAdmin(req);
+    const { id } = req.params;
+
+    const existing = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true, hostId: true, status: true },
+    });
+    if (!existing) return error(res, "Teaching session not found.", 404);
+    if (existing.hostId !== userId && !isAdmin) {
+      return error(res, "Only the host or a team admin can edit this session.", 403);
+    }
+    if (existing.status !== "DRAFT" && existing.status !== "SCHEDULED") {
+      return error(
+        res,
+        `Cannot edit a ${existing.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    const allowed = [
+      "title",
+      "topic",
+      "description",
+      "externalMeetingLink",
+      "capacity",
+      "scheduledAt",
+    ];
+    const data = {};
+    for (const key of allowed) {
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, key)) {
+        data[key] = req.body[key];
+      }
+    }
+    if (data.title === "" || data.topic === "") {
+      return error(res, "Title and topic must be non-empty.", 400);
+    }
+    if (data.scheduledAt) {
+      const d = new Date(data.scheduledAt);
+      if (Number.isNaN(d.getTime())) {
+        return error(res, "scheduledAt must be a valid ISO date.", 400);
+      }
+      if (d.getTime() <= Date.now()) {
+        return error(res, "scheduledAt must be in the future.", 400);
+      }
+      data.scheduledAt = d;
+      // Reset notify flags so the cron re-fires for the new time.
+      data.notifiedStartingSoonAt = null;
+      data.notifiedLiveNowAt = null;
+    }
+    if (data.capacity !== undefined) {
+      const cap = parseInt(data.capacity, 10);
+      if (!Number.isFinite(cap) || cap < 2 || cap > 200) {
+        return error(res, "capacity must be 2-200.", 400);
+      }
+      data.capacity = cap;
+    }
+
+    const updated = await prisma.teachingSession.update({
+      where: { id },
+      data,
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return success(res, { session: dtoForViewer(updated, userId, isAdmin) });
+  } catch (err) {
+    console.error("Update teaching session error:", err);
+    return error(res, "Failed to update teaching session.", 500);
+  }
+}
+
+// ============================================================================
+// CANCEL (host or admin, any non-COMPLETED state)
+// ============================================================================
+//
+// Soft-delete + status flip. We keep the row around so attendee/rating
+// data persists for the host's history; the row is hidden from list
+// queries via the deletedAt filter.
+// ============================================================================
+export async function cancelTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const isAdmin = isTeamAdmin(req);
+    const { id } = req.params;
+
+    const existing = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true, hostId: true, status: true },
+    });
+    if (!existing) return error(res, "Teaching session not found.", 404);
+    if (existing.hostId !== userId && !isAdmin) {
+      return error(res, "Only the host or a team admin can cancel.", 403);
+    }
+    if (existing.status === "COMPLETED" || existing.status === "CANCELLED") {
+      return error(
+        res,
+        `Cannot cancel a ${existing.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    const updated = await prisma.teachingSession.update({
+      where: { id },
+      data: { status: "CANCELLED", deletedAt: new Date() },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return success(res, { session: dtoForViewer(updated, userId, isAdmin) });
+  } catch (err) {
+    console.error("Cancel teaching session error:", err);
+    return error(res, "Failed to cancel teaching session.", 500);
+  }
+}
+
+// ============================================================================
+// START / END (host only)
+// ============================================================================
+//
+// `start` is host-initiated; the cron also auto-starts at scheduledAt.
+// Both paths set `startedAt` exactly once via CAS-style guard
+// (only flips SCHEDULED → LIVE).
+// ============================================================================
+export async function startTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const existing = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true, hostId: true, status: true },
+    });
+    if (!existing) return error(res, "Teaching session not found.", 404);
+    if (existing.hostId !== userId) {
+      return error(res, "Only the host can start this session.", 403);
+    }
+    if (existing.status !== "SCHEDULED" && existing.status !== "DRAFT") {
+      return error(
+        res,
+        `Cannot start a ${existing.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    const updated = await prisma.teachingSession.update({
+      where: { id },
+      data: { status: "LIVE", startedAt: new Date() },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return success(res, {
+      session: dtoForViewer(updated, userId, isTeamAdmin(req)),
+    });
+  } catch (err) {
+    console.error("Start teaching session error:", err);
+    return error(res, "Failed to start teaching session.", 500);
+  }
+}
+
+export async function endTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const existing = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true, hostId: true, status: true },
+    });
+    if (!existing) return error(res, "Teaching session not found.", 404);
+    if (existing.hostId !== userId) {
+      return error(res, "Only the host can end this session.", 403);
+    }
+    if (existing.status !== "LIVE") {
+      return error(
+        res,
+        `Cannot end a ${existing.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    const updated = await prisma.teachingSession.update({
+      where: { id },
+      data: { status: "COMPLETED", endedAt: new Date() },
+      include: {
+        host: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return success(res, {
+      session: dtoForViewer(updated, userId, isTeamAdmin(req)),
+    });
+  } catch (err) {
+    console.error("End teaching session error:", err);
+    return error(res, "Failed to end teaching session.", 500);
+  }
+}

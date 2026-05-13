@@ -18,6 +18,8 @@ const PAGE_META = {
     '/review': { title: 'Review Queue', crumb: 'Practice' },
     '/report': { title: 'My Report', crumb: 'Progress' },
     '/leaderboard': { title: 'Leaderboard', crumb: 'Progress' },
+    '/teaching': { title: 'Teaching', crumb: 'Team' },
+    '/teaching/new': { title: 'Schedule Session', crumb: 'Team' },
     '/profile': { title: 'My Profile', crumb: 'Progress' },
     '/admin': { title: 'Admin Panel', crumb: 'Admin' },
     '/admin/problems/new': { title: 'Add Problem', crumb: 'Admin' },

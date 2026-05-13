@@ -314,6 +314,12 @@ model User {
   verdictLogs VerdictLog[]
   usageEvents UsageTracking[]
 
+  // Teaching sessions — host + attend + rate + flag back-relations.
+  hostedTeachingSessions TeachingSession[]  @relation("TeachingHost")
+  teachingAttendances    TeachingAttendee[] @relation("TeachingAttendee")
+  teachingRatingsGiven   TeachingRating[]   @relation("TeachingRater")
+  teachingFlagsRaised    TeachingFlag[]     @relation("TeachingFlagger")
+
   authoredDesignReferences DesignReference[] @relation("DesignReferenceAuthor")
 
   // ── Indexes ────────────────────────────────────────
@@ -397,6 +403,7 @@ model Team {
   memberships       TeamMembership[]
   verdictLogs       VerdictLog[]
   usageEvents       UsageTracking[]
+  teachingSessions  TeachingSession[]
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -1903,4 +1910,160 @@ model UsageTracking {
   // Cron prune by createdAt < cutoff.
   @@index([createdAt])
   @@map("usage_tracking")
+}
+
+// ============================================================================
+// TEAM TEACHING SESSIONS — peer-to-peer knowledge sharing within a team
+// ============================================================================
+//
+// Members schedule + run sessions where one member teaches a topic. Peers
+// rate the teacher; flags surface to admins; AI summarizes the teacher's
+// notes + generates a quiz + scores topic-coverage. The host's
+// participation feeds the new D7 "Teaching Contributions" dimension on
+// the Intelligence Report (activates after ≥1 session hosted + ≥3 peer
+// ratings, conservative ~10% weight).
+//
+// v1 scope: external meeting link (Zoom/Meet/etc.) + manually-typed
+// markdown notes + a thin in-app live room (presence + Q&A only over the
+// existing WebSocket — no recording, no transcript). Recording +
+// transcripts deferred to v2 pending real-usage data.
+//
+// Lifecycle: SCHEDULED → LIVE → COMPLETED. CANCELLED is terminal from
+// any non-COMPLETED state. notifiedStartingSoonAt + notifiedLiveNowAt
+// give the cron CAS-style idempotency so a multi-replica deploy doesn't
+// double-broadcast the same session transition.
+// ============================================================================
+enum TeachingStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TeachingFlagStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+}
+
+model TeachingSession {
+  id String @id @default(cuid())
+
+  // ── Ownership (team-scoped) ────────────────────────
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  hostId String
+  host   User   @relation("TeachingHost", fields: [hostId], references: [id], onDelete: Cascade)
+
+  // ── Core ───────────────────────────────────────────
+  title               String
+  topic               String
+  description         String?
+  externalMeetingLink String?
+  capacity            Int     @default(20)
+
+  // ── Lifecycle ──────────────────────────────────────
+  status      TeachingStatus @default(SCHEDULED)
+  scheduledAt DateTime
+  startedAt   DateTime?
+  endedAt     DateTime?
+
+  // CAS idempotency for the 60s scheduler — flipped null → date once.
+  notifiedStartingSoonAt DateTime?
+  notifiedLiveNowAt      DateTime?
+
+  // ── Notes (markdown, post-session) ─────────────────
+  notes String?
+
+  // ── AI artifacts (filled async after submitNotes) ──
+  // summary       — teachingSummaryPrompt output (tldr + key takeaways)
+  // quiz          — teachingQuizPrompt output (3-5 review questions)
+  // topicCoverage — teachingTopicCoveragePrompt output (FULL/PARTIAL/OFF_TOPIC)
+  summary       Json?
+  quiz          Json?
+  topicCoverage Json?
+  aiGeneratedAt DateTime?
+
+  // ── Moderation ─────────────────────────────────────
+  flagCount Int @default(0)
+
+  // ── Soft delete ────────────────────────────────────
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attendees TeachingAttendee[]
+  ratings   TeachingRating[]
+  flags     TeachingFlag[]
+
+  // Hot path 1: upcoming sessions for this team (calendar list).
+  @@index([teamId, status, scheduledAt])
+  // Hot path 2: past sessions for D7 + leaderboard rollups.
+  @@index([teamId, status, endedAt(sort: Desc)])
+  // Cron poll: any session crossing the 5-min / start window.
+  @@index([status, scheduledAt])
+  // Host page — "my sessions".
+  @@index([hostId, status, scheduledAt])
+  @@map("teaching_sessions")
+}
+
+model TeachingAttendee {
+  id String @id @default(cuid())
+
+  sessionId String
+  session   TeachingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation("TeachingAttendee", fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+  durationMs Int?
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+  @@map("teaching_attendees")
+}
+
+model TeachingRating {
+  id String @id @default(cuid())
+
+  sessionId String
+  session   TeachingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  raterId   String
+  rater     User            @relation("TeachingRater", fields: [raterId], references: [id], onDelete: Cascade)
+
+  rating      Int // 1-5
+  comment     String?
+  peerLearned Boolean @default(false) // "I learned something" — feeds D7 score
+
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, raterId])
+  @@index([sessionId])
+  @@map("teaching_ratings")
+}
+
+model TeachingFlag {
+  id String @id @default(cuid())
+
+  sessionId  String
+  session    TeachingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  reporterId String
+  reporter   User            @relation("TeachingFlagger", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  reason String
+  status TeachingFlagStatus @default(OPEN)
+
+  resolvedById   String?
+  resolvedAt     DateTime?
+  resolutionNote String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([sessionId])
+  @@map("teaching_flags")
 }
