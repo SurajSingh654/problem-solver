@@ -116,6 +116,15 @@ setupQueryLogging(prisma);
 // UsageTracking. Non-blocking; failure never affects the AI response.
 import("./services/ai.usageWriter.js").then((m) => m.mountUsageWriter());
 
+// ── 8. Teaching scheduler (gated by feature flag) ────────────
+// 60s setInterval polling for "starting in 5 min" + "live now"
+// transitions. CAS-style row claim makes it safe to run on N replicas.
+if (FEATURE_TEACHING_SESSIONS) {
+  import("./services/teaching.scheduler.js").then((m) =>
+    m.mountTeachingScheduler(),
+  );
+}
+
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================

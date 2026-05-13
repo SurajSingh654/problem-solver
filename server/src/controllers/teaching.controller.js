@@ -40,6 +40,11 @@ import {
   buildFallbackTeachingTopicCoverage,
 } from "../services/ai.fallbacks.js";
 import { AI_MODEL_FAST } from "../config/env.js";
+import {
+  sendTeachingEndedEmail,
+  sendTeachingFlaggedEmail,
+} from "../services/email.service.js";
+import { fanOutTeachingCreatedEmails } from "../services/teaching.scheduler.js";
 
 // Sessions a candidate user can see vs sessions a host/admin can see —
 // non-COMPLETED sessions hide the host's `notes` from non-host viewers.
@@ -152,6 +157,11 @@ export async function createTeachingSession(req, res) {
         host: { select: { id: true, name: true, email: true } },
       },
     });
+
+    // Fire-and-forget create-email fan to every team member except
+    // the host. Wrapped inside the helper, so a Resend hiccup doesn't
+    // affect the response.
+    fanOutTeachingCreatedEmails({ session: created, host: created.host });
 
     return success(
       res,
@@ -524,6 +534,15 @@ export async function endTeachingSession(req, res) {
       sessionId: updated.id,
     });
 
+    // Nudge the host to add notes — the AI artifacts only generate
+    // once they do. Fire-and-forget; failure logged inside email layer.
+    if (updated.host?.email) {
+      sendTeachingEndedEmail({
+        to: updated.host.email,
+        session: updated,
+      }).catch(() => {});
+    }
+
     return success(res, {
       session: dtoForViewer(updated, userId, isTeamAdmin(req)),
     });
@@ -725,6 +744,16 @@ export async function flagTeachingSession(req, res) {
       return created;
     });
 
+    // Notify team admins async. Don't block the response on the
+    // membership query; if it fails we log + continue.
+    notifyTeamAdminsOfFlag({ teamId, flag, sessionRef: { id, title: undefined } }).catch(
+      (err) => {
+        console.warn(
+          `[teaching] flag-email fan-out failed for ${id}: ${err.message}`,
+        );
+      },
+    );
+
     return success(
       res,
       {
@@ -741,6 +770,26 @@ export async function flagTeachingSession(req, res) {
   } catch (err) {
     console.error("Flag teaching session error:", err);
     return error(res, "Failed to flag teaching session.", 500);
+  }
+}
+
+// Helper: lookup TEAM_ADMIN members + email each one. Co-located with
+// the flag controller because that's the only caller; pulls `title`
+// fresh from DB so the email body has it.
+async function notifyTeamAdminsOfFlag({ teamId, flag, sessionRef }) {
+  const session = await prisma.teachingSession.findUnique({
+    where: { id: sessionRef.id },
+    select: { id: true, title: true },
+  });
+  if (!session) return;
+  const admins = await prisma.teamMembership.findMany({
+    where: { teamId, role: "TEAM_ADMIN", isActive: true },
+    include: { user: { select: { email: true } } },
+  });
+  for (const a of admins) {
+    const email = a.user?.email;
+    if (!email) continue;
+    sendTeachingFlaggedEmail({ to: email, session, flag }).catch(() => {});
   }
 }
 

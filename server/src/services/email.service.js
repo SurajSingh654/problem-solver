@@ -329,3 +329,131 @@ export async function sendFeedbackNotificationEmail(to, report) {
     html,
   );
 }
+
+// ============================================================================
+// TEAM TEACHING SESSIONS — 4 transactional emails (P5)
+// ============================================================================
+//
+// All four are best-effort: callers wrap in try/catch and log on
+// failure. We never block the controller path on an email round-trip.
+// No granular opt-out preferences in v1 — matches sendTeamInviteEmail's
+// existing convention. Bulk fan-out (createdEmail) iterates recipients
+// sequentially because Resend rate-limits aggressive bursts; if a team
+// grows past ~50 active members we'd switch to Resend's batch API.
+// ============================================================================
+
+function formatSessionTime(scheduledAt) {
+  if (!scheduledAt) return "Soon";
+  const d = new Date(scheduledAt);
+  return d.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
+// 1. Session created — sent to every team member except the host.
+export async function sendTeachingSessionCreatedEmail({
+  to,
+  hostName,
+  session,
+}) {
+  if (!to) return { success: false, simulated: true };
+  const url = `${CLIENT_URL}/teaching/${session.id}`;
+  const html = emailWrapper(`
+    ${heading("📚 New teaching session")}
+    ${paragraph(
+      `<strong style="color:#f3f4f6;">${escapeHtml(hostName || "A teammate")}</strong> just scheduled a session your team can join.`,
+    )}
+    ${paragraph(
+      `<strong style="color:#f3f4f6;">${escapeHtml(session.title)}</strong>` +
+        (session.topic ? ` — ${escapeHtml(session.topic)}` : ""),
+    )}
+    ${paragraph(`📅 ${escapeHtml(formatSessionTime(session.scheduledAt))}`)}
+    ${button("View session", url)}
+    ${paragraph(
+      "Add it to your calendar — you'll get another nudge five minutes before it starts.",
+    )}
+  `);
+  return sendEmail(to, `New teaching session: ${session.title}`, html);
+}
+
+// 2. Starting soon — fired by the cron 5 minutes before scheduledAt.
+export async function sendTeachingStartingSoonEmail({ to, session }) {
+  if (!to) return { success: false, simulated: true };
+  const url = `${CLIENT_URL}/teaching/${session.id}`;
+  const html = emailWrapper(`
+    ${heading("⏰ Starting in 5 minutes")}
+    ${paragraph(
+      `<strong style="color:#f3f4f6;">${escapeHtml(session.title)}</strong> is about to begin.`,
+    )}
+    ${button("Open the live room", url)}
+    ${paragraph(
+      "The host is providing the meeting link — click through to join in-app and tap the link from there.",
+    )}
+  `);
+  return sendEmail(to, `${session.title} starts in 5 minutes`, html);
+}
+
+// 3. Ended — sent to the host only, prompting them to post notes so
+//    AI surfaces (summary, quiz, topic-coverage) can be generated.
+export async function sendTeachingEndedEmail({ to, session }) {
+  if (!to) return { success: false, simulated: true };
+  const url = `${CLIENT_URL}/teaching/${session.id}/notes`;
+  const html = emailWrapper(`
+    ${heading("Nice session — now lock in the value")}
+    ${paragraph(
+      `Your teaching session <strong style="color:#f3f4f6;">${escapeHtml(session.title)}</strong> is wrapped.`,
+    )}
+    ${paragraph(
+      "Post markdown notes to unlock the AI summary, a 3-5 question review quiz, and a topic-coverage check for attendees.",
+    )}
+    ${button("Post notes & generate AI artifacts", url)}
+    ${paragraph(
+      "Two minutes of typing now turns into a permanent reference for your team.",
+    )}
+  `);
+  return sendEmail(
+    to,
+    `Add notes for "${session.title}" to unlock AI summary`,
+    html,
+  );
+}
+
+// 4. Flagged — sent to team admins when any member flags a session.
+export async function sendTeachingFlaggedEmail({ to, session, flag }) {
+  if (!to) return { success: false, simulated: true };
+  const url = `${CLIENT_URL}/super-admin/teaching-flags`;
+  const reasonExcerpt = (flag.reason || "").slice(0, 240);
+  const html = emailWrapper(`
+    ${heading("🚩 Session flagged for review")}
+    ${paragraph(
+      `<strong style="color:#f3f4f6;">${escapeHtml(session.title)}</strong> was flagged by a team member.`,
+    )}
+    ${paragraph(
+      `<em style="color:#9ca3af;">"${escapeHtml(reasonExcerpt)}"</em>`,
+    )}
+    ${button("Review in admin queue", url)}
+    ${paragraph(
+      "You can dismiss the flag or uphold it (cancels the session and closes the live room).",
+    )}
+  `);
+  return sendEmail(to, `Teaching session flagged: ${session.title}`, html);
+}
+
+// Defense-in-depth: callers shouldn't be sending pre-escaped strings,
+// but if they are we don't want to break the layout. Keep this private —
+// the existing code paths use raw template-literal interpolation and we
+// don't want to retrofit them.
+function escapeHtml(str) {
+  if (typeof str !== "string") return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
