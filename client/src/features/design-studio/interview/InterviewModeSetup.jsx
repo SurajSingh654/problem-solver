@@ -4,6 +4,7 @@ import { cn } from '@utils/cn'
 import { toast } from '@store/useUIStore'
 import api from '@services/api'
 import { INTERVIEW_STYLES } from './interviewStyles'
+import { useFocusTrap } from '@hooks/useFocusTrap'
 
 // ══════════════════════════════════════════════════════════════════════════
 // INTERVIEW MODE SETUP — modal that flips a self-paced DesignSession into
@@ -11,6 +12,8 @@ import { INTERVIEW_STYLES } from './interviewStyles'
 // paired InterviewSession and returns both records.
 // ══════════════════════════════════════════════════════════════════════════
 export default function InterviewModeSetup({ sessionId, onStarted, onCancel }) {
+    // Focus trap + Escape-to-close, identical pattern to ConfirmModal.
+    const containerRef = useFocusTrap({ active: true, onEscape: onCancel })
     // SYSTEM_FOCUSED is the SD-friendly default per the existing persona list.
     const [interviewStyle, setInterviewStyle] = useState('SYSTEM_FOCUSED')
     const [acknowledged, setAcknowledged] = useState(false)
@@ -41,13 +44,24 @@ export default function InterviewModeSetup({ sessionId, onStarted, onCancel }) {
     }
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto p-4">
-            <div className="bg-surface-1 border border-border-default rounded-2xl w-full max-w-2xl my-8 overflow-hidden">
+        <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto p-4"
+            onClick={onCancel}
+            role="presentation"
+        >
+            <div
+                ref={containerRef}
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="interview-setup-title"
+                className="bg-surface-1 border border-border-default rounded-2xl w-full max-w-2xl my-8 overflow-hidden"
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-border-default">
                     <div className="flex items-center gap-2">
                         <span className="text-base">🎤</span>
-                        <h2 className="text-base font-bold text-text-primary">
+                        <h2 id="interview-setup-title" className="text-base font-bold text-text-primary">
                             Practice as Interview
                         </h2>
                     </div>

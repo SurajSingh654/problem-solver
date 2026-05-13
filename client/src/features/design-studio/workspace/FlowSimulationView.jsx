@@ -6,6 +6,7 @@ import {
     useDeleteFlowSimulation,
 } from '@hooks/useDesignStudio'
 import { toast } from '@store/useUIStore'
+import { useConfirm } from '@hooks/useConfirm'
 
 // ══════════════════════════════════════════════════════════════════════════
 // CHUNK 2.5: FLOW SIMULATION UI
@@ -15,6 +16,7 @@ import { toast } from '@store/useUIStore'
 // and bottleneck. Final-eval prompt reads flowSimulation[] to grade scale &
 // resilience reasoning.
 export default function FlowSimulationView({ session, sessionId, isReadOnly = false }) {
+    const confirm = useConfirm()
     const saveFlow = useSaveFlowSimulation()
     const deleteFlow = useDeleteFlowSimulation()
     const existingFlows = session.flowSimulation || []
@@ -104,8 +106,14 @@ export default function FlowSimulationView({ session, sessionId, isReadOnly = fa
                                     </div>
                                     {!isReadOnly && flow.id && (
                                         <button
-                                            onClick={() => {
-                                                if (window.confirm(`Delete flow "${flow.flowName}"?`)) {
+                                            onClick={async () => {
+                                                const ok = await confirm({
+                                                    title: `Delete flow "${flow.flowName}"?`,
+                                                    description: 'This cannot be undone.',
+                                                    confirmLabel: 'Delete',
+                                                    danger: true,
+                                                })
+                                                if (ok) {
                                                     deleteFlow.mutate({ sessionId, flowId: flow.id })
                                                 }
                                             }}

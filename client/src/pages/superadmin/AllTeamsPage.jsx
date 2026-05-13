@@ -10,8 +10,10 @@ import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
+import { useConfirm } from '@hooks/useConfirm'
 
 export default function AllTeamsPage() {
+    const confirm = useConfirm()
     const [teams, setTeams] = useState([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('')
@@ -103,7 +105,13 @@ export default function AllTeamsPage() {
     }
 
     async function handleDelete(teamId, teamName) {
-        if (!confirm(`Delete team "${teamName}"? All members will be moved to individual mode.`)) return
+        const ok = await confirm({
+            title: `Delete team "${teamName}"?`,
+            description: 'All members will be moved to individual mode. This cannot be undone.',
+            confirmLabel: 'Delete team',
+            danger: true,
+        })
+        if (!ok) return
         setActionLoading(teamId)
         try {
             await teamsApi.deleteTeam(teamId)

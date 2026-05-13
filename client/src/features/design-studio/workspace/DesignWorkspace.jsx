@@ -24,6 +24,7 @@ import { SD_PHASES, LLD_PHASES } from '../constants/phases'
 import { useSaveCoordinator } from '../hooks/useSaveCoordinator'
 import { usePhaseTimer } from '../hooks/usePhaseTimer'
 import { useStuckDetector } from '../hooks/useStuckDetector'
+import { useConfirm } from '@hooks/useConfirm'
 import { getSessionPhase, resolveView, defaultViewFor, isTerminal } from '../state/sessionPhase'
 
 // 30-second heartbeat for long-idle sessions so totalTimeSpent stays fresh
@@ -37,6 +38,7 @@ const HEARTBEAT_MS = 30_000
 // ══════════════════════════════════════════════════════════════════════════
 export default function DesignWorkspace({ sessionId, onBack }) {
     const navigate = useNavigate()
+    const confirm = useConfirm()
     const { data: session, isLoading, isError, error: fetchError, refetch } = useDesignSession(sessionId)
 
     const savePhase = useSavePhase()
@@ -270,7 +272,12 @@ export default function DesignWorkspace({ sessionId, onBack }) {
     }
 
     async function handleCompleteDesign() {
-        if (!window.confirm('Mark this design session as complete? You will no longer be able to edit it.')) return
+        const ok = await confirm({
+            title: 'Complete this design session?',
+            description: 'You will no longer be able to edit it after marking it complete.',
+            confirmLabel: 'Mark complete',
+        })
+        if (!ok) return
         try {
             recordPhaseExit()
             coordinator.queueTiming(buildTimingPayload(activePhaseIdx))

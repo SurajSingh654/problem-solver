@@ -22,6 +22,8 @@ import {
     useDeleteDesignReference,
 } from '@hooks/useDesignReferences'
 import { toast } from '@store/useUIStore'
+import { useConfirm } from '@hooks/useConfirm'
+import { useFocusTrap } from '@hooks/useFocusTrap'
 
 const DESIGN_TYPES = ['SYSTEM_DESIGN', 'LOW_LEVEL_DESIGN']
 const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD']
@@ -215,10 +217,17 @@ export default function DesignReferencesAdmin() {
 
 function DeleteButton({ id, onDeleted }) {
     const del = useDeleteDesignReference()
+    const confirm = useConfirm()
     return (
         <button
-            onClick={() => {
-                if (!window.confirm('Delete this reference? Cannot be undone.')) return
+            onClick={async () => {
+                const ok = await confirm({
+                    title: 'Delete this reference?',
+                    description: 'Cannot be undone.',
+                    confirmLabel: 'Delete',
+                    danger: true,
+                })
+                if (!ok) return
                 del.mutate(id, { onSuccess: onDeleted })
             }}
             disabled={del.isPending}
@@ -247,6 +256,8 @@ function blankReference() {
 }
 
 function ReferenceFormModal({ initial, existingId, problems, onClose, onSaved }) {
+    // Trap focus inside the modal for keyboard users; Escape closes.
+    const containerRef = useFocusTrap({ active: true, onEscape: onClose })
     const create = useCreateDesignReference()
     const update = useUpdateDesignReference()
 
@@ -330,10 +341,21 @@ function ReferenceFormModal({ initial, existingId, problems, onClose, onSaved })
     }
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto p-4">
-            <div className="bg-surface-1 border border-border-default rounded-2xl w-full max-w-3xl my-8 overflow-hidden">
+        <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto p-4"
+            onClick={onClose}
+            role="presentation"
+        >
+            <div
+                ref={containerRef}
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="reference-form-title"
+                className="bg-surface-1 border border-border-default rounded-2xl w-full max-w-3xl my-8 overflow-hidden"
+            >
                 <div className="flex items-center justify-between px-5 py-3 border-b border-border-default">
-                    <h2 className="text-base font-bold text-text-primary">
+                    <h2 id="reference-form-title" className="text-base font-bold text-text-primary">
                         {existingId ? 'Edit Reference' : 'New Reference'}
                     </h2>
                     <button onClick={onClose} className="text-text-disabled hover:text-text-primary">

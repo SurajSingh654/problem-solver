@@ -21,8 +21,10 @@ import { Input } from '@components/ui/Input'
 import { Avatar } from '@components/ui/Avatar'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
+import { useConfirm } from '@hooks/useConfirm'
 
 export default function TeamManagePage() {
+    const confirm = useConfirm()
     const navigate = useNavigate()
     const { teamId, teamName, isPersonalMode, isTeamAdmin, isSuperAdmin } = useTeamContext()
     const { switchTeam, user } = useAuthStore()
@@ -151,7 +153,13 @@ export default function TeamManagePage() {
     }
 
     async function handleRemoveMember(memberId, memberName) {
-        if (!confirm(`Remove ${memberName} from the team?`)) return
+        const ok = await confirm({
+            title: `Remove ${memberName} from the team?`,
+            description: 'They will lose access to all team content.',
+            confirmLabel: 'Remove',
+            danger: true,
+        })
+        if (!ok) return
         setActionLoading(memberId)
         try {
             await teamsApi.removeMember(memberId)
@@ -164,7 +172,13 @@ export default function TeamManagePage() {
     }
 
     async function handleLeave() {
-        if (!confirm('Are you sure you want to leave this team? You will be switched to individual mode.')) return
+        const ok = await confirm({
+            title: 'Leave this team?',
+            description: 'You will be switched to individual mode.',
+            confirmLabel: 'Leave team',
+            danger: true,
+        })
+        if (!ok) return
         setActionLoading('leave')
         try {
             const res = await teamsApi.leave()
@@ -179,7 +193,12 @@ export default function TeamManagePage() {
     }
 
     async function handleRegenerateCode() {
-        if (!confirm('Regenerate the join code? The old code will stop working.')) return
+        const ok = await confirm({
+            title: 'Regenerate the join code?',
+            description: 'The old code will stop working immediately. Anyone using the old code to join will need the new one.',
+            confirmLabel: 'Regenerate',
+        })
+        if (!ok) return
         setActionLoading('regen')
         try {
             const res = await teamsApi.regenerateCode()

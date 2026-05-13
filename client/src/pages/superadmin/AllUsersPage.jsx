@@ -9,8 +9,10 @@ import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
 import api from '@services/api'
+import { useConfirm } from '@hooks/useConfirm'
 
 export default function AllUsersPage() {
+    const confirm = useConfirm()
     const [users, setUsers] = useState([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
@@ -34,7 +36,13 @@ export default function AllUsersPage() {
     }
 
     async function handleDelete(userId, userName) {
-        if (!confirm(`Delete "${userName}"? This cannot be undone.`)) return
+        const ok = await confirm({
+            title: `Delete "${userName}"?`,
+            description: 'This cannot be undone.',
+            confirmLabel: 'Delete',
+            danger: true,
+        })
+        if (!ok) return
         setActionLoading(userId)
         try {
             await api.delete(`/users/${userId}`)

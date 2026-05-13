@@ -16,6 +16,7 @@ import { useGenerateContent, useAIStatus } from '@hooks/useAI'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import { COMPANIES, PATTERNS, SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
+import { useConfirm } from '@hooks/useConfirm'
 
 const schema = z.object({
     title: z.string().min(2, 'Title is required').max(200),
@@ -221,6 +222,7 @@ function Textarea({ label, optional, hint, rows = 3, ...props }) {
 }
 
 export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }) {
+    const confirm = useConfirm()
     const {
         register, handleSubmit, formState: { errors }, setValue, watch,
     } = useForm({
@@ -542,11 +544,11 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                                         followUps.length > 0
 
                                     if (hasExisting) {
-                                        const confirmed = window.confirm(
-                                            'AI-generated content will replace your current entries for:\n\n' +
-                                            '• Description\n• Real World Context\n• Use Cases\n' +
-                                            '• Admin Notes\n• Follow-up Questions\n• Tags\n\nContinue?'
-                                        )
+                                        const confirmed = await confirm({
+                                            title: 'Replace your existing entries?',
+                                            description: 'AI-generated content will overwrite Description, Real World Context, Use Cases, Admin Notes, Follow-up Questions, and Tags.',
+                                            confirmLabel: 'Replace with AI content',
+                                        })
                                         if (!confirmed) return
                                     }
 

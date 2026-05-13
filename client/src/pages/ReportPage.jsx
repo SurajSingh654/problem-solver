@@ -1219,6 +1219,12 @@ function AIVerdictCard({ verdict, usedFallback, cached, isLoading, isError }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6"
+      // The verdict arrives async (LLM call). aria-live announces the
+      // headline + content to screen readers when it lands, instead of
+      // silently swapping the skeleton.
+      role="region"
+      aria-live="polite"
+      aria-label="AI Readiness Verdict"
     >
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <h2 className="text-sm font-bold text-text-primary">AI Readiness Verdict</h2>

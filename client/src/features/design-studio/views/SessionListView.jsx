@@ -9,11 +9,13 @@ import {
     useUpdateSessionStatus,
 } from '@hooks/useDesignStudio'
 import { STATUS_CONFIG, formatTime } from '../constants/phases'
+import { useConfirm } from '@hooks/useConfirm'
 
 // ══════════════════════════════════════════════════════════════════════════
 // SESSION LIST VIEW
 // ══════════════════════════════════════════════════════════════════════════
 export default function SessionListView({ onSelectSession, onCreateNew }) {
+    const confirm = useConfirm()
     const [designTypeFilter, setDesignTypeFilter] = useState('ALL')
     const [statusFilter, setStatusFilter] = useState('ALL')
 
@@ -123,9 +125,15 @@ export default function SessionListView({ onSelectSession, onCreateNew }) {
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                         {(session.status === 'IN_PROGRESS' || session.status === 'VALIDATING') && (
                                             <button
-                                                onClick={(e) => {
+                                                onClick={async (e) => {
                                                     e.stopPropagation()
-                                                    if (window.confirm('Abandon this session? It will be marked abandoned and become read-only. Use the Abandoned filter to find it later.')) {
+                                                    const ok = await confirm({
+                                                        title: 'Abandon this session?',
+                                                        description: 'It will be marked abandoned and become read-only. Use the Abandoned filter to find it later.',
+                                                        confirmLabel: 'Abandon',
+                                                        danger: true,
+                                                    })
+                                                    if (ok) {
                                                         updateSessionStatus.mutate({ sessionId: session.id, status: 'ABANDONED' })
                                                     }
                                                 }}
@@ -138,7 +146,16 @@ export default function SessionListView({ onSelectSession, onCreateNew }) {
                                             </button>
                                         )}
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this session? This cannot be undone.')) deleteSession.mutate(session.id) }}
+                                            onClick={async (e) => {
+                                                e.stopPropagation()
+                                                const ok = await confirm({
+                                                    title: 'Delete this session?',
+                                                    description: 'This cannot be undone.',
+                                                    confirmLabel: 'Delete',
+                                                    danger: true,
+                                                })
+                                                if (ok) deleteSession.mutate(session.id)
+                                            }}
                                             title="Delete session"
                                             className="text-text-disabled hover:text-danger-fg transition-colors p-1"
                                         >

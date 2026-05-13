@@ -25,6 +25,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { MotionConfig } from 'framer-motion'
 import { ErrorBoundary } from '@components/ui/ErrorBoundary'
+import { ConfirmProvider } from '@components/ui/ConfirmModal'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // ── Layout ───────────────────────────────────────────────────
 import { AppShell } from '@components/layout/AppShell'
@@ -139,6 +140,7 @@ export default function App() {
           transitions instead of animated ones. Pairs with Tailwind's
           `motion-safe:` / `motion-reduce:` variants used in Skeleton. */}
       <MotionConfig reducedMotion="user">
+      <ConfirmProvider>
       <BrowserRouter>
         <Routes>
           {/* ============================================================ */}
@@ -302,6 +304,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       <ToastContainer />
+      </ConfirmProvider>
       </MotionConfig>
     </QueryClientProvider>
   )
