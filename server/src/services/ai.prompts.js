@@ -1828,3 +1828,181 @@ export const READINESS_VERDICT_FEWSHOT = [
 }`,
   },
 ];
+
+// ============================================================================
+// SOLUTION REVIEW FEW-SHOT — calibration examples
+// ============================================================================
+//
+// Two examples anchor the model to the score band we want and the
+// claim-with-evidence style we expect:
+//
+//   1. Cold/incomplete submit — Java code with TODO + missing Feynman.
+//      Anchors LOW scores, specific gap callouts, languageMismatch=false,
+//      incompleteSubmission=true. Demonstrates the "hard cap" semantic
+//      the controller enforces afterward.
+//   2. Well-explained submit — complete optimal solution with brute force
+//      noted, complexity stated, Feynman explanation present. Anchors
+//      HIGH scores with specific strength evidence.
+//
+// Kept short to preserve cache headroom — together they're under 1.5K
+// tokens. Same shape as READINESS_VERDICT_FEWSHOT: {role, content} pairs
+// injected between the system prompt and the live user prompt by aiComplete.
+// ============================================================================
+export const SOLUTION_REVIEW_FEWSHOT = [
+  {
+    role: "user",
+    content: `Review this CODING submission using the rubric from the system prompt.
+
+<problem_header>
+  <title>Two Sum</title>
+  <description>Given an array of integers and a target, return indices of two numbers that add up to the target. Each input has exactly one solution; do not use the same element twice.</description>
+  <difficulty>EASY</difficulty>
+</problem_header>
+
+<candidate_meta>
+  <language>Java</language>
+  <pattern_identified>Brute Force</pattern_identified>
+  <self_confidence>4/5</self_confidence>
+  <solve_method>Solved cold — no hints or external help</solve_method>
+  <time_taken>15-30 minutes</time_taken>
+</candidate_meta>
+
+<candidate_input>
+Approach:
+Loop through the array twice, return the indices when two add up.
+
+Code:
+\`\`\`java
+public int[] twoSum(int[] nums, int target) {
+    for (int i = 0; i < nums.length; i++) {
+        // TODO: handle this
+    }
+    return null;
+}
+\`\`\`
+Key Insight: Not provided
+Feynman Explanation: Not provided
+Real-World Connection: Not provided
+</candidate_input>
+
+<followup_answers status="all_skipped"/>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "scores": {
+    "codeCorrectness": 2,
+    "patternAccuracy": 4,
+    "understandingDepth": 2,
+    "explanationQuality": 2,
+    "confidenceCalibration": 2
+  },
+  "flags": {
+    "languageMismatch": false,
+    "detectedLanguage": null,
+    "incompleteSubmission": true,
+    "wrongPattern": false,
+    "identifiedPattern": "Brute Force",
+    "correctPattern": null
+  },
+  "strengths": [],
+  "gaps": [
+    "Code body is a TODO comment — the inner loop is missing entirely, so the solution does not run.",
+    "No Feynman explanation provided — cannot evaluate understanding depth without it.",
+    "Self-confidence rated 4/5 but the submission is non-functional — calibration is severely off."
+  ],
+  "improvement": "Complete the inner loop with the actual O(n²) check, then write a 2-3 sentence Feynman explanation of why hashmap reduces it to O(n). Re-rate confidence after.",
+  "interviewTip": "An interviewer would stop here and ask 'walk me through what your code does' — make sure you can answer that before submitting.",
+  "readinessVerdict": "Not ready — submission is incomplete and unable to demonstrate the pattern.",
+  "complexityCheck": {
+    "timeComplexity": "Cannot determine — code body missing",
+    "spaceComplexity": "Cannot determine — code body missing",
+    "timeCorrect": false,
+    "spaceCorrect": false,
+    "optimizationNote": "Brute force noted but never implemented; optimal hashmap approach not attempted."
+  },
+  "followUpEvaluations": []
+}`,
+  },
+  {
+    role: "user",
+    content: `Review this CODING submission using the rubric from the system prompt.
+
+<problem_header>
+  <title>Valid Parentheses</title>
+  <description>Given a string containing just '(', ')', '{', '}', '[' and ']', determine if the input string is valid. Brackets must close in the correct order.</description>
+  <difficulty>EASY</difficulty>
+</problem_header>
+
+<candidate_meta>
+  <language>Python</language>
+  <pattern_identified>Stack</pattern_identified>
+  <self_confidence>5/5</self_confidence>
+  <solve_method>Solved cold — no hints or external help</solve_method>
+  <time_taken>Under 15 minutes</time_taken>
+</candidate_meta>
+
+<candidate_input>
+Approach:
+Use a stack to track opening brackets. On a closer, peek the stack — if the top doesn't match, return False. At the end the stack must be empty.
+
+Code:
+\`\`\`python
+def isValid(s: str) -> bool:
+    pairs = {')': '(', ']': '[', '}': '{'}
+    stack = []
+    for ch in s:
+        if ch in '([{':
+            stack.append(ch)
+        elif ch in pairs:
+            if not stack or stack.pop() != pairs[ch]:
+                return False
+    return not stack
+\`\`\`
+Key Insight: A stack mirrors the LIFO structure of nested brackets; matching depends only on the most-recently-opened pair.
+Feynman Explanation: Imagine you're reading a math expression aloud. Every time you open a parenthesis, you remember it on a sticky-note pile. When you close one, you grab the top sticky-note and check it matches. If at the end your sticky-notes are gone, the expression was balanced.
+Real-World Connection: This is exactly how compilers validate code blocks — and how text editors do bracket-matching as you type.
+</candidate_input>
+
+<followup_answers status="all_skipped"/>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "scores": {
+    "codeCorrectness": 9,
+    "patternAccuracy": 10,
+    "understandingDepth": 9,
+    "explanationQuality": 9,
+    "confidenceCalibration": 9
+  },
+  "flags": {
+    "languageMismatch": false,
+    "detectedLanguage": null,
+    "incompleteSubmission": false,
+    "wrongPattern": false,
+    "identifiedPattern": "Stack",
+    "correctPattern": null
+  },
+  "strengths": [
+    "Pattern named correctly and applied — the LIFO matching argument is structurally sound.",
+    "Feynman explanation uses the sticky-note analogy to make the LIFO mechanic concrete; a beginner could follow it.",
+    "Edge case handled: 'if not stack' guards against a closer arriving before any opener."
+  ],
+  "gaps": [
+    "No explicit time/space complexity stated — though the code is O(n)/O(n), the candidate didn't write that out."
+  ],
+  "improvement": "Always state the complexity at the top of your explanation. Adds 5 seconds and demonstrates rigor.",
+  "interviewTip": "Lead the interview turn with 'this is O(n) time, O(n) space' before walking through the code — interviewers grade on this.",
+  "readinessVerdict": "Ready for an early-round technical screen on stack-based string validation problems.",
+  "complexityCheck": {
+    "timeComplexity": "O(n)",
+    "spaceComplexity": "O(n)",
+    "timeCorrect": true,
+    "spaceCorrect": true,
+    "optimizationNote": "This is the optimal solution — no further reduction possible."
+  },
+  "followUpEvaluations": []
+}`,
+  },
+];

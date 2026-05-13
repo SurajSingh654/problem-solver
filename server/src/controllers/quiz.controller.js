@@ -202,40 +202,62 @@ ${pastIntelligence.userFeedbacks
   .join("\n")}`;
     }
 
+    // ── Cache-friendly prompt structure ──────────────────────
+    // System prompt is byte-identical across every quiz call so
+    // OpenAI's prompt-cache discount applies (the static prefix is
+    // ~600 tokens). All per-user / per-attempt dynamic content moves
+    // to the user message: count, difficulty, subject, dedup history,
+    // weakness areas, progression hint, prior feedback. Pre-overhaul
+    // these were interpolated into the system prompt directly, which
+    // busted the cache on every call.
     const systemPrompt = `You are an expert quiz generator for interview preparation.
-Generate exactly ${count} multiple-choice questions on the given subject.
-Each question must have exactly 4 options labeled A, B, C, D.
-Difficulty level: ${difficulty || "MEDIUM"}.
-${context ? `Focus specifically on: ${context}` : ""}
-Make ALL four options plausible — wrong options should represent common misconceptions or subtle errors, not obvious wrong answers.
-CRITICAL: Distribute correct answers randomly across A, B, C, and D. Do NOT make A the correct answer more often than the others. A balanced distribution is required — approximately 25% each.
-${deduplicationInstruction}
-${weaknessInstruction}
-${progressionInstruction}
-${feedbackInstruction}
+
+GENERATION RULES — apply uniformly:
+- Each question must have exactly 4 options labeled A, B, C, D.
+- All four options must be plausible — wrong options should represent common misconceptions or subtle errors, not obvious wrong answers.
+- Distribute correct answers randomly across A, B, C, and D — approximately 25% each. Do NOT bias toward any single letter.
+- Each question's explanation must clarify why the correct answer is right AND why each wrong option is wrong.
+- Difficulty values are exactly: EASY | MEDIUM | HARD.
+
+The user message specifies the per-quiz parameters: subject, count, difficulty, plus optional past-attempt context (questions already asked, weak areas, progression hint, prior user feedback). Honor each constraint when present.
+
 Return JSON:
 {
   "questions": [
     {
-      "id": <number 1 to ${count}>,
+      "id": <number, 1 to count>,
       "question": "...",
       "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
-      "correctAnswer": "<one of: A, B, C, or D — must be distributed randomly across questions>",
-      "explanation": "Brief explanation of why this is correct and why the other options are wrong.",
+      "correctAnswer": "<A | B | C | D>",
+      "explanation": "Brief explanation of why this is correct and why each wrong option is wrong.",
       "difficulty": "EASY" | "MEDIUM" | "HARD"
     }
   ]
 }`;
 
+    // Build the user prompt. Every dynamic instruction lives here so the
+    // system prefix above stays cache-stable.
+    const userPromptParts = [
+      `Generate exactly ${count} multiple-choice questions on: ${subject}`,
+      `Difficulty: ${difficulty || "MEDIUM"}.`,
+    ];
+    if (context) userPromptParts.push(`Focus specifically on: ${context}`);
+    if (pastIntelligence) {
+      userPromptParts.push(
+        `(Attempt #${pastIntelligence.attemptCount + 1} for this user.)`,
+      );
+    }
+    if (deduplicationInstruction) userPromptParts.push(deduplicationInstruction);
+    if (weaknessInstruction) userPromptParts.push(weaknessInstruction);
+    if (progressionInstruction) userPromptParts.push(progressionInstruction);
+    if (feedbackInstruction) userPromptParts.push(feedbackInstruction);
+    const quizUserPrompt = userPromptParts.join("\n\n");
+
     let parsed;
     try {
       parsed = await aiComplete({
         systemPrompt,
-        userPrompt: `Generate a ${difficulty || "MEDIUM"} difficulty quiz on: ${subject}${
-          pastIntelligence
-            ? ` (Attempt #${pastIntelligence.attemptCount + 1} for this user)`
-            : ""
-        }`,
+        userPrompt: quizUserPrompt,
         userId,
         teamId,
         model: AI_MODEL_FAST,

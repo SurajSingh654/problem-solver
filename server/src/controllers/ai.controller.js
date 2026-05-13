@@ -281,7 +281,9 @@ export async function reviewSolution(req, res) {
     );
 
     // ── Call AI ────────────────────────────────────────
-    const { solutionReviewPrompt } = await import("../services/ai.prompts.js");
+    const { solutionReviewPrompt, SOLUTION_REVIEW_FEWSHOT } = await import(
+      "../services/ai.prompts.js"
+    );
     const { system, user } = solutionReviewPrompt({
       problem: solution.problem,
       category: solution.problem.category,
@@ -327,6 +329,11 @@ export async function reviewSolution(req, res) {
         temperature: 0.6,
         maxTokens: 2000,
         jsonMode: true,
+        // Calibration: 2 examples (cold/incomplete vs well-explained)
+        // anchor the model to the expected score band and the
+        // claim-with-evidence style. Cache-friendly — same array on
+        // every call.
+        fewShotMessages: SOLUTION_REVIEW_FEWSHOT,
         surface: "solution-review",
       });
       const check = validateReview(aiResponse, {
@@ -542,19 +549,30 @@ export async function getHint(req, res) {
     }
 
     const hintLevel = Math.min(Math.max(parseInt(level) || 1, 1), 3);
-    const levelInstructions = {
-      1: "Give a vague directional nudge. Do NOT name the pattern or approach. Just point them in the right direction.",
-      2: 'Name the general approach category (e.g., "Consider a sliding window approach") but do NOT give specific implementation details.',
-      3: "Name the specific technique and give a brief outline of the first step. Still do NOT give the full solution.",
-    };
+    // Level rubric now lives in the static system prompt below — see
+    // the cache-friendly restructure in P6.
 
     let hintText;
     try {
       hintText = await aiComplete({
-        systemPrompt: `You are an interview coach giving a Level ${hintLevel}/3 hint.
-${levelInstructions[hintLevel]}
-Keep it to 1-2 sentences maximum.`,
-        userPrompt: `Problem: ${problem.title}\nDescription: ${problem.description || "N/A"}\nCategory: ${problem.category}\nTags: ${problem.tags?.join(", ") || "none"}`,
+        // Cache-friendly: static rules + the three level rubrics. The
+        // per-call level number + problem context move to the user
+        // message so the same system prefix is reused across all 3
+        // hint levels for every problem.
+        systemPrompt: `You are an interview coach giving a tiered hint on a coding problem.
+
+LEVEL RUBRIC — read the user message for which level to apply:
+- Level 1: Give a vague directional nudge. Do NOT name the pattern or approach. Just point them in the right direction.
+- Level 2: Name the general approach category (e.g., "Consider a sliding window approach") but do NOT give specific implementation details.
+- Level 3: Name the specific technique and give a brief outline of the first step. Still do NOT give the full solution.
+
+OUTPUT FORMAT: 1-2 sentences maximum. Plain text, no JSON.`,
+        userPrompt: `Apply Level ${hintLevel}/3 to this problem.
+
+Problem: ${problem.title}
+Description: ${problem.description || "N/A"}
+Category: ${problem.category}
+Tags: ${problem.tags?.join(", ") || "none"}`,
         userId: req.user.id,
         teamId: req.teamId,
         model: AI_MODEL_FAST,
