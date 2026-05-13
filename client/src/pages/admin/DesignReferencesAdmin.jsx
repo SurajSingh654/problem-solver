@@ -89,6 +89,11 @@ export default function DesignReferencesAdmin() {
     }, [problems])
 
     const [editing, setEditing] = useState(null) // null | { id: string | null, initial: object }
+    // Per-row loading flag — the edit click fires a GET to fetch the
+    // full reference (the list endpoint returns summary-only). Without
+    // disabling the button, an impatient admin can fire 3 GETs by
+    // rapidly clicking, which then race in setEditing.
+    const [loadingEditId, setLoadingEditId] = useState(null)
 
     return (
         <div className="max-w-[1200px] mx-auto px-6 py-8 space-y-6">
@@ -169,17 +174,21 @@ export default function DesignReferencesAdmin() {
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                                 <button
+                                    disabled={loadingEditId === r.id}
                                     onClick={async () => {
+                                        setLoadingEditId(r.id)
                                         try {
                                             const res = await api.get(`/design-references/${r.id}`)
                                             setEditing({ id: r.id, initial: res.data.data.reference })
                                         } catch {
                                             toast.error('Failed to load reference.')
+                                        } finally {
+                                            setLoadingEditId(null)
                                         }
                                     }}
-                                    className="text-[10px] font-bold px-2 py-1 rounded-md border bg-surface-3 text-text-tertiary border-border-default hover:border-brand-line transition-colors"
+                                    className="text-[10px] font-bold px-2 py-1 rounded-md border bg-surface-3 text-text-tertiary border-border-default hover:border-brand-line transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    Edit
+                                    {loadingEditId === r.id ? 'Loading…' : 'Edit'}
                                 </button>
                                 <DeleteButton id={r.id} onDeleted={() => refetch()} />
                             </div>
