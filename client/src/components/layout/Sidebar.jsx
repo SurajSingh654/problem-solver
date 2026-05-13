@@ -47,6 +47,7 @@ export default function Sidebar() {
             { to: '/super-admin/roadmap', icon: '🗺️', label: 'Product Roadmap' },
             { to: '/super-admin/feedback', icon: '🐛', label: 'Feedback Inbox' },
             { to: '/super-admin/verdicts', icon: '⚖️', label: 'Verdict Audit' },
+            { to: '/super-admin/ai-usage', icon: '📡', label: 'AI Usage' },
             { to: '/super-admin/settings', icon: '⚙️', label: 'Settings' },
             { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
         ]

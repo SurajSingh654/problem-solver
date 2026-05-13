@@ -107,6 +107,11 @@ setupSwagger(app);
 // ── 6. Query performance logging ─────────────────────────────
 setupQueryLogging(prisma);
 
+// ── 7. AI usage telemetry writer ─────────────────────────────
+// Subscribes to ai.service's usage emitter and persists rows to
+// UsageTracking. Non-blocking; failure never affects the AI response.
+import("./services/ai.usageWriter.js").then((m) => m.mountUsageWriter());
+
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================

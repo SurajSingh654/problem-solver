@@ -312,6 +312,7 @@ model User {
   skillAssessments SkillAssessment[]
 
   verdictLogs VerdictLog[]
+  usageEvents UsageTracking[]
 
   authoredDesignReferences DesignReference[] @relation("DesignReferenceAuthor")
 
@@ -395,6 +396,7 @@ model Team {
   interviewSessions InterviewSession[]
   memberships       TeamMembership[]
   verdictLogs       VerdictLog[]
+  usageEvents       UsageTracking[]
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -1841,4 +1843,64 @@ model CompetitionEntry {
   // ── Indexes ────────────────────────────────────────
   @@index([competitionId, score(sort: Desc)])
   @@map("competition_entries")
+}
+
+// ============================================================================
+// USAGE TRACKING — per-AI-call telemetry
+// ============================================================================
+//
+// One row per ai.service.js call (success OR failure). Mirrors the
+// usage event payload emitted by aiComplete / aiStream so a 1:1 writer
+// can persist with no transformation. Used for:
+//
+//   1. Per-surface fallback rate (catches prompt regression)
+//   2. p99 latency by surface (catches model slowness)
+//   3. Per-team daily token spend (cost attribution; future billing)
+//
+// Append-only — pruned by a daily cron beyond 90 days. Both userId
+// and teamId are nullable to handle anonymous/unscoped surfaces
+// (e.g. system-init AI calls before a user is identified).
+// ============================================================================
+model UsageTracking {
+  id String @id @default(cuid())
+
+  // Optional ownership — null for unscoped calls.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  // What surface emitted this event.
+  surface String
+
+  // Models the request/response actually used. modelRequested may
+  // differ from modelUsed when the fallback chain in ai.service kicked in.
+  modelRequested String
+  modelUsed      String
+
+  // Token + latency telemetry from the OpenAI response.
+  promptTokens     Int @default(0)
+  completionTokens Int @default(0)
+  totalTokens      Int @default(0)
+  latencyMs        Int @default(0)
+
+  // Outcome flags.
+  usedFallback Boolean @default(false)
+  cached       Boolean @default(false)
+  errorCode    String? // null on success; AIError code on failure
+
+  // Streaming calls (aiStream) emit a single open event with stream=true.
+  // Useful for separating chat-style traffic from one-shot completions
+  // when computing latency p99s.
+  streamCall Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  // Per-team daily spend rollups + general "what happened today" queries.
+  @@index([teamId, createdAt])
+  // Per-surface fallback-rate / latency p99 queries.
+  @@index([surface, createdAt])
+  // Cron prune by createdAt < cutoff.
+  @@index([createdAt])
+  @@map("usage_tracking")
 }

@@ -2405,11 +2405,13 @@ export async function generateReadinessVerdict(req, res) {
         systemPrompt: system,
         userPrompt: user,
         userId,
+        teamId,
         model,
         temperature: 0.2,
         maxTokens: 1200,
         jsonMode: false,
         fewShotMessages: READINESS_VERDICT_FEWSHOT,
+        surface: "verdict",
       });
 
       const parsed = extractJSON(raw);
@@ -2525,3 +2527,209 @@ export async function getVerdictAudit(req, res) {
     return error(res, "Failed to load verdict audit.", 500);
   }
 }
+
+// ============================================================================
+// AI USAGE AUDIT (SUPER_ADMIN)
+// ============================================================================
+//
+// Reads from the UsageTracking table populated by ai.service's emit hook
+// (see services/ai.usageWriter.js). Three aggregates per request:
+//
+//   1. Per-surface fallback rate (7d / 30d windows)
+//   2. Per-surface latency p50/p95/p99 (7d window)
+//   3. Per-team token spend (7d window, top 10)
+//
+// Plus paginated recent rows for spot-checking. Mirrors getVerdictAudit
+// in shape so the super-admin dashboard treatment is consistent.
+// ============================================================================
+export async function getAIUsageStats(req, res) {
+  try {
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 25);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const surface = req.query.surface || null;
+    const fallbackOnly = req.query.fallbackOnly === "true";
+    const errorOnly = req.query.errorOnly === "true";
+
+    const where = {};
+    if (surface) where.surface = surface;
+    if (fallbackOnly) where.usedFallback = true;
+    if (errorOnly) where.errorCode = { not: null };
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // Aggregate queries — all run in parallel.
+    const [
+      rows,
+      totalCount,
+      // Per-surface 7d/30d fallback rates
+      surface7d,
+      surface30d,
+      // Per-team token spend (7d, top 10)
+      perTeamSpend,
+      // Total 7d call counts for headline
+      totalCalls7d,
+      fallbackCalls7d,
+      errorCalls7d,
+    ] = await Promise.all([
+      prisma.usageTracking.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          userId: true,
+          teamId: true,
+          surface: true,
+          modelRequested: true,
+          modelUsed: true,
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true,
+          latencyMs: true,
+          usedFallback: true,
+          cached: true,
+          errorCode: true,
+          streamCall: true,
+          createdAt: true,
+          user: { select: { id: true, name: true, email: true } },
+          team: { select: { id: true, name: true, isPersonal: true } },
+        },
+      }),
+      prisma.usageTracking.count({ where }),
+
+      // Per-surface 7d: total + fallback counts. We then divide.
+      prisma.usageTracking.groupBy({
+        by: ["surface"],
+        where: { createdAt: { gte: sevenDaysAgo } },
+        _count: { _all: true },
+        _sum: { totalTokens: true },
+      }),
+      prisma.usageTracking.groupBy({
+        by: ["surface"],
+        where: { createdAt: { gte: thirtyDaysAgo } },
+        _count: { _all: true },
+      }),
+
+      // Per-team spend over 7d.
+      prisma.usageTracking.groupBy({
+        by: ["teamId"],
+        where: { createdAt: { gte: sevenDaysAgo }, teamId: { not: null } },
+        _sum: { totalTokens: true, promptTokens: true, completionTokens: true },
+        _count: { _all: true },
+        orderBy: { _sum: { totalTokens: "desc" } },
+        take: 10,
+      }),
+
+      prisma.usageTracking.count({
+        where: { createdAt: { gte: sevenDaysAgo } },
+      }),
+      prisma.usageTracking.count({
+        where: { createdAt: { gte: sevenDaysAgo }, usedFallback: true },
+      }),
+      prisma.usageTracking.count({
+        where: { createdAt: { gte: sevenDaysAgo }, errorCode: { not: null } },
+      }),
+    ]);
+
+    // Latency p50/p95/p99 per surface — Prisma doesn't have native
+    // percentile_cont so we use raw SQL. Cheap because the index covers
+    // (surface, createdAt). Using the unaggregated rows would require
+    // pulling everything to memory; the SQL aggregate keeps it server-side.
+    const latencyRows = await prisma.$queryRaw`
+      SELECT
+        surface,
+        percentile_cont(0.5)  WITHIN GROUP (ORDER BY "latencyMs") AS p50,
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY "latencyMs") AS p95,
+        percentile_cont(0.99) WITHIN GROUP (ORDER BY "latencyMs") AS p99,
+        COUNT(*) AS calls
+      FROM usage_tracking
+      WHERE "createdAt" >= ${sevenDaysAgo}
+        AND "errorCode" IS NULL
+      GROUP BY surface
+      ORDER BY p99 DESC NULLS LAST
+    `;
+
+    // Build per-surface rollup combining 7d + 30d count + fallback rate.
+    const surface30dByName = new Map(
+      (surface30d || []).map((s) => [s.surface, s._count._all]),
+    );
+    const fallback7d = await prisma.usageTracking.groupBy({
+      by: ["surface"],
+      where: { createdAt: { gte: sevenDaysAgo }, usedFallback: true },
+      _count: { _all: true },
+    });
+    const fallback7dByName = new Map(
+      (fallback7d || []).map((s) => [s.surface, s._count._all]),
+    );
+
+    const surfaces = (surface7d || []).map((s) => {
+      const calls7d = s._count._all || 0;
+      const fb7d = fallback7dByName.get(s.surface) || 0;
+      const calls30d = surface30dByName.get(s.surface) || 0;
+      return {
+        surface: s.surface,
+        calls7d,
+        calls30d,
+        fallbackRatePct: calls7d > 0 ? Math.round((fb7d / calls7d) * 1000) / 10 : 0,
+        totalTokens7d: s._sum.totalTokens || 0,
+      };
+    });
+
+    // Headline metrics
+    const fallbackRate7dPct =
+      totalCalls7d > 0
+        ? Math.round((fallbackCalls7d / totalCalls7d) * 1000) / 10
+        : 0;
+    const errorRate7dPct =
+      totalCalls7d > 0 ? Math.round((errorCalls7d / totalCalls7d) * 1000) / 10 : 0;
+
+    // Resolve team names for per-team spend (one extra query, capped at 10).
+    const teamIds = perTeamSpend.map((t) => t.teamId).filter(Boolean);
+    const teamRows =
+      teamIds.length > 0
+        ? await prisma.team.findMany({
+            where: { id: { in: teamIds } },
+            select: { id: true, name: true, isPersonal: true },
+          })
+        : [];
+    const teamById = new Map(teamRows.map((t) => [t.id, t]));
+
+    const perTeam = perTeamSpend.map((t) => ({
+      teamId: t.teamId,
+      teamName: teamById.get(t.teamId)?.name || "(deleted team)",
+      isPersonal: !!teamById.get(t.teamId)?.isPersonal,
+      calls: t._count._all || 0,
+      promptTokens: t._sum.promptTokens || 0,
+      completionTokens: t._sum.completionTokens || 0,
+      totalTokens: t._sum.totalTokens || 0,
+    }));
+
+    return success(res, {
+      rows,
+      pagination: { total: totalCount, limit, offset },
+      headline: {
+        windowDays: 7,
+        totalCalls: totalCalls7d,
+        fallbackCalls: fallbackCalls7d,
+        fallbackRatePct: fallbackRate7dPct,
+        errorCalls: errorCalls7d,
+        errorRatePct: errorRate7dPct,
+      },
+      surfaces,
+      latency: latencyRows.map((r) => ({
+        surface: r.surface,
+        p50Ms: r.p50 != null ? Math.round(Number(r.p50)) : null,
+        p95Ms: r.p95 != null ? Math.round(Number(r.p95)) : null,
+        p99Ms: r.p99 != null ? Math.round(Number(r.p99)) : null,
+        calls: r.calls != null ? Number(r.calls) : 0,
+      })),
+      perTeam,
+    });
+  } catch (err) {
+    console.error("AI usage stats error:", err);
+    return error(res, "Failed to load AI usage stats.", 500);
+  }
+}
+

@@ -547,9 +547,11 @@ Be brutally honest. Use specific names and numbers from the data.`;
       systemPrompt,
       userPrompt,
       userId: req.user.id,
+      // No teamId — platform analysis is super-admin-only and platform-wide.
       model: AI_MODEL_PREMIUM || AI_MODEL_FAST,
       maxTokens: 2500,
       temperature: 0.7,
+      surface: "platform-analysis",
     });
 
     // ── Persist the analysis ─────────────────────────

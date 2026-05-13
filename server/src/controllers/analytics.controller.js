@@ -570,8 +570,10 @@ ALWAYS respond in this exact JSON format:
       systemPrompt,
       userPrompt,
       userId: req.user.id,
+      teamId: req.teamId,
       maxTokens: 2000,
       temperature: 0.7,
+      surface: "analytics-summary",
     });
 
     return success(res, analysis);

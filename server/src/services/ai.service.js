@@ -208,6 +208,7 @@ export async function aiComplete({
     systemPrompt,
     userPrompt,
     userId,
+    teamId,
     model = AI_MODEL_FAST,
     temperature = 0.7,
     maxTokens = 2000,
@@ -275,6 +276,7 @@ export async function aiComplete({
         emitUsage({
             surface,
             userId,
+            teamId,
             modelRequested: model,
             modelUsed,
             promptTokens: response.usage?.prompt_tokens ?? 0,
@@ -313,6 +315,7 @@ export async function aiComplete({
         emitUsage({
             surface,
             userId,
+            teamId,
             modelRequested: model,
             modelUsed: model,
             promptTokens: 0,
@@ -332,6 +335,7 @@ export async function aiStream({
     systemPrompt,
     messages,
     userId,
+    teamId,
     model = AI_MODEL_FAST,
     temperature = 0.7,
     maxTokens = 1500,
@@ -370,6 +374,7 @@ export async function aiStream({
         emitUsage({
             surface,
             userId,
+            teamId,
             modelRequested: model,
             modelUsed: model,
             promptTokens: 0,
@@ -386,6 +391,7 @@ export async function aiStream({
         emitUsage({
             surface,
             userId,
+            teamId,
             modelRequested: model,
             modelUsed: model,
             promptTokens: 0,

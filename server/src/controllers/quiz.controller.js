@@ -237,6 +237,7 @@ Return JSON:
             : ""
         }`,
         userId,
+        teamId,
         model: AI_MODEL_FAST,
         temperature: 0.8,
         jsonMode: true,
@@ -574,6 +575,7 @@ async function generateQuizAnalysis(quizId) {
       where: { id: quizId },
       select: {
         userId: true,
+        teamId: true,
         subject: true,
         score: true,
         answers: true,
@@ -625,6 +627,7 @@ ${wrongAnswers
   )
   .join("\n\n")}`,
       userId: quiz.userId,
+      teamId: quiz.teamId,
       model: AI_MODEL_FAST,
       temperature: 0.7,
       jsonMode: true,

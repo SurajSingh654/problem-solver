@@ -638,6 +638,7 @@ export async function handleInterviewMessage(ws, message) {
       systemPrompt,
       messages,
       userId: toolContext.userId,
+      teamId: toolContext.teamId,
       model: AI_MODEL_PRIMARY,
       tools: TOOL_DEFINITIONS,
       temperature: 0.7, // reduced from 0.85 — more consistent interviewer behavior
@@ -798,6 +799,7 @@ async function executeToolsAndRespond(
       systemPrompt,
       messages: followUpMessages,
       userId: toolContext.userId,
+      teamId: toolContext.teamId,
       model: AI_MODEL_PRIMARY,
       temperature: 0.7,
       maxTokens: 400,
@@ -1318,6 +1320,7 @@ Return JSON:
         systemPrompt: debriefSystem,
         userPrompt: `Interview transcript:\n${transcript}\n\nInterviewer observations:\n${interviewerNotes || "None recorded"}`,
         userId: toolContext.userId,
+        teamId: toolContext.teamId,
         model: AI_MODEL_PRIMARY,
         temperature: 0.6, // lower temp for more consistent evaluation
         maxTokens: 2500,
