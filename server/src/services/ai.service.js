@@ -1,201 +1,428 @@
-/**
- * AI SERVICE — OpenAI client, rate limiter, error handler
- * Single source of truth for all AI interactions.
- */
+// ============================================================================
+// AI SERVICE — single entry point for every OpenAI call on the platform
+// ============================================================================
+//
+// Responsibilities:
+//   1. Client lifecycle (lazy singleton).
+//   2. Per-user-per-day rate limiting (in-memory).
+//   3. Retry on transient OpenAI errors (429 / 5xx / Retry-After).
+//   4. Model fallback chain (primary → fast on model_not_found).
+//   5. Structured-output + tool-call passthrough for callers that need them.
+//   6. Error normalization into AIError so controllers don't reinvent it.
+//   7. Usage emission via EventEmitter so Phase 5 of the AI Prompts Overhaul
+//      can subscribe and persist to the UsageTracking table without changes
+//      here.
+//
+// Caller-visible API surface (BACKWARD COMPATIBLE):
+//   • aiComplete({ systemPrompt, userPrompt, userId, ... })
+//       Returns parsed JSON when jsonMode=true (default), raw string when
+//       jsonMode=false. Existing callers see no behavior change.
+//   • aiStream({ systemPrompt, messages, userId, ... })
+//       Returns the OpenAI streaming response unchanged.
+//   • New optional fields:
+//       - tools, toolChoice          → enable tool/function calling.
+//       - responseFormat             → pass an explicit json_schema or other
+//                                      response_format payload to the API.
+//       - returnFullMessage=true     → return the full message object
+//                                      (including tool_calls). Implied when
+//                                      tools is provided.
+//       - surface                    → free-form label used in usage events.
+//
+// ============================================================================
 import OpenAI from "openai";
-import { OPENAI_API_KEY, AI_MODEL_FAST, AI_DAILY_LIMIT } from "../config/env.js";
+import { EventEmitter } from "node:events";
+import {
+    OPENAI_API_KEY,
+    AI_MODEL_FAST,
+    AI_DAILY_LIMIT,
+} from "../config/env.js";
 
-// ── Initialize OpenAI client ───────────────────────────
+// ── Initialize OpenAI client (lazy singleton) ───────────────────────
 let openai = null;
 
 function getClient() {
-  if (!openai) {
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not set");
+    if (!openai) {
+        if (!OPENAI_API_KEY) {
+            throw new Error("OPENAI_API_KEY is not set");
+        }
+        openai = new OpenAI({ apiKey: OPENAI_API_KEY });
     }
-    openai = new OpenAI({
-      apiKey: OPENAI_API_KEY,
-    });
-  }
-  return openai;
+    return openai;
 }
 
-// ── Rate limiter (per user per day) ────────────────────
+// Test hook — allows test code to inject a mock client without env vars.
+// Not exported on the public surface; callers in src/ MUST go through
+// aiComplete / aiStream so retry, rate-limit, and usage emission apply.
+export function _setClientForTests(mock) {
+    openai = mock;
+}
+
+// ── Rate limiter (per user per day, in-memory) ──────────────────────
 const rateLimitMap = new Map();
 const RATE_LIMIT = AI_DAILY_LIMIT;
 
 function getRateLimitKey(userId) {
-  const today = new Date().toISOString().split("T")[0];
-  return `${userId}:${today}`;
+    const today = new Date().toISOString().split("T")[0];
+    return `${userId}:${today}`;
 }
 
 export function checkRateLimit(userId) {
-  const key = getRateLimitKey(userId);
-  const count = rateLimitMap.get(key) || 0;
-
-  if (count >= RATE_LIMIT) {
-    return {
-      allowed: false,
-      remaining: 0,
-      limit: RATE_LIMIT,
-    };
-  }
-
-  return {
-    allowed: true,
-    remaining: RATE_LIMIT - count,
-    limit: RATE_LIMIT,
-  };
+    const key = getRateLimitKey(userId);
+    const count = rateLimitMap.get(key) || 0;
+    if (count >= RATE_LIMIT) {
+        return { allowed: false, remaining: 0, limit: RATE_LIMIT };
+    }
+    return { allowed: true, remaining: RATE_LIMIT - count, limit: RATE_LIMIT };
 }
 
 function incrementRateLimit(userId) {
-  const key = getRateLimitKey(userId);
-  const count = rateLimitMap.get(key) || 0;
-  rateLimitMap.set(key, count + 1);
-
-  // Clean old keys every hour
-  if (Math.random() < 0.01) {
-    const today = new Date().toISOString().split("T")[0];
-    for (const [k] of rateLimitMap) {
-      if (!k.endsWith(today)) rateLimitMap.delete(k);
+    const key = getRateLimitKey(userId);
+    const count = rateLimitMap.get(key) || 0;
+    rateLimitMap.set(key, count + 1);
+    if (Math.random() < 0.01) {
+        const today = new Date().toISOString().split("T")[0];
+        for (const [k] of rateLimitMap) {
+            if (!k.endsWith(today)) rateLimitMap.delete(k);
+        }
     }
-  }
 }
 
-// ── Core completion function ───────────────────────────
-// `fewShotMessages`, when provided, is an array of {role, content} pairs
-// that get injected between the system prompt and the final user prompt.
-// Used by the readiness-verdict controller to ship calibration examples
-// that anchor the model's output style (structured anti-hallucination).
-export async function aiComplete({
-  systemPrompt,
-  userPrompt,
-  userId,
-  model = AI_MODEL_FAST,
-  temperature = 0.7,
-  maxTokens = 2000,
-  jsonMode = true,
-  fewShotMessages = [],
-}) {
-  const rateCheck = checkRateLimit(userId);
-  if (!rateCheck.allowed) {
-    throw new AIError(
-      "RATE_LIMITED",
-      `Daily AI limit reached (${RATE_LIMIT}/day).`,
+// ── Retry on transient errors ───────────────────────────────────────
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const BACKOFF_BASE_MS = 1000;
+const BACKOFF_CAP_MS = 30_000;
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function backoffDelay(attemptIdx, retryAfterHeader) {
+    if (retryAfterHeader != null) {
+        const seconds = parseInt(retryAfterHeader, 10);
+        if (Number.isFinite(seconds) && seconds > 0) {
+            return Math.min(seconds * 1000, BACKOFF_CAP_MS);
+        }
+    }
+    return Math.min(BACKOFF_BASE_MS * Math.pow(2, attemptIdx), BACKOFF_CAP_MS);
+}
+
+function getRetryAfter(err) {
+    return (
+        err?.response?.headers?.["retry-after"] ??
+        err?.headers?.["retry-after"] ??
+        err?.responseHeaders?.["retry-after"] ??
+        null
     );
-  }
+}
 
-  console.log(
-    `[AI] Request: model=${model}, maxTokens=${maxTokens}, jsonMode=${jsonMode}, fewShot=${fewShotMessages.length}`,
-  );
-  console.log(`[AI] System prompt length: ${systemPrompt.length} chars`);
-  console.log(`[AI] User prompt length: ${userPrompt.length} chars`);
+async function callWithRetry(operation, label = "ai") {
+    let lastErr;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+            return await operation();
+        } catch (err) {
+            lastErr = err;
+            const status = err?.status ?? err?.response?.status;
+            if (!RETRYABLE_STATUSES.has(status)) throw err;
+            if (attempt === MAX_ATTEMPTS - 1) throw err;
+            const delay = backoffDelay(attempt, getRetryAfter(err));
+            console.warn(
+                `[AI] ${label} retryable error status=${status} attempt=${attempt + 1}/${MAX_ATTEMPTS} sleep=${delay}ms`,
+            );
+            await sleep(delay);
+        }
+    }
+    throw lastErr;
+}
 
-  try {
+// ── Model fallback ──────────────────────────────────────────────────
+// If the requested model is unavailable (404 / model_not_found) and it
+// isn't already AI_MODEL_FAST, retry once with AI_MODEL_FAST. Returns
+// { response, modelUsed } so the caller can record which model actually
+// served the request (important for usage attribution).
+async function callWithModelFallback(buildRequest, primaryModel, label = "ai") {
     const client = getClient();
+    try {
+        const response = await callWithRetry(
+            () => client.chat.completions.create(buildRequest(primaryModel)),
+            `${label}:${primaryModel}`,
+        );
+        return { response, modelUsed: primaryModel };
+    } catch (err) {
+        const code = err?.code ?? err?.error?.code ?? "";
+        const status = err?.status ?? err?.response?.status;
+        const isModelMissing =
+            status === 404 || code === "model_not_found" || code === "model_not_available";
+        if (isModelMissing && primaryModel !== AI_MODEL_FAST) {
+            console.warn(
+                `[AI] ${label} primary model "${primaryModel}" unavailable (${code || status}); falling back to "${AI_MODEL_FAST}"`,
+            );
+            const response = await callWithRetry(
+                () => client.chat.completions.create(buildRequest(AI_MODEL_FAST)),
+                `${label}:${AI_MODEL_FAST}-fallback`,
+            );
+            return { response, modelUsed: AI_MODEL_FAST };
+        }
+        throw err;
+    }
+}
 
-    const response = await client.chat.completions.create({
-      model,
-      temperature,
-      max_tokens: maxTokens,
-      response_format: jsonMode ? { type: "json_object" } : undefined,
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...fewShotMessages,
-        { role: "user", content: userPrompt },
-      ],
+// ── Usage event emitter ─────────────────────────────────────────────
+// Phase 5 of the overhaul subscribes here and writes rows into the
+// UsageTracking table. Today the only built-in subscriber is the
+// console-log tap below. Failures inside subscribers MUST NOT break
+// the API call — they're caught and logged.
+const usageEmitter = new EventEmitter();
+usageEmitter.setMaxListeners(50);
+
+export function onUsageEvent(handler) {
+    usageEmitter.on("usage", handler);
+    return () => usageEmitter.off("usage", handler);
+}
+
+// Built-in tap — keeps the existing `[AI] Usage: N tokens` log line that
+// callers and ops eyeballed before this overhaul.
+usageEmitter.on("usage", (e) => {
+    if (e.errorCode) {
+        console.warn(
+            `[AI] usage surface=${e.surface || "?"} model=${e.modelUsed} latency=${e.latencyMs}ms error=${e.errorCode}`,
+        );
+        return;
+    }
+    console.log(
+        `[AI] usage surface=${e.surface || "?"} model=${e.modelUsed} tokens=${e.totalTokens} (p=${e.promptTokens}/c=${e.completionTokens}) latency=${e.latencyMs}ms`,
+    );
+});
+
+function emitUsage(payload) {
+    try {
+        usageEmitter.emit("usage", payload);
+    } catch (err) {
+        console.error("[AI] usage emitter handler threw:", err?.message);
+    }
+}
+
+// ── Core completion ─────────────────────────────────────────────────
+export async function aiComplete({
+    systemPrompt,
+    userPrompt,
+    userId,
+    model = AI_MODEL_FAST,
+    temperature = 0.7,
+    maxTokens = 2000,
+    jsonMode = true,
+    fewShotMessages = [],
+    // New (P1) — all opt-in:
+    tools,
+    toolChoice,
+    responseFormat,
+    returnFullMessage = false,
+    surface,
+}) {
+    const rateCheck = checkRateLimit(userId);
+    if (!rateCheck.allowed) {
+        throw new AIError(
+            "RATE_LIMITED",
+            `Daily AI limit reached (${RATE_LIMIT}/day).`,
+        );
+    }
+
+    // When tools are passed the caller almost certainly needs the full
+    // message (tool_calls live there), so flip returnFullMessage on
+    // unless explicitly disabled.
+    const wantFullMessage = returnFullMessage || !!tools;
+
+    // response_format: explicit override > json_object (when jsonMode + no
+    // tools) > none. Tool calling and json_object don't combine — when
+    // tools are present we drop json_object so the API doesn't reject it.
+    const finalResponseFormat = (() => {
+        if (responseFormat) return responseFormat;
+        if (jsonMode && !tools) return { type: "json_object" };
+        return undefined;
+    })();
+
+    console.log(
+        `[AI] request surface=${surface || "?"} model=${model} maxTokens=${maxTokens} jsonMode=${jsonMode} fewShot=${fewShotMessages.length} tools=${tools ? tools.length : 0}`,
+    );
+
+    const buildRequest = (m) => ({
+        model: m,
+        temperature,
+        max_tokens: maxTokens,
+        response_format: finalResponseFormat,
+        messages: [
+            { role: "system", content: systemPrompt },
+            ...fewShotMessages,
+            { role: "user", content: userPrompt },
+        ],
+        ...(tools ? { tools, ...(toolChoice ? { tool_choice: toolChoice } : {}) } : {}),
     });
 
-    incrementRateLimit(userId);
-
-    const content = response.choices[0]?.message?.content;
-    console.log(`[AI] Response received: ${content?.length || 0} chars`);
-    console.log(`[AI] Usage: ${response.usage?.total_tokens || "?"} tokens`);
-
-    if (!content) {
-      throw new AIError("EMPTY_RESPONSE", "AI returned an empty response");
-    }
-
-    if (jsonMode) {
-      try {
-        const parsed = JSON.parse(content);
-        console.log(`[AI] Parsed JSON keys: ${Object.keys(parsed).join(", ")}`);
-        return parsed;
-      } catch (e) {
-        console.error(
-          `[AI] JSON parse failed. Raw content:`,
-          content.slice(0, 300),
+    const t0 = Date.now();
+    try {
+        const { response, modelUsed } = await callWithModelFallback(
+            buildRequest,
+            model,
+            surface || "complete",
         );
-        throw new AIError("PARSE_ERROR", "AI response was not valid JSON");
-      }
-    }
+        incrementRateLimit(userId);
 
-    return content;
-  } catch (error) {
-    if (error instanceof AIError) throw error;
+        const message = response.choices?.[0]?.message;
+        const content = message?.content;
+        const latencyMs = Date.now() - t0;
 
-    console.error(
-      `[AI] OpenAI error: status=${error?.status}, message=${error?.message}`,
-    );
+        emitUsage({
+            surface,
+            userId,
+            modelRequested: model,
+            modelUsed,
+            promptTokens: response.usage?.prompt_tokens ?? 0,
+            completionTokens: response.usage?.completion_tokens ?? 0,
+            totalTokens: response.usage?.total_tokens ?? 0,
+            latencyMs,
+            usedFallback: modelUsed !== model,
+            errorCode: null,
+        });
 
-    if (error?.status === 429) {
-      throw new AIError(
-        "OPENAI_RATE_LIMITED",
-        "OpenAI rate limit hit. Wait and retry.",
-      );
-    }
-    if (error?.status === 401) {
-      throw new AIError("INVALID_API_KEY", "OpenAI API key is invalid.");
-    }
-    if (error?.status === 500 || error?.status === 503) {
-      throw new AIError("OPENAI_DOWN", "OpenAI is temporarily unavailable.");
-    }
+        if (wantFullMessage) {
+            // Caller will inspect tool_calls / content themselves.
+            return message;
+        }
 
-    throw new AIError("AI_ERROR", `AI request failed: ${error.message}`);
-  }
+        if (!content) {
+            throw new AIError("EMPTY_RESPONSE", "AI returned an empty response");
+        }
+
+        if (jsonMode) {
+            try {
+                return JSON.parse(content);
+            } catch {
+                console.error(
+                    `[AI] JSON parse failed. Raw content:`,
+                    content.slice(0, 300),
+                );
+                throw new AIError("PARSE_ERROR", "AI response was not valid JSON");
+            }
+        }
+
+        return content;
+    } catch (err) {
+        const latencyMs = Date.now() - t0;
+        const code = mapErrorToCode(err);
+        emitUsage({
+            surface,
+            userId,
+            modelRequested: model,
+            modelUsed: model,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            latencyMs,
+            usedFallback: false,
+            errorCode: code,
+        });
+        if (err instanceof AIError) throw err;
+        throw new AIError(code, err.message || "AI request failed");
+    }
 }
 
-// ── Streaming completion (for chat/interviewer) ────────
+// ── Streaming completion ────────────────────────────────────────────
 export async function aiStream({
-  systemPrompt,
-  messages,
-  userId,
-  model = AI_MODEL_FAST,
-  temperature = 0.7,
-  maxTokens = 1500,
+    systemPrompt,
+    messages,
+    userId,
+    model = AI_MODEL_FAST,
+    temperature = 0.7,
+    maxTokens = 1500,
+    // New (P1):
+    tools,
+    toolChoice,
+    surface,
 }) {
-  const rateCheck = checkRateLimit(userId);
-  if (!rateCheck.allowed) {
-    throw new AIError(
-      "RATE_LIMITED",
-      `Daily AI limit reached (${RATE_LIMIT}/day). Try again tomorrow.`,
-    );
-  }
+    const rateCheck = checkRateLimit(userId);
+    if (!rateCheck.allowed) {
+        throw new AIError(
+            "RATE_LIMITED",
+            `Daily AI limit reached (${RATE_LIMIT}/day). Try again tomorrow.`,
+        );
+    }
 
-  const client = getClient();
-
-  const stream = await client.chat.completions.create({
-    model,
-    temperature,
-    max_tokens: maxTokens,
-    stream: true,
-    messages: [{ role: "system", content: systemPrompt }, ...messages],
-  });
-
-  incrementRateLimit(userId);
-  return stream;
+    const client = getClient();
+    const t0 = Date.now();
+    try {
+        const stream = await callWithRetry(
+            () =>
+                client.chat.completions.create({
+                    model,
+                    temperature,
+                    max_tokens: maxTokens,
+                    stream: true,
+                    messages: [{ role: "system", content: systemPrompt }, ...messages],
+                    ...(tools ? { tools, ...(toolChoice ? { tool_choice: toolChoice } : {}) } : {}),
+                }),
+            `${surface || "stream"}:${model}`,
+        );
+        incrementRateLimit(userId);
+        // Token counts aren't known at stream-open time; emit a lightweight
+        // event recording the open. Subscribers that care about totals can
+        // listen for downstream chunks themselves.
+        emitUsage({
+            surface,
+            userId,
+            modelRequested: model,
+            modelUsed: model,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            latencyMs: Date.now() - t0,
+            usedFallback: false,
+            errorCode: null,
+            stream: true,
+        });
+        return stream;
+    } catch (err) {
+        const code = mapErrorToCode(err);
+        emitUsage({
+            surface,
+            userId,
+            modelRequested: model,
+            modelUsed: model,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            latencyMs: Date.now() - t0,
+            usedFallback: false,
+            errorCode: code,
+            stream: true,
+        });
+        if (err instanceof AIError) throw err;
+        throw new AIError(code, err.message || "AI stream request failed");
+    }
 }
 
-// ── Custom AI error class ──────────────────────────────
+// ── Error normalization ─────────────────────────────────────────────
+function mapErrorToCode(err) {
+    const status = err?.status ?? err?.response?.status;
+    if (err instanceof AIError) return err.code;
+    if (status === 429) return "OPENAI_RATE_LIMITED";
+    if (status === 401) return "INVALID_API_KEY";
+    if (status === 500 || status === 502 || status === 503 || status === 504)
+        return "OPENAI_DOWN";
+    if (status === 408) return "OPENAI_TIMEOUT";
+    return "AI_ERROR";
+}
+
+// ── Custom error class ──────────────────────────────────────────────
 export class AIError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.name = "AIError";
-    this.code = code;
-  }
+    constructor(code, message) {
+        super(message);
+        this.name = "AIError";
+        this.code = code;
+    }
 }
 
-// ── Check if AI is enabled ─────────────────────────────
+// ── Feature gate ────────────────────────────────────────────────────
 export function isAIEnabled() {
-  return process.env.AI_ENABLED === "true" && !!process.env.OPENAI_API_KEY;
+    return process.env.AI_ENABLED === "true" && !!process.env.OPENAI_API_KEY;
 }
