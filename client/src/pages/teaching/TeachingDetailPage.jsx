@@ -16,13 +16,14 @@
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useEffect } from 'react'
 import {
     useTeachingSession,
     useStartTeachingSession,
     useEndTeachingSession,
     useCancelTeachingSession,
 } from '@hooks/useTeaching'
-import { useAuthStore } from '@store/useAuthStore'
+import useAuthStore from '@store/useAuthStore'
 import { Spinner } from '@components/ui/Spinner'
 import { useConfirm } from '@hooks/useConfirm'
 import { cn } from '@utils/cn'
@@ -68,7 +69,28 @@ export default function TeachingDetailPage() {
     const [showRate, setShowRate] = useState(false)
     const [showFlag, setShowFlag] = useState(false)
 
-    const { data: session, isLoading, isError } = useTeachingSession(id)
+    // After the host submits notes, the server runs three AI prompts
+    // in the background. We poll the detail endpoint every 3s for up
+    // to 30s so the artifacts appear without a manual refresh. The
+    // session.aiGeneratedAt timestamp is the signal that all three
+    // artifacts have landed.
+    const [pollAi, setPollAi] = useState(false)
+    const { data: session, isLoading, isError } = useTeachingSession(id, {
+        pollAi,
+    })
+
+    // Auto-poll when notes exist but artifacts haven't been generated yet,
+    // for up to 60s. Stops the moment aiGeneratedAt fills in.
+    useEffect(() => {
+        if (!session) return
+        const needsAi =
+            session.status === 'COMPLETED' &&
+            !!session.notes &&
+            !session.aiGeneratedAt
+        if (needsAi && !pollAi) setPollAi(true)
+        if (!needsAi && pollAi) setPollAi(false)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session?.aiGeneratedAt, session?.notes, session?.status])
     const start = useStartTeachingSession()
     const end = useEndTeachingSession()
     const cancel = useCancelTeachingSession()
@@ -251,32 +273,31 @@ export default function TeachingDetailPage() {
 
                 <div className="bg-surface-1 border border-border-default rounded-xl p-5 min-h-[120px]">
                     {activeTab === 'notes' && (
-                        session.notes ? (
-                            <div className="text-xs text-text-secondary whitespace-pre-wrap font-mono">
-                                {session.notes}
-                            </div>
-                        ) : (
-                            <p className="text-xs text-text-tertiary">
-                                {isHost && session.status === 'COMPLETED'
-                                    ? 'You haven\'t posted notes yet. Add them to unlock the AI summary, quiz, and topic-coverage check.'
-                                    : 'Notes will appear here after the host posts them.'}
-                            </p>
-                        )
+                        <NotesPanel session={session} isHost={isHost} />
                     )}
                     {activeTab === 'summary' && (
-                        <p className="text-xs text-text-tertiary">
-                            AI-generated summary will appear here after the host submits notes.
-                        </p>
+                        <SummaryPanel
+                            summary={session.summary}
+                            hasNotes={!!session.notes}
+                            isHost={isHost}
+                            pending={pollAi}
+                        />
                     )}
                     {activeTab === 'quiz' && (
-                        <p className="text-xs text-text-tertiary">
-                            Review quiz lands here after the host submits notes.
-                        </p>
+                        <QuizPanel
+                            quiz={session.quiz}
+                            hasNotes={!!session.notes}
+                            isHost={isHost}
+                            pending={pollAi}
+                        />
                     )}
                     {activeTab === 'coverage' && (
-                        <p className="text-xs text-text-tertiary">
-                            Topic-coverage check lands here after the host submits notes.
-                        </p>
+                        <CoveragePanel
+                            coverage={session.topicCoverage}
+                            hasNotes={!!session.notes}
+                            isHost={isHost}
+                            pending={pollAi}
+                        />
                     )}
                     {activeTab === 'attendees' && (
                         <AttendeesPanel attendees={session.attendees} />
@@ -326,6 +347,265 @@ function AttendeesPanel({ attendees }) {
                 </li>
             ))}
         </ul>
+    )
+}
+
+// ── Notes panel ──────────────────────────────────────────────
+function NotesPanel({ session, isHost }) {
+    const isCompleted = session.status === 'COMPLETED'
+    if (session.notes) {
+        return (
+            <div className="space-y-3">
+                <div className="text-xs text-text-secondary whitespace-pre-wrap font-mono">
+                    {session.notes}
+                </div>
+                {isHost && isCompleted && (
+                    <Link
+                        to={`/teaching/${session.id}/notes`}
+                        className="inline-block text-[11px] font-bold text-brand-fg-soft hover:underline"
+                    >
+                        ✏️ Edit notes
+                    </Link>
+                )}
+            </div>
+        )
+    }
+    if (isHost && isCompleted) {
+        return (
+            <div className="text-center py-6 space-y-2">
+                <p className="text-xs text-text-tertiary">
+                    You haven't posted notes yet. Add them to unlock the AI summary,
+                    quiz, and topic-coverage check.
+                </p>
+                <Link
+                    to={`/teaching/${session.id}/notes`}
+                    className="inline-block bg-brand-soft text-brand-fg-soft border border-brand-line rounded-lg px-3 py-2 text-xs font-bold hover:bg-brand-soft/80 transition-colors"
+                >
+                    📝 Post notes
+                </Link>
+            </div>
+        )
+    }
+    return (
+        <p className="text-xs text-text-tertiary">
+            Notes will appear here after the host posts them.
+        </p>
+    )
+}
+
+function FallbackBanner({ artifact }) {
+    if (!artifact?._fallback) return null
+    return (
+        <div className="bg-warning-soft text-warning-fg border border-warning-line rounded-lg px-3 py-2 text-[11px] mb-3">
+            ⚠️ AI generation fell back to a placeholder for this artifact. Re-submit notes
+            to retry.
+        </div>
+    )
+}
+
+function PendingState({ kind }) {
+    return (
+        <p className="text-xs text-text-tertiary">
+            Generating AI {kind}… this usually takes a few seconds.
+        </p>
+    )
+}
+
+function NoNotesState({ isHost }) {
+    return (
+        <p className="text-xs text-text-tertiary">
+            {isHost
+                ? 'Post notes to generate this artifact.'
+                : 'Available once the host posts notes.'}
+        </p>
+    )
+}
+
+function SummaryPanel({ summary, hasNotes, isHost, pending }) {
+    if (!hasNotes) return <NoNotesState isHost={isHost} />
+    if (!summary) {
+        return pending ? <PendingState kind="summary" /> : <NoNotesState isHost={isHost} />
+    }
+    return (
+        <div className="space-y-4">
+            <FallbackBanner artifact={summary} />
+            {summary.tldr && (
+                <div>
+                    <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                        TL;DR
+                    </p>
+                    <p className="text-sm text-text-primary">{summary.tldr}</p>
+                </div>
+            )}
+            {Array.isArray(summary.keyTakeaways) && summary.keyTakeaways.length > 0 && (
+                <div>
+                    <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                        Key takeaways
+                    </p>
+                    <ul className="space-y-1.5">
+                        {summary.keyTakeaways.map((b, i) => (
+                            <li key={i} className="text-xs text-text-secondary flex gap-2">
+                                <span className="text-brand-fg-soft flex-shrink-0">•</span>
+                                <span>{b}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {Array.isArray(summary.definitions) && summary.definitions.length > 0 && (
+                <div>
+                    <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                        Definitions
+                    </p>
+                    <ul className="space-y-1.5">
+                        {summary.definitions.map((d, i) => (
+                            <li key={i} className="text-xs">
+                                <span className="font-bold text-text-primary">{d.term}</span>
+                                <span className="text-text-tertiary"> — {d.definition}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {Array.isArray(summary.openQuestions) && summary.openQuestions.length > 0 && (
+                <div>
+                    <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
+                        Open questions
+                    </p>
+                    <ul className="space-y-1.5">
+                        {summary.openQuestions.map((q, i) => (
+                            <li key={i} className="text-xs text-text-secondary italic">
+                                ? {q}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function QuizPanel({ quiz, hasNotes, isHost, pending }) {
+    if (!hasNotes) return <NoNotesState isHost={isHost} />
+    if (!quiz) {
+        return pending ? <PendingState kind="quiz" /> : <NoNotesState isHost={isHost} />
+    }
+    const questions = Array.isArray(quiz.questions) ? quiz.questions : []
+    return (
+        <div className="space-y-3">
+            <FallbackBanner artifact={quiz} />
+            {questions.map((q, i) => (
+                <QuizCard key={i} q={q} idx={i + 1} />
+            ))}
+        </div>
+    )
+}
+
+function QuizCard({ q, idx }) {
+    const [revealed, setRevealed] = useState(false)
+    return (
+        <div className="bg-surface-2 border border-border-default rounded-lg p-3">
+            <p className="text-xs font-bold text-text-primary mb-2">
+                <span className="text-text-disabled mr-1">Q{idx}.</span>
+                {q.question}
+            </p>
+            {q.type === 'MCQ' && Array.isArray(q.options) && (
+                <ol className="space-y-1 text-xs text-text-secondary mb-2 list-[upper-alpha] ml-5">
+                    {q.options.map((o, i) => (
+                        <li
+                            key={i}
+                            className={
+                                revealed && o === q.answer
+                                    ? 'text-success-fg font-bold'
+                                    : ''
+                            }
+                        >
+                            {o}
+                        </li>
+                    ))}
+                </ol>
+            )}
+            <button
+                type="button"
+                onClick={() => setRevealed((v) => !v)}
+                className="text-[11px] font-bold text-brand-fg-soft hover:underline"
+            >
+                {revealed ? 'Hide answer' : 'Reveal answer'}
+            </button>
+            {revealed && (
+                <div className="mt-2 bg-surface-1 border border-border-default rounded p-2 space-y-1">
+                    {q.type === 'SHORT' && q.answer && (
+                        <p className="text-xs">
+                            <span className="font-bold text-success-fg">A:</span>{' '}
+                            <span className="text-text-secondary">{q.answer}</span>
+                        </p>
+                    )}
+                    {q.explanation && (
+                        <p className="text-[11px] text-text-tertiary italic">
+                            {q.explanation}
+                        </p>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+const COVERAGE_TONES = {
+    FULL: 'bg-success-soft text-success-fg border-success-line',
+    PARTIAL: 'bg-warning-soft text-warning-fg border-warning-line',
+    OFF_TOPIC: 'bg-danger-soft text-danger-fg border-danger-line',
+}
+
+function CoveragePanel({ coverage, hasNotes, isHost, pending }) {
+    if (!hasNotes) return <NoNotesState isHost={isHost} />
+    if (!coverage) {
+        return pending ? <PendingState kind="coverage" /> : <NoNotesState isHost={isHost} />
+    }
+    return (
+        <div className="space-y-3">
+            <FallbackBanner artifact={coverage} />
+            <div className="flex items-center gap-3">
+                <span
+                    className={cn(
+                        'text-[11px] font-bold uppercase tracking-widest px-2 py-1 rounded-full border',
+                        COVERAGE_TONES[coverage.verdict] || COVERAGE_TONES.PARTIAL,
+                    )}
+                >
+                    {coverage.verdict}
+                </span>
+                <span className="text-2xl font-extrabold font-mono text-text-primary">
+                    {coverage.coverageScore}/100
+                </span>
+            </div>
+            {coverage.rationale && (
+                <p className="text-xs text-text-secondary">{coverage.rationale}</p>
+            )}
+            {Array.isArray(coverage.coveredAspects) && coverage.coveredAspects.length > 0 && (
+                <div>
+                    <p className="text-[10px] font-bold text-success-fg uppercase tracking-widest mb-1">
+                        ✓ Covered
+                    </p>
+                    <ul className="space-y-1 text-xs text-text-secondary list-disc ml-5">
+                        {coverage.coveredAspects.map((a, i) => (
+                            <li key={i}>{a}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {Array.isArray(coverage.missingAspects) && coverage.missingAspects.length > 0 && (
+                <div>
+                    <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-1">
+                        ✗ Missing
+                    </p>
+                    <ul className="space-y-1 text-xs text-text-secondary list-disc ml-5">
+                        {coverage.missingAspects.map((a, i) => (
+                            <li key={i}>{a}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
     )
 }
 
