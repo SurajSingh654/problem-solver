@@ -121,3 +121,29 @@ export function useEndTeachingSession() {
         },
     });
 }
+
+// REST mirrors of the WS join/leave handlers — used as a safety net
+// when the socket isn't connected yet (e.g. immediately on detail-page
+// mount) so attendance is recorded reliably.
+export function useJoinTeachingSession() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => teachingApi.join(id),
+        onSuccess: (_, id) => {
+            qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
+        },
+        // Errors from join (capacity, completed) bubble to the caller —
+        // we don't toast here because the LiveRoom UI already surfaces
+        // them inline.
+    });
+}
+
+export function useLeaveTeachingSession() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => teachingApi.leave(id),
+        onSuccess: (_, id) => {
+            qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
+        },
+    });
+}

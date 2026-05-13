@@ -20,6 +20,7 @@ const PAGE_META = {
     '/leaderboard': { title: 'Leaderboard', crumb: 'Progress' },
     '/teaching': { title: 'Teaching', crumb: 'Team' },
     '/teaching/new': { title: 'Schedule Session', crumb: 'Team' },
+    '/teaching/:id': { title: 'Session Detail', crumb: 'Team' },
     '/profile': { title: 'My Profile', crumb: 'Progress' },
     '/admin': { title: 'Admin Panel', crumb: 'Admin' },
     '/admin/problems/new': { title: 'Add Problem', crumb: 'Admin' },

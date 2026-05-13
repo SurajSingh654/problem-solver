@@ -60,6 +60,7 @@ import SuperAdminDashboard from '@pages/superadmin/SuperAdminDashboard'
 const MockInterviewPage = lazy(() => import('@pages/MockInterviewPage'))
 const TeachingListPage = lazy(() => import('@pages/teaching/TeachingListPage'))
 const TeachingNewPage = lazy(() => import('@pages/teaching/TeachingNewPage'))
+const TeachingDetailPage = lazy(() => import('@pages/teaching/TeachingDetailPage'))
 const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
@@ -237,6 +238,7 @@ export default function App() {
               <>
                 <Route path="teaching" element={<Lazy><TeachingListPage /></Lazy>} />
                 <Route path="teaching/new" element={<Lazy><TeachingNewPage /></Lazy>} />
+                <Route path="teaching/:id" element={<Lazy><TeachingDetailPage /></Lazy>} />
               </>
             )}
             {/* ── Leaderboard ───────────────────────────────────────── */}

@@ -26,6 +26,8 @@ import {
   cancelTeachingSession,
   startTeachingSession,
   endTeachingSession,
+  joinTeachingSession,
+  leaveTeachingSession,
 } from "../controllers/teaching.controller.js";
 
 const router = Router();
@@ -41,5 +43,7 @@ router.delete("/:id", cancelTeachingSession);
 router.post("/:id/start", startTeachingSession);
 router.post("/:id/end", endTeachingSession);
 router.post("/:id/cancel", cancelTeachingSession);
+router.post("/:id/join", joinTeachingSession);
+router.post("/:id/leave", leaveTeachingSession);
 
 export default router;

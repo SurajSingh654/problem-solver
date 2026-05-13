@@ -16,4 +16,6 @@ export const teachingApi = {
     cancel: (id) => api.delete(`/teaching/${id}`),
     start: (id) => api.post(`/teaching/${id}/start`),
     end: (id) => api.post(`/teaching/${id}/end`),
+    join: (id) => api.post(`/teaching/${id}/join`),
+    leave: (id) => api.post(`/teaching/${id}/leave`),
 };

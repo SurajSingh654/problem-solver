@@ -19,6 +19,7 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import { broadcastToTeam } from "../services/websocket.service.js";
 
 // Sessions a candidate user can see vs sessions a host/admin can see —
 // non-COMPLETED sessions hide the host's `notes` from non-host viewers.
@@ -450,6 +451,14 @@ export async function startTeachingSession(req, res) {
       },
     });
 
+    // Broadcast to every connected ws in this team so attendees can
+    // refresh / show "Join" CTA without polling.
+    broadcastToTeam(updated.teamId, {
+      type: "teaching:live_now",
+      sessionId: updated.id,
+      externalMeetingLink: updated.externalMeetingLink,
+    });
+
     return success(res, {
       session: dtoForViewer(updated, userId, isTeamAdmin(req)),
     });
@@ -490,11 +499,113 @@ export async function endTeachingSession(req, res) {
       },
     });
 
+    broadcastToTeam(updated.teamId, {
+      type: "teaching:ended",
+      sessionId: updated.id,
+    });
+
     return success(res, {
       session: dtoForViewer(updated, userId, isTeamAdmin(req)),
     });
   } catch (err) {
     console.error("End teaching session error:", err);
     return error(res, "Failed to end teaching session.", 500);
+  }
+}
+
+// ============================================================================
+// JOIN / LEAVE — REST mirrors of the WS handlers
+// ============================================================================
+//
+// The WS handlers are the canonical path for joining the live room.
+// The REST endpoints are the safety net for page reloads + clients
+// that lose their socket — they upsert the same TeachingAttendee row
+// so attendance is reliably recorded. Calling REST is idempotent: if
+// the user already has an active row, joinedAt is refreshed; if they
+// just left, a new join cycle starts.
+// ============================================================================
+export async function joinTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const session = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true, status: true, hostId: true, capacity: true },
+    });
+    if (!session) return error(res, "Teaching session not found.", 404);
+    if (session.status === "CANCELLED" || session.status === "COMPLETED") {
+      return error(
+        res,
+        `Cannot join a ${session.status.toLowerCase()} session.`,
+        409,
+        "INVALID_TRANSITION",
+      );
+    }
+
+    if (userId !== session.hostId) {
+      const activeCount = await prisma.teachingAttendee.count({
+        where: { sessionId: id, leftAt: null },
+      });
+      if (activeCount >= session.capacity) {
+        return error(res, "Session is at capacity.", 409, "AT_CAPACITY");
+      }
+    }
+
+    const attendee = await prisma.teachingAttendee.upsert({
+      where: { sessionId_userId: { sessionId: id, userId } },
+      create: { sessionId: id, userId },
+      update: { joinedAt: new Date(), leftAt: null, durationMs: null },
+    });
+
+    return success(res, {
+      attendee: {
+        id: attendee.id,
+        sessionId: attendee.sessionId,
+        userId: attendee.userId,
+        joinedAt: attendee.joinedAt,
+      },
+    });
+  } catch (err) {
+    console.error("Join teaching session error:", err);
+    return error(res, "Failed to join teaching session.", 500);
+  }
+}
+
+export async function leaveTeachingSession(req, res) {
+  try {
+    const teamId = req.teamId;
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const session = await prisma.teachingSession.findFirst({
+      where: { id, teamId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) return error(res, "Teaching session not found.", 404);
+
+    const existing = await prisma.teachingAttendee.findUnique({
+      where: { sessionId_userId: { sessionId: id, userId } },
+      select: { id: true, joinedAt: true, leftAt: true },
+    });
+    if (!existing || existing.leftAt) {
+      return success(res, { ok: true });
+    }
+
+    await prisma.teachingAttendee.update({
+      where: { id: existing.id },
+      data: {
+        leftAt: new Date(),
+        durationMs: existing.joinedAt
+          ? Date.now() - new Date(existing.joinedAt).getTime()
+          : null,
+      },
+    });
+
+    return success(res, { ok: true });
+  } catch (err) {
+    console.error("Leave teaching session error:", err);
+    return error(res, "Failed to leave teaching session.", 500);
   }
 }

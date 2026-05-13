@@ -5,8 +5,54 @@ import prisma from "../lib/prisma.js";
 
 const HEARTBEAT_INTERVAL = 30000;
 
+// Module-level reference so other services (teaching scheduler, REST
+// controllers that need to push presence updates from non-WS code paths)
+// can broadcast without holding a wss handle. Set on `setupWebSocket()`.
+let _wssRef = null;
+
+// Broadcast to every connected ws scoped to a given team. Used by the
+// teaching scheduler ("starting_soon", "live_now") and the teaching
+// controller's `:end` handler to push status flips to the room.
+// Safe no-op before setupWebSocket runs.
+export function broadcastToTeam(teamId, message) {
+  if (!_wssRef || !teamId) return;
+  const payload = JSON.stringify(message);
+  for (const ws of _wssRef.clients) {
+    if (ws.readyState === ws.OPEN && ws.teamId === teamId) {
+      try {
+        ws.send(payload);
+      } catch {
+        // Drop quietly — a partial fan-out failure isn't fatal.
+      }
+    }
+  }
+}
+
+// Broadcast to every ws that has joined the same teaching session room
+// (`ws.teachingSessionId === sessionId`). Used for `attendee_joined`,
+// `attendee_left`, `question`, `answer` fan-out where only the room
+// participants need the message.
+function broadcastToTeachingRoom(wss, sessionId, message, excludeWs = null) {
+  if (!sessionId) return;
+  const payload = JSON.stringify(message);
+  for (const ws of wss.clients) {
+    if (
+      ws !== excludeWs &&
+      ws.readyState === ws.OPEN &&
+      ws.teachingSessionId === sessionId
+    ) {
+      try {
+        ws.send(payload);
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
 export function setupWebSocket(server) {
   const wss = new WebSocketServer({ noServer: true });
+  _wssRef = wss;
 
   server.on("upgrade", (request, socket, head) => {
     try {
@@ -40,6 +86,10 @@ export function setupWebSocket(server) {
     ws.isAlive = true;
     ws.sessionId = null;
     ws.interviewMode = "text"; // Phase 4: track mode per connection
+    // Teaching live-room — set by `teaching:join` / cleared by
+    // `teaching:leave` or close. One connection = one teaching room
+    // (you can't be in two rooms at once on the same socket).
+    ws.teachingSessionId = null;
 
     console.log(`🔌 WS connected: user=${ws.userId} team=${ws.teamId}`);
 
@@ -81,6 +131,22 @@ export function setupWebSocket(server) {
             await handleBehavioralSignal(ws, message);
             break;
 
+          // ── Teaching Sessions live room (P1) ─────────────
+          // Presence + Q&A only. The actual meeting runs on the host's
+          // external link; the in-app room is just attendance + chat.
+          case "teaching:join":
+            await handleTeachingJoin(wss, ws, message);
+            break;
+          case "teaching:leave":
+            await handleTeachingLeave(wss, ws, message);
+            break;
+          case "teaching:question":
+            handleTeachingQuestion(wss, ws, message);
+            break;
+          case "teaching:answer":
+            handleTeachingAnswer(wss, ws, message);
+            break;
+
           default:
             ws.send(
               JSON.stringify({
@@ -113,6 +179,25 @@ export function setupWebSocket(server) {
             data: { status: "ABANDONED" },
           })
           .catch(() => {});
+      }
+      // Teaching room: notify peers this attendee dropped + write
+      // leftAt so the attendee record reflects reality. Fire-and-forget;
+      // a second join from a reload re-opens a fresh row.
+      if (ws.teachingSessionId) {
+        const sessionId = ws.teachingSessionId;
+        const userId = ws.userId;
+        broadcastToTeachingRoom(wss, sessionId, {
+          type: "teaching:attendee_left",
+          sessionId,
+          userId,
+        });
+        prisma.teachingAttendee
+          .updateMany({
+            where: { sessionId, userId, leftAt: null },
+            data: { leftAt: new Date() },
+          })
+          .catch(() => {});
+        ws.teachingSessionId = null;
       }
     });
   });
@@ -357,4 +442,159 @@ async function handleBehavioralSignal(ws, message) {
       },
     })
     .catch(() => {}); // fire-and-forget — non-critical
+}
+
+// ============================================================================
+// TEACHING SESSIONS LIVE ROOM (P1)
+// ============================================================================
+//
+// Presence + Q&A over the existing WebSocket. No video — the actual
+// meeting runs on the host's external link. Each ws can be in at most
+// one teaching room at a time (`ws.teachingSessionId`). The REST
+// endpoints `/teaching/:id/join` and `/teaching/:id/leave` mirror these
+// handlers so a page reload still records attendance correctly.
+// ============================================================================
+
+async function handleTeachingJoin(wss, ws, message) {
+  const { sessionId } = message;
+  if (!sessionId) {
+    ws.send(JSON.stringify({ type: "error", error: "sessionId required." }));
+    return;
+  }
+
+  // Verify the user belongs to the team that owns this session.
+  const session = await prisma.teachingSession.findFirst({
+    where: { id: sessionId, teamId: ws.teamId, deletedAt: null },
+    select: { id: true, status: true, hostId: true, capacity: true },
+  });
+  if (!session) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: "Teaching session not found in your team context.",
+      }),
+    );
+    return;
+  }
+  if (session.status === "CANCELLED" || session.status === "COMPLETED") {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: `Session is ${session.status.toLowerCase()}.`,
+      }),
+    );
+    return;
+  }
+
+  // Capacity check — host bypasses, attendees count active rows.
+  if (ws.userId !== session.hostId) {
+    const activeCount = await prisma.teachingAttendee.count({
+      where: { sessionId, leftAt: null },
+    });
+    if (activeCount >= session.capacity) {
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          error: "Session is at capacity.",
+        }),
+      );
+      return;
+    }
+  }
+
+  // Upsert attendee row. If they previously left, re-open a fresh row
+  // (joinedAt = now, leftAt = null) so the attendee table tracks every
+  // join cycle, not just first/last. Idempotent against the unique
+  // (sessionId, userId) constraint via update-on-conflict semantics.
+  await prisma.teachingAttendee.upsert({
+    where: { sessionId_userId: { sessionId, userId: ws.userId } },
+    create: { sessionId, userId: ws.userId },
+    update: { joinedAt: new Date(), leftAt: null, durationMs: null },
+  });
+
+  ws.teachingSessionId = sessionId;
+
+  // Tell the joiner they're in.
+  ws.send(JSON.stringify({ type: "teaching:joined", sessionId }));
+
+  // Tell everyone else in the room.
+  broadcastToTeachingRoom(
+    wss,
+    sessionId,
+    { type: "teaching:attendee_joined", sessionId, userId: ws.userId },
+    ws,
+  );
+}
+
+async function handleTeachingLeave(wss, ws, message) {
+  const sessionId = message.sessionId || ws.teachingSessionId;
+  if (!sessionId) return;
+
+  const startedAt = await prisma.teachingAttendee.findUnique({
+    where: { sessionId_userId: { sessionId, userId: ws.userId } },
+    select: { joinedAt: true },
+  });
+
+  await prisma.teachingAttendee
+    .updateMany({
+      where: { sessionId, userId: ws.userId, leftAt: null },
+      data: {
+        leftAt: new Date(),
+        durationMs: startedAt?.joinedAt
+          ? Date.now() - new Date(startedAt.joinedAt).getTime()
+          : null,
+      },
+    })
+    .catch(() => {});
+
+  if (ws.teachingSessionId === sessionId) ws.teachingSessionId = null;
+
+  broadcastToTeachingRoom(wss, sessionId, {
+    type: "teaching:attendee_left",
+    sessionId,
+    userId: ws.userId,
+  });
+  ws.send(JSON.stringify({ type: "teaching:left", sessionId }));
+}
+
+function handleTeachingQuestion(wss, ws, message) {
+  const sessionId = message.sessionId || ws.teachingSessionId;
+  if (!sessionId || sessionId !== ws.teachingSessionId) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: "Join the session before asking.",
+      }),
+    );
+    return;
+  }
+  const text = (message.text || "").trim();
+  if (!text) return;
+  // Q&A is in-memory in v1 (not persisted). Reload = fresh queue.
+  // Each question gets a per-message id so answers can target it.
+  const questionId = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  broadcastToTeachingRoom(wss, sessionId, {
+    type: "teaching:question",
+    sessionId,
+    questionId,
+    askerId: ws.userId,
+    text,
+    askedAt: new Date().toISOString(),
+  });
+}
+
+function handleTeachingAnswer(wss, ws, message) {
+  const sessionId = message.sessionId || ws.teachingSessionId;
+  if (!sessionId || sessionId !== ws.teachingSessionId) return;
+  const { questionId } = message;
+  const text = (message.text || "").trim();
+  if (!questionId || !text) return;
+  broadcastToTeachingRoom(wss, sessionId, {
+    type: "teaching:answer",
+    sessionId,
+    questionId,
+    answererId: ws.userId,
+    text,
+    answeredAt: new Date().toISOString(),
+  });
 }
