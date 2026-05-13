@@ -22,6 +22,7 @@ import {
   checkRateLimit,
 } from "../services/ai.service.js";
 import { success, error } from "../utils/response.js";
+import { AI_MODEL_PREMIUM, AI_MODEL_FAST } from "../config/env.js";
 
 // ── Helper: date ranges ────────────────────────────────
 function getDaysAgo(days) {
@@ -546,10 +547,7 @@ Be brutally honest. Use specific names and numbers from the data.`;
       systemPrompt,
       userPrompt,
       userId: req.user.id,
-      model:
-        process.env.OPENAI_MODEL_PREMIUM ||
-        process.env.OPENAI_MODEL ||
-        "gpt-4o-mini",
+      model: AI_MODEL_PREMIUM || AI_MODEL_FAST,
       maxTokens: 2500,
       temperature: 0.7,
     });

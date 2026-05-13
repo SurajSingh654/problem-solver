@@ -64,12 +64,25 @@ export const EMAIL_FROM = optional('EMAIL_FROM', 'ProbSolver <noreply@probsolver
 export const EMAIL_ENABLED = !!RESEND_API_KEY
 
 // ── OpenAI ───────────────────────────────────────────────────
+// Model knobs are the single source of truth. Callers should import these
+// constants instead of reading process.env directly. Three tiers:
+//   AI_MODEL_FAST    — bulk surfaces (review, generation, coaching)
+//   AI_MODEL_PRIMARY — default for any caller that doesn't pin a tier
+//   AI_MODEL_PREMIUM — high-stakes outputs (readiness verdict, admin analysis)
+// Legacy raw OPENAI_MODEL / OPENAI_MODEL_PREMIUM are accepted as fallbacks
+// for one cycle so prod env files don't have to change in lock-step.
 export const OPENAI_API_KEY = optional('OPENAI_API_KEY', '')
 export const AI_ENABLED = !!OPENAI_API_KEY
+export const AI_MODEL_FAST = optional('AI_MODEL_FAST', process.env.OPENAI_MODEL || 'gpt-4o-mini')
 export const AI_MODEL_PRIMARY = optional('AI_MODEL_PRIMARY', 'gpt-4o')
-export const AI_MODEL_FAST = optional('AI_MODEL_FAST', 'gpt-4o-mini')
+export const AI_MODEL_PREMIUM = optional('AI_MODEL_PREMIUM', process.env.OPENAI_MODEL_PREMIUM || AI_MODEL_PRIMARY)
 export const AI_EMBEDDING_MODEL = optional('AI_EMBEDDING_MODEL', 'text-embedding-3-small')
-export const AI_DAILY_LIMIT = parseInt(optional('AI_DAILY_LIMIT', '50'), 10)
+// Daily per-user AI request cap. AI_DAILY_LIMIT is the canonical name;
+// AI_RATE_LIMIT_PER_DAY is the legacy name still read for backward compat.
+export const AI_DAILY_LIMIT = parseInt(
+  optional('AI_DAILY_LIMIT', process.env.AI_RATE_LIMIT_PER_DAY || '50'),
+  10,
+)
 
 // ── Platform defaults ────────────────────────────────────────
 export const TEAM_MAX_MEMBERS_DEFAULT = parseInt(optional('TEAM_MAX_MEMBERS_DEFAULT', '20'), 10)

@@ -3,17 +3,18 @@
  * Single source of truth for all AI interactions.
  */
 import OpenAI from "openai";
+import { OPENAI_API_KEY, AI_MODEL_FAST, AI_DAILY_LIMIT } from "../config/env.js";
 
 // ── Initialize OpenAI client ───────────────────────────
 let openai = null;
 
 function getClient() {
   if (!openai) {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!OPENAI_API_KEY) {
       throw new Error("OPENAI_API_KEY is not set");
     }
     openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: OPENAI_API_KEY,
     });
   }
   return openai;
@@ -21,7 +22,7 @@ function getClient() {
 
 // ── Rate limiter (per user per day) ────────────────────
 const rateLimitMap = new Map();
-const RATE_LIMIT = parseInt(process.env.AI_RATE_LIMIT_PER_DAY || "30");
+const RATE_LIMIT = AI_DAILY_LIMIT;
 
 function getRateLimitKey(userId) {
   const today = new Date().toISOString().split("T")[0];
@@ -70,7 +71,7 @@ export async function aiComplete({
   systemPrompt,
   userPrompt,
   userId,
-  model = process.env.OPENAI_MODEL || "gpt-4o-mini",
+  model = AI_MODEL_FAST,
   temperature = 0.7,
   maxTokens = 2000,
   jsonMode = true,
@@ -159,7 +160,7 @@ export async function aiStream({
   systemPrompt,
   messages,
   userId,
-  model = process.env.OPENAI_MODEL || "gpt-4o-mini",
+  model = AI_MODEL_FAST,
   temperature = 0.7,
   maxTokens = 1500,
 }) {

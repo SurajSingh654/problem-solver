@@ -41,7 +41,9 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@vitest/ui": "^4.1.6",
     "nodemon": "^3.1.7",
-    "prisma": "^5.20.0"
+    "prisma": "^5.20.0",
+    "vitest": "^4.1.6"
   }
 }

@@ -1,0 +1,155 @@
+// ============================================================================
+// AI FALLBACKS — Deterministic safe outputs when AI fails
+// ============================================================================
+//
+// Pair each validator in ./ai.validators.js with a fallback here. The
+// fallback runs when:
+//   • The LLM call throws (network, 429, 5xx, timeout).
+//   • The LLM output fails its validator.
+//   • AI is rate-limited per-user-per-day.
+//
+// Fallbacks are the safe state — no retry, no second guess, no AI call
+// inside. They produce a working, conservative output the caller can
+// return to the user without surfacing infrastructure errors.
+//
+// Today only buildFallbackVerdict is wired into a controller. The other
+// builders are scaffolded for the upcoming phases (Phase 4 of the
+// AI Prompts Overhaul) — they currently return null so callers can do
+// `fallback ?? throw` while the migration is in flight.
+// ============================================================================
+
+// ── Pretty dimension labels (shared with verdict + future review fallback) ──
+export function prettyDimName(key) {
+  return (
+    {
+      patternRecognition: "Pattern Recognition",
+      solutionDepth: "Solution Depth",
+      communication: "Communication",
+      optimization: "Optimization",
+      pressurePerformance: "Pressure Performance",
+      retention: "Retention",
+    }[key] || key
+  );
+}
+
+// ── Readiness verdict fallback (gold-standard, in production) ───────────────
+//
+// Always returns a verdict that matches the schema and never overclaims.
+// Three branches:
+//   1. Too sparse  (active < 3 OR overall == null): generic "still building"
+//      headline + inactive dims surfaced as gaps.
+//   2. Partial cov (active >= 3, coverage < 50%): partial headline + nearest-tier
+//      hint without a tier-readiness claim.
+//   3. Data-ready  (active >= 3, overall present): top dim as strength, weakest
+//      active < 65 as gap, tier claim only when nearestTier.ready=true.
+//
+// Conservative by design — over-claiming readiness is the failure mode we
+// engineered against; under-claiming is safe.
+export function buildFallbackVerdict(evidence) {
+  const coverage = evidence.reportCoverage || { active: 0, total: 6, pct: 0 };
+  const activeCount = coverage.active ?? 0;
+  const coveragePct = coverage.pct ?? 0;
+  const overall = evidence.overall?.score ?? null;
+  const nearestTier = evidence.nearestTier;
+  const nextTier = evidence.nextTier;
+
+  if (activeCount < 3 || overall == null) {
+    const inactive = (evidence.dimensions || []).filter((d) => d.status === "inactive");
+    const gaps = inactive.slice(0, 2).map((d) => ({
+      claim: `${prettyDimName(d.key)} has no measurement yet`,
+      evidence: `n=${d.n ?? 0} so far`,
+      action: d.activationMessage || "Submit more solutions to unlock this dimension",
+    }));
+    return {
+      headline:
+        "Your readiness profile is still being built — not enough data yet to score most dimensions.",
+      strengths: [],
+      gaps,
+      readinessNote:
+        "Profile too sparse to assess tier readiness. Keep submitting solutions and requesting AI reviews — dimensions unlock as evidence accumulates.",
+      dataQualityNote: `${activeCount} of 6 dimensions currently active.`,
+    };
+  }
+
+  const activeDims = (evidence.dimensions || []).filter((d) => d.status === "active");
+  const topDim = [...activeDims].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+  const weakDim = [...activeDims]
+    .filter((d) => d.score != null && d.score < 65)
+    .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
+
+  const strengths = [];
+  if (topDim && topDim.score >= 50) {
+    strengths.push({
+      claim: `${prettyDimName(topDim.key)} is your leading dimension`,
+      evidence: `score=${topDim.score} over n=${topDim.n} data points`,
+      confidence: topDim.n >= 5 ? "high" : "tentative",
+    });
+  }
+  const gapsOut = [];
+  if (weakDim) {
+    gapsOut.push({
+      claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,
+      evidence: `score=${weakDim.score} over n=${weakDim.n} data points`,
+      action: `Focus practice sessions on ${prettyDimName(
+        weakDim.key,
+      ).toLowerCase()} over the next week`,
+    });
+  }
+
+  let headline;
+  let readinessNote;
+  if (coveragePct < 50) {
+    headline = `Partial profile — ${activeCount} of 6 dimensions measured so far. Treat these as early signals.`;
+    readinessNote = nearestTier?.name
+      ? `Current data suggests you're near the ${nearestTier.name} range, but coverage is still below 50% — not enough evidence to confirm tier readiness.`
+      : "Too few active dimensions to assess tier readiness.";
+  } else if (nearestTier?.ready) {
+    headline = `Meeting ${nearestTier.name} expectations across ${activeCount} of 6 dimensions.`;
+    readinessNote = nextTier
+      ? `Ready for ${nearestTier.name}. Next tier (${nextTier.name}) is ${nextTier.gap} overall points away.`
+      : `Meets the highest tier on record.`;
+  } else if (nextTier) {
+    headline = `${nextTier.gap} overall points from ${nextTier.name} readiness.`;
+    readinessNote = `Currently below the ${nextTier.name} threshold (${nextTier.threshold}); working on gaps would close the distance.`;
+  } else {
+    headline = `Profile under construction — keep building.`;
+    readinessNote = "Continue practicing to reach a tier threshold.";
+  }
+
+  return {
+    headline,
+    strengths,
+    gaps: gapsOut,
+    readinessNote,
+    dataQualityNote: `${activeCount} of 6 dimensions active at ${coveragePct}% coverage.`,
+  };
+}
+
+// ── Stub builders — wired in Phase 4 of the AI Prompts Overhaul ─────────────
+// These return null today. Each will be implemented when its surface migrates
+// to the validator + fallback pattern. Keeping them here as the registry so
+// future authors know where new fallbacks belong.
+
+export function buildFallbackReview(/* { submission, problem, category } */) {
+  return null;
+}
+
+export function buildFallbackFinalEval(/* { session } */) {
+  return null;
+}
+
+export function buildFallbackInterviewDebrief(/* { session } */) {
+  return null;
+}
+
+export function buildFallbackProblem(/* slot */) {
+  return null;
+}
+
+export function buildFallbackCoaching(/* { phase, content, mode } */) {
+  return null;
+}
+
+export function buildFallbackQuiz(/* { subject, count, difficulty } */) {
+  return null;
+}
