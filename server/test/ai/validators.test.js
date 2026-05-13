@@ -5,12 +5,14 @@ import { describe, it, expect } from 'vitest'
 import {
     validateVerdict,
     validateReview,
+    validateFinalEval,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
 import {
     buildFallbackVerdict,
     buildFallbackReview,
+    buildFallbackFinalEval,
     prettyDimName,
 } from '../../src/services/ai.fallbacks.js'
 
@@ -463,6 +465,197 @@ describe('buildFallbackReview', () => {
             s.explanationQuality * 0.15 +
             s.confidenceCalibration * 0.10
         expect(weighted).toBeCloseTo(5.0, 5)
+    })
+})
+
+// ── validateFinalEval ───────────────────────────────────────────────
+const VALID_SD_EVAL = {
+    dimensions: {
+        requirementsCompleteness: 7,
+        estimationSoundness: 6,
+        apiDesignQuality: 7,
+        dataModelCorrectness: 6,
+        architectureCoherence: 7,
+        deepDiveDepth: 5,
+        tradeoffAwareness: 6,
+        scenarioResilience: 7,
+        scaleReadiness: 6,
+        communicationClarity: 7,
+    },
+    overallScore: 6.5,
+    criticalGaps: ['Estimation step missing concurrent-write math'],
+    strengths: ['Clear separation between read and write paths'],
+    improvements: ['Add a Redis layer between API and DB for the 10K read/sec target'],
+    industryComparison: 'Most consumer-scale URL shorteners follow a similar Redis-fronted Postgres pattern (e.g. Bitly historical writeups).',
+    readinessVerdict: 'Would pass a Senior-level system design screen at most companies.',
+    timeAnalysis: 'Spent appropriate time on requirements; under-allocated to deep-dive.',
+    suggestedNextSteps: ['Practice deep-dive on Redis cluster failure modes'],
+}
+
+const VALID_LLD_EVAL = {
+    dimensions: {
+        requirementsCompleteness: 7,
+        entityIdentification: 8,
+        hierarchyCorrectness: 7,
+        patternApplication: 7,
+        solidCompliance: 6,
+        implementationQuality: 7,
+        extensibilityScore: 6,
+        scenarioResilience: 7,
+        edgeCaseAwareness: 6,
+        communicationClarity: 7,
+    },
+    overallScore: 6.8,
+    criticalGaps: [],
+    strengths: ['Strategy pattern applied cleanly to fee calculation'],
+    improvements: ['Add a UNIQUE constraint on custom alias as a backstop'],
+    industryComparison: 'Standard parking-lot LLD pattern, similar to InterviewBit reference implementations.',
+    readinessVerdict: 'Would pass a Senior LLD round at most companies.',
+    timeAnalysis: 'Time allocation was balanced.',
+    suggestedNextSteps: ['Practice concurrent-access edge cases'],
+}
+
+describe('validateFinalEval — happy paths', () => {
+    it('accepts a well-formed SD evaluation', () => {
+        const r = validateFinalEval(VALID_SD_EVAL, { designType: 'SYSTEM_DESIGN' })
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts a well-formed LLD evaluation', () => {
+        const r = validateFinalEval(VALID_LLD_EVAL, { designType: 'LOW_LEVEL_DESIGN' })
+        expect(r.valid).toBe(true)
+    })
+})
+
+describe('validateFinalEval — rejections', () => {
+    it('rejects unknown designType', () => {
+        const r = validateFinalEval(VALID_SD_EVAL, { designType: 'BEHAVIORAL' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('unknown-designType')
+    })
+
+    it('rejects an SD eval that uses LLD-only dim keys', () => {
+        const r = validateFinalEval(VALID_LLD_EVAL, { designType: 'SYSTEM_DESIGN' })
+        expect(r.valid).toBe(false)
+        // SD requires keys LLD doesn't have, and rejects keys SD doesn't have.
+        expect(r.violations.some(v => v.startsWith('dimensions-missing:apiDesignQuality'))).toBe(true)
+        expect(r.violations.some(v => v.startsWith('dimensions-extra:entityIdentification'))).toBe(true)
+    })
+
+    it('rejects out-of-range dimension score', () => {
+        const v = {
+            ...VALID_SD_EVAL,
+            dimensions: { ...VALID_SD_EVAL.dimensions, deepDiveDepth: 15 },
+        }
+        const r = validateFinalEval(v, { designType: 'SYSTEM_DESIGN' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('dimensions.deepDiveDepth-out-of-range')
+    })
+
+    it('rejects out-of-range overallScore', () => {
+        const r = validateFinalEval(
+            { ...VALID_SD_EVAL, overallScore: 11 },
+            { designType: 'SYSTEM_DESIGN' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('overallScore-out-of-range')
+    })
+
+    it('rejects criticalGaps cap > 5', () => {
+        const v = {
+            ...VALID_SD_EVAL,
+            criticalGaps: ['a', 'b', 'c', 'd', 'e', 'f'],
+        }
+        const r = validateFinalEval(v, { designType: 'SYSTEM_DESIGN' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('criticalGaps-cap-exceeded')
+    })
+
+    it('rejects suggestedNextSteps cap > 3', () => {
+        const v = { ...VALID_SD_EVAL, suggestedNextSteps: ['a', 'b', 'c', 'd'] }
+        const r = validateFinalEval(v, { designType: 'SYSTEM_DESIGN' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('suggestedNextSteps-cap-exceeded')
+    })
+
+    it('rejects empty industryComparison', () => {
+        const r = validateFinalEval(
+            { ...VALID_SD_EVAL, industryComparison: '' },
+            { designType: 'SYSTEM_DESIGN' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('industryComparison-empty')
+    })
+
+    it('rejects refusal-style readinessVerdict', () => {
+        const r = validateFinalEval(
+            { ...VALID_SD_EVAL, readinessVerdict: "I cannot evaluate this design." },
+            { designType: 'SYSTEM_DESIGN' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
+    })
+
+    it('rejects missing dimensions object', () => {
+        const { dimensions, ...rest } = VALID_SD_EVAL
+        const r = validateFinalEval(rest, { designType: 'SYSTEM_DESIGN' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('dimensions-shape')
+    })
+})
+
+// ── buildFallbackFinalEval ──────────────────────────────────────────
+describe('buildFallbackFinalEval', () => {
+    it('produces a valid SD fallback', () => {
+        const fallback = buildFallbackFinalEval({
+            designType: 'SYSTEM_DESIGN',
+            phases: { requirements: 'a'.repeat(60), apiDesign: 'b'.repeat(80) },
+            scenarios: [],
+        })
+        const r = validateFinalEval(fallback, { designType: 'SYSTEM_DESIGN' })
+        expect(r.valid).toBe(true)
+        expect(fallback._fallback).toBe(true)
+    })
+
+    it('produces a valid LLD fallback', () => {
+        const fallback = buildFallbackFinalEval({
+            designType: 'LOW_LEVEL_DESIGN',
+            phases: {},
+            scenarios: [],
+        })
+        const r = validateFinalEval(fallback, { designType: 'LOW_LEVEL_DESIGN' })
+        expect(r.valid).toBe(true)
+    })
+
+    it('caps fallback score at 6 even with full phase completion', () => {
+        const phases = Object.fromEntries(
+            Array.from({ length: 7 }, (_, i) => [`phase${i}`, 'x'.repeat(200)]),
+        )
+        const fallback = buildFallbackFinalEval({
+            designType: 'SYSTEM_DESIGN',
+            phases,
+            scenarios: [],
+        })
+        for (const [k, v] of Object.entries(fallback.dimensions)) {
+            if (k === 'scenarioResilience') continue
+            expect(v).toBeLessThanOrEqual(6)
+        }
+    })
+
+    it('uses scenario tally for scenarioResilience', () => {
+        const scenarios = [
+            { status: 'evaluated', aiVerdict: { verdict: 'PASS' } },
+            { status: 'evaluated', aiVerdict: { verdict: 'PASS' } },
+            { status: 'evaluated', aiVerdict: { verdict: 'PARTIAL' } },
+            { status: 'evaluated', aiVerdict: { verdict: 'FAIL' } },
+        ]
+        const fallback = buildFallbackFinalEval({
+            designType: 'SYSTEM_DESIGN',
+            phases: {},
+            scenarios,
+        })
+        // (2 + 0.5*1) / 4 * 10 = 6.25 → round 6
+        expect(fallback.dimensions.scenarioResilience).toBe(6)
     })
 })
 

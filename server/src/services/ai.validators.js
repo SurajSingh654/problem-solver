@@ -195,6 +195,117 @@ export function validateVerdict(verdict, evidence) {
   return { valid: violations.length === 0, violations };
 }
 
+// ── Design Studio final-evaluation validator ────────────────────────
+//
+// Validates designStudioFinalEvalPrompt output. The prompt declares 10
+// dimensions per designType with overlapping + designType-specific keys —
+// the validator enforces exact key membership so the model can't invent
+// new dimensions or drop one.
+//
+// SD ⨯ LLD share: requirementsCompleteness, scenarioResilience, communicationClarity.
+// SD-only:  estimationSoundness, apiDesignQuality, dataModelCorrectness,
+//           architectureCoherence, deepDiveDepth, tradeoffAwareness, scaleReadiness.
+// LLD-only: entityIdentification, hierarchyCorrectness, patternApplication,
+//           solidCompliance, implementationQuality, extensibilityScore, edgeCaseAwareness.
+const SD_DIM_KEYS = [
+  "requirementsCompleteness",
+  "estimationSoundness",
+  "apiDesignQuality",
+  "dataModelCorrectness",
+  "architectureCoherence",
+  "deepDiveDepth",
+  "tradeoffAwareness",
+  "scenarioResilience",
+  "scaleReadiness",
+  "communicationClarity",
+];
+const LLD_DIM_KEYS = [
+  "requirementsCompleteness",
+  "entityIdentification",
+  "hierarchyCorrectness",
+  "patternApplication",
+  "solidCompliance",
+  "implementationQuality",
+  "extensibilityScore",
+  "scenarioResilience",
+  "edgeCaseAwareness",
+  "communicationClarity",
+];
+
+function isFiniteScore0to10(n) {
+  return typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 10;
+}
+
+export function validateFinalEval(evalOut, { designType } = {}) {
+  const violations = [];
+  if (!evalOut || typeof evalOut !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (designType !== "SYSTEM_DESIGN" && designType !== "LOW_LEVEL_DESIGN") {
+    return { valid: false, violations: ["unknown-designType"] };
+  }
+  const expectedKeys = designType === "SYSTEM_DESIGN" ? SD_DIM_KEYS : LLD_DIM_KEYS;
+
+  // ── dimensions: object with exactly the expected keys, each 0-10 ──
+  const dims = evalOut.dimensions;
+  if (!dims || typeof dims !== "object" || Array.isArray(dims)) {
+    violations.push("dimensions-shape");
+  } else {
+    const seenKeys = new Set(Object.keys(dims));
+    for (const k of expectedKeys) {
+      if (!seenKeys.has(k)) violations.push(`dimensions-missing:${k}`);
+      else if (!isFiniteScore0to10(dims[k]))
+        violations.push(`dimensions.${k}-out-of-range`);
+    }
+    // Detect fabricated keys not in the expected set.
+    const expectedSet = new Set(expectedKeys);
+    for (const k of seenKeys) {
+      if (!expectedSet.has(k)) violations.push(`dimensions-extra:${k}`);
+    }
+  }
+
+  // ── overallScore 0-10 ──
+  if (!isFiniteScore0to10(evalOut.overallScore)) violations.push("overallScore-out-of-range");
+
+  // ── arrays of non-empty strings, max 5 each ──
+  for (const arrKey of ["criticalGaps", "strengths", "improvements"]) {
+    const arr = evalOut[arrKey];
+    if (!Array.isArray(arr)) {
+      violations.push(`${arrKey}-not-array`);
+      continue;
+    }
+    if (arr.length > 5) violations.push(`${arrKey}-cap-exceeded`);
+    if (arr.some((s) => !isNonEmptyString(s))) violations.push(`${arrKey}-empty-item`);
+  }
+
+  // ── prose fields non-empty ──
+  for (const k of ["industryComparison", "readinessVerdict", "timeAnalysis"]) {
+    if (!isNonEmptyString(evalOut[k])) violations.push(`${k}-empty`);
+  }
+
+  // ── suggestedNextSteps array of non-empty strings, max 3 ──
+  if (!Array.isArray(evalOut.suggestedNextSteps)) {
+    violations.push("suggestedNextSteps-not-array");
+  } else {
+    if (evalOut.suggestedNextSteps.length > 3)
+      violations.push("suggestedNextSteps-cap-exceeded");
+    if (evalOut.suggestedNextSteps.some((s) => !isNonEmptyString(s)))
+      violations.push("suggestedNextSteps-empty-item");
+  }
+
+  // ── refusal detection ──
+  const refusalProbe = `${evalOut.industryComparison || ""} ${evalOut.readinessVerdict || ""}`.toLowerCase();
+  if (
+    /^i (cannot|can't|am unable to)/.test(refusalProbe.trim()) ||
+    refusalProbe.includes("i cannot evaluate") ||
+    refusalProbe.includes("i'm unable to evaluate")
+  ) {
+    violations.push("refusal-detected");
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ── Solution review validator ───────────────────────────────────────
 //
 // Validates the AI output of solutionReviewPrompt against the exact schema

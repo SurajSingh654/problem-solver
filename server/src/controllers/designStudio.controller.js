@@ -32,7 +32,10 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
-import { aiComplete } from "../services/ai.service.js";
+import { aiComplete, AIError } from "../services/ai.service.js";
+import { validateFinalEval } from "../services/ai.validators.js";
+import { buildFallbackFinalEval } from "../services/ai.fallbacks.js";
+import { AI_MODEL_PRIMARY } from "../config/env.js";
 import { initialSM2State } from "../utils/sm2.js";
 import {
   designStudioCoachingPrompt,
@@ -1219,21 +1222,67 @@ export async function requestFinalEvaluation(req, res) {
       phaseTimings: session.phaseTimings || {},
     });
 
-    const aiResponse = await aiComplete({
-      systemPrompt: system,
-      userPrompt: user,
-      userId,
-      model: "gpt-4o",
-      temperature: 0.5,
-      maxTokens: 4000,
-      jsonMode: true,
-    });
+    // ── AI call → validate → fallback if needed ───────────
+    // Same grounded-AI ladder as solution review and verdict. RATE_LIMITED
+    // surfaces to the user as 429; everything else falls back so the
+    // session still gets an evaluation row written.
+    let aiResponse;
+    let usedEvalFallback = false;
+    let evalViolations = [];
+    try {
+      aiResponse = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        model: AI_MODEL_PRIMARY,
+        temperature: 0.5,
+        maxTokens: 4000,
+        jsonMode: true,
+        surface: "design-final-eval",
+      });
+      const check = validateFinalEval(aiResponse, {
+        designType: session.designType,
+      });
+      if (!check.valid) {
+        evalViolations = check.violations;
+        console.warn(
+          `[design-final-eval] validation failed for session ${sessionId}: ${evalViolations.join(", ")}`,
+        );
+        aiResponse = buildFallbackFinalEval({
+          designType: session.designType,
+          phases: session.phases || {},
+          scenarios: session.scenarios || [],
+        });
+        usedEvalFallback = true;
+      }
+    } catch (aiErr) {
+      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
+        return error(res, aiErr.message, 429, aiErr.code);
+      }
+      console.warn(
+        `[design-final-eval] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+      );
+      aiResponse = buildFallbackFinalEval({
+        designType: session.designType,
+        phases: session.phases || {},
+        scenarios: session.scenarios || [],
+      });
+      usedEvalFallback = true;
+      evalViolations = [`llm-error:${aiErr?.code || aiErr?.message || "unknown"}`];
+    }
+
+    // Tag the persisted evaluation so the UI can surface a fallback banner.
+    const persistedEvaluation = {
+      ...aiResponse,
+      usedFallback: usedEvalFallback,
+      ...(usedEvalFallback ? { fallbackReason: evalViolations } : {}),
+    };
 
     // Store evaluation and mark session complete
     await prisma.designSession.update({
       where: { id: sessionId },
       data: {
-        evaluation: aiResponse,
+        evaluation: persistedEvaluation,
         status: "COMPLETED",
         completedAt: new Date(),
       },
@@ -1243,9 +1292,12 @@ export async function requestFinalEvaluation(req, res) {
     // record so Review Queue, SM-2 spaced repetition, and team stats keep
     // working for SD/LLD practice. Non-blocking — bridge failures are
     // logged but don't affect the eval response.
-    await bridgeDesignSessionToSolution(session, aiResponse);
+    await bridgeDesignSessionToSolution(session, persistedEvaluation);
 
-    return success(res, { evaluation: aiResponse });
+    return success(res, {
+      evaluation: persistedEvaluation,
+      usedFallback: usedEvalFallback,
+    });
   } catch (err) {
     if (err.code === "RATE_LIMITED" || err.code === "OPENAI_RATE_LIMITED") {
       return error(res, err.message, 429, err.code);

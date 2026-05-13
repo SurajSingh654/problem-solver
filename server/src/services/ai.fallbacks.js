@@ -180,8 +180,104 @@ export function buildFallbackReview({ followUpQuestionIds = [] } = {}) {
   };
 }
 
-export function buildFallbackFinalEval(/* { session } */) {
-  return null;
+// Design Studio final evaluation fallback. Used when the AI call fails
+// or its output is rejected by validateFinalEval.
+//
+// The dimension key set is designType-dependent — the validator rejects
+// any key not in the expected list, so we mirror the same lists here.
+// Conservative scores (5/10) plus optional "completeness boost" derived
+// from how many phases the candidate actually filled in. The boost is
+// capped at +2 so we never claim the candidate is at Senior level on a
+// fallback path.
+const FALLBACK_SD_DIM_KEYS = [
+  "requirementsCompleteness",
+  "estimationSoundness",
+  "apiDesignQuality",
+  "dataModelCorrectness",
+  "architectureCoherence",
+  "deepDiveDepth",
+  "tradeoffAwareness",
+  "scenarioResilience",
+  "scaleReadiness",
+  "communicationClarity",
+];
+const FALLBACK_LLD_DIM_KEYS = [
+  "requirementsCompleteness",
+  "entityIdentification",
+  "hierarchyCorrectness",
+  "patternApplication",
+  "solidCompliance",
+  "implementationQuality",
+  "extensibilityScore",
+  "scenarioResilience",
+  "edgeCaseAwareness",
+  "communicationClarity",
+];
+
+export function buildFallbackFinalEval({
+  designType = "SYSTEM_DESIGN",
+  phases = {},
+  scenarios = [],
+} = {}) {
+  const keys =
+    designType === "LOW_LEVEL_DESIGN" ? FALLBACK_LLD_DIM_KEYS : FALLBACK_SD_DIM_KEYS;
+
+  // Completion ratio: how many phases have meaningful content.
+  const phaseValues = Object.values(phases || {});
+  const filled = phaseValues.filter(
+    (v) => typeof v === "string" && v.trim().length >= 50,
+  ).length;
+  const totalPhases = Math.max(phaseValues.length, 1);
+  const completion = filled / totalPhases; // 0..1
+
+  // Conservative base + small completion boost. Caps at 6/10 so a fallback
+  // can never read as Senior-level.
+  const baseScore = Math.round(4 + 2 * completion); // 4..6
+
+  // Scenario resilience computed deterministically from the scenarios
+  // tally — not delegated to the model.
+  const evaluated = (scenarios || []).filter((s) => s?.status === "evaluated");
+  const passes = evaluated.filter(
+    (s) => s?.aiVerdict?.verdict === "PASS",
+  ).length;
+  const partials = evaluated.filter(
+    (s) => s?.aiVerdict?.verdict === "PARTIAL",
+  ).length;
+  const totalScenarios = Math.max(evaluated.length, 1);
+  const scenarioScore = Math.round(
+    Math.min(10, ((passes + 0.5 * partials) / totalScenarios) * 10),
+  );
+
+  const dimensions = {};
+  for (const k of keys) {
+    dimensions[k] = k === "scenarioResilience" ? scenarioScore : baseScore;
+  }
+
+  // Weighted-style overall — but we keep it simple and conservative.
+  const dimVals = Object.values(dimensions);
+  const overallScore = Math.round(
+    dimVals.reduce((a, b) => a + b, 0) / dimVals.length,
+  );
+
+  return {
+    dimensions,
+    overallScore,
+    criticalGaps: [
+      "AI evaluation unavailable — please retry to receive a full review.",
+    ],
+    strengths: [],
+    improvements: [
+      "Re-run final evaluation when AI is back online for actionable feedback.",
+    ],
+    industryComparison:
+      "Industry comparison unavailable — fallback evaluation in use.",
+    readinessVerdict:
+      "Cannot assess readiness — AI evaluation failed. Please retry.",
+    timeAnalysis:
+      "Time analysis unavailable — fallback evaluation in use.",
+    suggestedNextSteps: ["Retry final evaluation when AI is available."],
+    _fallback: true,
+  };
 }
 
 export function buildFallbackInterviewDebrief(/* { session } */) {
