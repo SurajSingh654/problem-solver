@@ -130,8 +130,54 @@ export function buildFallbackVerdict(evidence) {
 // to the validator + fallback pattern. Keeping them here as the registry so
 // future authors know where new fallbacks belong.
 
-export function buildFallbackReview(/* { submission, problem, category } */) {
-  return null;
+// Solution review fallback. Used when the AI call throws, when the LLM
+// output fails validateReview, or when AI is rate-limited mid-review.
+//
+// Conservative by design — every dimension scores 5/10 so the weighted
+// overall lands at 5 (mid-tier). No claims, no over-promise. The
+// "AI review unavailable" prose tells the user this isn't a real review.
+//
+// followUpQuestionIds (optional): when provided, we echo each id back with
+// score=null so the controller's followUpEvaluations.map alignment doesn't
+// break and the existing UI renders cleanly.
+export function buildFallbackReview({ followUpQuestionIds = [] } = {}) {
+  return {
+    scores: {
+      codeCorrectness: 5,
+      patternAccuracy: 5,
+      understandingDepth: 5,
+      explanationQuality: 5,
+      confidenceCalibration: 5,
+    },
+    flags: {
+      languageMismatch: false,
+      detectedLanguage: null,
+      incompleteSubmission: false,
+      wrongPattern: false,
+      identifiedPattern: null,
+      correctPattern: null,
+    },
+    strengths: [],
+    gaps: ["AI review unavailable — please retry to get fresh feedback."],
+    improvement:
+      "AI review couldn't complete this time. Please re-submit for fresh feedback.",
+    interviewTip:
+      "Try again in a few minutes — the AI service had a transient issue.",
+    readinessVerdict: "Cannot assess — AI review failed.",
+    complexityCheck: {
+      timeComplexity: "",
+      spaceComplexity: "",
+      timeCorrect: false,
+      spaceCorrect: false,
+      optimizationNote: null,
+    },
+    followUpEvaluations: followUpQuestionIds.map((questionId) => ({
+      questionId,
+      score: null,
+      feedback: "Skipped — AI review failed",
+    })),
+    _fallback: true,
+  };
 }
 
 export function buildFallbackFinalEval(/* { session } */) {

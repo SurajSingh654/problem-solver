@@ -4,11 +4,13 @@
 import { describe, it, expect } from 'vitest'
 import {
     validateVerdict,
+    validateReview,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
 import {
     buildFallbackVerdict,
+    buildFallbackReview,
     prettyDimName,
 } from '../../src/services/ai.fallbacks.js'
 
@@ -280,6 +282,187 @@ describe('buildFallbackVerdict', () => {
         const v = buildFallbackVerdict(FULL_EVIDENCE)
         expect(v.headline).toMatch(/Tier 2/i)
         expect(v.readinessNote).toMatch(/FAANG|Tier 2/i)
+    })
+})
+
+// ── validateReview ──────────────────────────────────────────────────
+const VALID_REVIEW = {
+    scores: {
+        codeCorrectness: 7,
+        patternAccuracy: 8,
+        understandingDepth: 6,
+        explanationQuality: 7,
+        confidenceCalibration: 8,
+    },
+    flags: {
+        languageMismatch: false,
+        detectedLanguage: null,
+        incompleteSubmission: false,
+        wrongPattern: false,
+        identifiedPattern: 'Two Pointers',
+        correctPattern: null,
+    },
+    strengths: ['Clear two-pointer setup', 'Correct edge cases for empty input'],
+    gaps: ['Could explain time complexity more concisely'],
+    improvement: 'Tighten the Feynman explanation to 2 sentences max.',
+    interviewTip: 'State the invariant explicitly before coding.',
+    readinessVerdict: 'Ready for an early-round technical screen on this pattern.',
+    complexityCheck: {
+        timeComplexity: 'O(n)',
+        spaceComplexity: 'O(1)',
+        timeCorrect: true,
+        spaceCorrect: true,
+        optimizationNote: null,
+    },
+    followUpEvaluations: [
+        { questionId: 'fu-1', score: 7, feedback: 'Solid answer.' },
+        { questionId: 'fu-2', score: null, feedback: 'Skipped' },
+    ],
+}
+
+describe('validateReview — happy paths', () => {
+    it('accepts a well-formed review with no follow-ups', () => {
+        const r = validateReview({ ...VALID_REVIEW, followUpEvaluations: [] })
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts a review whose follow-ups echo expected questionIds', () => {
+        const r = validateReview(VALID_REVIEW, {
+            followUpQuestionIds: ['fu-1', 'fu-2'],
+        })
+        expect(r.valid).toBe(true)
+    })
+})
+
+describe('validateReview — rejections', () => {
+    it('rejects null/undefined input', () => {
+        expect(validateReview(null).valid).toBe(false)
+        expect(validateReview(undefined).valid).toBe(false)
+    })
+
+    it('rejects out-of-range dimension scores', () => {
+        const v = {
+            ...VALID_REVIEW,
+            scores: { ...VALID_REVIEW.scores, codeCorrectness: 11 },
+        }
+        const r = validateReview(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('scores.codeCorrectness-out-of-range')
+    })
+
+    it('rejects missing dimension', () => {
+        const { codeCorrectness, ...rest } = VALID_REVIEW.scores
+        const v = { ...VALID_REVIEW, scores: rest }
+        const r = validateReview(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('scores.codeCorrectness-out-of-range')
+    })
+
+    it('rejects wrongPattern=true without correctPattern', () => {
+        const v = {
+            ...VALID_REVIEW,
+            flags: { ...VALID_REVIEW.flags, wrongPattern: true, correctPattern: null },
+        }
+        const r = validateReview(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('flags.wrongPattern-without-correctPattern')
+    })
+
+    it('rejects languageMismatch=true without detectedLanguage', () => {
+        const v = {
+            ...VALID_REVIEW,
+            flags: { ...VALID_REVIEW.flags, languageMismatch: true, detectedLanguage: null },
+        }
+        const r = validateReview(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('flags.languageMismatch-without-detectedLanguage')
+    })
+
+    it('rejects empty improvement / interviewTip', () => {
+        const r = validateReview({ ...VALID_REVIEW, improvement: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('improvement-empty')
+    })
+
+    it('rejects when follow-ups omit an expected questionId', () => {
+        const v = {
+            ...VALID_REVIEW,
+            followUpEvaluations: [
+                { questionId: 'fu-1', score: 7, feedback: 'ok' },
+                // fu-2 missing
+            ],
+        }
+        const r = validateReview(v, { followUpQuestionIds: ['fu-1', 'fu-2'] })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('followUp-missing-questionId:fu-2')
+    })
+
+    it('rejects when follow-ups include an invented questionId', () => {
+        const v = {
+            ...VALID_REVIEW,
+            followUpEvaluations: [
+                { questionId: 'fu-1', score: 7, feedback: 'ok' },
+                { questionId: 'fu-INVENTED', score: 5, feedback: 'whatever' },
+            ],
+        }
+        const r = validateReview(v, { followUpQuestionIds: ['fu-1'] })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('followUp-unknown-questionId:fu-INVENTED')
+    })
+
+    it('rejects refusal-style improvement text', () => {
+        const v = {
+            ...VALID_REVIEW,
+            improvement: "I cannot review this submission as it appears incomplete.",
+        }
+        const r = validateReview(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
+    })
+
+    it('rejects malformed scores object', () => {
+        const r = validateReview({ ...VALID_REVIEW, scores: 'oops' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('scores-shape')
+    })
+})
+
+// ── buildFallbackReview ─────────────────────────────────────────────
+describe('buildFallbackReview', () => {
+    it('produces an output that satisfies its own validator', () => {
+        const fallback = buildFallbackReview()
+        const r = validateReview(fallback)
+        // The fallback's gaps[0] is a non-empty string so gaps-empty-item
+        // doesn't fire; flags are all false; scores are all 5; complexityCheck
+        // has both bools. Should pass.
+        expect(r.valid).toBe(true)
+    })
+
+    it('echoes follow-up question IDs back with score=null', () => {
+        const fallback = buildFallbackReview({ followUpQuestionIds: ['fu-1', 'fu-2'] })
+        expect(fallback.followUpEvaluations).toHaveLength(2)
+        expect(fallback.followUpEvaluations.every(e => e.score === null)).toBe(true)
+        const r = validateReview(fallback, {
+            followUpQuestionIds: ['fu-1', 'fu-2'],
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('marks itself with _fallback=true so callers can detect it', () => {
+        const fallback = buildFallbackReview()
+        expect(fallback._fallback).toBe(true)
+    })
+
+    it('weighted score lands at exactly 5.0', () => {
+        const fallback = buildFallbackReview()
+        const s = fallback.scores
+        const weighted =
+            s.codeCorrectness * 0.35 +
+            s.patternAccuracy * 0.20 +
+            s.understandingDepth * 0.20 +
+            s.explanationQuality * 0.15 +
+            s.confidenceCalibration * 0.10
+        expect(weighted).toBeCloseTo(5.0, 5)
     })
 })
 

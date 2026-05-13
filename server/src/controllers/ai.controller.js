@@ -13,6 +13,8 @@ import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
 import { aiComplete, AIError } from "../services/ai.service.js";
+import { validateReview } from "../services/ai.validators.js";
+import { buildFallbackReview } from "../services/ai.fallbacks.js";
 import {
   hasBothApproaches,
   isCodingSolution,
@@ -294,7 +296,20 @@ export async function reviewSolution(req, res) {
       categorySpecificData: solution.categorySpecificData || null, // ADD THIS
     });
 
+    // ── AI call → validate → fallback if needed ───────────
+    // The grounded-AI pattern from the readiness verdict applied here:
+    //   1. Try the LLM. Transient errors (429/5xx) already retried inside
+    //      aiComplete; only terminal failures throw.
+    //   2. If the call returns, validate against validateReview's hard
+    //      rules (score ranges, flag/explainer consistency, follow-up
+    //      questionId echo-back, refusal detection).
+    //   3. On any AI error or validation failure → buildFallbackReview.
+    //      User sees a working "review unavailable, please retry"
+    //      response instead of a 500.
+    const expectedQuestionIds = followUpAnswersForPrompt.map((q) => q.id);
     let aiResponse;
+    let usedReviewFallback = false;
+    let reviewViolations = [];
     try {
       aiResponse = await aiComplete({
         systemPrompt: system,
@@ -306,8 +321,35 @@ export async function reviewSolution(req, res) {
         jsonMode: true,
         surface: "solution-review",
       });
+      const check = validateReview(aiResponse, {
+        followUpQuestionIds: expectedQuestionIds,
+      });
+      if (!check.valid) {
+        reviewViolations = check.violations;
+        console.warn(
+          `[solution-review] validation failed for solution ${solutionId}: ${reviewViolations.join(", ")}`,
+        );
+        aiResponse = buildFallbackReview({
+          followUpQuestionIds: expectedQuestionIds,
+        });
+        usedReviewFallback = true;
+      }
     } catch (aiErr) {
-      return aiErrorResponse(res, aiErr, "Failed to generate AI feedback.");
+      // Hard AI failure (429, 5xx exhaustion, parse error, rate limit).
+      // Map RATE_LIMITED to a user-visible 429 — they explicitly hit the
+      // per-day cap and should know. Everything else falls back to a safe
+      // review so the user isn't blocked on transient infra problems.
+      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
+        return aiErrorResponse(res, aiErr, "Failed to generate AI feedback.");
+      }
+      console.warn(
+        `[solution-review] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+      );
+      aiResponse = buildFallbackReview({
+        followUpQuestionIds: expectedQuestionIds,
+      });
+      usedReviewFallback = true;
+      reviewViolations = [`llm-error:${aiErr?.code || aiErr?.message || "unknown"}`];
     }
 
     // ── Compute weighted score ─────────────────────────
@@ -399,6 +441,11 @@ export async function reviewSolution(req, res) {
         hasAdminNotes: !!solution.problem.adminNotes,
       },
       patternBaseline, // ← stored — AIReviewCard can display baseline context
+      // Set when the AI failed or returned an output that didn't pass
+      // validateReview. UI can render a "review unavailable, retry"
+      // banner instead of misrepresenting the placeholder as real feedback.
+      usedFallback: usedReviewFallback,
+      fallbackReason: usedReviewFallback ? reviewViolations : undefined,
     };
 
     const existingFeedback = Array.isArray(solution.aiFeedback)
@@ -450,6 +497,7 @@ export async function reviewSolution(req, res) {
           ? existingFeedback[existingFeedback.length - 1].overallScore
           : null,
       totalReviews: updatedFeedback.length,
+      usedFallback: usedReviewFallback,
     });
   } catch (err) {
     console.error("AI review error:", err);

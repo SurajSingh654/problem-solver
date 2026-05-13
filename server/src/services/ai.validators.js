@@ -194,3 +194,112 @@ export function validateVerdict(verdict, evidence) {
 
   return { valid: violations.length === 0, violations };
 }
+
+// ── Solution review validator ───────────────────────────────────────
+//
+// Validates the AI output of solutionReviewPrompt against the exact schema
+// the prompt declares (system message, "RESPOND WITH EXACT JSON" block).
+// Caller passes the expected followUpQuestionIds so we can enforce the
+// echo-back rule (model must use the questionId from the input verbatim).
+//
+// On any violation the caller MUST discard the LLM output and use
+// buildFallbackReview from ./ai.fallbacks.js — same pattern as verdict.
+const REVIEW_DIMENSION_KEYS = [
+  "codeCorrectness",
+  "patternAccuracy",
+  "understandingDepth",
+  "explanationQuality",
+  "confidenceCalibration",
+];
+
+function isFiniteScore(n) {
+  return typeof n === "number" && Number.isFinite(n) && n >= 1 && n <= 10;
+}
+
+function isNonEmptyString(s) {
+  return typeof s === "string" && s.trim().length > 0;
+}
+
+export function validateReview(review, { followUpQuestionIds = [] } = {}) {
+  const violations = [];
+  if (!review || typeof review !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  // ── scores: 5 numeric dimensions, each 1-10 ──
+  const scores = review.scores;
+  if (!scores || typeof scores !== "object") {
+    violations.push("scores-shape");
+  } else {
+    for (const key of REVIEW_DIMENSION_KEYS) {
+      if (!isFiniteScore(scores[key])) violations.push(`scores.${key}-out-of-range`);
+    }
+  }
+
+  // ── flags: shape + cross-field consistency ──
+  const flags = review.flags;
+  if (!flags || typeof flags !== "object") {
+    violations.push("flags-shape");
+  } else {
+    if (typeof flags.languageMismatch !== "boolean") violations.push("flags.languageMismatch-not-bool");
+    if (typeof flags.incompleteSubmission !== "boolean") violations.push("flags.incompleteSubmission-not-bool");
+    if (typeof flags.wrongPattern !== "boolean") violations.push("flags.wrongPattern-not-bool");
+    // Cross-field: when flagging, the explainer field must be set.
+    if (flags.languageMismatch === true && !isNonEmptyString(flags.detectedLanguage)) {
+      violations.push("flags.languageMismatch-without-detectedLanguage");
+    }
+    if (flags.wrongPattern === true && !isNonEmptyString(flags.correctPattern)) {
+      violations.push("flags.wrongPattern-without-correctPattern");
+    }
+  }
+
+  // ── strengths / gaps: arrays of non-empty strings ──
+  if (!Array.isArray(review.strengths)) violations.push("strengths-not-array");
+  else if (review.strengths.some((s) => !isNonEmptyString(s))) violations.push("strengths-empty-item");
+  if (!Array.isArray(review.gaps)) violations.push("gaps-not-array");
+  else if (review.gaps.some((g) => !isNonEmptyString(g))) violations.push("gaps-empty-item");
+
+  // ── prose fields ──
+  if (!isNonEmptyString(review.improvement)) violations.push("improvement-empty");
+  if (!isNonEmptyString(review.interviewTip)) violations.push("interviewTip-empty");
+
+  // ── complexityCheck shape ──
+  const cc = review.complexityCheck;
+  if (!cc || typeof cc !== "object") {
+    violations.push("complexityCheck-shape");
+  } else {
+    if (typeof cc.timeCorrect !== "boolean") violations.push("complexityCheck.timeCorrect-not-bool");
+    if (typeof cc.spaceCorrect !== "boolean") violations.push("complexityCheck.spaceCorrect-not-bool");
+  }
+
+  // ── followUpEvaluations: every input questionId must be echoed once ──
+  if (!Array.isArray(review.followUpEvaluations)) {
+    violations.push("followUpEvaluations-not-array");
+  } else if (followUpQuestionIds.length > 0) {
+    const echoed = new Set(
+      review.followUpEvaluations
+        .map((e) => (e && typeof e.questionId === "string" ? e.questionId : null))
+        .filter(Boolean),
+    );
+    for (const qid of followUpQuestionIds) {
+      if (!echoed.has(qid)) violations.push(`followUp-missing-questionId:${qid}`);
+    }
+    // Forbid IDs the model invented — prevents silent mismatched scoring.
+    const expected = new Set(followUpQuestionIds);
+    for (const qid of echoed) {
+      if (!expected.has(qid)) violations.push(`followUp-unknown-questionId:${qid}`);
+    }
+  }
+
+  // ── refusal-detection: AI shouldn't flat-out refuse to review ──
+  // Catches cases where the model returns a nominally-valid JSON shape but the
+  // prose is "I cannot help with this request" — would otherwise pass schema.
+  const refusalProbe = `${review.improvement || ""} ${review.interviewTip || ""}`.toLowerCase();
+  if (/^i (cannot|can't|am unable to)/.test(refusalProbe.trim()) ||
+      refusalProbe.includes("i cannot review") ||
+      refusalProbe.includes("i'm unable to review")) {
+    violations.push("refusal-detected");
+  }
+
+  return { valid: violations.length === 0, violations };
+}
