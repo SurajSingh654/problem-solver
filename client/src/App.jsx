@@ -23,6 +23,8 @@
 // ============================================================================
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { MotionConfig } from 'framer-motion'
+import { ErrorBoundary } from '@components/ui/ErrorBoundary'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // ── Layout ───────────────────────────────────────────────────
 import { AppShell } from '@components/layout/AppShell'
@@ -107,9 +109,15 @@ function PageLoader() {
     </div>
   )
 }
-// Wraps lazy-loaded routes in Suspense
+// Wraps lazy-loaded routes in Suspense + ErrorBoundary so a crash on
+// any one page renders a recoverable fallback INSIDE the AppShell
+// layout (sidebar / topbar stay), instead of taking down the whole app.
 function Lazy({ children }) {
-  return <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    </ErrorBoundary>
+  )
 }
 // ── Catch-all: redirect based on role ────────────────────────
 function CatchAllRedirect() {
@@ -124,6 +132,13 @@ function CatchAllRedirect() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      {/* Honor the user's `prefers-reduced-motion: reduce` setting across
+          every framer-motion animation in the app — entrance fades,
+          stagger, drawers, etc. The `"user"` setting reads the OS-level
+          preference; users with motion sensitivity get instant
+          transitions instead of animated ones. Pairs with Tailwind's
+          `motion-safe:` / `motion-reduce:` variants used in Skeleton. */}
+      <MotionConfig reducedMotion="user">
       <BrowserRouter>
         <Routes>
           {/* ============================================================ */}
@@ -287,6 +302,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       <ToastContainer />
+      </MotionConfig>
     </QueryClientProvider>
   )
 }
