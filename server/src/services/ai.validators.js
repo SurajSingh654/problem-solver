@@ -306,6 +306,88 @@ export function validateFinalEval(evalOut, { designType } = {}) {
   return { valid: violations.length === 0, violations };
 }
 
+// ── Mock Interview debrief validator ────────────────────────────────
+//
+// Validates generateDebrief output. The prompt declares a category-specific
+// scores object (CODING / SD / LLD / BEHAVIORAL / HR / etc.) so we don't
+// pin exact score keys — only that `scores` exists with at least one
+// numeric value. The verdict-anchor rule is the load-bearing one: the
+// model is told "MUST equal preComputedVerdict, ±1 step max"; we enforce
+// that here so a hallucinated jump (NO_HIRE → STRONG_HIRE) gets caught.
+const VERDICT_TIERS = ["NO_HIRE", "LEAN_NO_HIRE", "LEAN_HIRE", "HIRE", "STRONG_HIRE"];
+
+export function validateInterviewDebrief(debrief, { preComputedVerdict } = {}) {
+  const violations = [];
+  if (!debrief || typeof debrief !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  // ── verdict in enum ──
+  const tierIdx = VERDICT_TIERS.indexOf(debrief.verdict);
+  if (tierIdx < 0) violations.push("verdict-unknown-tier");
+
+  // ── verdict within 1 step of preComputedVerdict (anchor rule) ──
+  if (preComputedVerdict !== undefined) {
+    const preIdx = VERDICT_TIERS.indexOf(preComputedVerdict);
+    if (preIdx >= 0 && tierIdx >= 0 && Math.abs(tierIdx - preIdx) > 1) {
+      violations.push(
+        `verdict-too-far-from-precomputed:${preComputedVerdict}->${debrief.verdict}`,
+      );
+    }
+  }
+
+  // ── overallScore 1-10 ──
+  if (!isFiniteScore(debrief.overallScore)) violations.push("overallScore-out-of-range");
+
+  // ── scores object ──
+  const scores = debrief.scores;
+  if (!scores || typeof scores !== "object" || Array.isArray(scores)) {
+    violations.push("scores-shape");
+  } else {
+    const numericValues = Object.values(scores).filter((v) =>
+      typeof v === "number" && Number.isFinite(v),
+    );
+    if (numericValues.length === 0) violations.push("scores-no-numeric-values");
+    // Each numeric value should be in a sensible 1-10 range (some rubric
+    // fields are 1-4 but those still fall within 1-10).
+    for (const [k, v] of Object.entries(scores)) {
+      if (typeof v === "number" && Number.isFinite(v) && (v < 1 || v > 10)) {
+        violations.push(`scores.${k}-out-of-range`);
+      }
+    }
+  }
+
+  // ── behavioralSignals shape (best-effort) ──
+  if (!debrief.behavioralSignals || typeof debrief.behavioralSignals !== "object") {
+    violations.push("behavioralSignals-shape");
+  }
+
+  // ── arrays of non-empty strings ──
+  for (const arrKey of ["strengths", "improvements", "keyMoments"]) {
+    const arr = debrief[arrKey];
+    if (!Array.isArray(arr)) {
+      violations.push(`${arrKey}-not-array`);
+      continue;
+    }
+    if (arr.some((s) => !isNonEmptyString(s))) violations.push(`${arrKey}-empty-item`);
+  }
+
+  // ── summary ──
+  if (!isNonEmptyString(debrief.summary)) violations.push("summary-empty");
+
+  // ── refusal detection ──
+  const refusalProbe = `${debrief.summary || ""}`.toLowerCase().trim();
+  if (
+    /^i (cannot|can't|am unable to)/.test(refusalProbe) ||
+    refusalProbe.includes("i cannot evaluate this interview") ||
+    refusalProbe.includes("i'm unable to evaluate")
+  ) {
+    violations.push("refusal-detected");
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ── Solution review validator ───────────────────────────────────────
 //
 // Validates the AI output of solutionReviewPrompt against the exact schema

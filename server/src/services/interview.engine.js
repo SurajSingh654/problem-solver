@@ -17,7 +17,9 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { AI_MODEL_PRIMARY } from "../config/env.js";
-import { aiStream, aiComplete } from "./ai.service.js";
+import { aiStream, aiComplete, AIError } from "./ai.service.js";
+import { validateInterviewDebrief } from "./ai.validators.js";
+import { buildFallbackInterviewDebrief } from "./ai.fallbacks.js";
 
 // Phase 1 fix: import persona system that was previously dead code
 import { INTERVIEW_STYLES, getCompanyPersona } from "./interview.phases.js";
@@ -1295,16 +1297,71 @@ Return JSON:
   "summary": "<2-3 sentences referencing specific things they said or did — honest assessment>"
 }`;
 
-    const debrief = await aiComplete({
-      systemPrompt: debriefSystem,
-      userPrompt: `Interview transcript:\n${transcript}\n\nInterviewer observations:\n${interviewerNotes || "None recorded"}`,
-      userId: toolContext.userId,
-      model: AI_MODEL_PRIMARY,
-      temperature: 0.6, // lower temp for more consistent evaluation
-      maxTokens: 2500,
-      jsonMode: true,
-      surface: "interview-debrief",
-    });
+    // ── AI call → validate → fallback if needed ───────────
+    // The verdict-anchor rule (verdict must be within 1 step of
+    // preComputedVerdict) is enforced by validateInterviewDebrief —
+    // a hallucinated jump (e.g. NO_HIRE → STRONG_HIRE) gets rejected
+    // and the user receives the deterministic fallback verdict instead.
+    let debrief;
+    let usedDebriefFallback = false;
+    let debriefViolations = [];
+    const fallbackContext = {
+      preComputedVerdict,
+      hintsGiven,
+      clarifyingQuestionCount,
+      thoughtOutLoud,
+      identifiedComplexityIndependently,
+      foundEdgeCasesIndependently,
+    };
+    try {
+      debrief = await aiComplete({
+        systemPrompt: debriefSystem,
+        userPrompt: `Interview transcript:\n${transcript}\n\nInterviewer observations:\n${interviewerNotes || "None recorded"}`,
+        userId: toolContext.userId,
+        model: AI_MODEL_PRIMARY,
+        temperature: 0.6, // lower temp for more consistent evaluation
+        maxTokens: 2500,
+        jsonMode: true,
+        surface: "interview-debrief",
+      });
+      const check = validateInterviewDebrief(debrief, { preComputedVerdict });
+      if (!check.valid) {
+        debriefViolations = check.violations;
+        console.warn(
+          `[interview-debrief] validation failed for session ${toolContext.sessionId}: ${debriefViolations.join(", ")}`,
+        );
+        debrief = buildFallbackInterviewDebrief(fallbackContext);
+        usedDebriefFallback = true;
+      }
+    } catch (aiErr) {
+      // RATE_LIMITED still propagates as an error so the WS layer
+      // surfaces it; everything else falls back so the session still
+      // completes with a deterministic debrief grounded in real signals.
+      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
+        console.error("Debrief rate-limited:", aiErr.message);
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            error: aiErr.message,
+            code: aiErr.code,
+          }),
+        );
+        return;
+      }
+      console.warn(
+        `[interview-debrief] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+      );
+      debrief = buildFallbackInterviewDebrief(fallbackContext);
+      usedDebriefFallback = true;
+      debriefViolations = [`llm-error:${aiErr?.code || aiErr?.message || "unknown"}`];
+    }
+
+    // Tag the persisted debrief so the UI can surface a fallback banner.
+    const persistedDebrief = {
+      ...debrief,
+      usedFallback: usedDebriefFallback,
+      ...(usedDebriefFallback ? { fallbackReason: debriefViolations } : {}),
+    };
 
     // ── Store debrief ────────────────────────────────────
     await prisma.interviewSession.update({
@@ -1312,12 +1369,12 @@ Return JSON:
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
-        debrief,
-        scores: debrief.scores,
+        debrief: persistedDebrief,
+        scores: persistedDebrief.scores,
       },
     });
 
-    ws.send(JSON.stringify({ type: "interview:debrief", debrief }));
+    ws.send(JSON.stringify({ type: "interview:debrief", debrief: persistedDebrief }));
   } catch (err) {
     console.error("Debrief generation error:", err);
     ws.send(

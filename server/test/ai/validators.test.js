@@ -6,6 +6,7 @@ import {
     validateVerdict,
     validateReview,
     validateFinalEval,
+    validateInterviewDebrief,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
@@ -13,6 +14,7 @@ import {
     buildFallbackVerdict,
     buildFallbackReview,
     buildFallbackFinalEval,
+    buildFallbackInterviewDebrief,
     prettyDimName,
 } from '../../src/services/ai.fallbacks.js'
 
@@ -656,6 +658,195 @@ describe('buildFallbackFinalEval', () => {
         })
         // (2 + 0.5*1) / 4 * 10 = 6.25 → round 6
         expect(fallback.dimensions.scenarioResilience).toBe(6)
+    })
+})
+
+// ── validateInterviewDebrief ────────────────────────────────────────
+const VALID_DEBRIEF = {
+    verdict: 'LEAN_HIRE',
+    overallScore: 6,
+    scores: {
+        clarifyingQuestions: 3,
+        problemDecomposition: 7,
+        codeCorrectness: 6,
+        communicationWhileCoding: 7,
+    },
+    behavioralSignals: {
+        clarifyingQuestions: 'asked some independently',
+        hintsRequired: '1 hint',
+        thoughtOutLoud: true,
+        identifiedComplexityIndependently: true,
+        foundEdgeCasesIndependently: false,
+    },
+    strengths: [
+        'Asked clarifying questions about input constraints before coding',
+        'Stated O(n log n) target complexity at minute 8',
+    ],
+    improvements: [
+        'Did not test the empty-array edge case until prompted at minute 22',
+    ],
+    keyMoments: [
+        'Pivoted from O(n^2) brute force to O(n log n) sorted approach after hint',
+    ],
+    summary: 'Solid mid-tier signal. Clarifying-question instincts are good; edge-case discipline needs work.',
+}
+
+describe('validateInterviewDebrief — happy paths', () => {
+    it('accepts a well-formed debrief', () => {
+        const r = validateInterviewDebrief(VALID_DEBRIEF, {
+            preComputedVerdict: 'LEAN_HIRE',
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts debrief 1 step away from preComputedVerdict', () => {
+        const r = validateInterviewDebrief(
+            { ...VALID_DEBRIEF, verdict: 'HIRE' },
+            { preComputedVerdict: 'LEAN_HIRE' },
+        )
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts debrief without preComputedVerdict context', () => {
+        const r = validateInterviewDebrief(VALID_DEBRIEF)
+        expect(r.valid).toBe(true)
+    })
+})
+
+describe('validateInterviewDebrief — rejections', () => {
+    it('rejects unknown verdict tier', () => {
+        const r = validateInterviewDebrief(
+            { ...VALID_DEBRIEF, verdict: 'MAYBE_HIRE' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('verdict-unknown-tier')
+    })
+
+    it('rejects verdict more than 1 step from preComputed', () => {
+        const r = validateInterviewDebrief(
+            { ...VALID_DEBRIEF, verdict: 'STRONG_HIRE' },
+            { preComputedVerdict: 'NO_HIRE' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations.some(v => v.startsWith('verdict-too-far-from-precomputed'))).toBe(true)
+    })
+
+    it('rejects out-of-range overallScore', () => {
+        const r = validateInterviewDebrief(
+            { ...VALID_DEBRIEF, overallScore: 11 },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('overallScore-out-of-range')
+    })
+
+    it('rejects scores object without numeric values', () => {
+        const r = validateInterviewDebrief(
+            { ...VALID_DEBRIEF, scores: { foo: 'bar' } },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('scores-no-numeric-values')
+    })
+
+    it('rejects out-of-range score in scores object', () => {
+        const r = validateInterviewDebrief(
+            { ...VALID_DEBRIEF, scores: { ...VALID_DEBRIEF.scores, codeCorrectness: 15 } },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('scores.codeCorrectness-out-of-range')
+    })
+
+    it('rejects empty summary', () => {
+        const r = validateInterviewDebrief({ ...VALID_DEBRIEF, summary: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('summary-empty')
+    })
+
+    it('rejects refusal-style summary', () => {
+        const r = validateInterviewDebrief({
+            ...VALID_DEBRIEF,
+            summary: "I cannot evaluate this interview as no real questions were asked.",
+        })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
+    })
+
+    it('rejects missing behavioralSignals', () => {
+        const { behavioralSignals, ...rest } = VALID_DEBRIEF
+        const r = validateInterviewDebrief(rest)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('behavioralSignals-shape')
+    })
+
+    it('rejects empty-string strength bullet', () => {
+        const r = validateInterviewDebrief(
+            { ...VALID_DEBRIEF, strengths: ['valid', ''] },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths-empty-item')
+    })
+})
+
+// ── buildFallbackInterviewDebrief ───────────────────────────────────
+describe('buildFallbackInterviewDebrief', () => {
+    it('uses preComputedVerdict directly', () => {
+        const fb = buildFallbackInterviewDebrief({
+            preComputedVerdict: 'NO_HIRE',
+            hintsGiven: 5,
+            clarifyingQuestionCount: 0,
+        })
+        expect(fb.verdict).toBe('NO_HIRE')
+        expect(fb.overallScore).toBe(2)
+    })
+
+    it('produces a valid output that satisfies its own validator', () => {
+        const fb = buildFallbackInterviewDebrief({
+            preComputedVerdict: 'LEAN_HIRE',
+            hintsGiven: 1,
+            clarifyingQuestionCount: 2,
+            thoughtOutLoud: true,
+            identifiedComplexityIndependently: true,
+        })
+        const r = validateInterviewDebrief(fb, { preComputedVerdict: 'LEAN_HIRE' })
+        expect(r.valid).toBe(true)
+    })
+
+    it('falls back to LEAN_NO_HIRE when preComputedVerdict missing', () => {
+        const fb = buildFallbackInterviewDebrief()
+        expect(fb.verdict).toBe('LEAN_NO_HIRE')
+    })
+
+    it('builds deterministic improvement bullets from bad signals', () => {
+        const fb = buildFallbackInterviewDebrief({
+            preComputedVerdict: 'NO_HIRE',
+            hintsGiven: 5,
+            clarifyingQuestionCount: 0,
+            thoughtOutLoud: false,
+            identifiedComplexityIndependently: false,
+            foundEdgeCasesIndependently: false,
+        })
+        expect(fb.improvements.some(s => s.includes('clarifying'))).toBe(true)
+        expect(fb.improvements.some(s => s.includes('hint'))).toBe(true)
+        expect(fb.improvements.some(s => s.toLowerCase().includes('complexity'))).toBe(true)
+    })
+
+    it('echoes provided behavioralSignals back unchanged', () => {
+        const computed = {
+            clarifyingQuestions: 'asked 3 questions',
+            hintsRequired: '0 hints',
+            thoughtOutLoud: true,
+            identifiedComplexityIndependently: true,
+            foundEdgeCasesIndependently: true,
+        }
+        const fb = buildFallbackInterviewDebrief({
+            preComputedVerdict: 'HIRE',
+            behavioralSignals: computed,
+        })
+        expect(fb.behavioralSignals).toMatchObject(computed)
+    })
+
+    it('marks itself with _fallback=true', () => {
+        const fb = buildFallbackInterviewDebrief()
+        expect(fb._fallback).toBe(true)
     })
 })
 

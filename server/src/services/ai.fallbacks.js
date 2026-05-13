@@ -280,8 +280,124 @@ export function buildFallbackFinalEval({
   };
 }
 
-export function buildFallbackInterviewDebrief(/* { session } */) {
-  return null;
+// Mock interview debrief fallback. Used when the AI call fails or the
+// output is rejected by validateInterviewDebrief.
+//
+// The deterministic verdict (preComputedVerdict) is computed from
+// behavioral signals upstream — we use it directly here. overallScore is
+// derived from the verdict tier so the two stay consistent. behavioralSignals
+// echo back the actual computed values so the user still sees real data
+// (unlike the AI's prose, which is replaced).
+const VERDICT_TO_SCORE = {
+  NO_HIRE: 2,
+  LEAN_NO_HIRE: 4,
+  LEAN_HIRE: 6,
+  HIRE: 7,
+  STRONG_HIRE: 9,
+};
+
+export function buildFallbackInterviewDebrief({
+  preComputedVerdict = "LEAN_NO_HIRE",
+  behavioralSignals = {},
+  hintsGiven = 0,
+  clarifyingQuestionCount = 0,
+  thoughtOutLoud = false,
+  identifiedComplexityIndependently = false,
+  foundEdgeCasesIndependently = false,
+} = {}) {
+  const verdict = VERDICT_TO_SCORE[preComputedVerdict]
+    ? preComputedVerdict
+    : "LEAN_NO_HIRE";
+  const overallScore = VERDICT_TO_SCORE[verdict];
+
+  // Echo signals — the controller computed these deterministically before
+  // calling AI; we surface them unchanged so the UI's "behavioral signals"
+  // panel still shows real data even on fallback.
+  const finalBehavioralSignals = {
+    clarifyingQuestions: behavioralSignals.clarifyingQuestions
+      ?? `${clarifyingQuestionCount} question${clarifyingQuestionCount !== 1 ? "s" : ""} asked`,
+    hintsRequired: behavioralSignals.hintsRequired
+      ?? `${hintsGiven} hint${hintsGiven !== 1 ? "s" : ""}`,
+    thoughtOutLoud:
+      typeof behavioralSignals.thoughtOutLoud === "boolean"
+        ? behavioralSignals.thoughtOutLoud
+        : thoughtOutLoud,
+    identifiedComplexityIndependently:
+      typeof behavioralSignals.identifiedComplexityIndependently === "boolean"
+        ? behavioralSignals.identifiedComplexityIndependently
+        : identifiedComplexityIndependently,
+    foundEdgeCasesIndependently:
+      typeof behavioralSignals.foundEdgeCasesIndependently === "boolean"
+        ? behavioralSignals.foundEdgeCasesIndependently
+        : foundEdgeCasesIndependently,
+  };
+
+  // Build deterministic strength/improvement bullets from the signals.
+  const strengths = [];
+  if (clarifyingQuestionCount >= 2) {
+    strengths.push(
+      `Asked ${clarifyingQuestionCount} clarifying questions before jumping in`,
+    );
+  }
+  if (identifiedComplexityIndependently) {
+    strengths.push("Identified time/space complexity without prompting");
+  }
+  if (foundEdgeCasesIndependently) {
+    strengths.push("Surfaced edge cases independently");
+  }
+  if (thoughtOutLoud) {
+    strengths.push("Thought out loud throughout the interview");
+  }
+  if (strengths.length === 0) {
+    strengths.push("Completed the interview session");
+  }
+
+  const improvements = [];
+  if (clarifyingQuestionCount === 0) {
+    improvements.push(
+      "Open with clarifying questions — confirm constraints, scale, edge cases before coding",
+    );
+  }
+  if (hintsGiven >= 3) {
+    improvements.push(
+      `Reduce hint reliance — ${hintsGiven} hints were needed; aim for ≤ 1 in real interviews`,
+    );
+  }
+  if (!identifiedComplexityIndependently) {
+    improvements.push(
+      "State time and space complexity proactively, not only when asked",
+    );
+  }
+  if (!foundEdgeCasesIndependently) {
+    improvements.push(
+      "Walk through edge cases (empty, boundary, large) before declaring done",
+    );
+  }
+  if (improvements.length === 0) {
+    improvements.push(
+      "Continue practicing this interview type to consolidate the skills demonstrated",
+    );
+  }
+
+  return {
+    verdict,
+    overallScore,
+    scores: {
+      // Single placeholder — the rubric varies per category and the AI
+      // would normally fill these. Keeping it generic + non-empty so
+      // the validator's "scores-no-numeric-values" rule passes.
+      overall: overallScore,
+    },
+    behavioralSignals: finalBehavioralSignals,
+    strengths,
+    improvements,
+    keyMoments: [
+      "AI debrief unavailable for this session — review the transcript directly for specific moments",
+    ],
+    summary:
+      "AI debrief couldn't complete this time. Behavioral signals above are computed deterministically from the transcript and remain accurate. Re-run the debrief to get the AI's narrative analysis.",
+    _fallback: true,
+  };
 }
 
 export function buildFallbackProblem(/* slot */) {
