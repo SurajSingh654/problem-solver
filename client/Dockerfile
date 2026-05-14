@@ -4,9 +4,11 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 
-# Accept build arg and set as env var for Vite
+# Accept build args and set as env vars for Vite
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_FEATURE_TEACHING_SESSIONS
+ENV VITE_FEATURE_TEACHING_SESSIONS=$VITE_FEATURE_TEACHING_SESSIONS
 
 RUN npm run build
 
