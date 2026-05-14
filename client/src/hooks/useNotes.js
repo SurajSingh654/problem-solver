@@ -120,6 +120,30 @@ export function useLinkSearch(type, q) {
     });
 }
 
+export function useGenerateNoteSummary() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) =>
+            notesApi.generateSummary(id).then((r) => r.data.data),
+        onSuccess: (_data, id) => {
+            qc.invalidateQueries({ queryKey: ["notes", "item", id] });
+            toast.success("Summary generated.");
+        },
+        onError: (err) => toast.error(pickError(err, "Failed to generate summary.")),
+    });
+}
+
+export function useSuggestNoteTags() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => notesApi.suggestTags(id).then((r) => r.data.data),
+        onSuccess: (_data, id) => {
+            qc.invalidateQueries({ queryKey: ["notes", "item", id] });
+        },
+        onError: (err) => toast.error(pickError(err, "Failed to suggest tags.")),
+    });
+}
+
 export function useTogglePinNote() {
     const qc = useQueryClient();
     return useMutation({

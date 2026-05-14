@@ -1105,3 +1105,128 @@ export function validateReview(review, { followUpQuestionIds = [] } = {}) {
 
   return { valid: violations.length === 0, violations };
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// NOTES — validators (P4)
+// ════════════════════════════════════════════════════════════════════════════
+
+const NOTE_TAG_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+
+export function validateNoteSummary(out, { hasContent = true } = {}) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  if (!isNonEmptyString(out.tldr)) violations.push("tldr-empty");
+  else if (out.tldr.length > 280) violations.push("tldr-too-long");
+
+  if (!Array.isArray(out.keyTakeaways)) {
+    violations.push("keyTakeaways-not-array");
+  } else {
+    if (out.keyTakeaways.length < 3 || out.keyTakeaways.length > 5) {
+      violations.push(`keyTakeaways-count:got=${out.keyTakeaways.length}`);
+    }
+    out.keyTakeaways.forEach((b, i) => {
+      if (!isNonEmptyString(b)) violations.push(`keyTakeaways[${i}]-empty`);
+      else if (b.length > 240) violations.push(`keyTakeaways[${i}]-too-long`);
+    });
+  }
+
+  if (!Array.isArray(out.openQuestions)) {
+    violations.push("openQuestions-not-array");
+  } else {
+    if (out.openQuestions.length > 3) violations.push("openQuestions-cap-exceeded");
+    out.openQuestions.forEach((q, i) => {
+      if (!isNonEmptyString(q)) violations.push(`openQuestions[${i}]-empty`);
+    });
+  }
+
+  if (!isNonEmptyString(out.suggestedReviewFocus)) {
+    violations.push("suggestedReviewFocus-empty");
+  } else if (out.suggestedReviewFocus.length > 200) {
+    violations.push("suggestedReviewFocus-too-long");
+  }
+
+  // Sanity: don\047t accept "the note is empty" claims when content is non-empty
+  if (hasContent) {
+    const probe = `${out.tldr || ""} ${(out.keyTakeaways || []).join(" ")}`.toLowerCase();
+    if (
+      probe.includes("note is empty") ||
+      probe.includes("no content provided") ||
+      probe.includes("notes are empty")
+    ) {
+      violations.push("emptiness-claim-when-content-present");
+    }
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
+export function validateNoteAutoTag(out, { existingTags = [] } = {}) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!Array.isArray(out.tags)) {
+    return { valid: false, violations: ["tags-not-array"] };
+  }
+  if (out.tags.length < 3 || out.tags.length > 7) {
+    violations.push(`tags-count:got=${out.tags.length}`);
+  }
+  const existing = new Set((existingTags || []).map((t) => String(t).toLowerCase()));
+  const seen = new Set();
+  out.tags.forEach((t, i) => {
+    if (typeof t !== "string") {
+      violations.push(`tags[${i}]-not-string`);
+      return;
+    }
+    if (t.length < 2 || t.length > 30) violations.push(`tags[${i}]-len`);
+    if (!NOTE_TAG_REGEX.test(t)) violations.push(`tags[${i}]-not-kebab`);
+    if (seen.has(t)) violations.push(`tags[${i}]-duplicate`);
+    seen.add(t);
+    if (existing.has(t.toLowerCase())) violations.push(`tags[${i}]-collides-existing`);
+  });
+  return { valid: violations.length === 0, violations };
+}
+
+export function validateNoteRelated(out, { candidateNoteIds = [], candidateProblemIds = [] } = {}) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  const noteIds = new Set(candidateNoteIds);
+  const problemIds = new Set(candidateProblemIds);
+
+  function checkSection(arr, key, idSet) {
+    if (!Array.isArray(arr)) {
+      violations.push(`${key}-not-array`);
+      return;
+    }
+    if (arr.length > 5) violations.push(`${key}-cap-exceeded`);
+    const seen = new Set();
+    arr.forEach((item, i) => {
+      if (!item || typeof item !== "object") {
+        violations.push(`${key}[${i}]-not-object`);
+        return;
+      }
+      if (typeof item.id !== "string" || !item.id) {
+        violations.push(`${key}[${i}].id-empty`);
+      } else if (!idSet.has(item.id)) {
+        violations.push(`${key}[${i}].id-not-in-candidates`);
+      } else if (seen.has(item.id)) {
+        violations.push(`${key}[${i}].id-duplicate`);
+      }
+      if (item.id) seen.add(item.id);
+      if (!isNonEmptyString(item.rationale)) {
+        violations.push(`${key}[${i}].rationale-empty`);
+      } else if (item.rationale.length > 120) {
+        violations.push(`${key}[${i}].rationale-too-long`);
+      }
+    });
+  }
+
+  checkSection(out.relatedNotes, "relatedNotes", noteIds);
+  checkSection(out.relatedProblems, "relatedProblems", problemIds);
+  return { valid: violations.length === 0, violations };
+}

@@ -20,6 +20,8 @@ import MarkdownEditor from "@components/notes/MarkdownEditor";
 import EntityLinkPicker from "@components/notes/EntityLinkPicker";
 import TagInput from "@components/notes/TagInput";
 import RelatedNotesPanel from "@components/notes/RelatedNotesPanel";
+import AiSummaryCard from "@components/notes/AiSummaryCard";
+import SuggestedTagsBar from "@components/notes/SuggestedTagsBar";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
 import { formatRelativeDate } from "@utils/formatters";
@@ -195,6 +197,18 @@ export default function NoteDetailPage() {
                 }}
             />
 
+            {!isArchived && (
+                <SuggestedTagsBar
+                    note={note}
+                    currentTags={tags}
+                    onAdoptTag={(t) => {
+                        if (tags.includes(t)) return;
+                        setTags([...tags, t]);
+                        setDirty(true);
+                    }}
+                />
+            )}
+
             <input
                 value={title}
                 onChange={(e) => {
@@ -217,6 +231,7 @@ export default function NoteDetailPage() {
                 }}
             />
 
+            {!isArchived && <AiSummaryCard note={note} />}
             {!isArchived && <RelatedNotesPanel noteId={note.id} />}
 
             <p className="text-[10px] text-text-disabled text-right">

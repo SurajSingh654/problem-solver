@@ -2381,3 +2381,267 @@ shipped a fix by morning.
 }`,
   },
 ];
+
+// ════════════════════════════════════════════════════════════════════════════
+// NOTES — AI surfaces (P4)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Substrate is user-typed markdown. Treat the contents of <note_content>
+// as untrusted (UNTRUSTED_INPUT_RULE applies).
+
+// ── Summary: tldr + key takeaways + open questions ──────────────────
+export function noteSummaryPrompt({ title, contentMarkdown, tags = [] }) {
+  const system = `You are summarizing a personal note from a software engineer's private notebook. The user wants a quick recap they can re-read later or paste into a doc. Output is shown only to the note's author.
+
+OUTPUT RULES (strict):
+- tldr: ONE sentence, ≤ 280 characters. The single most important takeaway.
+- keyTakeaways: 3-5 bullets, each ≤ 240 chars. Specific, actionable.
+- openQuestions: 0-3 entries — questions the note raises but doesn't answer.
+- suggestedReviewFocus: ≤ 200 chars. ONE sentence telling the author what to revisit later (e.g. a concept they should drill on, a definition to verify).
+
+ANTI-HALLUCINATION:
+- Do not invent facts not in the note.
+- If the note is short or thin, return shorter lists; do not pad.
+- If the note is largely empty, set tldr to a brief honest description and return empty arrays.
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "tldr": "<string, ≤ 280 chars>",
+  "keyTakeaways": ["<string>", ...],
+  "openQuestions": ["<string>", ...],
+  "suggestedReviewFocus": "<string, ≤ 200 chars>"
+}`;
+
+  const userParts = [
+    `Summarize this note.`,
+    "",
+    `<note_title>${xmlEscape(title || "Untitled")}</note_title>`,
+  ];
+  if (Array.isArray(tags) && tags.length > 0) {
+    userParts.push(`<note_tags>${xmlEscape(tags.join(", "))}</note_tags>`);
+  }
+  userParts.push(
+    "",
+    "<note_content>",
+    xmlEscape(truncated(contentMarkdown || "", 8000)),
+    "</note_content>",
+  );
+  return { system, user: userParts.join("\n") };
+}
+
+export const NOTE_SUMMARY_FEWSHOT = [
+  {
+    role: "user",
+    content: `Summarize this note.
+
+<note_title>Why our deploys keep breaking on Fridays</note_title>
+<note_tags>postmortem, deploy, ci-cd</note_tags>
+
+<note_content>
+Pattern: every Friday afternoon merge train has a higher rollback rate than mid-week.
+
+Possible causes I'm considering:
+- People rush to ship before the weekend.
+- Less coverage on review (folks already mentally checked out).
+- Less time to roll forward if something breaks at 5pm.
+
+Would freezing Friday afternoon deploys hurt productivity more than it saves rollbacks?
+</note_content>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "tldr": "Friday afternoon merges show a higher rollback rate, likely from rushed shipping and reviewer fatigue; trade-off of a freeze vs. throughput is open.",
+  "keyTakeaways": [
+    "Rollback rate is concentrated on Friday afternoon merges, not random.",
+    "Hypotheses: rushed shipping, fatigued reviewers, less rollforward time after 5pm.",
+    "Decision pending: a Friday-afternoon freeze might cost throughput more than it saves.",
+    "Need data — pull rollback timestamps to see if the pattern is significant or anecdotal."
+  ],
+  "openQuestions": [
+    "Does the rollback rate actually differ statistically by day of week, or is this a vibe?",
+    "What does a Friday-afternoon freeze cost in delayed customer-visible work?"
+  ],
+  "suggestedReviewFocus": "Quantify the Friday rollback signal before recommending policy changes."
+}`,
+  },
+  {
+    role: "user",
+    content: `Summarize this note.
+
+<note_title>RxJS observable lifecycle</note_title>
+<note_tags>rxjs, frontend</note_tags>
+
+<note_content>
+Cold observables don't run until subscribed. Each subscriber gets its own execution.
+Hot observables share execution — multiple subscribers see the same emissions.
+Use \`share()\` to convert cold → hot. \`shareReplay(1)\` also replays the last value to late subscribers.
+
+Memory: forgetting to unsubscribe is the leak. \`takeUntil(destroy$)\` is the canonical fix in Angular.
+</note_content>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "tldr": "Cold observables run per-subscriber; hot ones share execution. share()/shareReplay convert cold→hot, and takeUntil(destroy$) is the leak fix.",
+  "keyTakeaways": [
+    "Cold observables: each subscriber triggers its own execution.",
+    "Hot observables: subscribers share a single execution and emissions.",
+    "share() converts cold to hot; shareReplay(1) also replays the last value to late subscribers.",
+    "Memory leaks come from missing unsubscribe — takeUntil(destroy$) is the canonical Angular pattern."
+  ],
+  "openQuestions": [],
+  "suggestedReviewFocus": "Drill on when to choose share() vs shareReplay() and the trade-offs of each."
+}`,
+  },
+];
+
+// ── Auto-tag: suggest 3-7 kebab-case tags ───────────────────────────
+export function noteAutoTagPrompt({ title, contentMarkdown, existingTags = [] }) {
+  const system = `You suggest tags for a personal engineering note. Tags help the user find related notes later. Output is reviewed by the author before applying.
+
+OUTPUT RULES (strict):
+- 3 to 7 tags total.
+- Each tag is lowercase kebab-case, 2-30 chars, ASCII letters/digits/hyphen only (^[a-z0-9][a-z0-9-]*$).
+- No duplicates. No tags identical to any in <existing_tags>.
+- Prefer specific topics over generic ones (\`postgres-indexes\` over \`database\`).
+- Avoid stop-words and meta words (\`note\`, \`thoughts\`, \`misc\`, \`tag\`, \`untitled\`).
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "tags": ["<kebab-tag>", ...]
+}`;
+
+  const userParts = [
+    `Suggest tags for this note.`,
+    "",
+    `<note_title>${xmlEscape(title || "Untitled")}</note_title>`,
+  ];
+  if (Array.isArray(existingTags) && existingTags.length > 0) {
+    userParts.push(
+      `<existing_tags>${xmlEscape(existingTags.join(", "))}</existing_tags>`,
+    );
+  }
+  userParts.push(
+    "",
+    "<note_content>",
+    xmlEscape(truncated(contentMarkdown || "", 6000)),
+    "</note_content>",
+  );
+  return { system, user: userParts.join("\n") };
+}
+
+export const NOTE_AUTOTAG_FEWSHOT = [
+  {
+    role: "user",
+    content: `Suggest tags for this note.
+
+<note_title>Stripe webhook retries</note_title>
+
+<note_content>
+Stripe retries failed webhooks for up to 3 days with exponential backoff.
+Idempotency keys on our handlers prevent double-charges if a retry fires after we already processed.
+Always verify signatures with Stripe-Signature header — never trust the body alone.
+</note_content>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "tags": ["stripe", "webhooks", "idempotency", "exponential-backoff", "signature-verification"]
+}`,
+  },
+  {
+    role: "user",
+    content: `Suggest tags for this note.
+
+<note_title>What I told the team during the on-call rotation</note_title>
+<existing_tags>oncall</existing_tags>
+
+<note_content>
+Talked through how I handled the cache stampede last week:
+- Acknowledge the page within 5 min even if I'm not solving yet.
+- Communicate every 15 min in #incidents while still investigating.
+- Write the postmortem same week — memory fades fast.
+</note_content>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "tags": ["incident-response", "communication", "postmortems", "cache-stampede"]
+}`,
+  },
+];
+
+// ── Related: LLM ranks embedding-search candidates with rationales ──
+export function noteRelatedPrompt({ noteTitle, noteSummary, candidates }) {
+  const system = `You are ranking which of the candidate Notes and Problems are most relevant to a source note. Embeddings already pre-filtered to high-similarity candidates — your job is to drop low-relevance ones and add a short rationale to those that survive.
+
+OUTPUT RULES (strict):
+- relatedNotes: at most 5, ordered most relevant first. ID must come from the candidate set.
+- relatedProblems: at most 5, ordered most relevant first. ID must come from the candidate set.
+- Each item has a "rationale" ≤ 120 chars explaining the link in plain English (e.g., "Both discuss B-tree write amplification.").
+- Reject items that are only nominally similar (matching one common word but talking about a different concept). Empty arrays are valid.
+- Do NOT invent IDs. Only use IDs present in <candidates>.
+- Do not duplicate IDs across or within sections.
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "relatedNotes": [{"id": "<candidate-id>", "rationale": "<≤120 chars>"}],
+  "relatedProblems": [{"id": "<candidate-id>", "rationale": "<≤120 chars>"}]
+}`;
+
+  const userParts = [
+    `Rank candidates against the source note.`,
+    "",
+    `<source_note_title>${xmlEscape(noteTitle || "Untitled")}</source_note_title>`,
+  ];
+  if (noteSummary) {
+    userParts.push(
+      `<source_note_summary>${xmlEscape(truncated(noteSummary, 600))}</source_note_summary>`,
+    );
+  }
+  userParts.push("", "<candidates>", JSON.stringify(candidates || {}, null, 2), "</candidates>");
+  return { system, user: userParts.join("\n") };
+}
+
+export const NOTE_RELATED_FEWSHOT = [
+  {
+    role: "user",
+    content: `Rank candidates against the source note.
+
+<source_note_title>Postgres B-tree write amplification</source_note_title>
+<source_note_summary>Indexes speed reads but each one adds a write cost — every insert/update touches every index. Discusses dropping unused indexes via pg_stat_user_indexes.</source_note_summary>
+
+<candidates>
+{
+  "notes": [
+    {"id": "n1", "title": "GIN vs BRIN tradeoffs"},
+    {"id": "n2", "title": "Friday deploy postmortem"},
+    {"id": "n3", "title": "Index-only scans"}
+  ],
+  "problems": [
+    {"id": "p1", "title": "Slow query: missing composite index"},
+    {"id": "p2", "title": "OAuth token refresh flow"}
+  ]
+}
+</candidates>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "relatedNotes": [
+    {"id": "n3", "rationale": "Index-only scans are the read-side payoff that justifies the write-amplification cost."},
+    {"id": "n1", "rationale": "Comparing GIN vs BRIN write cost is a direct extension of the B-tree write-amp discussion."}
+  ],
+  "relatedProblems": [
+    {"id": "p1", "rationale": "Same domain — composite index design directly trades read speed for write cost."}
+  ]
+}`,
+  },
+];

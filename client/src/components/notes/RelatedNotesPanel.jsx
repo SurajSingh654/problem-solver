@@ -31,9 +31,16 @@ export default function RelatedNotesPanel({ noteId }) {
 
     return (
         <div className="rounded-xl bg-surface-1 border border-border-default p-4 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                🧭 Related
-            </h3>
+            <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                    🧭 Related
+                </h3>
+                {data?.aiGenerated && (
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-brand-fg-soft">
+                        ✨ AI-ranked
+                    </span>
+                )}
+            </div>
 
             {empty ? (
                 <p className="text-xs text-text-disabled italic">
@@ -51,6 +58,7 @@ export default function RelatedNotesPanel({ noteId }) {
                                     to={`/notes/${n.id}`}
                                     title={n.title}
                                     subtitle={(n.tags || []).slice(0, 3).map((t) => `#${t}`).join(" ")}
+                                    rationale={n.rationale}
                                     similarity={n.similarity}
                                 />
                             ))}
@@ -64,6 +72,7 @@ export default function RelatedNotesPanel({ noteId }) {
                                     to={`/problems/${p.id}`}
                                     title={p.title}
                                     subtitle={`${p.category} · ${p.difficulty}`}
+                                    rationale={p.rationale}
                                     similarity={p.similarity}
                                 />
                             ))}
@@ -86,7 +95,7 @@ function Section({ title, children }) {
     );
 }
 
-function RelatedRow({ to, title, subtitle, similarity }) {
+function RelatedRow({ to, title, subtitle, similarity, rationale }) {
     const pct = Math.round((similarity || 0) * 100);
     return (
         <li>
@@ -109,6 +118,11 @@ function RelatedRow({ to, title, subtitle, similarity }) {
                         {pct}%
                     </span>
                 </div>
+                {rationale && (
+                    <p className="text-[11px] text-text-tertiary mt-1 italic leading-snug">
+                        {rationale}
+                    </p>
+                )}
             </Link>
         </li>
     );

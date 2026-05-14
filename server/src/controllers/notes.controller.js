@@ -18,6 +18,26 @@ import {
   findSimilarNotes,
   findProblemsByNoteEmbedding,
 } from "../services/embedding.service.js";
+import { aiComplete, AIError } from "../services/ai.service.js";
+import {
+  noteSummaryPrompt,
+  noteAutoTagPrompt,
+  noteRelatedPrompt,
+  NOTE_SUMMARY_FEWSHOT,
+  NOTE_AUTOTAG_FEWSHOT,
+  NOTE_RELATED_FEWSHOT,
+} from "../services/ai.prompts.js";
+import {
+  validateNoteSummary,
+  validateNoteAutoTag,
+  validateNoteRelated,
+  extractJSON,
+} from "../services/ai.validators.js";
+import {
+  buildFallbackNoteSummary,
+  buildFallbackNoteAutoTag,
+  buildFallbackNoteRelated,
+} from "../services/ai.fallbacks.js";
 
 // ── Validation helpers ───────────────────────────────────────
 const TITLE_MAX = 200;
@@ -389,49 +409,247 @@ export async function restoreNote(req, res) {
 // show a confidence indicator. P4 will layer LLM ranking on top of these
 // raw candidates.
 // ============================================================================
+function similarityScore(d) {
+  const num = Number(d);
+  if (Number.isNaN(num)) return 0;
+  return Math.max(0, Math.min(1, (2 - num) / 2));
+}
+
 export async function getRelatedForNote(req, res) {
   try {
     const userId = req.user.id;
     const note = await prisma.note.findFirst({
       where: { id: req.params.id, userId },
-      select: { id: true },
+      select: { id: true, title: true, summary: true },
     });
     if (!note) return error(res, "Note not found", 404);
 
     const teamIds = await userTeamIds(userId);
-    const [notes, problems] = await Promise.all([
-      findSimilarNotes(note.id, userId, 5),
-      findProblemsByNoteEmbedding(note.id, teamIds, 5),
+    const [rawNotes, rawProblems] = await Promise.all([
+      findSimilarNotes(note.id, userId, 10),
+      findProblemsByNoteEmbedding(note.id, teamIds, 10),
     ]);
 
-    // Cosine distance is in [0, 2]. Lower = more similar. Coerce to a
-    // 0–1 similarity score for the UI ((2 - d) / 2 → clamped).
-    function score(d) {
-      const num = Number(d);
-      if (Number.isNaN(num)) return 0;
-      return Math.max(0, Math.min(1, (2 - num) / 2));
+    // Build the candidate set the LLM ranks. Only top-10 each; no body
+    // text — titles + tags keep the prompt cheap and reduce hallucination
+    // surface.
+    const candidates = {
+      notes: rawNotes.map((n) => ({ id: n.id, title: n.title })),
+      problems: rawProblems.map((p) => ({ id: p.id, title: p.title })),
+    };
+
+    // Try LLM ranking. On any failure, return the embedding-only result
+    // with a graceful "raw similarity" rationale.
+    let llmRanked = null;
+    try {
+      const summary =
+        note.summary && typeof note.summary === "object"
+          ? `${note.summary.tldr || ""}\n${(note.summary.keyTakeaways || []).join(". ")}`
+          : "";
+      const { system, user } = noteRelatedPrompt({
+        noteTitle: note.title,
+        noteSummary: summary,
+        candidates,
+      });
+      const raw = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        surface: "note:related",
+        fewShotMessages: NOTE_RELATED_FEWSHOT,
+        maxTokens: 800,
+        temperature: 0.4,
+      });
+      const parsed = extractJSON(raw);
+      const v = validateNoteRelated(parsed, {
+        candidateNoteIds: candidates.notes.map((n) => n.id),
+        candidateProblemIds: candidates.problems.map((p) => p.id),
+      });
+      if (v.valid) llmRanked = parsed;
+      else {
+        console.warn("[notes.related] LLM output rejected:", v.violations);
+      }
+    } catch (e) {
+      if (!(e instanceof AIError)) {
+        console.error("[notes.related] AI call threw:", e.message);
+      }
     }
 
+    const fallback = llmRanked
+      ? null
+      : buildFallbackNoteRelated({ rawNotes, rawProblems });
+    const ranked = llmRanked || fallback;
+
+    // Hydrate each ID with display fields from the embedding query so the
+    // client doesn't need a second lookup.
+    const noteById = new Map(rawNotes.map((n) => [n.id, n]));
+    const probById = new Map(rawProblems.map((p) => [p.id, p]));
+
     return success(res, {
-      relatedNotes: notes.map((n) => ({
-        id: n.id,
-        title: n.title,
-        tags: n.tags || [],
-        updatedAt: n.updatedAt,
-        similarity: score(n.distance),
-      })),
-      relatedProblems: problems.map((p) => ({
-        id: p.id,
-        title: p.title,
-        difficulty: p.difficulty,
-        category: p.category,
-        tags: p.tags || [],
-        similarity: score(p.distance),
-      })),
+      aiGenerated: !!llmRanked,
+      relatedNotes: (ranked.relatedNotes || [])
+        .map((r) => {
+          const n = noteById.get(r.id);
+          if (!n) return null;
+          return {
+            id: r.id,
+            title: n.title,
+            tags: n.tags || [],
+            updatedAt: n.updatedAt,
+            similarity: similarityScore(n.distance),
+            rationale: r.rationale,
+          };
+        })
+        .filter(Boolean),
+      relatedProblems: (ranked.relatedProblems || [])
+        .map((r) => {
+          const p = probById.get(r.id);
+          if (!p) return null;
+          return {
+            id: r.id,
+            title: p.title,
+            difficulty: p.difficulty,
+            category: p.category,
+            tags: p.tags || [],
+            similarity: similarityScore(p.distance),
+            rationale: r.rationale,
+          };
+        })
+        .filter(Boolean),
     });
   } catch (err) {
     console.error("getRelatedForNote:", err);
     return error(res, "Failed to load related items", 500);
+  }
+}
+
+// ============================================================================
+// AI: SUMMARY
+// ============================================================================
+export async function generateNoteSummary(req, res) {
+  try {
+    const userId = req.user.id;
+    const note = await prisma.note.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true, title: true, contentMarkdown: true, tags: true },
+    });
+    if (!note) return error(res, "Note not found", 404);
+
+    const hasContent = (note.contentMarkdown || "").trim().length >= 20;
+    if (!hasContent) {
+      return error(res, "Note has too little content to summarize", 400);
+    }
+
+    let summary;
+    let isFallback = false;
+    try {
+      const { system, user } = noteSummaryPrompt({
+        title: note.title,
+        contentMarkdown: note.contentMarkdown,
+        tags: note.tags,
+      });
+      const raw = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        surface: "note:summary",
+        fewShotMessages: NOTE_SUMMARY_FEWSHOT,
+        maxTokens: 900,
+        temperature: 0.5,
+      });
+      const parsed = extractJSON(raw);
+      const v = validateNoteSummary(parsed, { hasContent });
+      if (v.valid) summary = parsed;
+      else {
+        console.warn("[notes.summary] LLM output rejected:", v.violations);
+      }
+    } catch (e) {
+      if (!(e instanceof AIError)) {
+        console.error("[notes.summary] AI call threw:", e.message);
+      }
+    }
+    if (!summary) {
+      summary = buildFallbackNoteSummary({
+        title: note.title,
+        contentMarkdown: note.contentMarkdown,
+      });
+      isFallback = true;
+    }
+
+    await prisma.note.update({
+      where: { id: note.id },
+      data: { summary, summaryGeneratedAt: new Date() },
+    });
+
+    return success(res, { summary, fallback: isFallback });
+  } catch (err) {
+    console.error("generateNoteSummary:", err);
+    return error(res, "Failed to generate summary", 500);
+  }
+}
+
+// ============================================================================
+// AI: AUTO-TAG
+// ============================================================================
+export async function suggestNoteTags(req, res) {
+  try {
+    const userId = req.user.id;
+    const note = await prisma.note.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true, title: true, contentMarkdown: true, tags: true },
+    });
+    if (!note) return error(res, "Note not found", 404);
+
+    if ((note.contentMarkdown || "").trim().length < 20) {
+      return error(res, "Note has too little content to suggest tags", 400);
+    }
+
+    let result;
+    let isFallback = false;
+    try {
+      const { system, user } = noteAutoTagPrompt({
+        title: note.title,
+        contentMarkdown: note.contentMarkdown,
+        existingTags: note.tags,
+      });
+      const raw = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        surface: "note:autotag",
+        fewShotMessages: NOTE_AUTOTAG_FEWSHOT,
+        maxTokens: 200,
+        temperature: 0.3,
+      });
+      const parsed = extractJSON(raw);
+      const v = validateNoteAutoTag(parsed, { existingTags: note.tags });
+      if (v.valid) result = parsed;
+      else {
+        console.warn("[notes.autotag] LLM output rejected:", v.violations);
+      }
+    } catch (e) {
+      if (!(e instanceof AIError)) {
+        console.error("[notes.autotag] AI call threw:", e.message);
+      }
+    }
+    if (!result) {
+      result = buildFallbackNoteAutoTag({
+        contentMarkdown: note.contentMarkdown,
+        existingTags: note.tags,
+      });
+      isFallback = true;
+    }
+
+    // Persist the suggestion list (separate from user-applied `tags`).
+    await prisma.note.update({
+      where: { id: note.id },
+      data: { suggestedTags: result.tags },
+    });
+
+    return success(res, { tags: result.tags, fallback: isFallback });
+  } catch (err) {
+    console.error("suggestNoteTags:", err);
+    return error(res, "Failed to suggest tags", 500);
   }
 }
 

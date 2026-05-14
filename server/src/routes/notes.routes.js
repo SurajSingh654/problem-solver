@@ -11,6 +11,7 @@
 // ============================================================================
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
+import { aiLimiter } from "../middleware/rateLimit.middleware.js";
 import {
   createNote,
   listNotes,
@@ -23,6 +24,8 @@ import {
   searchLinkableEntities,
   listTags,
   getRelatedForNote,
+  generateNoteSummary,
+  suggestNoteTags,
 } from "../controllers/notes.controller.js";
 
 const router = Router();
@@ -39,7 +42,9 @@ router.get("/tags", listTags);
 router.get("/by-entity/:type/:id", listNotesByEntity);
 
 router.get("/:id", getNote);
-router.get("/:id/related", getRelatedForNote);
+router.get("/:id/related", aiLimiter, getRelatedForNote);
+router.post("/:id/ai/summary", aiLimiter, generateNoteSummary);
+router.post("/:id/ai/suggest-tags", aiLimiter, suggestNoteTags);
 router.patch("/:id", updateNote);
 router.delete("/:id", archiveNote);
 router.post("/:id/restore", restoreNote);

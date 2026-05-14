@@ -17,6 +17,9 @@ import {
     validateTeachingSummary,
     validateTeachingQuiz,
     validateTeachingTopicCoverage,
+    validateNoteSummary,
+    validateNoteAutoTag,
+    validateNoteRelated,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
@@ -1917,5 +1920,192 @@ describe('prettyDimName', () => {
 
     it('falls through to the input on unknown keys', () => {
         expect(prettyDimName('unknownKey')).toBe('unknownKey')
+    })
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// NOTES validators
+// ════════════════════════════════════════════════════════════════════════════
+
+const VALID_NOTE_SUMMARY = {
+    tldr: 'A short and clear takeaway sentence.',
+    keyTakeaways: ['One', 'Two', 'Three'],
+    openQuestions: ['What now?'],
+    suggestedReviewFocus: 'Re-read tomorrow morning.',
+}
+
+describe('validateNoteSummary', () => {
+    it('accepts a well-formed summary', () => {
+        expect(validateNoteSummary(VALID_NOTE_SUMMARY).valid).toBe(true)
+    })
+
+    it('rejects empty tldr', () => {
+        const r = validateNoteSummary({ ...VALID_NOTE_SUMMARY, tldr: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('tldr-empty')
+    })
+
+    it('rejects tldr > 280 chars', () => {
+        const r = validateNoteSummary({
+            ...VALID_NOTE_SUMMARY,
+            tldr: 'a'.repeat(281),
+        })
+        expect(r.violations).toContain('tldr-too-long')
+    })
+
+    it('rejects fewer than 3 takeaways', () => {
+        const r = validateNoteSummary({
+            ...VALID_NOTE_SUMMARY,
+            keyTakeaways: ['just one'],
+        })
+        expect(r.violations.some(v => v.startsWith('keyTakeaways-count'))).toBe(true)
+    })
+
+    it('rejects more than 3 open questions', () => {
+        const r = validateNoteSummary({
+            ...VALID_NOTE_SUMMARY,
+            openQuestions: ['a', 'b', 'c', 'd'],
+        })
+        expect(r.violations).toContain('openQuestions-cap-exceeded')
+    })
+
+    it('rejects empty suggestedReviewFocus', () => {
+        const r = validateNoteSummary({
+            ...VALID_NOTE_SUMMARY,
+            suggestedReviewFocus: '',
+        })
+        expect(r.violations).toContain('suggestedReviewFocus-empty')
+    })
+
+    it('rejects "note is empty" claim when content is present', () => {
+        const r = validateNoteSummary(
+            { ...VALID_NOTE_SUMMARY, tldr: 'The note is empty so nothing to summarize.' },
+            { hasContent: true },
+        )
+        expect(r.violations).toContain('emptiness-claim-when-content-present')
+    })
+})
+
+describe('validateNoteAutoTag', () => {
+    it('accepts 3-7 valid kebab tags', () => {
+        const r = validateNoteAutoTag({ tags: ['stripe', 'webhooks', 'idempotency'] })
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects fewer than 3 tags', () => {
+        const r = validateNoteAutoTag({ tags: ['only-one'] })
+        expect(r.violations.some(v => v.startsWith('tags-count'))).toBe(true)
+    })
+
+    it('rejects more than 7 tags', () => {
+        const r = validateNoteAutoTag({
+            tags: ['a-b', 'c-d', 'e-f', 'g-h', 'i-j', 'k-l', 'm-n', 'o-p'],
+        })
+        expect(r.violations.some(v => v.startsWith('tags-count'))).toBe(true)
+    })
+
+    it('rejects non-kebab tags', () => {
+        const r = validateNoteAutoTag({ tags: ['Foo', 'bar', 'baz'] })
+        expect(r.violations.some(v => v.endsWith('-not-kebab'))).toBe(true)
+    })
+
+    it('rejects duplicates', () => {
+        const r = validateNoteAutoTag({ tags: ['foo', 'foo', 'bar'] })
+        expect(r.violations.some(v => v.endsWith('-duplicate'))).toBe(true)
+    })
+
+    it('rejects tags that collide with existing user tags', () => {
+        const r = validateNoteAutoTag(
+            { tags: ['react', 'redux', 'jest'] },
+            { existingTags: ['react'] },
+        )
+        expect(r.violations.some(v => v.endsWith('-collides-existing'))).toBe(true)
+    })
+
+    it('rejects tags too short or too long', () => {
+        const r = validateNoteAutoTag({ tags: ['a', 'b'.repeat(31), 'c'] })
+        expect(r.violations.some(v => v.endsWith('-len'))).toBe(true)
+    })
+})
+
+describe('validateNoteRelated', () => {
+    const candidateNoteIds = ['n1', 'n2']
+    const candidateProblemIds = ['p1', 'p2']
+
+    it('accepts a valid response', () => {
+        const r = validateNoteRelated(
+            {
+                relatedNotes: [{ id: 'n1', rationale: 'Same topic.' }],
+                relatedProblems: [{ id: 'p1', rationale: 'Direct extension.' }],
+            },
+            { candidateNoteIds, candidateProblemIds },
+        )
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects ids not in the candidate set', () => {
+        const r = validateNoteRelated(
+            {
+                relatedNotes: [{ id: 'fake', rationale: 'x' }],
+                relatedProblems: [],
+            },
+            { candidateNoteIds, candidateProblemIds },
+        )
+        expect(r.violations.some(v => v.endsWith('id-not-in-candidates'))).toBe(true)
+    })
+
+    it('rejects > 5 entries per section', () => {
+        const r = validateNoteRelated(
+            {
+                relatedNotes: Array(6).fill({ id: 'n1', rationale: 'x' }),
+                relatedProblems: [],
+            },
+            { candidateNoteIds, candidateProblemIds },
+        )
+        expect(r.violations).toContain('relatedNotes-cap-exceeded')
+    })
+
+    it('rejects empty rationale', () => {
+        const r = validateNoteRelated(
+            {
+                relatedNotes: [{ id: 'n1', rationale: '' }],
+                relatedProblems: [],
+            },
+            { candidateNoteIds, candidateProblemIds },
+        )
+        expect(r.violations.some(v => v.endsWith('rationale-empty'))).toBe(true)
+    })
+
+    it('rejects rationale > 120 chars', () => {
+        const r = validateNoteRelated(
+            {
+                relatedNotes: [{ id: 'n1', rationale: 'x'.repeat(121) }],
+                relatedProblems: [],
+            },
+            { candidateNoteIds, candidateProblemIds },
+        )
+        expect(r.violations.some(v => v.endsWith('rationale-too-long'))).toBe(true)
+    })
+
+    it('rejects duplicate ids', () => {
+        const r = validateNoteRelated(
+            {
+                relatedNotes: [
+                    { id: 'n1', rationale: 'one' },
+                    { id: 'n1', rationale: 'two' },
+                ],
+                relatedProblems: [],
+            },
+            { candidateNoteIds, candidateProblemIds },
+        )
+        expect(r.violations.some(v => v.endsWith('id-duplicate'))).toBe(true)
+    })
+
+    it('accepts empty arrays', () => {
+        const r = validateNoteRelated(
+            { relatedNotes: [], relatedProblems: [] },
+            { candidateNoteIds, candidateProblemIds },
+        )
+        expect(r.valid).toBe(true)
     })
 })

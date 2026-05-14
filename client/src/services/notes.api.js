@@ -19,4 +19,6 @@ export const notesApi = {
         api.get("/notes/link-search", { params: { type, q } }),
     listTags: () => api.get("/notes/tags"),
     related: (id) => api.get(`/notes/${id}/related`),
+    generateSummary: (id) => api.post(`/notes/${id}/ai/summary`),
+    suggestTags: (id) => api.post(`/notes/${id}/ai/suggest-tags`),
 }
