@@ -20,6 +20,7 @@ import {
     validateNoteSummary,
     validateNoteAutoTag,
     validateNoteRelated,
+    validateNoteFlashcards,
     extractJSON,
     hashInputPayload,
 } from '../../src/services/ai.validators.js'
@@ -2107,5 +2108,83 @@ describe('validateNoteRelated', () => {
             { candidateNoteIds, candidateProblemIds },
         )
         expect(r.valid).toBe(true)
+    })
+})
+
+describe('validateNoteFlashcards', () => {
+    const VALID_DRAFT = {
+        front: 'What is a B-tree index?',
+        back: 'A balanced tree structure used as the default Postgres index, supporting equality and range queries.',
+        type: 'DEFINITION',
+        tagSuggestions: ['postgres', 'indexes'],
+    }
+    const VALID = {
+        drafts: [
+            VALID_DRAFT,
+            { ...VALID_DRAFT, front: 'How does GIN differ from B-tree?', type: 'CONTRAST' },
+            { ...VALID_DRAFT, front: 'Why pick a partial index?', type: 'CONCEPT' },
+        ],
+    }
+
+    it('accepts a well-formed draft set', () => {
+        expect(validateNoteFlashcards(VALID).valid).toBe(true)
+    })
+
+    it('rejects fewer than 3 drafts', () => {
+        const r = validateNoteFlashcards({ drafts: [VALID_DRAFT] })
+        expect(r.violations.some(v => v.startsWith('drafts-count'))).toBe(true)
+    })
+
+    it('rejects more than 7 drafts', () => {
+        const r = validateNoteFlashcards({
+            drafts: Array(8).fill(VALID_DRAFT),
+        })
+        expect(r.violations.some(v => v.startsWith('drafts-count'))).toBe(true)
+    })
+
+    it('rejects empty front', () => {
+        const r = validateNoteFlashcards({
+            drafts: [{ ...VALID_DRAFT, front: '' }, VALID_DRAFT, VALID_DRAFT],
+        })
+        expect(r.violations.some(v => v.endsWith('.front-empty'))).toBe(true)
+    })
+
+    it('rejects front > 200 chars', () => {
+        const r = validateNoteFlashcards({
+            drafts: [{ ...VALID_DRAFT, front: 'a'.repeat(201) }, VALID_DRAFT, VALID_DRAFT],
+        })
+        expect(r.violations.some(v => v.endsWith('.front-too-long'))).toBe(true)
+    })
+
+    it('rejects back > 500 chars', () => {
+        const r = validateNoteFlashcards({
+            drafts: [{ ...VALID_DRAFT, back: 'a'.repeat(501) }, VALID_DRAFT, VALID_DRAFT],
+        })
+        expect(r.violations.some(v => v.endsWith('.back-too-long'))).toBe(true)
+    })
+
+    it('rejects invalid type enum', () => {
+        const r = validateNoteFlashcards({
+            drafts: [{ ...VALID_DRAFT, type: 'TRIVIA' }, VALID_DRAFT, VALID_DRAFT],
+        })
+        expect(r.violations.some(v => v.endsWith('.type-invalid'))).toBe(true)
+    })
+
+    it('rejects 5+ drafts that are all DEFINITION (laziness)', () => {
+        const r = validateNoteFlashcards({
+            drafts: Array(5).fill({ ...VALID_DRAFT, type: 'DEFINITION' }),
+        })
+        expect(r.violations).toContain('all-definitions-laziness-signal')
+    })
+
+    it('rejects non-kebab tagSuggestions', () => {
+        const r = validateNoteFlashcards({
+            drafts: [
+                { ...VALID_DRAFT, tagSuggestions: ['Foo Bar'] },
+                VALID_DRAFT,
+                VALID_DRAFT,
+            ],
+        })
+        expect(r.violations.some(v => v.endsWith('-not-kebab'))).toBe(true)
     })
 })

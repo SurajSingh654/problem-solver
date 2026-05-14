@@ -23,20 +23,24 @@ import {
   noteSummaryPrompt,
   noteAutoTagPrompt,
   noteRelatedPrompt,
+  noteFlashcardsPrompt,
   NOTE_SUMMARY_FEWSHOT,
   NOTE_AUTOTAG_FEWSHOT,
   NOTE_RELATED_FEWSHOT,
+  NOTE_FLASHCARDS_FEWSHOT,
 } from "../services/ai.prompts.js";
 import {
   validateNoteSummary,
   validateNoteAutoTag,
   validateNoteRelated,
+  validateNoteFlashcards,
   extractJSON,
 } from "../services/ai.validators.js";
 import {
   buildFallbackNoteSummary,
   buildFallbackNoteAutoTag,
   buildFallbackNoteRelated,
+  buildFallbackNoteFlashcards,
 } from "../services/ai.fallbacks.js";
 
 // ── Validation helpers ───────────────────────────────────────
@@ -585,6 +589,76 @@ export async function generateNoteSummary(req, res) {
   } catch (err) {
     console.error("generateNoteSummary:", err);
     return error(res, "Failed to generate summary", 500);
+  }
+}
+
+// ============================================================================
+// AI: FLASHCARD DRAFTS
+// ============================================================================
+//
+// Returns drafts only — does NOT persist Flashcard rows. The user
+// reviews each draft (accept/reject + edit) in the FlashcardDraftReview
+// UI, then sends accepted drafts to POST /flashcards as a bulk create.
+// ============================================================================
+export async function generateNoteFlashcards(req, res) {
+  try {
+    const userId = req.user.id;
+    const note = await prisma.note.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true, title: true, contentMarkdown: true, tags: true },
+    });
+    if (!note) return error(res, "Note not found", 404);
+
+    const hasContent = (note.contentMarkdown || "").trim().length >= 50;
+    if (!hasContent) {
+      return error(
+        res,
+        "Note has too little content for flashcards (min 50 chars)",
+        400,
+      );
+    }
+
+    let drafts;
+    let isFallback = false;
+    try {
+      const { system, user } = noteFlashcardsPrompt({
+        title: note.title,
+        contentMarkdown: note.contentMarkdown,
+        tags: note.tags,
+      });
+      const raw = await aiComplete({
+        systemPrompt: system,
+        userPrompt: user,
+        userId,
+        surface: "note:flashcards",
+        fewShotMessages: NOTE_FLASHCARDS_FEWSHOT,
+        maxTokens: 1500,
+        temperature: 0.6,
+      });
+      const parsed = extractJSON(raw);
+      const v = validateNoteFlashcards(parsed);
+      if (v.valid) drafts = parsed.drafts;
+      else {
+        console.warn("[notes.flashcards] LLM output rejected:", v.violations);
+      }
+    } catch (e) {
+      if (!(e instanceof AIError)) {
+        console.error("[notes.flashcards] AI call threw:", e.message);
+      }
+    }
+    if (!drafts) {
+      const fb = buildFallbackNoteFlashcards({
+        title: note.title,
+        contentMarkdown: note.contentMarkdown,
+      });
+      drafts = fb.drafts;
+      isFallback = true;
+    }
+
+    return success(res, { drafts, fallback: isFallback });
+  } catch (err) {
+    console.error("generateNoteFlashcards:", err);
+    return error(res, "Failed to generate flashcards", 500);
   }
 }
 

@@ -26,6 +26,7 @@ import {
   getRelatedForNote,
   generateNoteSummary,
   suggestNoteTags,
+  generateNoteFlashcards,
 } from "../controllers/notes.controller.js";
 
 const router = Router();
@@ -45,6 +46,7 @@ router.get("/:id", getNote);
 router.get("/:id/related", aiLimiter, getRelatedForNote);
 router.post("/:id/ai/summary", aiLimiter, generateNoteSummary);
 router.post("/:id/ai/suggest-tags", aiLimiter, suggestNoteTags);
+router.post("/:id/ai/flashcards", aiLimiter, generateNoteFlashcards);
 router.patch("/:id", updateNote);
 router.delete("/:id", archiveNote);
 router.post("/:id/restore", restoreNote);

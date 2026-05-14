@@ -1190,6 +1190,56 @@ export function validateNoteAutoTag(out, { existingTags = [] } = {}) {
   return { valid: violations.length === 0, violations };
 }
 
+const NOTE_FLASHCARD_TYPES = new Set(["CONCEPT", "DEFINITION", "CONTRAST"]);
+
+export function validateNoteFlashcards(out) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+  if (!Array.isArray(out.drafts)) {
+    return { valid: false, violations: ["drafts-not-array"] };
+  }
+  if (out.drafts.length < 3 || out.drafts.length > 7) {
+    violations.push(`drafts-count:got=${out.drafts.length}`);
+  }
+
+  let definitionRatio = 0;
+  out.drafts.forEach((d, i) => {
+    const tag = `drafts[${i}]`;
+    if (!d || typeof d !== "object") {
+      violations.push(`${tag}-not-object`);
+      return;
+    }
+    if (!isNonEmptyString(d.front)) violations.push(`${tag}.front-empty`);
+    else if (d.front.length > 200) violations.push(`${tag}.front-too-long`);
+    if (!isNonEmptyString(d.back)) violations.push(`${tag}.back-empty`);
+    else if (d.back.length > 500) violations.push(`${tag}.back-too-long`);
+    if (!NOTE_FLASHCARD_TYPES.has(d.type)) violations.push(`${tag}.type-invalid`);
+    if (d.type === "DEFINITION") definitionRatio++;
+    if (Array.isArray(d.tagSuggestions)) {
+      if (d.tagSuggestions.length > 3) {
+        violations.push(`${tag}.tagSuggestions-too-many`);
+      }
+      d.tagSuggestions.forEach((t, j) => {
+        if (typeof t !== "string" || !NOTE_TAG_REGEX.test(t)) {
+          violations.push(`${tag}.tagSuggestions[${j}]-not-kebab`);
+        }
+      });
+    } else if (d.tagSuggestions !== undefined) {
+      violations.push(`${tag}.tagSuggestions-not-array`);
+    }
+  });
+
+  // Anti-laziness: 5+ drafts can't all be DEFINITION (the model is being lazy
+  // and just splitting the note into term/definition pairs).
+  if (out.drafts.length >= 5 && definitionRatio === out.drafts.length) {
+    violations.push("all-definitions-laziness-signal");
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
 export function validateNoteRelated(out, { candidateNoteIds = [], candidateProblemIds = [] } = {}) {
   const violations = [];
   if (!out || typeof out !== "object") {

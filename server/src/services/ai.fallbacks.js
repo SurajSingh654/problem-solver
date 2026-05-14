@@ -826,6 +826,64 @@ export function buildFallbackNoteAutoTag({
   return { tags: sorted, _fallback: true };
 }
 
+// Extract bullet items from markdown (`- text` or `* text`).
+function _markdownBullets(text, limit = 7) {
+  if (!text) return [];
+  const out = [];
+  for (const raw of String(text).split("\n")) {
+    const m = raw.match(/^\s*[-*]\s+(.{4,300})$/);
+    if (m) out.push(m[1].trim());
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export function buildFallbackNoteFlashcards({
+  title = "Untitled note",
+  contentMarkdown = "",
+} = {}) {
+  // Naïve extractor: turn the first three markdown bullets (or first three
+  // sentences) into Q/A pairs. Front = first ~80 chars before colon/period
+  // ending in "?", back = the rest. Always returns at least 3 cards so the
+  // validator's 3-7 cap is satisfied; cards carry _fallback so the UI can
+  // show "AI unavailable" if it cares.
+  const bullets = _markdownBullets(contentMarkdown, 5);
+  const sources =
+    bullets.length >= 3
+      ? bullets
+      : String(contentMarkdown || "")
+          .split(/[.!?]\s+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length >= 20)
+          .slice(0, 5);
+
+  const drafts = [];
+  for (let i = 0; i < Math.min(sources.length, 3); i++) {
+    const text = sources[i].replace(/\s+/g, " ").trim();
+    const colon = text.indexOf(":");
+    const front =
+      colon > 10 && colon < 100
+        ? text.slice(0, colon).trim().replace(/[.!?]+$/, "") + "?"
+        : `What does this point from "${title}" say?`;
+    const back = (colon > -1 ? text.slice(colon + 1) : text).trim().slice(0, 500);
+    drafts.push({
+      front: front.length > 200 ? front.slice(0, 199) + "?" : front,
+      back: back || "AI flashcard generation unavailable. Open the note to recall the full answer.",
+      type: "CONCEPT",
+      tagSuggestions: [],
+    });
+  }
+  while (drafts.length < 3) {
+    drafts.push({
+      front: `What's the single most important takeaway from this note?`,
+      back: "AI generation unavailable — open the note above and recall the answer in your own words.",
+      type: "CONCEPT",
+      tagSuggestions: [],
+    });
+  }
+  return { drafts, _fallback: true };
+}
+
 export function buildFallbackNoteRelated({
   rawNotes = [],
   rawProblems = [],

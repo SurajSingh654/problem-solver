@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { useFlashcards, useArchiveFlashcard } from "@hooks/useFlashcards";
 import FlashcardForm from "./FlashcardForm";
+import FlashcardDraftReview from "@components/notes/FlashcardDraftReview";
 import { Spinner } from "@components/ui/Spinner";
 import { formatRelativeDate } from "@utils/formatters";
 import { cn } from "@utils/cn";
@@ -23,22 +24,32 @@ function statusFor(card) {
 export default function FlashcardList({ noteId }) {
     const [creating, setCreating] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [reviewingDrafts, setReviewingDrafts] = useState(false);
     const { data: cards, isLoading } = useFlashcards({ noteId });
     const archive = useArchiveFlashcard();
 
     return (
         <div className="rounded-xl bg-surface-1 border border-border-default p-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
                     🃏 Flashcards
                 </h3>
-                <button
-                    type="button"
-                    onClick={() => setCreating(true)}
-                    className="text-[10px] font-bold text-brand-fg-soft hover:underline"
-                >
-                    + New card
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setReviewingDrafts(true)}
+                        className="text-[10px] font-bold text-brand-fg-soft hover:underline"
+                    >
+                        ✨ Generate from note
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setCreating(true)}
+                        className="text-[10px] font-bold text-text-tertiary hover:text-text-primary"
+                    >
+                        + New card
+                    </button>
+                </div>
             </div>
 
             {isLoading ? (
@@ -105,6 +116,12 @@ export default function FlashcardList({ noteId }) {
                     noteId={noteId}
                     existing={editing}
                     onClose={() => setEditing(null)}
+                />
+            )}
+            {reviewingDrafts && (
+                <FlashcardDraftReview
+                    noteId={noteId}
+                    onClose={() => setReviewingDrafts(false)}
                 />
             )}
         </div>

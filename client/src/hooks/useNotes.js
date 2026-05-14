@@ -144,6 +144,15 @@ export function useSuggestNoteTags() {
     });
 }
 
+export function useGenerateNoteFlashcards() {
+    return useMutation({
+        mutationFn: (id) =>
+            notesApi.generateFlashcards(id).then((r) => r.data.data),
+        onError: (err) =>
+            toast.error(pickError(err, "Failed to generate flashcards.")),
+    });
+}
+
 export function useTogglePinNote() {
     const qc = useQueryClient();
     return useMutation({

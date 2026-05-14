@@ -21,4 +21,5 @@ export const notesApi = {
     related: (id) => api.get(`/notes/${id}/related`),
     generateSummary: (id) => api.post(`/notes/${id}/ai/summary`),
     suggestTags: (id) => api.post(`/notes/${id}/ai/suggest-tags`),
+    generateFlashcards: (id) => api.post(`/notes/${id}/ai/flashcards`),
 }

@@ -2645,3 +2645,131 @@ export const NOTE_RELATED_FEWSHOT = [
 }`,
   },
 ];
+
+// ── Flashcard drafts: 3-7 SM-2-friendly Q/A pairs from a note ────────
+export function noteFlashcardsPrompt({ title, contentMarkdown, tags = [] }) {
+  const system = `You are extracting active-recall flashcards from a personal engineering note. The cards feed an SM-2 spaced-repetition queue, so they must isolate one fact per card and have a clear right answer.
+
+OUTPUT RULES (strict):
+- 3 to 7 drafts. Quality matters more than quantity — fewer good cards beats padding.
+- front: ≤ 200 chars. ONE clear question, definition prompt, or contrast prompt. Always end with a question mark or colon.
+- back: ≤ 500 chars. The answer or definition. Markdown allowed.
+- type: one of CONCEPT (reasoning question), DEFINITION (term recall), CONTRAST (compare two things).
+- tagSuggestions: 0-3 kebab-case tags relevant to this card.
+
+ANTI-LAZINESS:
+- Do NOT make every card a definition. Mix CONCEPT, DEFINITION, and CONTRAST.
+- Do NOT trivially split a sentence into front/back. The front must require the reader to retrieve, not just complete.
+- Do NOT invent facts not in the note.
+- If the note is too thin to extract real cards, return only what's defensible (minimum 3 still).
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "drafts": [
+    {
+      "front": "<≤200 chars, ends with ? or :>",
+      "back": "<≤500 chars>",
+      "type": "CONCEPT" | "DEFINITION" | "CONTRAST",
+      "tagSuggestions": ["<kebab-tag>", ...]
+    }
+  ]
+}`;
+
+  const userParts = [
+    `Extract flashcards from this note.`,
+    "",
+    `<note_title>${xmlEscape(title || "Untitled")}</note_title>`,
+  ];
+  if (Array.isArray(tags) && tags.length > 0) {
+    userParts.push(`<note_tags>${xmlEscape(tags.join(", "))}</note_tags>`);
+  }
+  userParts.push(
+    "",
+    "<note_content>",
+    xmlEscape(truncated(contentMarkdown || "", 8000)),
+    "</note_content>",
+  );
+  return { system, user: userParts.join("\n") };
+}
+
+export const NOTE_FLASHCARDS_FEWSHOT = [
+  {
+    role: "user",
+    content: `Extract flashcards from this note.
+
+<note_title>RxJS observable lifecycle</note_title>
+
+<note_content>
+Cold observables don't run until subscribed. Each subscriber gets its own execution.
+Hot observables share execution — multiple subscribers see the same emissions.
+share() converts cold → hot. shareReplay(1) also replays the last value to late subscribers.
+Memory leaks come from missing unsubscribe. takeUntil(destroy$) is the canonical fix in Angular.
+</note_content>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "drafts": [
+    {
+      "front": "What's the practical difference between a cold and a hot observable?",
+      "back": "Cold: each subscriber triggers its own execution; subscribers don't share emissions. Hot: a single execution is shared across all subscribers, so they see the same emissions.",
+      "type": "CONTRAST",
+      "tagSuggestions": ["rxjs", "observables"]
+    },
+    {
+      "front": "How does shareReplay(1) differ from share()?",
+      "back": "share() converts cold to hot but late subscribers miss past emissions. shareReplay(1) additionally replays the last emitted value to any subscriber that arrives after the source has emitted.",
+      "type": "CONTRAST",
+      "tagSuggestions": ["rxjs", "share-replay"]
+    },
+    {
+      "front": "What's the canonical fix for observable memory leaks in an Angular component?",
+      "back": "Pipe each subscription through takeUntil(destroy$) and emit on destroy$ in ngOnDestroy. The subscription completes automatically when the component tears down.",
+      "type": "CONCEPT",
+      "tagSuggestions": ["rxjs", "memory-leaks", "angular"]
+    }
+  ]
+}`,
+  },
+  {
+    role: "user",
+    content: `Extract flashcards from this note.
+
+<note_title>Why I don't merge fixes I can't explain</note_title>
+
+<note_content>
+A teammate asked me why we treat bug fixes as full investigations.
+The reason: a fix you can't explain is a fix that won't survive a refactor or a junior engineer's confused stare.
+- Reproduce the bug locally first — never trust the report alone.
+- Write the failing test BEFORE the fix.
+- After fixing, ask "what allowed this bug to exist?" — that's where the real work is.
+</note_content>`,
+  },
+  {
+    role: "assistant",
+    content: `{
+  "drafts": [
+    {
+      "front": "Why is reproducing a bug locally a non-negotiable first step?",
+      "back": "The bug report is a hypothesis, not the truth. Reproducing locally confirms the symptom and gives you a closed loop for testing the fix; without it, you're patching what someone said, not what's actually broken.",
+      "type": "CONCEPT",
+      "tagSuggestions": ["debugging", "engineering-practices"]
+    },
+    {
+      "front": "Why write the failing test BEFORE the fix?",
+      "back": "It forces you to make the bug concrete and reproducible in code. The test then guards against regression and proves the fix actually addresses the reported symptom — not just an adjacent one.",
+      "type": "CONCEPT",
+      "tagSuggestions": ["test-driven-development", "debugging"]
+    },
+    {
+      "front": "After fixing a bug, what root-cause question should you ask?",
+      "back": "What allowed this bug to exist? The answer surfaces missing types, missing invariants, missing tests, or missing review steps — fixing those prevents the next bug of the same shape.",
+      "type": "CONCEPT",
+      "tagSuggestions": ["root-cause-analysis", "postmortems"]
+    }
+  ]
+}`,
+  },
+];
