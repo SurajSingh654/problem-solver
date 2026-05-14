@@ -34,7 +34,6 @@ import {
   validateNoteAutoTag,
   validateNoteRelated,
   validateNoteFlashcards,
-  extractJSON,
 } from "../services/ai.validators.js";
 import {
   buildFallbackNoteSummary,
@@ -504,7 +503,7 @@ export async function getRelatedForNote(req, res) {
         noteSummary: summary,
         candidates,
       });
-      const raw = await aiComplete({
+      const parsed = await aiComplete({
         systemPrompt: system,
         userPrompt: user,
         userId,
@@ -513,7 +512,6 @@ export async function getRelatedForNote(req, res) {
         maxTokens: 800,
         temperature: 0.4,
       });
-      const parsed = extractJSON(raw);
       const v = validateNoteRelated(parsed, {
         candidateNoteIds: candidates.notes.map((n) => n.id),
         candidateProblemIds: candidates.problems.map((p) => p.id),
@@ -608,30 +606,27 @@ export async function generateNoteSummary(req, res) {
         tags: note.tags,
         isCompressed: prepped.wasCompressed,
       });
-      const raw = await aiComplete({
+      // aiComplete with jsonMode=true (the default) returns the parsed
+      // JSON object directly. No extractJSON call needed — that was a
+      // bug that caused "text.indexOf is not a function" because
+      // extractJSON expects a raw string with embedded JSON.
+      const parsed = await aiComplete({
         systemPrompt: system,
         userPrompt: user,
         userId,
         // Larger budget for long notes — JSON of 5 takeaways + 3 questions
         // + tldr + suggestedReviewFocus comfortably fits in 1500 tokens.
-        // 900 was prone to mid-JSON truncation on long notes, which made
-        // extractJSON return null and the validator reject silently.
+        // 900 was prone to mid-JSON truncation on long notes.
         maxTokens: 1500,
         temperature: 0.5,
         surface: "note:summary",
         fewShotMessages: NOTE_SUMMARY_FEWSHOT,
       });
-      const parsed = extractJSON(raw);
-      if (!parsed) {
-        fallbackReason = "extract-json-failed";
-        console.warn("[notes.summary] extractJSON returned null. Raw head:", String(raw || "").slice(0, 200));
-      } else {
-        const v = validateNoteSummary(parsed, { hasContent });
-        if (v.valid) summary = parsed;
-        else {
-          fallbackReason = `validator:${v.violations.join(",")}`;
-          console.warn("[notes.summary] LLM output rejected:", v.violations);
-        }
+      const v = validateNoteSummary(parsed, { hasContent });
+      if (v.valid) summary = parsed;
+      else {
+        fallbackReason = `validator:${v.violations.join(",")}`;
+        console.warn("[notes.summary] LLM output rejected:", v.violations);
       }
     } catch (e) {
       fallbackReason =
@@ -695,7 +690,7 @@ export async function generateNoteFlashcards(req, res) {
         tags: note.tags,
         isCompressed: prepped.wasCompressed,
       });
-      const raw = await aiComplete({
+      const parsed = await aiComplete({
         systemPrompt: system,
         userPrompt: user,
         userId,
@@ -706,17 +701,11 @@ export async function generateNoteFlashcards(req, res) {
         maxTokens: 2200,
         temperature: 0.6,
       });
-      const parsed = extractJSON(raw);
-      if (!parsed) {
-        fallbackReason = "extract-json-failed";
-        console.warn("[notes.flashcards] extractJSON returned null. Raw head:", String(raw || "").slice(0, 200));
-      } else {
-        const v = validateNoteFlashcards(parsed);
-        if (v.valid) drafts = parsed.drafts;
-        else {
-          fallbackReason = `validator:${v.violations.join(",")}`;
-          console.warn("[notes.flashcards] LLM output rejected:", v.violations);
-        }
+      const v = validateNoteFlashcards(parsed);
+      if (v.valid) drafts = parsed.drafts;
+      else {
+        fallbackReason = `validator:${v.violations.join(",")}`;
+        console.warn("[notes.flashcards] LLM output rejected:", v.violations);
       }
     } catch (e) {
       fallbackReason =
@@ -766,7 +755,7 @@ export async function suggestNoteTags(req, res) {
         existingTags: note.tags,
         isCompressed: prepped.wasCompressed,
       });
-      const raw = await aiComplete({
+      const parsed = await aiComplete({
         systemPrompt: system,
         userPrompt: user,
         userId,
@@ -775,17 +764,11 @@ export async function suggestNoteTags(req, res) {
         maxTokens: 300,
         temperature: 0.3,
       });
-      const parsed = extractJSON(raw);
-      if (!parsed) {
-        fallbackReason = "extract-json-failed";
-        console.warn("[notes.autotag] extractJSON returned null. Raw head:", String(raw || "").slice(0, 200));
-      } else {
-        const v = validateNoteAutoTag(parsed, { existingTags: note.tags });
-        if (v.valid) result = parsed;
-        else {
-          fallbackReason = `validator:${v.violations.join(",")}`;
-          console.warn("[notes.autotag] LLM output rejected:", v.violations);
-        }
+      const v = validateNoteAutoTag(parsed, { existingTags: note.tags });
+      if (v.valid) result = parsed;
+      else {
+        fallbackReason = `validator:${v.violations.join(",")}`;
+        console.warn("[notes.autotag] LLM output rejected:", v.violations);
       }
     } catch (e) {
       fallbackReason =
