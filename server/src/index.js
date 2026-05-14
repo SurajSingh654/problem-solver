@@ -62,6 +62,7 @@ import designStudioRoutes from "./routes/designStudio.routes.js";
 import designReferencesRoutes from "./routes/designReferences.routes.js";
 import teachingRoutes from "./routes/teaching.routes.js";
 import notesRoutes from "./routes/notes.routes.js";
+import flashcardsRoutes from "./routes/flashcards.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
 import { FEATURE_TEACHING_SESSIONS, FEATURE_NOTES_ENABLED } from "./config/env.js";
@@ -207,6 +208,7 @@ function mountRoutes(prefix) {
   // Personal-only routes — no requireTeamContext, scoped by userId.
   if (FEATURE_NOTES_ENABLED) {
     app.use(`${prefix}/notes`, apiLimiter, notesRoutes);
+    app.use(`${prefix}/flashcards`, apiLimiter, flashcardsRoutes);
   }
 }
 

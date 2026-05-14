@@ -22,6 +22,7 @@ import TagInput from "@components/notes/TagInput";
 import RelatedNotesPanel from "@components/notes/RelatedNotesPanel";
 import AiSummaryCard from "@components/notes/AiSummaryCard";
 import SuggestedTagsBar from "@components/notes/SuggestedTagsBar";
+import FlashcardList from "@components/flashcards/FlashcardList";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
 import { formatRelativeDate } from "@utils/formatters";
@@ -232,6 +233,7 @@ export default function NoteDetailPage() {
             />
 
             {!isArchived && <AiSummaryCard note={note} />}
+            {!isArchived && <FlashcardList noteId={note.id} />}
             {!isArchived && <RelatedNotesPanel noteId={note.id} />}
 
             <p className="text-[10px] text-text-disabled text-right">

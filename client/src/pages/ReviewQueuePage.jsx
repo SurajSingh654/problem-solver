@@ -12,6 +12,7 @@ import { CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
 import { RecallAnalyticsPanel } from '@components/features/charts/RecallAnalyticsPanel'
 import { ForgettingCurve } from '@components/features/charts/ForgettingCurve'
 import { RecallDiff } from '@components/features/solutions/RecallDiff'
+import FlashcardReviewSection from '@components/flashcards/FlashcardReviewSection'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -1048,6 +1049,11 @@ export default function ReviewQueuePage() {
                         </Button>
                     )}
                 </div>
+            </div>
+
+            {/* Flashcards (gated, hidden when feature flag is off) */}
+            <div className="mb-6">
+                <FlashcardReviewSection />
             </div>
 
             {/* Session complete banner */}
