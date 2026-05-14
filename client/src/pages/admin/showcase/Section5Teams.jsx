@@ -1,10 +1,8 @@
 import { motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
 import { cn } from '@utils/cn'
 import { Section, SectionBadge, SectionTitle, SectionDesc } from './components'
 
 export default function Section5Teams() {
-    const navigate = useNavigate()
 
     return (
         <Section id="teams" className="py-20 px-8 bg-surface-0">

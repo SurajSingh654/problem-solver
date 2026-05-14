@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { cn } from '@utils/cn'
 import { Section, AnimatedNumber } from './components'
 
 export default function Section1Hero({ stats }) {

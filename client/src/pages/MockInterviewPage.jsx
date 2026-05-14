@@ -1,15 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProblems } from '@hooks/useProblems'
-import useAuthStore from '@store/useAuthStore'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
-import { Spinner } from '@components/ui/Spinner'
 import { Avatar } from '@components/ui/Avatar'
 import { cn } from '@utils/cn'
 import { PROBLEM_CATEGORIES } from '@utils/constants'
-import { formatDuration } from '@utils/formatters'
 import api from '@services/api'
 import { ExcalidrawEditor } from '@components/ui/ExcalidrawEditor'
 
@@ -44,7 +41,7 @@ function getWsUrl() {
 // ── Voice Interview Mode component ────────────────────
 // Added to ChatScreen alongside the existing text input
 // Shows when interviewMode === 'voice'
-function VoiceModeInput({ onTranscript, disabled, sessionId }) {
+function VoiceModeInput({ onTranscript, disabled, sessionId: _sessionId }) {
     const [isRecording, setIsRecording] = useState(false)
     const [isProcessing, setIsProcessing] = useState(false)
     const [lastTranscript, setLastTranscript] = useState('')
@@ -106,7 +103,7 @@ function VoiceModeInput({ onTranscript, disabled, sessionId }) {
             mediaRecorder.start(250) // collect in 250ms chunks
             setIsRecording(true)
             recognitionRef.current?.start()
-        } catch (err) {
+        } catch {
             setError('Microphone access denied. Please allow microphone access.')
         }
     }
@@ -156,7 +153,7 @@ function VoiceModeInput({ onTranscript, disabled, sessionId }) {
                         setLastTranscript(transcript)
                         onTranscript(transcript)
                     }
-                } catch (err) {
+                } catch {
                     setError('Could not transcribe audio. Please try again or switch to text mode.')
                 } finally {
                     setIsProcessing(false)
@@ -289,7 +286,6 @@ function useTTS() {
 // SETUP SCREEN
 // ══════════════════════════════════════════════════════
 function SetupScreen({ onStart }) {
-    const { user } = useAuthStore()
     const [company, setCompany] = useState('ALGORITHM_FOCUSED')
     const [category, setCategory] = useState('CODING')
     const [duration, setDuration] = useState(45)
@@ -697,7 +693,7 @@ function InterviewTimer({ startedAt, duration, phases }) {
                 {mins}:{secs}
             </div>
             <div className="flex-1 flex items-center gap-1">
-                {phases.map((phase, i) => (
+                {phases.map((phase) => (
                     <div
                         key={phase.name}
                         className={cn(
@@ -840,8 +836,7 @@ function WorkspacePanel({ category, workspace, onWorkspaceChange }) {
 // ══════════════════════════════════════════════════════
 // CHAT SCREEN
 // ══════════════════════════════════════════════════════
-function ChatScreen({ sessionData, onEnd, onDebrief }) {
-    const { user } = useAuthStore()
+function ChatScreen({ sessionData, onEnd: _onEnd, onDebrief }) {
     const [messages, setMessages] = useState([])
     const [input, setInput] = useState('')
     const [isTyping, setIsTyping] = useState(false)
@@ -1194,7 +1189,7 @@ function ChatScreen({ sessionData, onEnd, onDebrief }) {
 // ══════════════════════════════════════════════════════
 // DEBRIEF SCREEN
 // ══════════════════════════════════════════════════════
-function DebriefScreen({ debrief, sessionData, onNewInterview }) {
+function DebriefScreen({ debrief, sessionData: _sessionData, onNewInterview }) {
     const navigate = useNavigate()
 
     // Server sends STRONG_HIRE, NO_HIRE etc. — handle both formats

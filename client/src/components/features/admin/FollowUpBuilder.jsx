@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
 
-const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const DIFF_COLORS = {
     EASY: 'bg-success/12  border-success/30  text-success',
     MEDIUM: 'bg-warning/12  border-warning/30  text-warning',

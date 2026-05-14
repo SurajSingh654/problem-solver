@@ -436,7 +436,7 @@ const toolHandlers = {
     // JSON would balloon prompt size and most of it (positions, IDs) is
     // noise to the model. Kinds + count is enough to ask "I see 2
     // databases — which one is which?"
-    let diagramSummary = null;
+    let diagramSummary;
     try {
       const parsed =
         typeof ds.diagramData === "string"
@@ -729,7 +729,7 @@ async function executeToolsAndRespond(
   messages,
   toolCalls,
   toolContext,
-  currentWorkspace,
+  _currentWorkspace,
 ) {
   try {
     const toolResults = [];

@@ -93,7 +93,7 @@ function FunnelBar({ label, value, total, color = 'bg-brand-400' }) {
 }
 
 // ── Weekly bar chart ───────────────────────────────────
-function WeeklyBars({ data, label }) {
+function WeeklyBars({ data, label: _label }) {
     if (!data?.length) return null
     const max = Math.max(...data, 1)
     return (

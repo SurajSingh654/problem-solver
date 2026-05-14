@@ -13,7 +13,6 @@ import {
     useDeleteNotePermanent,
 } from "@hooks/useNotes";
 import { Button } from "@components/ui/Button";
-import { Spinner } from "@components/ui/Spinner";
 import { Skeleton } from "@components/ui/Skeleton";
 import { formatRelativeDate } from "@utils/formatters";
 import { cn } from "@utils/cn";
@@ -166,7 +165,6 @@ export default function NotesListPage() {
 }
 
 function NoteCard({ note }) {
-    const navigate = useNavigate();
     const togglePin = useTogglePinNote();
     const archive = useArchiveNote();
     const restore = useRestoreNote();

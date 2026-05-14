@@ -12,7 +12,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
-import { formatShortDate, formatRelativeDate } from '@utils/formatters'
+import { formatRelativeDate } from '@utils/formatters'
 import api from '@services/api'
 
 const AI_TIMEOUT = { timeout: 120000 }

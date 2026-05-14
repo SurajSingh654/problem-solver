@@ -47,7 +47,7 @@ function CollapsibleSection({ title, icon, defaultOpen = false, children }) {
     )
 }
 
-export default function Section6Technical({ stats }) {
+export default function Section6Technical({ stats: _stats }) {
     return (
         <Section id="technical" className="py-20 px-8">
             <div className="max-w-[1000px] mx-auto">

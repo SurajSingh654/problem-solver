@@ -18,7 +18,6 @@ export async function startInterview(req, res) {
       difficulty,
       interviewStyle,
       interviewMode,
-      duration,
     } = req.body;
 
     let problem = null;

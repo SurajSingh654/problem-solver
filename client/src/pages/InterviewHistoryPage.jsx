@@ -5,7 +5,7 @@ import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
-import { formatRelativeDate, formatDuration } from '@utils/formatters'
+import { formatRelativeDate } from '@utils/formatters'
 import api from '@services/api'
 import AttachedNotesPanel from '@components/notes/AttachedNotesPanel'
 

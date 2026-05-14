@@ -987,16 +987,6 @@ export default function ReviewQueuePage() {
         ? Math.round((totalDoneToday / (totalDoneToday + totalDue)) * 100)
         : 0
 
-    // reviewedToday: count from server data + this session
-    const reviewedToday = useMemo(() => {
-        if (!queueData) return totalDoneToday
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        // Server returns all due items — we approximate today's total
-        // from session count since queue only returns due/upcoming
-        return totalDoneToday
-    }, [queueData, totalDoneToday])
-
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">

@@ -290,7 +290,7 @@ router.put(
     // Inline profile update — simple enough to not need a separate controller fn
     try {
       const prisma = (await import("../lib/prisma.js")).default;
-      const { success, error } = await import("../utils/response.js");
+      const { success } = await import("../utils/response.js");
 
       const updated = await prisma.user.update({
         where: { id: req.user.id },

@@ -20,8 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "lint": "eslint src test",
-    "lint:strict": "eslint src test --max-warnings 0",
+    "lint": "eslint src test --max-warnings 0",
     "lint:fix": "eslint src test --fix"
   },
   "dependencies": {

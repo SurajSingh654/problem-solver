@@ -37,15 +37,6 @@ function getDifficultyLabel(difficulty, category) {
     return d ? d.charAt(0).toUpperCase() + d.slice(1) : difficulty
 }
 
-// Get the display color class for a difficulty value, considering category.
-function getDifficultyColor(difficulty, category) {
-    if (category === 'HR') {
-        return HR_STAKES[difficulty]?.color || 'text-text-secondary'
-    }
-    const colors = { EASY: 'text-success-fg', MEDIUM: 'text-warning-fg', HARD: 'text-danger-fg' }
-    return colors[difficulty] || 'text-text-secondary'
-}
-
 // ── Stats bar ──────────────────────────────────────────
 // Category-aware: shows stakes labels for HR problems in the count.
 function StatsBar({ problems }) {
@@ -246,12 +237,6 @@ export default function ProblemsPage() {
         )
         return [...t].slice(0, 20)
     }, [allProblems])
-
-    // Whether any HR problems exist — affects filter row labels
-    const hasHRProblems = useMemo(
-        () => allProblems.some(p => p.category === 'HR'),
-        [allProblems]
-    )
 
     // Whether the current category filter is HR
     const isHRFilter = category === 'HR'

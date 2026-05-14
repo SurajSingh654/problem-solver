@@ -61,10 +61,6 @@ const BREAKDOWN_CONFIG = [
 
 // ── Score bar — visual breakdown ───────────────────────
 function ScoreBar({ breakdown }) {
-  const total = breakdown
-    ? BREAKDOWN_CONFIG.reduce((sum, c) => sum + (breakdown[c.key] || 0) * parseFloat(c.weight) / 100, 0)
-    : 0
-
   return (
     <div className="h-1.5 w-full bg-surface-3 rounded-full overflow-hidden flex">
       {BREAKDOWN_CONFIG.map((c) => {
@@ -466,7 +462,6 @@ export default function LeaderboardPage() {
   }
 
   const podium = leaderboard?.slice(0, 3) || []
-  const rest = leaderboard?.slice(3) || []
   const currentUserEntry = leaderboard?.find((e) => e.id === user?.id)
 
   return (

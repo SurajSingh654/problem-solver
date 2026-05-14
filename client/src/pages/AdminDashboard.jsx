@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { usePersonalStats } from '@hooks/useReport'
@@ -7,13 +6,11 @@ import { useUsers } from '@hooks/useUsers'
 import useAuthStore from '@store/useAuthStore'
 import { ActivityFeed } from '@components/features/ActivityFeed'
 import { Button } from '@components/ui/Button'
-import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
 import { Avatar } from '@components/ui/Avatar'
 import { cn } from '@utils/cn'
 import { PROBLEM_CATEGORIES } from '@utils/constants'
 import { formatRelativeDate } from '@utils/formatters'
-import api from '@services/api'
 
 // ── Stat card ──────────────────────────────────────────
 function AdminStat({ icon, value, label, color, sub, onClick, delay = 0 }) {

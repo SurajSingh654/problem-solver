@@ -3,7 +3,7 @@
 //
 // We use _setClientForTests() to inject a mock OpenAI client whose
 // chat.completions.create returns whatever the test wants.
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
     aiComplete,
     aiStream,

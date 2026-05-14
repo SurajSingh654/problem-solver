@@ -13,10 +13,7 @@ import {
   retrievability,
   stabilityAfterReps,
 } from "../utils/fsrsRetention.js";
-import {
-  READINESS_TIERS,
-  classifyReadiness,
-} from "../utils/readinessTiers.js";
+import { classifyReadiness } from "../utils/readinessTiers.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
   readinessVerdictPrompt,
@@ -471,7 +468,6 @@ export async function getLeaderboard(req, res) {
     const scored = members.map((member) => {
       const solutions = solutionsByUser.get(member.id) || [];
       const clarityRatings = ratingsByUser.get(member.id) || [];
-      const quizzes = quizzesByUser.get(member.id) || [];
       const totalSolutions = solutions.length;
 
       // ── Difficulty counts ─────────────────────────
@@ -493,7 +489,7 @@ export async function getLeaderboard(req, res) {
       // Peer ratings are second (social proof, hard to game).
       // Self-reported confidence is last (subjective, gameable).
       // ─────────────────────────────────────────────
-      let sqs = 0;
+      let sqs;
 
       if (totalSolutions === 0) {
         sqs = 0;
@@ -1586,9 +1582,8 @@ export async function get6DReport(req, res) {
     const d6Attempts = Array.from(latestSuccessfulBySolution.values());
     const d6SolutionCount = latestSuccessfulBySolution.size;
 
-    // Legacy `d6` number kept around only in case any downstream code
-    // still expects it mid-function; the authoritative output is `d6Score`.
-    let d6 = 0;
+    // Authoritative output is `d6Score`. (Legacy `d6` numeric was
+    // dropped — no downstream reader.)
     let d6Score;
     if (d6Attempts.length < 3 || d6SolutionCount < 2) {
       const need = Math.max(0, 3 - d6Attempts.length);
@@ -1611,7 +1606,6 @@ export async function get6DReport(req, res) {
         return retrievability(daysSince, stability) * 100;
       });
       const ci = meanCI(retentionValues);
-      d6 = ci.score;
       d6Score = activeDim("retention", {
         score: ci.score,
         n: d6Attempts.length,

@@ -15,10 +15,11 @@ import useAuthStore from '@store/useAuthStore'
 import api from '@services/api'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
+import { cn } from '@utils/cn'
 
 export default function TeamPendingPage() {
   const navigate = useNavigate()
-  const { user, switchTeam } = useAuthStore()
+  const { user } = useAuthStore()
 
   const [pendingTeams, setPendingTeams] = useState([])
   const [loading, setLoading] = useState(true)
@@ -55,7 +56,7 @@ export default function TeamPendingPage() {
       // If the user isn't super admin, they can't access /teams/all
       // Try to get pending teams from their profile instead
       try {
-        const profileRes = await api.get('/auth/me')
+        await api.get('/auth/me')
         // Check if user has a pending team by looking at created teams
         // For now, just show empty state
         setPendingTeams([])

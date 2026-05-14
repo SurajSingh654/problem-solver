@@ -8,7 +8,9 @@
 // ============================================================================
 import { IS_PRODUCTION } from "../config/env.js";
 
-export function errorHandler(err, req, res, next) {
+// `_next` is required by Express's 4-arg error-middleware signature
+// even though we don't call it.
+export function errorHandler(err, req, res, _next) {
   const requestId = req.requestId || "unknown";
 
   // Log with request ID for traceability

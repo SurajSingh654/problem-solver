@@ -36,7 +36,6 @@ import prisma from "../lib/prisma.js";
 import { generateToken } from "../lib/jwt.js";
 import {
   sendVerificationEmail,
-  sendWelcomeEmail,
   sendPasswordResetEmail,
 } from "../services/email.service.js";
 import {
@@ -103,17 +102,6 @@ async function buildUserResponse(userId) {
 // ── Helper: generate 6-digit code ────────────────────────────
 function generateCode() {
   return crypto.randomInt(100000, 999999).toString();
-}
-
-// ── Helper: generate join code ───────────────────────────────
-function generateJoinCode(length = 8) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  const bytes = crypto.randomBytes(length);
-  for (let i = 0; i < length; i++) {
-    code += chars[bytes[i] % chars.length];
-  }
-  return code;
 }
 
 // ── Helper: code expiry date ─────────────────────────────────

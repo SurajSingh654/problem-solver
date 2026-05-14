@@ -1,7 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — Problem Form (Add + Edit)
 // ============================================================================
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,7 +10,6 @@ import { FollowUpBuilder } from './FollowUpBuilder'
 import { ChipInput } from '@components/ui/ChipInput'
 import { Input } from '@components/ui/Input'
 import { Button } from '@components/ui/Button'
-import { Badge } from '@components/ui/Badge'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { useGenerateContent, useAIStatus } from '@hooks/useAI'
 import { toast } from '@store/useUIStore'
@@ -191,32 +190,6 @@ function MarkdownTextarea({ label, optional, hint, rows = 3, value, ...props }) 
                     {...props}
                 />
             )}
-        </div>
-    )
-}
-
-// ── Plain textarea (no preview needed) ─────────────────────────
-function Textarea({ label, optional, hint, rows = 3, ...props }) {
-    return (
-        <div>
-            {label && (
-                <label className="block text-sm font-semibold text-text-primary mb-1.5">
-                    {label}
-                    {optional && (
-                        <span className="ml-1.5 text-xs font-normal text-text-disabled">optional</span>
-                    )}
-                </label>
-            )}
-            {hint && <p className="text-xs text-text-tertiary mb-2">{hint}</p>}
-            <textarea
-                rows={rows}
-                className="w-full bg-surface-3 border border-border-strong rounded-xl
-                           text-sm text-text-primary placeholder:text-text-tertiary
-                           px-3.5 py-2.5 outline-none resize-none
-                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                           transition-all duration-150"
-                {...props}
-            />
         </div>
     )
 }

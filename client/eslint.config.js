@@ -55,6 +55,10 @@ export default [
       // Stylistic rule — codebase uses apostrophes freely in JSX copy;
       // escape churn would be massive and low-value.
       "react/no-unescaped-entities": "off",
+      // Empty catch blocks are common for "best-effort" cleanup paths
+      // (localStorage, fire-and-forget). Allow them; require an inline
+      // comment for non-catch empty blocks.
+      "no-empty": ["error", { allowEmptyCatch: true }],
     },
   },
 ];

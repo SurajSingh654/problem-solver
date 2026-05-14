@@ -339,7 +339,7 @@ async function handleWorkspace(ws, message) {
     .catch(() => {});
 }
 
-async function handleEnd(ws, message) {
+async function handleEnd(ws, _message) {
   if (!ws.sessionId) return;
   await handleInterviewMessage(ws, {
     type: "end_interview",

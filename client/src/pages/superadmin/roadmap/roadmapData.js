@@ -115,6 +115,22 @@ export const EFFORT_CONFIG = {
 
 export const ROADMAP_ITEMS = [
 
+    // ── DEFERRED — pending design discussion ────────────────────────────
+
+    {
+        id: 'strict-prepush-quality-gate',
+        phase: 'NEXT',
+        theme: 'Engineering Hygiene',
+        priority: 'MEDIUM',
+        effort: 'Medium',
+        title: 'Strict pre-push code-quality gate',
+        impact: 'Server lint + tests are already gated. The next layer extends the .githooks/pre-push hook to also block on (a) client lint --max-warnings 0, (b) `vite build` succeeding, (c) client component tests via a new vitest setup in client/, (d) `prisma migrate status` (no drift). With these in place, the kind of bugs that leaked into prod recently (extractJSON-on-parsed-JSON, hasContent reference, easinessFactor field-name mismatch, missing migration) cannot leave the dev machine.',
+        description: 'In progress as of 2026-05-14. Already shipped: server eslint flat config (errors block, warnings tracked), 9 controller integration tests, .githooks/pre-push running server lint:strict + vitest. Pending decisions: (1) client lint strictness — 17 react-hooks/exhaustive-deps warnings need audit before --max-warnings 0 flips, (2) whether to add `vite build` to the gate (~30s overhead per push), (3) whether to set up vitest in client/ and add a thin component-test layer, (4) whether to add prisma migrate status drift check. Discuss + finalize scope with user, then implement.',
+        why: 'Cost of pre-push checks (~30s) is much smaller than the cost of a bug shipping to prod. The recent bug class (silent fallbacks, undefined refs, schema-field mismatches) is exactly what static checks + integration tests catch — but only if they run before push. Manual discipline does not scale.',
+        researchBasis: 'Standard CI/CD discipline. Pre-commit/pre-push hooks at major engineering orgs (Google, Meta, Stripe) gate on lint + types + unit tests at minimum. The cost-benefit favours expanding this gate even further when the team finds a bug class that escaped.',
+        technicalNotes: '.githooks/pre-push currently runs server lint + vitest. Client lint runs only when PRE_PUSH_CLIENT_LINT=1 is set (opt-in until 17 hook-deps warnings are addressed). server/eslint.config.js splits hard errors from warnings; lint:strict fails on any warning. Server has 9 controller integration tests in test/controllers/ + 213 validator/service unit tests = 222 total. Client has no test runner configured.',
+    },
+
     // ── SHIPPED (May 2026 — Intelligence Report + Design Studio + Polish) ─
 
     {

@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { CodeEditor } from '@components/ui/CodeEditor'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
-import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
 
 const SOLUTION_TYPES = [
@@ -163,7 +161,6 @@ export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesCha
     const timeLabel = config?.complexityLabels?.time || 'Time Complexity'
     const spaceLabel = config?.complexityLabels?.space || 'Space Complexity'
     const codeLabel = config?.codeLabel || 'Code'
-    const codePlaceholder = config?.codePlaceholder || ''
     const notesLabel = config?.notesLabel || 'Notes'
     const defaultLanguage = config?.defaultLanguage || null
 

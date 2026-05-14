@@ -418,7 +418,7 @@ Members: alex@example.com / member123`}
                                 cd server && npx prisma studio
                             </code>
                             {' '}opens Prisma Studio at{' '}
-                            <a href="http://localhost:5555" target="_blank" className="text-brand-fg-soft underline">
+                            <a href="http://localhost:5555" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline">
                                 localhost:5555
                             </a>
                         </Callout>
@@ -460,11 +460,11 @@ Members: alex@example.com / member123`}
                         </CodeBlock>
                         <Callout type="success">
                             Open{' '}
-                            <a href="http://localhost:5173" target="_blank" className="text-brand-fg-soft underline font-semibold">
+                            <a href="http://localhost:5173" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline font-semibold">
                                 http://localhost:5173
                             </a>
                             {' '}— your app is live. API health check:{' '}
-                            <a href="http://localhost:5000/health" target="_blank" className="text-brand-fg-soft underline">
+                            <a href="http://localhost:5000/health" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline">
                                 localhost:5000/health
                             </a>
                         </Callout>
@@ -505,7 +505,7 @@ npm run dev`}
                     >
                         <p className="text-xs text-text-secondary mb-2">
                             Go to{' '}
-                            <a href="http://localhost:5173/register" target="_blank"
+                            <a href="http://localhost:5173/register" target="_blank" rel="noopener noreferrer"
                                 className="text-brand-fg-soft underline">
                                 localhost:5173/register
                             </a>
@@ -583,8 +583,8 @@ npm run dev`}
                         <strong>Shared server:</strong> One person runs Express, all teammates set{' '}
                         <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">VITE_API_URL</code>{' '}
                         to that machine's IP. Or deploy to{' '}
-                        <a href="https://railway.app" target="_blank" className="text-brand-fg-soft underline">Railway</a> or{' '}
-                        <a href="https://render.com" target="_blank" className="text-brand-fg-soft underline">Render</a> free tier.
+                        <a href="https://railway.app" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline">Railway</a> or{' '}
+                        <a href="https://render.com" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline">Render</a> free tier.
                     </Callout>
                 </Section>
 
@@ -724,9 +724,9 @@ npm run dev`}
                         </CodeBlock>
                         <Callout type="info">
                             Free PostgreSQL:{' '}
-                            <a href="https://neon.tech" target="_blank" className="text-brand-fg-soft underline">neon.tech</a>
+                            <a href="https://neon.tech" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline">neon.tech</a>
                             {' '}(serverless, great for teams) or{' '}
-                            <a href="https://railway.app" target="_blank" className="text-brand-fg-soft underline">railway.app</a>.
+                            <a href="https://railway.app" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline">railway.app</a>.
                             Both have free tiers.
                         </Callout>
                     </StepCard>

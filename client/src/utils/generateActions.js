@@ -167,7 +167,7 @@ export function generateActionItems(stats, solutions = []) {
 /**
  * Generate a one-line overall verdict based on scores
  */
-export function getOverallVerdict(overallScore, dims = {}) {
+export function getOverallVerdict(overallScore, _dims = {}) {
   if (overallScore >= 80)
     return {
       label: "Excellent",

@@ -16,7 +16,7 @@ import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import {
     PATTERNS, CONFIDENCE_LEVELS, PROBLEM_CATEGORIES,
-    HR_STAKES, HR_QUESTION_CATEGORIES, HR_QUESTION_CATEGORY_MAP,
+    HR_STAKES, HR_QUESTION_CATEGORIES,
 } from '@utils/constants'
 import { getCategoryForm } from '@utils/categoryForms'
 

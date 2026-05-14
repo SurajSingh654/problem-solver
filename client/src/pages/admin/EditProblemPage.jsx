@@ -27,13 +27,12 @@
 //    Mirrors standard CMS patterns.
 //
 // ============================================================================
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProblem, useUpdateProblem, useDeleteProblem } from '@hooks/useProblems'
 import { FollowUpBuilder } from '@components/features/admin/FollowUpBuilder'
 import { Button } from '@components/ui/Button'
-import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
@@ -43,7 +42,6 @@ import {
     PATTERNS,
     HR_STAKES,
     HR_QUESTION_CATEGORIES,
-    HR_QUESTION_CATEGORY_MAP,
 } from '@utils/constants'
 
 // ── Constants ──────────────────────────────────────────

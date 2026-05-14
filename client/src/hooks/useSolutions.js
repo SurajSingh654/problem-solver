@@ -35,7 +35,7 @@ export function useSubmitSolution() {
   return useMutation({
     mutationFn: ({ problemId, data }) =>
       api.post(`/solutions/${problemId}`, data),
-    onSuccess: (_, { problemId }) => {
+    onSuccess: (_data, { problemId: _problemId }) => {
       queryClient.invalidateQueries({
         queryKey: [...teamQueryKey, "solutions"],
       });

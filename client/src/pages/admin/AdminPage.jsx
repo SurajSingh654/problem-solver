@@ -201,8 +201,6 @@ function ProblemsTable({ problems, onEdit, onDelete, onTogglePin, onToggleVisibi
 
 // ── Members table (uses team API) ──────────────────────
 function MembersTable({ members, currentUserId }) {
-    const navigate = useNavigate()
-
     if (!members?.length) {
         return (
             <div className="flex flex-col items-center gap-3 py-16 text-center">

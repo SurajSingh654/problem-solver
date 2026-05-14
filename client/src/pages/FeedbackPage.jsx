@@ -3,7 +3,7 @@
 // ============================================================================
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSubmitFeedback, useFeedbackList, useSimilarFeedback, useExportFeedback } from '@hooks/useFeedback'
+import { useSubmitFeedback, useFeedbackList, useSimilarFeedback } from '@hooks/useFeedback'
 import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'

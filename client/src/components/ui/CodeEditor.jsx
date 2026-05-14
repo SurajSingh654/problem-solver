@@ -113,7 +113,6 @@ export function CodeEditor({
     className,
 }) {
     const [copied, setCopied] = useState(false)
-    const [mounted, setMounted] = useState(false)
 
     const isDark = typeof document !== 'undefined'
         ? document.documentElement.classList.contains('dark') ||
@@ -123,7 +122,6 @@ export function CodeEditor({
     function handleMount(editor, monaco) {
         defineTheme(monaco)
         monaco.editor.setTheme(isDark ? 'probsolver-dark' : 'probsolver-light')
-        setMounted(true)
         editor.updateOptions({
             fontSize: 13,
             fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace",

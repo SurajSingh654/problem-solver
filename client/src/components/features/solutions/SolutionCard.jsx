@@ -8,7 +8,7 @@ import { Badge } from '@components/ui/Badge'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { cn } from '@utils/cn'
 import { formatRelativeDate } from '@utils/formatters'
-import { LANGUAGE_LABELS, CONFIDENCE_LEVELS, HR_STAKES, HR_QUESTION_CATEGORY_MAP } from '@utils/constants'
+import { LANGUAGE_LABELS, CONFIDENCE_LEVELS, HR_QUESTION_CATEGORY_MAP } from '@utils/constants'
 
 // ── HR question category IDs for old-format detection ──
 // HR solutions submitted before categorySpecificData was added stored
@@ -85,7 +85,7 @@ function SDSolutionDisplay({ data }) {
 }
 
 // ── LLD structured display ─────────────────────────────
-function LLDSolutionDisplay({ data, code, language }) {
+function LLDSolutionDisplay({ data, code, language: _language }) {
     const [activeKey, setActiveKey] = useState(() => {
         const orderedKeys = ['entities', 'classHierarchy', 'designPattern', 'solidAnalysis', 'extensibilityAnalysis']
         return orderedKeys.find(k => data[k]?.trim?.()?.length > 0) || 'entities'
@@ -583,7 +583,7 @@ function ConfidenceDisplay({ level, isHR = false }) {
 }
 
 // ── Main SolutionCard ──────────────────────────────────
-export function SolutionCard({ solution, isOwn = false, problemFollowUps = [] }) {
+export function SolutionCard({ solution, isOwn = false, problemFollowUps: _problemFollowUps = [] }) {
     const [expanded, setExpanded] = useState(false)
     const [tab, setTab] = useState('approach')
 

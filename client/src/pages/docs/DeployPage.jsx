@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
     DocsLayout, DocsHero, Section, SectionTitle, SectionDesc,
-    StepCard, CodeBlock, Callout, Table, SbLink,
+    StepCard, CodeBlock, Callout,
 } from './components'
 
 const STEPS = [
@@ -439,7 +439,7 @@ git push`}
                         sub="Use GitHub OAuth — makes repo connection seamless">
                         <p className="text-xs text-text-secondary leading-relaxed">
                             Go to{' '}
-                            <a href="https://railway.app" target="_blank" className="text-brand-fg-soft underline">railway.app</a>
+                            <a href="https://railway.app" target="_blank" rel="noopener noreferrer" className="text-brand-fg-soft underline">railway.app</a>
                             {' '}→ <strong>Login with GitHub</strong> → <strong>New Project</strong> →{' '}
                             <strong>Empty Project</strong> → name it <code className="text-brand-fg-soft bg-brand-soft px-1 rounded text-xs">problem-solver</code>.
                         </p>

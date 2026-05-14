@@ -77,7 +77,7 @@ export function ActivityHeatmap({ activity = {}, days = 91 }) {
             <div className="flex gap-[3px]">
                 {weeks.map((week, wi) => (
                     <div key={wi} className="flex flex-col gap-[3px]">
-                        {week.map((cell, di) => (
+                        {week.map((cell) => (
                             <motion.div
                                 key={cell.date}
                                 initial={{ opacity: 0, scale: 0.5 }}

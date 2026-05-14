@@ -1,4 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+// ESLint's react/jsx-key rule flags <Check /> / <Cross /> appearing
+// inside Table row arrays (rows={[[<Check />, <Cross />, ...]]}). The
+// Table component in ./components.jsx already assigns keys when it
+// renders rows.map((row, ri) => row.map((cell, ci) => …)), so these
+// keys would be redundant. Disable the rule for this docs page only.
+/* eslint-disable react/jsx-key */
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
     DocsLayout, DocsHero, Section, SectionTitle, SectionDesc,
@@ -42,7 +48,6 @@ const NAV = [
 
 export default function ReadmePage() {
     const [active, setActive] = useState('what')
-    const mainRef = useRef(null)
 
     // Scroll spy
     useEffect(() => {

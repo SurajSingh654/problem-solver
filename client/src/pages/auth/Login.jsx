@@ -57,7 +57,7 @@ export default function Login() {
     const {
         register,
         handleSubmit,
-        formState: { errors, isSubmitting },
+        formState: { errors },
         setError,
     } = useForm({ resolver: zodResolver(loginSchema) })
 

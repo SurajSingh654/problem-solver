@@ -31,7 +31,6 @@ import {
   getSkill,
   getProfileLevel,
   computeDecay,
-  SKILL_TAXONOMY,
   getSkillsForCategory,
 } from "../utils/skillTaxonomy.js";
 
@@ -89,8 +88,9 @@ export async function recomputeSkillsFromSolution(solutionId) {
     const stability = Math.max(1, ef * Math.pow(reps + 1, 0.7));
     const sm2RetentionScore = Math.exp(-daysSince / (stability * 10)) * 100;
 
-    // Confidence calibration (self-reported — lower weight)
-    const confidenceScore = (solution.confidence / 5) * 100;
+    // (Self-reported confidence calibration was prototyped here but
+    // dropped — too gameable. The retention score above carries the
+    // signal we actually trust.)
 
     for (const skillId of skillIds) {
       const skillConfig = getSkill(skillId);

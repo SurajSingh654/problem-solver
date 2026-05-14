@@ -4,7 +4,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'

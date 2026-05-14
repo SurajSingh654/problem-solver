@@ -153,7 +153,7 @@ export default function Section3AI({ stats }) {
                                 { icon: '🧩', value: stats.totalQuizzes || 0, label: 'AI Quizzes' },
                                 { icon: '💬', value: stats.totalSims || 0, label: 'Mock Interviews' },
                                 { icon: '📐', value: stats.embeddingCount || stats.problemEmbeddings || 0, label: 'Embeddings' },
-                            ].map((s, i) => (
+                            ].map((s) => (
                                 <div key={s.label} className="text-center">
                                     <span className="text-xl">{s.icon}</span>
                                     <div className="text-xl font-extrabold font-mono text-brand-fg-soft mt-1">
