@@ -593,7 +593,7 @@ export async function generateNoteSummary(req, res) {
     }
 
     let summary;
-    let isFallback = false;
+    let fallbackReason = null;
     try {
       const { system, user } = noteSummaryPrompt({
         title: note.title,
@@ -604,28 +604,35 @@ export async function generateNoteSummary(req, res) {
         systemPrompt: system,
         userPrompt: user,
         userId,
+        // Larger budget for long notes — JSON of 5 takeaways + 3 questions
+        // + tldr + suggestedReviewFocus comfortably fits in 1500 tokens.
+        // 900 was prone to mid-JSON truncation on long notes, which made
+        // extractJSON return null and the validator reject silently.
+        maxTokens: 1500,
+        temperature: 0.5,
         surface: "note:summary",
         fewShotMessages: NOTE_SUMMARY_FEWSHOT,
-        maxTokens: 900,
-        temperature: 0.5,
       });
       const parsed = extractJSON(raw);
-      const v = validateNoteSummary(parsed, { hasContent });
-      if (v.valid) summary = parsed;
-      else {
-        console.warn("[notes.summary] LLM output rejected:", v.violations);
+      if (!parsed) {
+        fallbackReason = "extract-json-failed";
+        console.warn("[notes.summary] extractJSON returned null. Raw head:", String(raw || "").slice(0, 200));
+      } else {
+        const v = validateNoteSummary(parsed, { hasContent });
+        if (v.valid) summary = parsed;
+        else {
+          fallbackReason = `validator:${v.violations.join(",")}`;
+          console.warn("[notes.summary] LLM output rejected:", v.violations);
+        }
       }
     } catch (e) {
-      if (!(e instanceof AIError)) {
-        console.error("[notes.summary] AI call threw:", e.message);
-      }
+      fallbackReason =
+        e instanceof AIError ? `ai-error:${e.code}` : `ai-threw:${e.message}`;
+      console.error("[notes.summary] AI call failed:", fallbackReason);
     }
+    const isFallback = !summary;
     if (!summary) {
-      summary = buildFallbackNoteSummary({
-        title: note.title,
-        contentMarkdown: note.contentMarkdown,
-      });
-      isFallback = true;
+      summary = buildFallbackNoteSummary();
     }
 
     await prisma.note.update({
@@ -633,7 +640,11 @@ export async function generateNoteSummary(req, res) {
       data: { summary, summaryGeneratedAt: new Date() },
     });
 
-    return success(res, { summary, fallback: isFallback });
+    return success(res, {
+      summary,
+      fallback: isFallback,
+      ...(fallbackReason ? { fallbackReason } : {}),
+    });
   } catch (err) {
     console.error("generateNoteSummary:", err);
     return error(res, "Failed to generate summary", 500);
@@ -667,7 +678,7 @@ export async function generateNoteFlashcards(req, res) {
     }
 
     let drafts;
-    let isFallback = false;
+    let fallbackReason = null;
     try {
       const { system, user } = noteFlashcardsPrompt({
         title: note.title,
@@ -680,30 +691,39 @@ export async function generateNoteFlashcards(req, res) {
         userId,
         surface: "note:flashcards",
         fewShotMessages: NOTE_FLASHCARDS_FEWSHOT,
-        maxTokens: 1500,
+        // Up from 1500 — 7 drafts × ~700 chars + JSON skeleton can hit
+        // ~2000 tokens; 1500 was prone to mid-JSON truncation.
+        maxTokens: 2200,
         temperature: 0.6,
       });
       const parsed = extractJSON(raw);
-      const v = validateNoteFlashcards(parsed);
-      if (v.valid) drafts = parsed.drafts;
-      else {
-        console.warn("[notes.flashcards] LLM output rejected:", v.violations);
+      if (!parsed) {
+        fallbackReason = "extract-json-failed";
+        console.warn("[notes.flashcards] extractJSON returned null. Raw head:", String(raw || "").slice(0, 200));
+      } else {
+        const v = validateNoteFlashcards(parsed);
+        if (v.valid) drafts = parsed.drafts;
+        else {
+          fallbackReason = `validator:${v.violations.join(",")}`;
+          console.warn("[notes.flashcards] LLM output rejected:", v.violations);
+        }
       }
     } catch (e) {
-      if (!(e instanceof AIError)) {
-        console.error("[notes.flashcards] AI call threw:", e.message);
-      }
+      fallbackReason =
+        e instanceof AIError ? `ai-error:${e.code}` : `ai-threw:${e.message}`;
+      console.error("[notes.flashcards] AI call failed:", fallbackReason);
     }
+    const isFallback = !drafts;
     if (!drafts) {
-      const fb = buildFallbackNoteFlashcards({
-        title: note.title,
-        contentMarkdown: note.contentMarkdown,
-      });
+      const fb = buildFallbackNoteFlashcards();
       drafts = fb.drafts;
-      isFallback = true;
     }
 
-    return success(res, { drafts, fallback: isFallback });
+    return success(res, {
+      drafts,
+      fallback: isFallback,
+      ...(fallbackReason ? { fallbackReason } : {}),
+    });
   } catch (err) {
     console.error("generateNoteFlashcards:", err);
     return error(res, "Failed to generate flashcards", 500);
@@ -727,7 +747,7 @@ export async function suggestNoteTags(req, res) {
     }
 
     let result;
-    let isFallback = false;
+    let fallbackReason = null;
     try {
       const { system, user } = noteAutoTagPrompt({
         title: note.title,
@@ -740,26 +760,32 @@ export async function suggestNoteTags(req, res) {
         userId,
         surface: "note:autotag",
         fewShotMessages: NOTE_AUTOTAG_FEWSHOT,
-        maxTokens: 200,
+        maxTokens: 300,
         temperature: 0.3,
       });
       const parsed = extractJSON(raw);
-      const v = validateNoteAutoTag(parsed, { existingTags: note.tags });
-      if (v.valid) result = parsed;
-      else {
-        console.warn("[notes.autotag] LLM output rejected:", v.violations);
+      if (!parsed) {
+        fallbackReason = "extract-json-failed";
+        console.warn("[notes.autotag] extractJSON returned null. Raw head:", String(raw || "").slice(0, 200));
+      } else {
+        const v = validateNoteAutoTag(parsed, { existingTags: note.tags });
+        if (v.valid) result = parsed;
+        else {
+          fallbackReason = `validator:${v.violations.join(",")}`;
+          console.warn("[notes.autotag] LLM output rejected:", v.violations);
+        }
       }
     } catch (e) {
-      if (!(e instanceof AIError)) {
-        console.error("[notes.autotag] AI call threw:", e.message);
-      }
+      fallbackReason =
+        e instanceof AIError ? `ai-error:${e.code}` : `ai-threw:${e.message}`;
+      console.error("[notes.autotag] AI call failed:", fallbackReason);
     }
+    const isFallback = !result;
     if (!result) {
       result = buildFallbackNoteAutoTag({
         contentMarkdown: note.contentMarkdown,
         existingTags: note.tags,
       });
-      isFallback = true;
     }
 
     // Persist the suggestion list (separate from user-applied `tags`).
@@ -768,7 +794,11 @@ export async function suggestNoteTags(req, res) {
       data: { suggestedTags: result.tags },
     });
 
-    return success(res, { tags: result.tags, fallback: isFallback });
+    return success(res, {
+      tags: result.tags,
+      fallback: isFallback,
+      ...(fallbackReason ? { fallbackReason } : {}),
+    });
   } catch (err) {
     console.error("suggestNoteTags:", err);
     return error(res, "Failed to suggest tags", 500);

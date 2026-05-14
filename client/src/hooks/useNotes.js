@@ -139,10 +139,8 @@ export function useGenerateNoteSummary() {
         mutationFn: (id) =>
             notesApi.generateSummary(id).then((r) => r.data.data),
         onSuccess: (data, id) => {
-            // Patch the cache immediately so the UI reflects the new
-            // summary without waiting for a refetch round-trip. Without
-            // this, a successful retry can briefly still render the
-            // previous fallback banner.
+            // Stash the fallback reason on the cached note so the UI
+            // banner can show it without a refetch.
             if (data?.summary) {
                 qc.setQueryData(KEYS.ITEM(id), (prev) =>
                     prev
@@ -150,6 +148,7 @@ export function useGenerateNoteSummary() {
                             ...prev,
                             summary: data.summary,
                             summaryGeneratedAt: new Date().toISOString(),
+                            _lastSummaryFallbackReason: data.fallbackReason || null,
                         }
                         : prev,
                 );
@@ -157,7 +156,7 @@ export function useGenerateNoteSummary() {
             qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
             if (data?.fallback) {
                 toast.error(
-                    "AI is currently unavailable — fallback applied. Try again in a moment.",
+                    `AI fallback (${data.fallbackReason || "unknown"}) — try again.`,
                 );
             } else {
                 toast.success("Summary generated.");

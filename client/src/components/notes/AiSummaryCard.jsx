@@ -40,6 +40,7 @@ export default function AiSummaryCard({ note }) {
     // fallback's filler text the same way as a real summary, which made
     // it look like AI succeeded when it hadn't.
     if (isFallback) {
+        const reason = note._lastSummaryFallbackReason;
         return (
             <div className="rounded-xl bg-warning-soft border border-warning-line p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -55,12 +56,18 @@ export default function AiSummaryCard({ note }) {
                     </Button>
                 </div>
                 <p className="text-xs text-text-secondary leading-relaxed">
-                    The AI service couldn't be reached (rate limit, network, or
-                    temporary outage). No summary was generated. Your note is unchanged.
+                    The AI service couldn't be reached or returned an output that
+                    failed validation. No summary was generated. Your note is unchanged.
                 </p>
+                {reason && (
+                    <div className="text-[11px] text-text-disabled">
+                        <span className="font-bold">Reason:</span>{" "}
+                        <code className="font-mono">{reason}</code>
+                    </div>
+                )}
                 <p className="text-[11px] text-text-disabled">
-                    If this persists, check that <code className="font-mono text-[10px]">OPENAI_API_KEY</code> is set
-                    on the server and that you haven't hit the per-user daily AI limit.
+                    Common causes: <code className="font-mono text-[10px]">OPENAI_API_KEY</code> not set,
+                    daily AI limit hit, model returned malformed JSON, or note exceeds the input window.
                 </p>
             </div>
         );
