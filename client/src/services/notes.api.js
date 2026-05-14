@@ -14,4 +14,7 @@ export const notesApi = {
     archive: (id) => api.delete(`/notes/${id}`),
     restore: (id) => api.post(`/notes/${id}/restore`),
     togglePin: (id) => api.post(`/notes/${id}/pin`),
+    listByEntity: (type, id) => api.get(`/notes/by-entity/${type}/${id}`),
+    linkSearch: (type, q = "") =>
+        api.get("/notes/link-search", { params: { type, q } }),
 }

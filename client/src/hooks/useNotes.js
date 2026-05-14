@@ -83,6 +83,26 @@ export function useRestoreNote() {
     });
 }
 
+export function useNotesByEntity(type, id) {
+    return useQuery({
+        queryKey: ["notes", "by-entity", type, id],
+        queryFn: () =>
+            notesApi.listByEntity(type, id).then((r) => r.data.data.notes),
+        enabled: Boolean(type && id),
+        staleTime: 1000 * 30,
+    });
+}
+
+export function useLinkSearch(type, q) {
+    return useQuery({
+        queryKey: ["notes", "link-search", type, q],
+        queryFn: () =>
+            notesApi.linkSearch(type, q).then((r) => r.data.data.results),
+        enabled: Boolean(type),
+        staleTime: 1000 * 15,
+    });
+}
+
 export function useTogglePinNote() {
     const qc = useQueryClient();
     return useMutation({

@@ -17,6 +17,7 @@ import {
     useTogglePinNote,
 } from "@hooks/useNotes";
 import MarkdownEditor from "@components/notes/MarkdownEditor";
+import EntityLinkPicker from "@components/notes/EntityLinkPicker";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
 import { formatRelativeDate } from "@utils/formatters";
@@ -156,6 +157,29 @@ export default function NoteDetailPage() {
                     This note is archived. Restore it to keep editing.
                 </div>
             )}
+
+            <EntityLinkPicker
+                disabled={isArchived}
+                value={
+                    note.linkedEntityType
+                        ? {
+                            linkedEntityType: note.linkedEntityType,
+                            linkedEntityId: note.linkedEntityId,
+                            linkedEntityTitle: note.linkedEntityTitle,
+                        }
+                        : null
+                }
+                onChange={(next) => {
+                    if (next) {
+                        update.mutate({
+                            linkedEntityType: next.linkedEntityType,
+                            linkedEntityId: next.linkedEntityId,
+                        });
+                    } else {
+                        update.mutate({ linkedEntityType: null });
+                    }
+                }}
+            />
 
             <input
                 value={title}

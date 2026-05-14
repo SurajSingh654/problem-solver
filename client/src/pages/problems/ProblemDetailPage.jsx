@@ -14,6 +14,7 @@ import { PageSpinner } from '@components/ui/Spinner'
 import { EmptyState } from '@components/ui/EmptyState'
 import { AIReviewCard } from '@components/features/ai/AIReviewCard'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
+import AttachedNotesPanel from '@components/notes/AttachedNotesPanel'
 import { useAIStatus } from '@hooks/useAI'
 import { cn } from '@utils/cn'
 import { formatShortDate } from '@utils/formatters'
@@ -1420,6 +1421,9 @@ export default function ProblemDetailPage() {
                         )}
                     </div>
                 )}
+                <div className="mt-6">
+                    <AttachedNotesPanel entityType="PROBLEM" entityId={problem.id} />
+                </div>
             </motion.div>
         </div>
     )

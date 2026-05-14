@@ -19,6 +19,8 @@ import {
   archiveNote,
   restoreNote,
   togglePin,
+  listNotesByEntity,
+  searchLinkableEntities,
 } from "../controllers/notes.controller.js";
 
 const router = Router();
@@ -27,6 +29,12 @@ router.use(authenticate);
 
 router.post("/", createNote);
 router.get("/", listNotes);
+
+// Static paths must come before the dynamic `/:id` route so they win
+// routing precedence.
+router.get("/link-search", searchLinkableEntities);
+router.get("/by-entity/:type/:id", listNotesByEntity);
+
 router.get("/:id", getNote);
 router.patch("/:id", updateNote);
 router.delete("/:id", archiveNote);

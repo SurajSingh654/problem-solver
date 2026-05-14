@@ -7,6 +7,7 @@ import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
 import { formatRelativeDate, formatDuration } from '@utils/formatters'
 import api from '@services/api'
+import AttachedNotesPanel from '@components/notes/AttachedNotesPanel'
 
 // ── Verdict badge ──────────────────────────────────────
 function VerdictBadge({ verdict }) {
@@ -278,6 +279,10 @@ function SessionDetail({ sessionId, onBack }) {
                         )
                     })}
                 </div>
+            </div>
+
+            <div className="mt-6">
+                <AttachedNotesPanel entityType="INTERVIEW_SESSION" entityId={sessionId} />
             </div>
         </div>
     )

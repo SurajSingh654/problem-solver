@@ -28,6 +28,7 @@ import { Spinner } from '@components/ui/Spinner'
 import { useConfirm } from '@hooks/useConfirm'
 import { cn } from '@utils/cn'
 import LiveTeachingRoom from '@components/teaching/LiveTeachingRoom'
+import AttachedNotesPanel from '@components/notes/AttachedNotesPanel'
 import TeachingRatingForm from '@components/teaching/TeachingRatingForm'
 import TeachingFlagModal from '@components/teaching/TeachingFlagModal'
 
@@ -310,6 +311,8 @@ export default function TeachingDetailPage() {
                     )}
                 </div>
             </div>
+
+            <AttachedNotesPanel entityType="TEACHING_SESSION" entityId={session.id} />
 
             {showRate && (
                 <TeachingRatingForm

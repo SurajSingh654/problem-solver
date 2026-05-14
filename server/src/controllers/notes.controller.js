@@ -17,6 +17,12 @@ import { success, error } from "../utils/response.js";
 // ── Validation helpers ───────────────────────────────────────
 const TITLE_MAX = 200;
 const CONTENT_MAX = 50_000; // ~10K words
+const VALID_ENTITY_TYPES = new Set([
+  "PROBLEM",
+  "INTERVIEW_SESSION",
+  "DESIGN_SESSION",
+  "TEACHING_SESSION",
+]);
 
 function trimTitle(raw) {
   if (typeof raw !== "string") return "";
@@ -26,6 +32,69 @@ function trimTitle(raw) {
 function clampContent(raw) {
   if (typeof raw !== "string") return "";
   return raw.length > CONTENT_MAX ? raw.slice(0, CONTENT_MAX) : raw;
+}
+
+// Get the team IDs the user is a member of — used to gate team-scoped
+// entity linking (Problem, TeachingSession). We don't rely on
+// requireTeamContext, so the JWT-stamped `currentTeamId` isn't enough
+// when the user wants to link a note to an entity in a different team
+// they belong to.
+async function userTeamIds(userId) {
+  const memberships = await prisma.teamMembership.findMany({
+    where: { userId },
+    select: { teamId: true },
+  });
+  return memberships.map((m) => m.teamId);
+}
+
+// Validate ownership and resolve a snapshot title for a linked entity.
+// Returns { title } if valid, or throws-shaped { error: "..." } if not.
+async function resolveEntitySnapshot({ type, id, userId }) {
+  if (!VALID_ENTITY_TYPES.has(type)) return { error: "Invalid entity type" };
+  if (typeof id !== "string" || !id) return { error: "Invalid entity id" };
+
+  switch (type) {
+    case "PROBLEM": {
+      const teamIds = await userTeamIds(userId);
+      const p = await prisma.problem.findFirst({
+        where: { id, teamId: { in: teamIds } },
+        select: { title: true },
+      });
+      if (!p) return { error: "Problem not found or not accessible" };
+      return { title: p.title };
+    }
+    case "INTERVIEW_SESSION": {
+      const s = await prisma.interviewSession.findFirst({
+        where: { id, userId },
+        include: { problem: { select: { title: true } } },
+      });
+      if (!s) return { error: "Interview session not found" };
+      return {
+        title:
+          s.problem?.title ||
+          `Mock Interview · ${new Date(s.createdAt).toLocaleDateString()}`,
+      };
+    }
+    case "DESIGN_SESSION": {
+      const s = await prisma.designSession.findFirst({
+        where: { id, userId },
+        select: { title: true },
+      });
+      if (!s) return { error: "Design session not found" };
+      return { title: s.title };
+    }
+    case "TEACHING_SESSION": {
+      const teamIds = await userTeamIds(userId);
+      const s = await prisma.teachingSession.findFirst({
+        where: { id, teamId: { in: teamIds } },
+        select: { title: true },
+      });
+      if (!s) return { error: "Teaching session not found or not accessible" };
+      return { title: s.title };
+    }
+    default:
+      return { error: "Invalid entity type" };
+  }
 }
 
 // Public DTO — strips embedding (binary) and never leaks other-user data.
@@ -61,6 +130,22 @@ export async function createNote(req, res) {
 
     if (!title) return error(res, "Title is required", 400);
 
+    // Optional entity link — validate ownership + snapshot title.
+    let linkedEntityType = null;
+    let linkedEntityId = null;
+    let linkedEntityTitle = null;
+    if (req.body?.linkedEntityType && req.body?.linkedEntityId) {
+      const snap = await resolveEntitySnapshot({
+        type: req.body.linkedEntityType,
+        id: req.body.linkedEntityId,
+        userId,
+      });
+      if (snap.error) return error(res, snap.error, 400);
+      linkedEntityType = req.body.linkedEntityType;
+      linkedEntityId = req.body.linkedEntityId;
+      linkedEntityTitle = snap.title;
+    }
+
     const note = await prisma.note.create({
       data: {
         userId,
@@ -68,6 +153,9 @@ export async function createNote(req, res) {
         contentMarkdown,
         tags: [],
         suggestedTags: [],
+        linkedEntityType,
+        linkedEntityId,
+        linkedEntityTitle,
       },
     });
 
@@ -101,11 +189,21 @@ export async function listNotes(req, res) {
     );
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
 
+    const entityType =
+      typeof req.query.entityType === "string" &&
+      VALID_ENTITY_TYPES.has(req.query.entityType)
+        ? req.query.entityType
+        : null;
+    const entityId =
+      typeof req.query.entityId === "string" ? req.query.entityId : null;
+
     const where = {
       userId,
       archivedAt: archived ? { not: null } : null,
       ...(onlyPinned ? { pinned: true } : {}),
       ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
+      ...(entityType ? { linkedEntityType: entityType } : {}),
+      ...(entityId ? { linkedEntityId: entityId } : {}),
     };
 
     const notes = await prisma.note.findMany({
@@ -168,6 +266,22 @@ export async function updateNote(req, res) {
     if (typeof req.body?.contentMarkdown === "string") {
       data.contentMarkdown = clampContent(req.body.contentMarkdown);
     }
+    // Allow `null` to detach an existing link.
+    if ("linkedEntityType" in (req.body || {})) {
+      const t = req.body.linkedEntityType;
+      const id = req.body.linkedEntityId;
+      if (t === null || t === undefined || t === "") {
+        data.linkedEntityType = null;
+        data.linkedEntityId = null;
+        data.linkedEntityTitle = null;
+      } else {
+        const snap = await resolveEntitySnapshot({ type: t, id, userId });
+        if (snap.error) return error(res, snap.error, 400);
+        data.linkedEntityType = t;
+        data.linkedEntityId = id;
+        data.linkedEntityTitle = snap.title;
+      }
+    }
 
     const note = await prisma.note.update({
       where: { id: existing.id },
@@ -217,6 +331,142 @@ export async function restoreNote(req, res) {
 // ============================================================================
 // PIN / UNPIN
 // ============================================================================
+// ============================================================================
+// LIST BY ENTITY — used by AttachedNotesPanel on Problem/Session detail pages
+// ============================================================================
+export async function listNotesByEntity(req, res) {
+  try {
+    const userId = req.user.id;
+    const { type, id } = req.params;
+    if (!VALID_ENTITY_TYPES.has(type)) {
+      return error(res, "Invalid entity type", 400);
+    }
+    const notes = await prisma.note.findMany({
+      where: {
+        userId,
+        archivedAt: null,
+        linkedEntityType: type,
+        linkedEntityId: id,
+      },
+      orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
+      include: { _count: { select: { flashcards: true } } },
+    });
+    return success(res, { notes: notes.map(dtoNote) });
+  } catch (err) {
+    console.error("listNotesByEntity:", err);
+    return error(res, "Failed to load notes", 500);
+  }
+}
+
+// ============================================================================
+// LINK SEARCH — typeahead for the EntityLinkPicker
+// ============================================================================
+//
+// Query: ?type=PROBLEM|INTERVIEW_SESSION|DESIGN_SESSION|TEACHING_SESSION&q=...
+// Returns { results: [{ id, title, subtitle? }] } scoped to entities the
+// user can access. Limited to 20 hits — picker is for narrowing, not browsing.
+// ============================================================================
+export async function searchLinkableEntities(req, res) {
+  try {
+    const userId = req.user.id;
+    const type = req.query.type;
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (!VALID_ENTITY_TYPES.has(type)) {
+      return error(res, "Invalid entity type", 400);
+    }
+    const titleContains = q
+      ? { contains: q, mode: "insensitive" }
+      : undefined;
+    const teamIds = await userTeamIds(userId);
+
+    let results = [];
+    if (type === "PROBLEM") {
+      const rows = await prisma.problem.findMany({
+        where: {
+          teamId: { in: teamIds },
+          ...(titleContains ? { title: titleContains } : {}),
+        },
+        select: { id: true, title: true, difficulty: true, category: true },
+        orderBy: { updatedAt: "desc" },
+        take: 20,
+      });
+      results = rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        subtitle: `${r.category} · ${r.difficulty}`,
+      }));
+    } else if (type === "INTERVIEW_SESSION") {
+      const rows = await prisma.interviewSession.findMany({
+        where: {
+          userId,
+          ...(titleContains
+            ? { problem: { title: titleContains } }
+            : {}),
+        },
+        select: {
+          id: true,
+          createdAt: true,
+          status: true,
+          problem: { select: { title: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
+      results = rows.map((r) => ({
+        id: r.id,
+        title:
+          r.problem?.title ||
+          `Mock Interview · ${new Date(r.createdAt).toLocaleDateString()}`,
+        subtitle: `${r.status}`,
+      }));
+    } else if (type === "DESIGN_SESSION") {
+      const rows = await prisma.designSession.findMany({
+        where: {
+          userId,
+          ...(titleContains ? { title: titleContains } : {}),
+        },
+        select: {
+          id: true,
+          title: true,
+          designType: true,
+          difficulty: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
+      results = rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        subtitle: `${r.designType} · ${r.difficulty}`,
+      }));
+    } else if (type === "TEACHING_SESSION") {
+      const rows = await prisma.teachingSession.findMany({
+        where: {
+          teamId: { in: teamIds },
+          ...(titleContains ? { title: titleContains } : {}),
+        },
+        select: {
+          id: true,
+          title: true,
+          topic: true,
+          status: true,
+        },
+        orderBy: { scheduledAt: "desc" },
+        take: 20,
+      });
+      results = rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        subtitle: `${r.topic} · ${r.status}`,
+      }));
+    }
+    return success(res, { results });
+  } catch (err) {
+    console.error("searchLinkableEntities:", err);
+    return error(res, "Failed to search", 500);
+  }
+}
+
 export async function togglePin(req, res) {
   try {
     const userId = req.user.id;
