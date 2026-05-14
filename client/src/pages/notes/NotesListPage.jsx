@@ -225,20 +225,29 @@ function NoteCard({ note }) {
                 className={cn(
                     "block p-4 rounded-xl border transition-colors h-full",
                     "bg-surface-1 hover:border-brand-400/40",
-                    note.pinned
+                    note.pinned && !isArchived
                         ? "border-warning-line/60"
                         : "border-border-default",
+                    isArchived && "opacity-75",
                 )}
             >
                 {/* Header — title + pinned mark */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0 flex-1">
-                        {note.pinned && (
+                        {note.pinned && !isArchived && (
                             <span
                                 className="text-[9px] font-bold uppercase tracking-widest text-warning-fg
                                            inline-flex items-center gap-1 mb-1"
                             >
                                 📌 Pinned
+                            </span>
+                        )}
+                        {isArchived && (
+                            <span
+                                className="text-[9px] font-bold uppercase tracking-widest text-text-disabled
+                                           inline-flex items-center gap-1 mb-1"
+                            >
+                                🗄️ Archived
                             </span>
                         )}
                         <h3 className="text-sm font-bold text-text-primary line-clamp-2 leading-tight">

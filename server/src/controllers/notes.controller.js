@@ -41,7 +41,10 @@ import {
   buildFallbackNoteRelated,
   buildFallbackNoteFlashcards,
 } from "../services/ai.fallbacks.js";
-import { prepareNoteContentForAi } from "../utils/notesCompression.js";
+import {
+  prepareNoteContentForAi,
+  assessNoteContentQuality,
+} from "../utils/notesCompression.js";
 
 // ── Validation helpers ───────────────────────────────────────
 const TITLE_MAX = 200;
@@ -394,9 +397,12 @@ export async function updateNote(req, res) {
 export async function archiveNote(req, res) {
   try {
     const userId = req.user.id;
+    // Auto-unpin on archive — a pinned-and-archived note is incoherent
+    // (pinned means "keep at top of active list" and archived hides it
+    // from active). User can re-pin after restoring if they want.
     const note = await prisma.note.updateMany({
       where: { id: req.params.id, userId, archivedAt: null },
-      data: { archivedAt: new Date() },
+      data: { archivedAt: new Date(), pinned: false },
     });
     if (note.count === 0) return error(res, "Note not found", 404);
     return success(res, { archived: true });
@@ -586,9 +592,16 @@ export async function generateNoteSummary(req, res) {
     });
     if (!note) return error(res, "Note not found", 404);
 
-    const hasContent = (note.contentMarkdown || "").trim().length >= 20;
-    if (!hasContent) {
-      return error(res, "Note has too little content to summarize", 400);
+    // Content-quality gate — gibberish or near-empty notes can't be
+    // summarized usefully. Reject with a clear 400 instead of letting
+    // the AI return empties and silently falling back.
+    const q = assessNoteContentQuality(note.contentMarkdown);
+    if (q.chars < 80 || q.uniqueWords < 8) {
+      return error(
+        res,
+        "Note is too thin to summarize — add at least a paragraph of meaningful content (8+ unique words).",
+        400,
+      );
     }
 
     let summary;
@@ -671,11 +684,11 @@ export async function generateNoteFlashcards(req, res) {
     });
     if (!note) return error(res, "Note not found", 404);
 
-    const hasContent = (note.contentMarkdown || "").trim().length >= 50;
-    if (!hasContent) {
+    const q = assessNoteContentQuality(note.contentMarkdown);
+    if (q.chars < 200 || q.uniqueWords < 20) {
       return error(
         res,
-        "Note has too little content for flashcards (min 50 chars)",
+        "Note is too thin for flashcards — write at least a couple of paragraphs first (20+ unique words).",
         400,
       );
     }
@@ -741,8 +754,13 @@ export async function suggestNoteTags(req, res) {
     });
     if (!note) return error(res, "Note not found", 404);
 
-    if ((note.contentMarkdown || "").trim().length < 20) {
-      return error(res, "Note has too little content to suggest tags", 400);
+    const q = assessNoteContentQuality(note.contentMarkdown);
+    if (q.chars < 60 || q.uniqueWords < 5) {
+      return error(
+        res,
+        "Note is too thin for tag suggestions — add a few sentences first.",
+        400,
+      );
     }
 
     let result;
@@ -973,9 +991,12 @@ export async function togglePin(req, res) {
     const userId = req.user.id;
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, userId },
-      select: { id: true, pinned: true },
+      select: { id: true, pinned: true, archivedAt: true },
     });
     if (!existing) return error(res, "Note not found", 404);
+    if (existing.archivedAt) {
+      return error(res, "Restore the note before pinning it", 400);
+    }
 
     const note = await prisma.note.update({
       where: { id: existing.id },

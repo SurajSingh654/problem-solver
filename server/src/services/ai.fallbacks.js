@@ -765,14 +765,6 @@ export const buildFallbackTeachingNotesArtifacts = (input) => ({
 // NOTES — fallbacks (P4)
 // ════════════════════════════════════════════════════════════════════════════
 
-const NOTE_STOPWORDS = new Set([
-  "the", "and", "for", "this", "that", "with", "from", "into", "what",
-  "when", "where", "which", "their", "there", "would", "could", "should",
-  "have", "has", "had", "are", "but", "not", "all", "any", "you", "your",
-  "our", "out", "in", "of", "to", "is", "it", "as", "an", "be", "by",
-  "do", "or", "if", "so", "we", "us", "i", "a",
-]);
-
 export function buildFallbackNoteSummary() {
   // Honest fallback — do NOT echo the user's content as if it were a
   // generated summary. A summary that's just "your note's first 280
@@ -792,30 +784,15 @@ export function buildFallbackNoteSummary() {
   };
 }
 
-export function buildFallbackNoteAutoTag({
-  contentMarkdown = "",
-  existingTags = [],
-} = {}) {
-  // Frequency-based keyword extraction. Lowercase, strip non-alpha, drop
-  // stopwords + existing tags, take top 3 by frequency.
-  const text = String(contentMarkdown || "").toLowerCase();
-  const tokens = text.match(/[a-z][a-z0-9-]{2,29}/g) || [];
-  const counts = new Map();
-  const existing = new Set(existingTags.map((t) => t.toLowerCase()));
-  for (const tok of tokens) {
-    if (NOTE_STOPWORDS.has(tok)) continue;
-    if (existing.has(tok)) continue;
-    counts.set(tok, (counts.get(tok) || 0) + 1);
-  }
-  const sorted = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([t]) => t);
-  // Validator allows 3-7. If we couldn't extract 3, the validator will reject
-  // this fallback — caller already accepts that. Pad with a generic that
-  // still passes the kebab regex but signals fallback.
-  while (sorted.length < 3) sorted.push(`uncategorized-${sorted.length + 1}`);
-  return { tags: sorted, _fallback: true };
+export function buildFallbackNoteAutoTag() {
+  // Honest fallback. The previous heuristic (frequency-based keyword
+  // extraction) produced pseudo-tags from gibberish input — e.g., a
+  // note containing "asdfgh…" yielded `#asdfgh`-style tags that were
+  // technically valid kebab-case but obviously useless. Returning an
+  // empty list with the _fallback flag lets the UI render an honest
+  // "AI unavailable, retry" message instead of polluting the user's
+  // tag set with garbage.
+  return { tags: [], _fallback: true };
 }
 
 // Extract bullet items from markdown (`- text` or `* text`).

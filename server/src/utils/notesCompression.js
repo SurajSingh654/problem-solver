@@ -25,6 +25,29 @@ const TARGET_CHARS = 4500;
 const MAX_BULLETS_PER_SECTION = 5;
 const MAX_PROSE_PER_SECTION = 240;
 
+// ── Content-quality gate ────────────────────────────────────────────
+//
+// AI surfaces only return useful output when the source has enough
+// signal to summarize / tag / flashcard. Garbage input ("asdfg…") still
+// passes a raw character-count check but produces empty AI output that
+// validator rejects → silent fallback. We catch it upfront and return
+// a helpful 400 so the user knows what's wrong.
+export function assessNoteContentQuality(rawMarkdown) {
+  const text = String(rawMarkdown || "")
+    .replace(/```[\s\S]*?```/g, " ")            // drop fenced code
+    .replace(/[#*_`~>|]/g, " ")                   // drop markdown decoration
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1 ")    // links → label
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, " ")     // images → space
+    .toLowerCase();
+
+  const chars = text.replace(/\s+/g, "").length;
+  const words = text.match(/\b[a-z][a-z0-9'-]{1,29}\b/g) || [];
+  const uniqueWords = new Set(words).size;
+
+  return { chars, words: words.length, uniqueWords };
+}
+
+
 function isHeading(line) {
   return /^\s{0,3}#{1,6}\s+/.test(line);
 }
