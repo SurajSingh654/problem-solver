@@ -101,6 +101,11 @@ export const ENABLE_AI_PROBLEMS = optional('ENABLE_AI_PROBLEMS', 'true') === 'tr
 // while the feature is rolled out across phases P0–P5; flipped on in P6.
 // In Client mirror: VITE_FEATURE_TEACHING_SESSIONS in client/.env.
 export const FEATURE_TEACHING_SESSIONS = optional('FEATURE_TEACHING_SESSIONS', 'false') === 'true'
+// Personal Notes + SM-2 Flashcards. Default off through P0–P6; flipped in P7.
+// In Client mirror: VITE_FEATURE_NOTES_ENABLED in client/.env. The client
+// Dockerfile must declare a matching ARG/ENV pair so the var reaches
+// `vite build` — runtime Railway env vars do not auto-flow into ARGs.
+export const FEATURE_NOTES_ENABLED = optional('FEATURE_NOTES_ENABLED', 'false') === 'true'
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

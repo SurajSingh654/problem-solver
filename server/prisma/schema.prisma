@@ -314,6 +314,11 @@ model User {
   verdictLogs VerdictLog[]
   usageEvents UsageTracking[]
 
+  // Personal notes + spaced-repetition flashcards. Both are user-scoped
+  // (no teamId) — they survive team switches.
+  notes      Note[]
+  flashcards Flashcard[]
+
   // Teaching sessions — host + attend + rate + flag back-relations.
   hostedTeachingSessions TeachingSession[]  @relation("TeachingHost")
   teachingAttendances    TeachingAttendee[] @relation("TeachingAttendee")
@@ -2066,4 +2071,113 @@ model TeachingFlag {
   @@index([status, createdAt])
   @@index([sessionId])
   @@map("teaching_flags")
+}
+
+// ============================================================================
+// NOTES — personal markdown workspace
+// ============================================================================
+//
+// Notes are user-scoped (no teamId). They survive team switches and are
+// never visible to other users. Routes use `authenticate` only — no
+// `requireTeamContext` — so a team-status bug can't break notes access.
+//
+// `linkedEntity*` columns let a note attach to a Problem / interview /
+// design / teaching session. `linkedEntityTitle` is a snapshot so a
+// dangling link (entity moved out of view after a team switch or
+// deletion) still renders gracefully.
+//
+// `embedding` populated by a fire-and-forget background job after every
+// content write. Used for "related notes" + cross-table similarity
+// against Problem.embedding for "suggest links to your problems".
+// ============================================================================
+
+enum NoteEntityType {
+  PROBLEM
+  INTERVIEW_SESSION
+  DESIGN_SESSION
+  TEACHING_SESSION
+}
+
+model Note {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title           String
+  contentMarkdown String  @db.Text
+  tags            String[]
+
+  // Optional entity attachment — null = standalone scratchpad.
+  linkedEntityType  NoteEntityType?
+  linkedEntityId    String?
+  linkedEntityTitle String?
+
+  // AI-generated artifacts. `summary` shape locked by validateNoteSummary.
+  summary            Json?
+  summaryGeneratedAt DateTime?
+  suggestedTags      String[]
+
+  // pgvector(1536) — actual column + HNSW index live in the migration SQL.
+  embedding Unsupported("vector(1536)")?
+
+  pinned     Boolean   @default(false)
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  flashcards Flashcard[]
+
+  @@index([userId, archivedAt, pinned, updatedAt])
+  @@index([userId, linkedEntityType, linkedEntityId])
+  @@index([userId, archivedAt])
+  @@index([embedding], map: "idx_notes_embedding_hnsw")
+  @@map("notes")
+}
+
+// ============================================================================
+// FLASHCARDS — SM-2 cards generated from notes (or manual)
+// ============================================================================
+//
+// Mirrors the SM-2 columns on Solution. Lives in its own table so the
+// existing Solution review path is byte-identical; the combined queue is
+// merged client-side.
+//
+// noteId nullable so manually-created cards (no parent note) work.
+// onDelete: SetNull keeps the card alive if the source note is deleted.
+// ============================================================================
+
+model Flashcard {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  noteId String?
+  note   Note?   @relation(fields: [noteId], references: [id], onDelete: SetNull)
+
+  front String
+  back  String  @db.Text
+  tags  String[]
+
+  // ── SM-2 state (mirrors Solution) ──────────────────
+  sm2EasinessFactor Float    @default(2.5)
+  sm2Interval       Int      @default(1)
+  sm2Repetitions    Int      @default(0)
+  lapseCount        Int      @default(0)
+  nextReviewDate    DateTime
+  reviewCount       Int      @default(0)
+  lastReviewedAt    DateTime?
+  reviewDates       Json     @default("[]")
+
+  aiGenerated Boolean   @default(false)
+  archivedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, archivedAt, nextReviewDate])
+  @@index([userId, noteId])
+  @@map("flashcards")
 }

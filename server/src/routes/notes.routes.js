@@ -1,0 +1,36 @@
+// ============================================================================
+// ProbSolver — Notes Routes (P0)
+// ============================================================================
+//
+// Mounted via mountRoutes() in src/index.js. Personal-only — uses
+// `authenticate` middleware only, NOT requireTeamContext, so notes
+// survive team switches and never depend on team status.
+//
+// The whole router is gated by FEATURE_NOTES_ENABLED upstream — when off,
+// it isn't registered at all.
+// ============================================================================
+import { Router } from "express";
+import { authenticate } from "../middleware/auth.middleware.js";
+import {
+  createNote,
+  listNotes,
+  getNote,
+  updateNote,
+  archiveNote,
+  restoreNote,
+  togglePin,
+} from "../controllers/notes.controller.js";
+
+const router = Router();
+
+router.use(authenticate);
+
+router.post("/", createNote);
+router.get("/", listNotes);
+router.get("/:id", getNote);
+router.patch("/:id", updateNote);
+router.delete("/:id", archiveNote);
+router.post("/:id/restore", restoreNote);
+router.post("/:id/pin", togglePin);
+
+export default router;

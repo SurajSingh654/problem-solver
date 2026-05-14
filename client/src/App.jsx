@@ -63,6 +63,9 @@ const TeachingNewPage = lazy(() => import('@pages/teaching/TeachingNewPage'))
 const TeachingDetailPage = lazy(() => import('@pages/teaching/TeachingDetailPage'))
 const TeachingNotesPage = lazy(() => import('@pages/teaching/TeachingNotesPage'))
 const TeachingFlagsPage = lazy(() => import('@pages/superadmin/TeachingFlagsPage'))
+const NotesListPage = lazy(() => import('@pages/notes/NotesListPage'))
+const NoteNewPage = lazy(() => import('@pages/notes/NoteNewPage'))
+const NoteDetailPage = lazy(() => import('@pages/notes/NoteDetailPage'))
 const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
@@ -245,6 +248,14 @@ export default function App() {
                 <Route path="teaching/new" element={<Lazy><TeachingNewPage /></Lazy>} />
                 <Route path="teaching/:id" element={<Lazy><TeachingDetailPage /></Lazy>} />
                 <Route path="teaching/:id/notes" element={<Lazy><TeachingNotesPage /></Lazy>} />
+              </>
+            )}
+            {/* ── Personal Notes (gated — VITE_FEATURE_NOTES_ENABLED) ── */}
+            {import.meta.env.VITE_FEATURE_NOTES_ENABLED === 'true' && (
+              <>
+                <Route path="notes" element={<Lazy><NotesListPage /></Lazy>} />
+                <Route path="notes/new" element={<Lazy><NoteNewPage /></Lazy>} />
+                <Route path="notes/:id" element={<Lazy><NoteDetailPage /></Lazy>} />
               </>
             )}
             {/* ── Leaderboard ───────────────────────────────────────── */}

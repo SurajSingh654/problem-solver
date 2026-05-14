@@ -61,9 +61,10 @@ import feedbackRoutes from "./routes/feedback.routes.js";
 import designStudioRoutes from "./routes/designStudio.routes.js";
 import designReferencesRoutes from "./routes/designReferences.routes.js";
 import teachingRoutes from "./routes/teaching.routes.js";
+import notesRoutes from "./routes/notes.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
-import { FEATURE_TEACHING_SESSIONS } from "./config/env.js";
+import { FEATURE_TEACHING_SESSIONS, FEATURE_NOTES_ENABLED } from "./config/env.js";
 
 // ============================================================================
 // APP SETUP
@@ -200,6 +201,12 @@ function mountRoutes(prefix) {
   // ── Team Teaching Sessions (gated until P6 flag flip) ────
   if (FEATURE_TEACHING_SESSIONS) {
     app.use(`${prefix}/teaching`, apiLimiter, teachingRoutes);
+  }
+
+  // ── Personal Notes + Flashcards (gated until P7 flag flip) ──
+  // Personal-only routes — no requireTeamContext, scoped by userId.
+  if (FEATURE_NOTES_ENABLED) {
+    app.use(`${prefix}/notes`, apiLimiter, notesRoutes);
   }
 }
 

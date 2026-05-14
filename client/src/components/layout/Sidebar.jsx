@@ -68,6 +68,9 @@ export default function Sidebar() {
             { to: '/design-studio', icon: '🏗️', label: 'Design Studio' },
             { to: '/interview-history', icon: '📜', label: 'Interview History' },
             { to: '/report', icon: '📈', label: 'Intelligence Report' },
+            ...(import.meta.env.VITE_FEATURE_NOTES_ENABLED === 'true'
+                ? [{ to: '/notes', icon: '📝', label: 'Notes' }]
+                : []),
             { to: '/feedback', icon: '🐛', label: 'Feedback & Issues' },
             { to: '/docs/how-to', icon: '📘', label: 'How-To Guide' },
         ]
