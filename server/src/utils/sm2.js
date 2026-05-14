@@ -67,7 +67,9 @@ export function calculateSM2(quality, easinessFactor, interval, repetitions) {
   const ef = Math.max(1.3, easinessFactor ?? 2.5);
   const rep = Math.max(0, repetitions ?? 0);
 
-  let newEF = ef;
+  // newEF is reassigned in both branches below before use; declaring
+  // without an initializer keeps the no-useless-assignment lint happy.
+  let newEF;
   let newInterval;
   let newRepetitions;
 

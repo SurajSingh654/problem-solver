@@ -566,7 +566,6 @@ export function getCompanyPersona(input) {
     adobe: "ALGORITHM_FOCUSED",
     twitter: "ALGORITHM_FOCUSED",
     palantir: "ALGORITHM_FOCUSED",
-    adobe: "ALGORITHM_FOCUSED",
     flipkart: "ALGORITHM_FOCUSED",
 
     // System-Focused
@@ -590,7 +589,6 @@ export function getCompanyPersona(input) {
     atlassian: "COLLABORATIVE",
     gitlab: "COLLABORATIVE",
     github: "COLLABORATIVE",
-    atlassian: "COLLABORATIVE",
 
     // Domain-Specific
     goldman: "DOMAIN_SPECIFIC",

@@ -672,7 +672,10 @@ ${wrongAnswers
       data: { aiAnalysis: analysis },
     });
 
-    recomputeSkillsFromInterview(sessionId).catch(() => {});
+    // Fire-and-forget skill recomputation for this quiz attempt.
+    // (Was incorrectly calling recomputeSkillsFromInterview(sessionId) —
+    // wrong function and `sessionId` doesn't exist in this scope.)
+    recomputeSkillsFromQuiz(quizId).catch(() => {});
   } catch (err) {
     console.error("Quiz analysis error:", err.message);
   }

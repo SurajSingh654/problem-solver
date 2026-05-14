@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Pre-push gate — runs lint + tests on both workspaces before any push
+# leaves the local machine. Aborts the push on any failure.
+#
+# Activate this hook (run once per clone):
+#     git config core.hooksPath .githooks
+#
+# Skip in an emergency with `git push --no-verify` (use sparingly).
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+cyan() { printf "\033[36m%s\033[0m\n" "$1"; }
+red()  { printf "\033[31m%s\033[0m\n" "$1"; }
+green(){ printf "\033[32m%s\033[0m\n" "$1"; }
+
+run_in() {
+    local dir="$1"
+    local label="$2"
+    shift 2
+    cyan "▶ ${label}"
+    if ! ( cd "${ROOT}/${dir}" && "$@" ); then
+        red "✘ ${label} failed — push aborted"
+        exit 1
+    fi
+}
+
+if [ -d "${ROOT}/server" ] && [ -f "${ROOT}/server/package.json" ]; then
+    run_in server "server: lint" npm run lint
+    run_in server "server: test" npm run test
+fi
+
+# Client lint is currently informational. The client codebase has ~120
+# pre-existing errors that are real but pre-date this hook. Until those
+# are cleaned up, gating every push on them just trains people to use
+# --no-verify (which defeats the point). To re-enable strict gating:
+#
+#     export PRE_PUSH_CLIENT_LINT=1
+#
+# Or set the env var globally in your shell rc once the client is clean.
+if [ -d "${ROOT}/client" ] && [ -f "${ROOT}/client/package.json" ]; then
+    if [ "${PRE_PUSH_CLIENT_LINT:-0}" = "1" ]; then
+        run_in client "client: lint" npm run lint
+    else
+        cyan "▷ client: lint (skipped — set PRE_PUSH_CLIENT_LINT=1 to enable)"
+    fi
+fi
+
+green "✔ All pre-push checks passed"
