@@ -1,7 +1,7 @@
 // ============================================================================
 // NotesListPage — main notes workspace
 // ============================================================================
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useNotes, useNoteTags } from "@hooks/useNotes";
@@ -22,6 +22,20 @@ export default function NotesListPage() {
     const [tabId, setTabId] = useState("active");
     const [q, setQ] = useState("");
     const [tagFilter, setTagFilter] = useState(null);
+    const searchRef = useRef(null);
+
+    // Cmd/Ctrl+K focuses the search input
+    useEffect(() => {
+        function onKey(e) {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+                e.preventDefault();
+                searchRef.current?.focus();
+                searchRef.current?.select();
+            }
+        }
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
 
     const tab = TABS.find((t) => t.id === tabId);
     const params = useMemo(
@@ -72,9 +86,10 @@ export default function NotesListPage() {
                     ))}
                 </div>
                 <input
+                    ref={searchRef}
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="Search by title…"
+                    placeholder="Search by title…  (⌘K)"
                     className="text-xs px-3 py-2 rounded-lg bg-surface-1 border border-border-default
                                outline-none focus:border-brand-line w-56"
                 />

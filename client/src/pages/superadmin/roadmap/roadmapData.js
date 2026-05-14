@@ -447,6 +447,21 @@ export const ROADMAP_ITEMS = [
     },
 
     {
+        id: 'notes-section',
+        phase: 'DONE',
+        shippedAt: '2026-05-14',
+        theme: 'Personal Productivity',
+        priority: 'HIGH',
+        effort: 'Large',
+        title: 'Personal Notes + AI-driven SM-2 Flashcards',
+        impact: 'Captures the missing layer between solving a problem and remembering it. Users now have a markdown notebook (private, survives team switches) that attaches to Problems, Mock Interviews, Design Sessions, or Teaching Sessions. AI auto-summarizes notes, suggests tags, ranks related notes/problems via embedding similarity, and extracts SM-2 flashcards that flow into the existing Review Queue alongside Solutions — closing the loop between insight capture and long-term retention.',
+        description: '7-phase rollout behind FEATURE_NOTES_ENABLED + VITE_FEATURE_NOTES_ENABLED (with matching client/Dockerfile ARG). P0: Note + Flashcard models + pgvector(1536) + HNSW + minimal CRUD UI. P1: optional entity linking with snapshot title (dangling-link safe across team switches), AttachedNotesPanel on Problem/Teaching/Interview detail pages. P2: kebab-case tag input + filter chips + tag aggregation endpoint. P3: per-note background embedding writer (5s debounce, fire-and-forget) + cross-table cosine similarity. P4: 3 AI surfaces (note:summary, note:autotag, note:related) with validate→fallback→few-shot. Related panel does embed→LLM-rank with rationales. P5: Flashcard model + manual create + extended Review Queue (Solutions and Flashcards merged client-side, modal mirrored). P6: AI flashcard drafts (note:flashcards) with accept/reject/edit modal that bulk-creates accepted cards via the existing flashcards endpoint.',
+        why: 'A user who solves a problem, takes a great mock interview, or hosts a teaching session has no in-app place to capture insights they want to revisit. They paste into a side notes app or forget. Notes + AI flashcards close the spaced-repetition loop for ANY insight, not just solved problems — so transient understanding stays.',
+        researchBasis: 'Karpicke & Roediger (2008) — testing effect: retrieval beats re-reading by 50%+ on long-term retention. Wozniak (1990) — SM-2 algorithm (already powering Solutions review). Pichert & Anderson (1977) — encoding specificity: notes attached to source context (the Problem you solved) recall better than free-floating notes. Anthropic prompting best practices (validate→fallback→few-shot) reused from Notes-feature peers.',
+        technicalNotes: 'Server: Note + Flashcard models in schema.prisma (Note has Unsupported("vector(1536)") + idx_notes_embedding_hnsw); 4 new AI prompts (noteSummary/noteAutoTag/noteRelated/noteFlashcards) + matching validators/fallbacks/few-shots; notes.controller.js + flashcards.controller.js (both userId-scoped, no requireTeamContext); notes.embedding.js (5s per-noteId debounce, embedding fire-and-forget). Client: services + hooks (notes.api.js, flashcards.api.js, useNotes, useFlashcards, useGenerateNoteFlashcards), MarkdownEditor (split textarea + preview), EntityLinkPicker, TagInput (kebab normalization mirroring server), RelatedNotesPanel (LLM-ranked w/ rationales + AI badge), AiSummaryCard, SuggestedTagsBar, FlashcardForm + FlashcardList + FlashcardReviewModal + FlashcardReviewSection on ReviewQueuePage, FlashcardDraftReview accept/reject UI. Dockerfile ARG VITE_FEATURE_NOTES_ENABLED added (lesson from Teaching deploy: Railway runtime env doesn\'t auto-flow into vite build).',
+    },
+
+    {
         id: 'team-teaching-sessions',
         phase: 'DONE',
         shippedAt: '2026-05-14',

@@ -7,9 +7,11 @@
 // canonical AI input as raw markdown. TipTap upgrade deferred to v2
 // once usage justifies it.
 // ============================================================================
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MarkdownRenderer } from "@components/ui/MarkdownRenderer";
 import { cn } from "@utils/cn";
+
+const MODE_CYCLE = ["split", "edit", "preview"];
 
 export default function MarkdownEditor({
     value,
@@ -20,12 +22,27 @@ export default function MarkdownEditor({
 }) {
     const [mode, setMode] = useState("split"); // "edit" | "preview" | "split"
 
+    // Cmd/Ctrl+/ cycles edit ↔ split ↔ preview
+    useEffect(() => {
+        function onKey(e) {
+            if ((e.metaKey || e.ctrlKey) && e.key === "/") {
+                e.preventDefault();
+                setMode((cur) => {
+                    const i = MODE_CYCLE.indexOf(cur);
+                    return MODE_CYCLE[(i + 1) % MODE_CYCLE.length];
+                });
+            }
+        }
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
+
     return (
         <div className="rounded-xl border border-border-default bg-surface-1 overflow-hidden">
             {/* Toolbar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-surface-2">
                 <div className="text-[10px] font-semibold tracking-widest uppercase text-text-disabled">
-                    Markdown
+                    Markdown <span className="text-text-disabled/60 normal-case font-normal ml-2">⌘/ to toggle</span>
                 </div>
                 <div className="flex gap-1 text-[10px] font-bold">
                     {[
