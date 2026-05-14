@@ -635,7 +635,9 @@ export async function generateNoteSummary(req, res) {
         surface: "note:summary",
         fewShotMessages: NOTE_SUMMARY_FEWSHOT,
       });
-      const v = validateNoteSummary(parsed, { hasContent });
+      // hasContent is true at this point — the quality gate above
+      // already short-circuited any thin note with a 400.
+      const v = validateNoteSummary(parsed, { hasContent: true });
       if (v.valid) summary = parsed;
       else {
         fallbackReason = `validator:${v.violations.join(",")}`;
