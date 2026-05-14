@@ -108,7 +108,17 @@ export async function createFlashcards(req, res) {
       return error(res, "Note not found", 404);
     }
 
-    const sm2Init = initialSM2State();
+    // initialSM2State returns { easinessFactor, interval, repetitions,
+    // nextReviewDate } — but the Flashcard schema uses sm2-prefixed
+    // names (sm2EasinessFactor / sm2Interval / sm2Repetitions). Map
+    // explicitly so Prisma doesn't reject the unknown keys.
+    const sm2 = initialSM2State();
+    const sm2Init = {
+      sm2EasinessFactor: sm2.easinessFactor,
+      sm2Interval: sm2.interval,
+      sm2Repetitions: sm2.repetitions,
+      nextReviewDate: sm2.nextReviewDate,
+    };
 
     if (!isBulk) {
       const front = trimStr(req.body?.front, FRONT_MAX);
