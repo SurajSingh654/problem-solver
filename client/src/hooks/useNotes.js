@@ -71,6 +71,19 @@ export function useArchiveNote() {
     });
 }
 
+export function useDeleteNotePermanent() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => notesApi.deletePermanent(id),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["notes"] });
+            toast.success("Note deleted permanently.");
+        },
+        onError: (err) =>
+            toast.error(pickError(err, "Failed to delete note.")),
+    });
+}
+
 export function useRestoreNote() {
     const qc = useQueryClient();
     return useMutation({
@@ -125,9 +138,30 @@ export function useGenerateNoteSummary() {
     return useMutation({
         mutationFn: (id) =>
             notesApi.generateSummary(id).then((r) => r.data.data),
-        onSuccess: (_data, id) => {
-            qc.invalidateQueries({ queryKey: ["notes", "item", id] });
-            toast.success("Summary generated.");
+        onSuccess: (data, id) => {
+            // Patch the cache immediately so the UI reflects the new
+            // summary without waiting for a refetch round-trip. Without
+            // this, a successful retry can briefly still render the
+            // previous fallback banner.
+            if (data?.summary) {
+                qc.setQueryData(KEYS.ITEM(id), (prev) =>
+                    prev
+                        ? {
+                            ...prev,
+                            summary: data.summary,
+                            summaryGeneratedAt: new Date().toISOString(),
+                        }
+                        : prev,
+                );
+            }
+            qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
+            if (data?.fallback) {
+                toast.error(
+                    "AI is currently unavailable — fallback applied. Try again in a moment.",
+                );
+            } else {
+                toast.success("Summary generated.");
+            }
         },
         onError: (err) => toast.error(pickError(err, "Failed to generate summary.")),
     });
@@ -137,8 +171,16 @@ export function useSuggestNoteTags() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id) => notesApi.suggestTags(id).then((r) => r.data.data),
-        onSuccess: (_data, id) => {
-            qc.invalidateQueries({ queryKey: ["notes", "item", id] });
+        onSuccess: (data, id) => {
+            if (Array.isArray(data?.tags)) {
+                qc.setQueryData(KEYS.ITEM(id), (prev) =>
+                    prev ? { ...prev, suggestedTags: data.tags } : prev,
+                );
+            }
+            qc.invalidateQueries({ queryKey: KEYS.ITEM(id) });
+            if (data?.fallback) {
+                toast.error("AI tag suggestions unavailable — used heuristic fallback.");
+            }
         },
         onError: (err) => toast.error(pickError(err, "Failed to suggest tags.")),
     });

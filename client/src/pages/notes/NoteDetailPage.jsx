@@ -13,6 +13,7 @@ import {
     useNote,
     useUpdateNote,
     useArchiveNote,
+    useDeleteNotePermanent,
     useRestoreNote,
     useTogglePinNote,
 } from "@hooks/useNotes";
@@ -33,6 +34,7 @@ export default function NoteDetailPage() {
     const { data: note, isLoading, isError, error } = useNote(id);
     const update = useUpdateNote(id);
     const archive = useArchiveNote();
+    const deletePermanent = useDeleteNotePermanent();
     const restore = useRestoreNote();
     const togglePin = useTogglePinNote();
 
@@ -135,27 +137,65 @@ export default function NoteDetailPage() {
                         {note.pinned ? "Unpin" : "📌 Pin"}
                     </Button>
                     {isArchived ? (
-                        <Button
-                            variant="ghost"
-                            onClick={() =>
-                                restore.mutate(note.id, {
-                                    onSuccess: () => navigate("/notes"),
-                                })
-                            }
-                        >
-                            Restore
-                        </Button>
+                        <>
+                            <Button
+                                variant="ghost"
+                                onClick={() =>
+                                    restore.mutate(note.id, {
+                                        onSuccess: () => navigate("/notes"),
+                                    })
+                                }
+                            >
+                                Restore
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    if (
+                                        !window.confirm(
+                                            "Delete this note permanently? This cannot be undone.",
+                                        )
+                                    )
+                                        return;
+                                    deletePermanent.mutate(note.id, {
+                                        onSuccess: () => navigate("/notes"),
+                                    });
+                                }}
+                                className="!text-danger-fg hover:!bg-danger-soft"
+                            >
+                                Delete permanently
+                            </Button>
+                        </>
                     ) : (
-                        <Button
-                            variant="ghost"
-                            onClick={() =>
-                                archive.mutate(note.id, {
-                                    onSuccess: () => navigate("/notes"),
-                                })
-                            }
-                        >
-                            Archive
-                        </Button>
+                        <>
+                            <Button
+                                variant="ghost"
+                                onClick={() =>
+                                    archive.mutate(note.id, {
+                                        onSuccess: () => navigate("/notes"),
+                                    })
+                                }
+                            >
+                                Archive
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    if (
+                                        !window.confirm(
+                                            "Delete this note permanently? This cannot be undone. Use Archive if you might want it back.",
+                                        )
+                                    )
+                                        return;
+                                    deletePermanent.mutate(note.id, {
+                                        onSuccess: () => navigate("/notes"),
+                                    });
+                                }}
+                                className="!text-danger-fg hover:!bg-danger-soft"
+                            >
+                                Delete
+                            </Button>
+                        </>
                     )}
                 </div>
             </div>

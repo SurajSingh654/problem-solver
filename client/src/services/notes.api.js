@@ -12,6 +12,7 @@ export const notesApi = {
     create: (data) => api.post("/notes", data),
     update: (id, data) => api.patch(`/notes/${id}`, data),
     archive: (id) => api.delete(`/notes/${id}`),
+    deletePermanent: (id) => api.delete(`/notes/${id}/permanent`),
     restore: (id) => api.post(`/notes/${id}/restore`),
     togglePin: (id) => api.post(`/notes/${id}/pin`),
     listByEntity: (type, id) => api.get(`/notes/by-entity/${type}/${id}`),

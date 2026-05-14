@@ -406,6 +406,34 @@ export async function archiveNote(req, res) {
   }
 }
 
+// ============================================================================
+// HARD DELETE (permanent — no recovery)
+// ============================================================================
+//
+// Distinct from archive (soft delete via archivedAt). Removes the row
+// entirely along with any flashcards that referenced it (cascade to
+// SET NULL on Flashcard.noteId — cards survive but lose their parent
+// link; if the user wants the cards gone too, they archive them
+// individually).
+// ============================================================================
+export async function deleteNotePermanent(req, res) {
+  try {
+    const userId = req.user.id;
+    // updateMany-style guard: try to find first to ensure ownership,
+    // then delete by id.
+    const existing = await prisma.note.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true },
+    });
+    if (!existing) return error(res, "Note not found", 404);
+    await prisma.note.delete({ where: { id: existing.id } });
+    return success(res, { deleted: true });
+  } catch (err) {
+    console.error("deleteNotePermanent:", err);
+    return error(res, "Failed to delete note", 500);
+  }
+}
+
 export async function restoreNote(req, res) {
   try {
     const userId = req.user.id;

@@ -18,6 +18,7 @@ import {
   getNote,
   updateNote,
   archiveNote,
+  deleteNotePermanent,
   restoreNote,
   togglePin,
   listNotesByEntity,
@@ -49,6 +50,7 @@ router.post("/:id/ai/suggest-tags", aiLimiter, suggestNoteTags);
 router.post("/:id/ai/flashcards", aiLimiter, generateNoteFlashcards);
 router.patch("/:id", updateNote);
 router.delete("/:id", archiveNote);
+router.delete("/:id/permanent", deleteNotePermanent);
 router.post("/:id/restore", restoreNote);
 router.post("/:id/pin", togglePin);
 
