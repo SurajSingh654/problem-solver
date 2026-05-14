@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCreateNote } from "@hooks/useNotes";
 import MarkdownEditor from "@components/notes/MarkdownEditor";
 import EntityLinkPicker from "@components/notes/EntityLinkPicker";
+import TagInput from "@components/notes/TagInput";
 import { Button } from "@components/ui/Button";
 
 export default function NoteNewPage() {
@@ -13,6 +14,7 @@ export default function NoteNewPage() {
     const [searchParams] = useSearchParams();
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
+    const [tags, setTags] = useState([]);
     // Pre-populate link from URL if user clicked "Add note" on an entity page.
     // Title will be resolved server-side from the entity at create time.
     const [link, setLink] = useState(() => {
@@ -30,6 +32,7 @@ export default function NoteNewPage() {
         const note = await create.mutateAsync({
             title: title.trim(),
             contentMarkdown: content,
+            tags,
             ...(link?.linkedEntityType && link?.linkedEntityId
                 ? {
                     linkedEntityType: link.linkedEntityType,
@@ -75,6 +78,7 @@ export default function NoteNewPage() {
             />
 
             <EntityLinkPicker value={link} onChange={setLink} />
+            <TagInput value={tags} onChange={setTags} />
 
             <MarkdownEditor value={content} onChange={setContent} />
 

@@ -21,6 +21,7 @@ import {
   togglePin,
   listNotesByEntity,
   searchLinkableEntities,
+  listTags,
 } from "../controllers/notes.controller.js";
 
 const router = Router();
@@ -33,6 +34,7 @@ router.get("/", listNotes);
 // Static paths must come before the dynamic `/:id` route so they win
 // routing precedence.
 router.get("/link-search", searchLinkableEntities);
+router.get("/tags", listTags);
 router.get("/by-entity/:type/:id", listNotesByEntity);
 
 router.get("/:id", getNote);

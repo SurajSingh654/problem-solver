@@ -17,4 +17,5 @@ export const notesApi = {
     listByEntity: (type, id) => api.get(`/notes/by-entity/${type}/${id}`),
     linkSearch: (type, q = "") =>
         api.get("/notes/link-search", { params: { type, q } }),
+    listTags: () => api.get("/notes/tags"),
 }

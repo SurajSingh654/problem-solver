@@ -18,6 +18,7 @@ import {
 } from "@hooks/useNotes";
 import MarkdownEditor from "@components/notes/MarkdownEditor";
 import EntityLinkPicker from "@components/notes/EntityLinkPicker";
+import TagInput from "@components/notes/TagInput";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
 import { formatRelativeDate } from "@utils/formatters";
@@ -33,6 +34,7 @@ export default function NoteDetailPage() {
 
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
+    const [tags, setTags] = useState([]);
     const [dirty, setDirty] = useState(false);
     const [savedAt, setSavedAt] = useState(null);
     const initRef = useRef(false);
@@ -43,6 +45,7 @@ export default function NoteDetailPage() {
         if (note && !initRef.current) {
             setTitle(note.title);
             setContent(note.contentMarkdown || "");
+            setTags(note.tags || []);
             initRef.current = true;
         }
     }, [note]);
@@ -56,12 +59,13 @@ export default function NoteDetailPage() {
             await update.mutateAsync({
                 title: title.trim(),
                 contentMarkdown: content,
+                tags,
             });
             setDirty(false);
             setSavedAt(new Date());
         }, 1200);
         return () => debounceRef.current && clearTimeout(debounceRef.current);
-    }, [title, content, dirty, update]);
+    }, [title, content, tags, dirty, update]);
 
     // Cmd/Ctrl+S manual save
     useEffect(() => {
@@ -73,7 +77,7 @@ export default function NoteDetailPage() {
             if (debounceRef.current) clearTimeout(debounceRef.current);
             if (!title.trim()) return;
             update.mutate(
-                { title: title.trim(), contentMarkdown: content },
+                { title: title.trim(), contentMarkdown: content, tags },
                 {
                     onSuccess: () => {
                         setDirty(false);
@@ -84,7 +88,7 @@ export default function NoteDetailPage() {
         }
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [title, content, update]);
+    }, [title, content, tags, update]);
 
     if (isLoading) {
         return (
@@ -178,6 +182,15 @@ export default function NoteDetailPage() {
                     } else {
                         update.mutate({ linkedEntityType: null });
                     }
+                }}
+            />
+
+            <TagInput
+                value={tags}
+                disabled={isArchived}
+                onChange={(next) => {
+                    setTags(next);
+                    setDirty(true);
                 }}
             />
 

@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useNotes } from "@hooks/useNotes";
+import { useNotes, useNoteTags } from "@hooks/useNotes";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
 import { Skeleton } from "@components/ui/Skeleton";
@@ -21,6 +21,7 @@ export default function NotesListPage() {
     const navigate = useNavigate();
     const [tabId, setTabId] = useState("active");
     const [q, setQ] = useState("");
+    const [tagFilter, setTagFilter] = useState(null);
 
     const tab = TABS.find((t) => t.id === tabId);
     const params = useMemo(
@@ -28,12 +29,15 @@ export default function NotesListPage() {
             archived: String(tab.archived),
             ...(tab.pinned ? { pinned: "true" } : {}),
             ...(q.trim() ? { q: q.trim() } : {}),
+            ...(tagFilter ? { tag: tagFilter } : {}),
         }),
-        [tab, q],
+        [tab, q, tagFilter],
     );
 
     const { data, isLoading, isError, error } = useNotes(params);
     const notes = data?.notes || [];
+    const { data: tagList } = useNoteTags();
+    const topTags = (tagList || []).slice(0, 12);
 
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -75,6 +79,37 @@ export default function NotesListPage() {
                                outline-none focus:border-brand-line w-56"
                 />
             </div>
+
+            {topTags.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-text-disabled">
+                        Tags
+                    </span>
+                    {tagFilter && (
+                        <button
+                            onClick={() => setTagFilter(null)}
+                            className="px-2 py-0.5 rounded-md text-[11px] font-bold
+                                       bg-danger-soft text-danger-fg hover:bg-danger-soft/80"
+                        >
+                            Clear filter
+                        </button>
+                    )}
+                    {topTags.map(({ tag, count }) => (
+                        <button
+                            key={tag}
+                            onClick={() => setTagFilter(tag === tagFilter ? null : tag)}
+                            className={cn(
+                                "px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors",
+                                tag === tagFilter
+                                    ? "bg-brand-soft text-brand-fg-soft border border-brand-line"
+                                    : "bg-surface-2 text-text-secondary hover:bg-surface-3 border border-border-default",
+                            )}
+                        >
+                            #{tag} <span className="text-text-disabled">{count}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Body */}
             {isLoading ? (
@@ -126,9 +161,27 @@ function NoteCard({ note }) {
                         </span>
                     )}
                 </div>
-                <p className="text-xs text-text-tertiary line-clamp-3 mb-3 min-h-[2.5em]">
+                <p className="text-xs text-text-tertiary line-clamp-3 mb-2 min-h-[2.5em]">
                     {preview || <span className="italic text-text-disabled">No content yet.</span>}
                 </p>
+                {note.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                        {note.tags.slice(0, 4).map((t) => (
+                            <span
+                                key={t}
+                                className="text-[9px] font-bold px-1.5 py-px rounded
+                                           bg-surface-2 text-text-tertiary border border-border-subtle"
+                            >
+                                #{t}
+                            </span>
+                        ))}
+                        {note.tags.length > 4 && (
+                            <span className="text-[9px] text-text-disabled">
+                                +{note.tags.length - 4}
+                            </span>
+                        )}
+                    </div>
+                )}
                 <div className="flex items-center justify-between text-[10px] text-text-disabled">
                     <span>{formatRelativeDate(note.updatedAt)}</span>
                     {note.flashcardCount > 0 && (

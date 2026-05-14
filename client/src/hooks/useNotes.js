@@ -93,6 +93,14 @@ export function useNotesByEntity(type, id) {
     });
 }
 
+export function useNoteTags() {
+    return useQuery({
+        queryKey: ["notes", "tags"],
+        queryFn: () => notesApi.listTags().then((r) => r.data.data.tags),
+        staleTime: 1000 * 60,
+    });
+}
+
 export function useLinkSearch(type, q) {
     return useQuery({
         queryKey: ["notes", "link-search", type, q],

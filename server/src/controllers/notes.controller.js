@@ -34,6 +34,33 @@ function clampContent(raw) {
   return raw.length > CONTENT_MAX ? raw.slice(0, CONTENT_MAX) : raw;
 }
 
+// Tag normalization: lowercase, kebab-case, 2–30 chars, deduped, max 20.
+// Mirrors the validator constraints in P4's auto-tag AI surface so manual
+// + AI tags share one normalization rule.
+const TAG_REGEX = /^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$|^[a-z0-9]$/;
+function normalizeTags(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const t of raw) {
+    if (typeof t !== "string") continue;
+    const slug = t
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    if (!slug || slug.length < 2 || slug.length > 30) continue;
+    if (!TAG_REGEX.test(slug)) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 // Get the team IDs the user is a member of — used to gate team-scoped
 // entity linking (Problem, TeachingSession). We don't rely on
 // requireTeamContext, so the JWT-stamped `currentTeamId` isn't enough
@@ -151,7 +178,7 @@ export async function createNote(req, res) {
         userId,
         title,
         contentMarkdown,
-        tags: [],
+        tags: normalizeTags(req.body?.tags),
         suggestedTags: [],
         linkedEntityType,
         linkedEntityId,
@@ -196,6 +223,7 @@ export async function listNotes(req, res) {
         : null;
     const entityId =
       typeof req.query.entityId === "string" ? req.query.entityId : null;
+    const tag = typeof req.query.tag === "string" ? req.query.tag.trim() : "";
 
     const where = {
       userId,
@@ -204,6 +232,7 @@ export async function listNotes(req, res) {
       ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
       ...(entityType ? { linkedEntityType: entityType } : {}),
       ...(entityId ? { linkedEntityId: entityId } : {}),
+      ...(tag ? { tags: { has: tag } } : {}),
     };
 
     const notes = await prisma.note.findMany({
@@ -265,6 +294,9 @@ export async function updateNote(req, res) {
     }
     if (typeof req.body?.contentMarkdown === "string") {
       data.contentMarkdown = clampContent(req.body.contentMarkdown);
+    }
+    if (Array.isArray(req.body?.tags)) {
+      data.tags = normalizeTags(req.body.tags);
     }
     // Allow `null` to detach an existing link.
     if ("linkedEntityType" in (req.body || {})) {
@@ -331,6 +363,38 @@ export async function restoreNote(req, res) {
 // ============================================================================
 // PIN / UNPIN
 // ============================================================================
+// ============================================================================
+// LIST TAGS — distinct tags + usage count for the filter UI
+// ============================================================================
+//
+// Aggregates tags across the user's non-archived notes. Returns at most
+// the top 50 by usage to keep the response small. The list page uses
+// this to render quick-pick chips above the search bar.
+// ============================================================================
+export async function listTags(req, res) {
+  try {
+    const userId = req.user.id;
+    const notes = await prisma.note.findMany({
+      where: { userId, archivedAt: null },
+      select: { tags: true },
+    });
+    const counts = new Map();
+    for (const n of notes) {
+      for (const t of n.tags || []) {
+        counts.set(t, (counts.get(t) || 0) + 1);
+      }
+    }
+    const tags = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50)
+      .map(([tag, count]) => ({ tag, count }));
+    return success(res, { tags });
+  } catch (err) {
+    console.error("listTags:", err);
+    return error(res, "Failed to load tags", 500);
+  }
+}
+
 // ============================================================================
 // LIST BY ENTITY — used by AttachedNotesPanel on Problem/Session detail pages
 // ============================================================================
