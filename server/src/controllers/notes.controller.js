@@ -42,6 +42,7 @@ import {
   buildFallbackNoteRelated,
   buildFallbackNoteFlashcards,
 } from "../services/ai.fallbacks.js";
+import { prepareNoteContentForAi } from "../utils/notesCompression.js";
 
 // ── Validation helpers ───────────────────────────────────────
 const TITLE_MAX = 200;
@@ -594,11 +595,18 @@ export async function generateNoteSummary(req, res) {
 
     let summary;
     let fallbackReason = null;
+    const prepped = prepareNoteContentForAi(note.contentMarkdown);
+    if (prepped.wasCompressed) {
+      console.log(
+        `[notes.summary] compressed ${prepped.originalChars}→${prepped.finalChars} chars for AI`,
+      );
+    }
     try {
       const { system, user } = noteSummaryPrompt({
         title: note.title,
-        contentMarkdown: note.contentMarkdown,
+        contentMarkdown: prepped.content,
         tags: note.tags,
+        isCompressed: prepped.wasCompressed,
       });
       const raw = await aiComplete({
         systemPrompt: system,
@@ -679,11 +687,13 @@ export async function generateNoteFlashcards(req, res) {
 
     let drafts;
     let fallbackReason = null;
+    const prepped = prepareNoteContentForAi(note.contentMarkdown);
     try {
       const { system, user } = noteFlashcardsPrompt({
         title: note.title,
-        contentMarkdown: note.contentMarkdown,
+        contentMarkdown: prepped.content,
         tags: note.tags,
+        isCompressed: prepped.wasCompressed,
       });
       const raw = await aiComplete({
         systemPrompt: system,
@@ -748,11 +758,13 @@ export async function suggestNoteTags(req, res) {
 
     let result;
     let fallbackReason = null;
+    const prepped = prepareNoteContentForAi(note.contentMarkdown);
     try {
       const { system, user } = noteAutoTagPrompt({
         title: note.title,
-        contentMarkdown: note.contentMarkdown,
+        contentMarkdown: prepped.content,
         existingTags: note.tags,
+        isCompressed: prepped.wasCompressed,
       });
       const raw = await aiComplete({
         systemPrompt: system,

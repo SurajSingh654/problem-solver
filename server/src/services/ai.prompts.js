@@ -2390,7 +2390,7 @@ shipped a fix by morning.
 // as untrusted (UNTRUSTED_INPUT_RULE applies).
 
 // ── Summary: tldr + key takeaways + open questions ──────────────────
-export function noteSummaryPrompt({ title, contentMarkdown, tags = [] }) {
+export function noteSummaryPrompt({ title, contentMarkdown, tags = [], isCompressed = false }) {
   const system = `You are summarizing a personal note from a software engineer's private notebook. The user wants a quick recap they can re-read later or paste into a doc. Output is shown only to the note's author.
 
 OUTPUT RULES (strict):
@@ -2403,6 +2403,7 @@ ANTI-HALLUCINATION:
 - Do not invent facts not in the note.
 - If the note is short or thin, return shorter lists; do not pad.
 - If the note is largely empty, set tldr to a brief honest description and return empty arrays.
+- If <note_content> is marked as a STRUCTURAL EXTRACT, treat absent details as "not given here" rather than missing — the original note is longer; only summarize what is shown.
 
 ${UNTRUSTED_INPUT_RULE}
 
@@ -2421,6 +2422,11 @@ RESPOND WITH EXACT JSON:
   ];
   if (Array.isArray(tags) && tags.length > 0) {
     userParts.push(`<note_tags>${xmlEscape(tags.join(", "))}</note_tags>`);
+  }
+  if (isCompressed) {
+    userParts.push(
+      `<note_format>STRUCTURAL EXTRACT — this is the note's outline (headings + lead prose + key bullets). Summarize what is present; do not invent missing detail.</note_format>`,
+    );
   }
   userParts.push(
     "",
@@ -2499,7 +2505,7 @@ Memory: forgetting to unsubscribe is the leak. \`takeUntil(destroy$)\` is the ca
 ];
 
 // ── Auto-tag: suggest 3-7 kebab-case tags ───────────────────────────
-export function noteAutoTagPrompt({ title, contentMarkdown, existingTags = [] }) {
+export function noteAutoTagPrompt({ title, contentMarkdown, existingTags = [], isCompressed = false }) {
   const system = `You suggest tags for a personal engineering note. Tags help the user find related notes later. Output is reviewed by the author before applying.
 
 OUTPUT RULES (strict):
@@ -2524,6 +2530,11 @@ RESPOND WITH EXACT JSON:
   if (Array.isArray(existingTags) && existingTags.length > 0) {
     userParts.push(
       `<existing_tags>${xmlEscape(existingTags.join(", "))}</existing_tags>`,
+    );
+  }
+  if (isCompressed) {
+    userParts.push(
+      `<note_format>STRUCTURAL EXTRACT — tag based on the topics shown.</note_format>`,
     );
   }
   userParts.push(
@@ -2647,7 +2658,7 @@ export const NOTE_RELATED_FEWSHOT = [
 ];
 
 // ── Flashcard drafts: 3-7 SM-2-friendly Q/A pairs from a note ────────
-export function noteFlashcardsPrompt({ title, contentMarkdown, tags = [] }) {
+export function noteFlashcardsPrompt({ title, contentMarkdown, tags = [], isCompressed = false }) {
   const system = `You are extracting active-recall flashcards from a personal engineering note. The cards feed an SM-2 spaced-repetition queue, so they must isolate one fact per card and have a clear right answer.
 
 OUTPUT RULES (strict):
@@ -2684,6 +2695,11 @@ RESPOND WITH EXACT JSON:
   ];
   if (Array.isArray(tags) && tags.length > 0) {
     userParts.push(`<note_tags>${xmlEscape(tags.join(", "))}</note_tags>`);
+  }
+  if (isCompressed) {
+    userParts.push(
+      `<note_format>STRUCTURAL EXTRACT — extract cards only from concepts visible in this outline. Do not infer cards for sections not shown.</note_format>`,
+    );
   }
   userParts.push(
     "",
