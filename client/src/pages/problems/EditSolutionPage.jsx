@@ -923,6 +923,10 @@ export default function EditSolutionPage() {
         }
 
         setLoaded(true)
+        // isDBRound / isTKRound are derived from category and read
+        // through closure; the round flags don't change after the
+        // solution is loaded so they shouldn't gate the effect.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mySolution, loaded, isHRRound])
 
     function updateFormData(updates) {

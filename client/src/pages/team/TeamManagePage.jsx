@@ -59,6 +59,9 @@ export default function TeamManagePage() {
 
     useEffect(() => {
         loadTeamData()
+        // loadTeamData closes over teamId/isPersonalMode; refetching
+        // when teamId changes is the intent.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [teamId])
 
     async function loadTeamData() {

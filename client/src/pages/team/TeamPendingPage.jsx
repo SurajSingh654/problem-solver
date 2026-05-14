@@ -35,6 +35,9 @@ export default function TeamPendingPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
+    // Mount-only effect; loadPendingTeams + checkForApproval are stable
+    // closures within the component lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadPendingTeams() {

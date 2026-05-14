@@ -21,8 +21,11 @@ const MONACO_LANG = {
     OTHER: 'plaintext',
 }
 
-// Languages shown in the submit form dropdown — interview-relevant only
-// Full list available in CodeEditor when showLanguageSelector=true (all buttons mode)
+// Languages shown in the submit form dropdown — interview-relevant only.
+// Full list available in CodeEditor when showLanguageSelector=true.
+// (Co-located with the editor for cohesion; HMR fast-refresh warning
+// is acceptable since this constant rarely changes.)
+// eslint-disable-next-line react-refresh/only-export-components
 export const SUBMIT_LANGUAGES = [
     'PYTHON',
     'JAVASCRIPT',

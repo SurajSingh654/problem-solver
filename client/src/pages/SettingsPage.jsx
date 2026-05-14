@@ -201,6 +201,10 @@ export default function SettingsPage() {
             })
             setAvatarColor(user.avatarUrl || '#7c6ff7')
         }
+        // We intentionally only re-run when user.name changes — the
+        // form is reset on identity changes, not on every user-object
+        // reference change (which would happen on any re-fetch).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.name])
 
     async function onSave(data) {

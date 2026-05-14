@@ -120,6 +120,10 @@ function QuizTimer({ totalSecs, running, onTimeUp }) {
             })
         }, 1000)
         return () => clearInterval(interval)
+        // onTimeUp is intentionally not a dep — including it would
+        // restart the timer every render; we want the timer driven by
+        // running/totalSecs only.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [running, totalSecs])
     if (!totalSecs) return null
     const mins = Math.floor(remaining / 60).toString().padStart(2, '0')
@@ -155,7 +159,12 @@ function SetupScreen({ onStart, onRetry }) {
     const generateQuiz = useGenerateQuiz()
     const { data: aiStatus } = useAIStatus()
     const { data: historyData } = useQuizHistory()
-    const pastQuizzes = historyData?.quizzes || []
+    // Memoize the `|| []` short-circuit so identity is stable across
+    // re-renders — otherwise downstream useMemos re-run every render.
+    const pastQuizzes = useMemo(
+        () => historyData?.quizzes || [],
+        [historyData?.quizzes],
+    )
 
     const recentSubjects = useMemo(() => {
         if (!pastQuizzes.length) return []
@@ -526,7 +535,10 @@ function SetupScreen({ onStart, onRetry }) {
 // ══════════════════════════════════════════════════════
 function QuizHistory({ onRetry, onPracticeAgain }) {
     const { data: historyData, isLoading } = useQuizHistory()
-    const quizzes = historyData?.quizzes || []
+    const quizzes = useMemo(
+        () => historyData?.quizzes || [],
+        [historyData?.quizzes],
+    )
 
     // Group by subject — all hooks before early return
     const subjectGroups = useMemo(() => {
@@ -762,7 +774,10 @@ function ActiveQuizScreen({ quizData, onComplete }) {
                 }
             }
         } catch { /* ignore malformed localStorage */ }
-    }, []) // Only on mount — storageKey and total are stable
+        // Mount-only restore from localStorage; storageKey + total are
+        // captured by closure but stable for the quiz lifecycle.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     useEffect(() => {
         // Save progress on every answer change
@@ -832,6 +847,10 @@ function ActiveQuizScreen({ quizData, onComplete }) {
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
+        // goTo / handleSelect / handleSubmit are stable callbacks defined
+        // in the parent scope and intentionally excluded from deps to
+        // avoid rebinding the listener on every keystroke.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentQ, total, answered, answers])
 
     if (!question) return null

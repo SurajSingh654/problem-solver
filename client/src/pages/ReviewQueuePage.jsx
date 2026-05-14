@@ -74,6 +74,9 @@ function RecallTimer({ seconds, onExpire }) {
         if (remaining <= 0) { onExpire?.(); return }
         const t = setTimeout(() => setRemaining(r => r - 1), 1000)
         return () => clearTimeout(t)
+        // onExpire is read via closure; including it would restart the
+        // countdown timer every parent render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [remaining])
 
     const mins = Math.floor(remaining / 60).toString().padStart(2, '0')

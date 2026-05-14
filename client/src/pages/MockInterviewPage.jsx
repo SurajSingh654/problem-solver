@@ -953,7 +953,7 @@ function ChatScreen({ sessionData, onEnd: _onEnd, onDebrief }) {
                         break
 
                     default:
-                        console.log('[WS] Unhandled message type:', msg.type, msg)
+                        console.warn('[WS] Unhandled message type:', msg.type, msg)
                 }
             } catch (err) {
                 console.error('[WS] Failed to parse message:', err)
@@ -972,6 +972,9 @@ function ChatScreen({ sessionData, onEnd: _onEnd, onDebrief }) {
             if (ws.readyState === WebSocket.OPEN) ws.close()
             clearTimeout(typingTimeoutRef.current)
         }
+        // Re-run only when the session changes; speak/onDebrief/isVoiceMode
+        // are read via closure and don't need to trigger a WS reconnect.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [session.id])
 
     // ── Auto-scroll ──────────────────────────────────

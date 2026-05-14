@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pre-push gate — runs lint + tests on both workspaces before any push
-# leaves the local machine. Aborts the push on any failure.
+# Pre-push gate — every check that can catch a bug before code leaves
+# the local machine. Aborts the push on any failure.
 #
 # Activate this hook (run once per clone):
 #     git config core.hooksPath .githooks
@@ -10,10 +10,12 @@
 set -e
 
 ROOT="$(git rev-parse --show-toplevel)"
+START_TIME=$(date +%s)
 
-cyan() { printf "\033[36m%s\033[0m\n" "$1"; }
-red()  { printf "\033[31m%s\033[0m\n" "$1"; }
-green(){ printf "\033[32m%s\033[0m\n" "$1"; }
+cyan()  { printf "\033[36m%s\033[0m\n" "$1"; }
+red()   { printf "\033[31m%s\033[0m\n" "$1"; }
+green() { printf "\033[32m%s\033[0m\n" "$1"; }
+gray()  { printf "\033[90m%s\033[0m\n" "$1"; }
 
 run_in() {
     local dir="$1"
@@ -26,25 +28,39 @@ run_in() {
     fi
 }
 
+# ── SERVER ────────────────────────────────────────────────────
 if [ -d "${ROOT}/server" ] && [ -f "${ROOT}/server/package.json" ]; then
-    run_in server "server: lint" npm run lint
-    run_in server "server: test" npm run test
-fi
+    run_in server "server: lint (strict)" npm run lint
+    run_in server "server: tests"          npm run test
 
-# Client lint is currently informational. The client codebase has ~120
-# pre-existing errors that are real but pre-date this hook. Until those
-# are cleaned up, gating every push on them just trains people to use
-# --no-verify (which defeats the point). To re-enable strict gating:
-#
-#     export PRE_PUSH_CLIENT_LINT=1
-#
-# Or set the env var globally in your shell rc once the client is clean.
-if [ -d "${ROOT}/client" ] && [ -f "${ROOT}/client/package.json" ]; then
-    if [ "${PRE_PUSH_CLIENT_LINT:-0}" = "1" ]; then
-        run_in client "client: lint" npm run lint
-    else
-        cyan "▷ client: lint (skipped — set PRE_PUSH_CLIENT_LINT=1 to enable)"
+    # Prisma migration drift — fails if there are pending migrations
+    # the local clone hasn't run, OR if schema.prisma is ahead of the
+    # migration history. Either case would break a deploy.
+    cyan "▶ server: prisma migrate status"
+    if ! ( cd "${ROOT}/server" && npx --no-install prisma migrate status >/dev/null 2>&1 ); then
+        # Run again without -q so the user sees the actual diff.
+        ( cd "${ROOT}/server" && npx --no-install prisma migrate status ) || true
+        red "✘ server: prisma migrate status failed — pending or drifted migrations"
+        red "   Either run \`npm run db:migrate\` locally or commit the missing migration."
+        exit 1
     fi
 fi
 
-green "✔ All pre-push checks passed"
+# ── CLIENT ────────────────────────────────────────────────────
+if [ -d "${ROOT}/client" ] && [ -f "${ROOT}/client/package.json" ]; then
+    run_in client "client: lint (strict)" npm run lint
+
+    # Build verification — catches:
+    #   • broken imports / circular dependencies
+    #   • Vite plugin errors
+    #   • bundle-blocking syntax errors that lint missed
+    #   • the recent class of bug where VITE_FEATURE_* didn't reach
+    #     the bundle (any future regression with env-var wiring is
+    #     caught here when the build's output is inspected by humans).
+    # ~30s overhead per push; bypass with --no-verify in true emergencies.
+    run_in client "client: vite build"     npm run build
+fi
+
+DURATION=$(($(date +%s) - START_TIME))
+green "✔ All pre-push checks passed (${DURATION}s)"
+gray  "  Skip with --no-verify in genuine emergencies."

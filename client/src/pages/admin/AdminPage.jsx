@@ -332,6 +332,10 @@ export default function AdminPage() {
                 .catch(err => console.error('Failed to load members:', err))
                 .finally(() => setMembersLoading(false))
         }
+        // members.length intentionally not a dep — we only want to
+        // refetch when the user navigates to this tab, not on local
+        // state changes that mutate the list.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab])
 
     function handleEdit(problemId) {

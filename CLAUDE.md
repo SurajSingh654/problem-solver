@@ -21,18 +21,43 @@ Two-workspace monorepo with **no root `package.json`** — install and run comma
 - `npm run db:seed` — runs `prisma/seed.js`
 - `npm run db:studio` — Prisma Studio
 - `npm run db:reset` — **destructive**; resets dev DB
-- No test runner is configured.
+- `npm run lint` / `npm run lint:fix` — ESLint flat config (`--max-warnings 0`); the bug-class rules (`no-undef`, `no-dupe-keys`, `no-redeclare`, `no-unreachable`) are hard errors
+- `npm test` — vitest, ~231 tests covering validators, fallbacks, controllers (`test/controllers/`)
 
 ### Client (`cd client`)
 
 - `npm run dev` — Vite on port 5173 (strict), proxies `/api` → `http://localhost:5000`
 - `npm run build` / `npm run preview` (preview on 4173)
-- `npm run lint` — ESLint with `--max-warnings 0`
-- No test runner is configured.
+- `npm run lint` — ESLint with `--max-warnings 0`; flat config with React + react-hooks rules, allows empty catches, blocks dead code at error level
+- No test runner is configured for components yet (planned).
 
 ### Dev flow
 
 Start both in separate terminals: `cd server && npm run dev`, then `cd client && npm run dev`. The Vite proxy means the client calls `/api/...` relative URLs in dev. In production the client uses `VITE_API_URL` (baked in at build time via Dockerfile `ARG`).
+
+### Pre-push gate (required)
+
+`.githooks/pre-push` runs **before every `git push`** and aborts on any failure. Activate it once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+The hook runs (in order, ~30s end-to-end):
+
+1. **`server: lint (strict)`** — `npm run lint` with `--max-warnings 0`. Catches `no-undef`, dupe keys, unused symbols, unreachable code. **A bug like `recomputeSkillsFromInterview(sessionId)` referencing two undefined symbols would have been caught here.**
+2. **`server: tests`** — full vitest suite. Includes controller integration tests in `server/test/controllers/` that exercise wire-level behavior (extract-JSON contract, hasContent reference, SM-2 field-name contract for Flashcards). **A bug like `easinessFactor` vs `sm2EasinessFactor` would have been caught here.**
+3. **`server: prisma migrate status`** — fails if local clone has pending migrations or schema drift. **A missing migration file would have been caught here before the deploy fails.**
+4. **`client: lint (strict)`** — `npm run lint` with `--max-warnings 0`.
+5. **`client: vite build`** — full production build. Catches broken imports, circular deps, syntax errors, env-var wiring issues that lint can't see.
+
+Bypass with `git push --no-verify` only in genuine emergencies. The hook is intentionally fast (33s) so the cost is well under the cost of any prod regression.
+
+**Test runners:**
+- Server: vitest. Layered tests:
+  - `test/ai/validators.test.js` — pure-function validator + fallback unit tests (golden cases per rule)
+  - `test/utils/notesCompression.test.js` — utility unit tests
+  - `test/controllers/` — controller integration tests with mocked Prisma + mocked `aiComplete`. Use the `_harness.js` helper to invoke controllers directly without spinning up Express. Each test file targets a real bug we've shipped (regression guards).
 
 ## Environment
 

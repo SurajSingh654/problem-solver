@@ -52,6 +52,9 @@ export function AppShell() {
         ) {
             navigate('/change-password', { replace: true })
         }
+        // navigate is stable from react-router and intentionally excluded
+        // from deps to avoid redundant redirects.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.mustChangePassword, location.pathname])
     useKeyboardShortcuts()
 

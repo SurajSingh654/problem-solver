@@ -192,7 +192,10 @@ export default function ProblemsPage() {
     const [viewMode, setViewMode] = useState('grid')
 
     const { data, isLoading } = useProblems({ limit: 200 })
-    const allProblems = data?.problems || []
+    const allProblems = useMemo(
+        () => data?.problems || [],
+        [data?.problems],
+    )
 
     // Client-side filtering
     const filtered = useMemo(() => {

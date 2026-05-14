@@ -23,6 +23,10 @@ export default function AllTeamsPage() {
 
     useEffect(() => {
         loadTeams()
+        // loadTeams is defined inside the component but doesn't change
+        // between renders in any meaningful way; including it would
+        // trigger redundant fetches.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filter])
 
     async function loadTeams() {
