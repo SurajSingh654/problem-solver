@@ -4,12 +4,27 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useNotes, useNoteTags } from "@hooks/useNotes";
+import {
+    useNotes,
+    useNoteTags,
+    useTogglePinNote,
+    useArchiveNote,
+    useRestoreNote,
+    useDeleteNotePermanent,
+} from "@hooks/useNotes";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
 import { Skeleton } from "@components/ui/Skeleton";
 import { formatRelativeDate } from "@utils/formatters";
 import { cn } from "@utils/cn";
+
+const ENTITY_ICON = {
+    PROBLEM: "📋",
+    INTERVIEW_SESSION: "💬",
+    DESIGN_SESSION: "🏗️",
+    TEACHING_SESSION: "📚",
+    CUSTOM: "🔗",
+};
 
 const TABS = [
     { id: "active", label: "Notes", archived: false, pinned: false },
@@ -151,34 +166,127 @@ export default function NotesListPage() {
 }
 
 function NoteCard({ note }) {
+    const navigate = useNavigate();
+    const togglePin = useTogglePinNote();
+    const archive = useArchiveNote();
+    const restore = useRestoreNote();
+    const deletePermanent = useDeleteNotePermanent();
+    const isArchived = Boolean(note.archivedAt);
+
     const preview = (note.contentMarkdown || "")
-        .replace(/[#*_`>~\-]/g, "")
+        .replace(/```[\s\S]*?```/g, "")          // strip fenced code
+        .replace(/[#*_`~>]/g, "")                  // strip markdown decorations
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")  // links → text
+        .replace(/\s+/g, " ")
         .trim()
-        .slice(0, 200);
+        .slice(0, 220);
+
+    const hasSummary = !!note.summary && !note.summary._fallback;
+    const hasFallbackSummary = !!note.summary?._fallback;
+    const charCount = (note.contentMarkdown || "").length;
+
+    function stop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function onPin(e) {
+        stop(e);
+        togglePin.mutate(note.id);
+    }
+    function onArchive(e) {
+        stop(e);
+        archive.mutate(note.id);
+    }
+    function onRestore(e) {
+        stop(e);
+        restore.mutate(note.id);
+    }
+    function onDelete(e) {
+        stop(e);
+        if (
+            !window.confirm(
+                `Delete "${note.title}" permanently? This cannot be undone.`,
+            )
+        )
+            return;
+        deletePermanent.mutate(note.id);
+    }
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.15 }}
+            className="group relative"
         >
             <Link
                 to={`/notes/${note.id}`}
-                className="block p-4 rounded-xl bg-surface-1 border border-border-default
-                           hover:border-brand-400/30 transition-colors h-full"
+                className={cn(
+                    "block p-4 rounded-xl border transition-colors h-full",
+                    "bg-surface-1 hover:border-brand-400/40",
+                    note.pinned
+                        ? "border-warning-line/60"
+                        : "border-border-default",
+                )}
             >
+                {/* Header — title + pinned mark */}
                 <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="text-sm font-bold text-text-primary line-clamp-2">
-                        {note.title}
-                    </h3>
-                    {note.pinned && (
-                        <span className="text-xs text-warning-fg shrink-0" aria-label="Pinned">
-                            📌
+                    <div className="min-w-0 flex-1">
+                        {note.pinned && (
+                            <span
+                                className="text-[9px] font-bold uppercase tracking-widest text-warning-fg
+                                           inline-flex items-center gap-1 mb-1"
+                            >
+                                📌 Pinned
+                            </span>
+                        )}
+                        <h3 className="text-sm font-bold text-text-primary line-clamp-2 leading-tight">
+                            {note.title}
+                        </h3>
+                    </div>
+                    {hasSummary && (
+                        <span
+                            className="text-[9px] text-brand-fg-soft shrink-0"
+                            title="AI summary available"
+                        >
+                            ✨
+                        </span>
+                    )}
+                    {hasFallbackSummary && (
+                        <span
+                            className="text-[9px] text-warning-fg shrink-0"
+                            title="AI summary fell back — retry from the note"
+                        >
+                            ⚠️
                         </span>
                     )}
                 </div>
-                <p className="text-xs text-text-tertiary line-clamp-3 mb-2 min-h-[2.5em]">
-                    {preview || <span className="italic text-text-disabled">No content yet.</span>}
+
+                {/* Linked-entity badge */}
+                {note.linkedEntityType && (
+                    <div className="mb-2">
+                        <span
+                            className="inline-flex items-center gap-1 px-1.5 py-px rounded
+                                       bg-brand-soft/40 border border-brand-line/40
+                                       text-[10px] text-brand-fg-soft truncate max-w-full"
+                        >
+                            <span>{ENTITY_ICON[note.linkedEntityType] || "🔗"}</span>
+                            <span className="truncate">
+                                {note.linkedEntityTitle || note.linkedEntityType}
+                            </span>
+                        </span>
+                    </div>
+                )}
+
+                {/* Preview */}
+                <p className="text-xs text-text-tertiary line-clamp-3 mb-2 min-h-[2.5em] leading-relaxed">
+                    {preview || (
+                        <span className="italic text-text-disabled">No content yet.</span>
+                    )}
                 </p>
+
+                {/* Tags */}
                 {note.tags?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {note.tags.slice(0, 4).map((t) => (
@@ -191,20 +299,90 @@ function NoteCard({ note }) {
                             </span>
                         ))}
                         {note.tags.length > 4 && (
-                            <span className="text-[9px] text-text-disabled">
+                            <span className="text-[9px] text-text-disabled self-center">
                                 +{note.tags.length - 4}
                             </span>
                         )}
                     </div>
                 )}
-                <div className="flex items-center justify-between text-[10px] text-text-disabled">
-                    <span>{formatRelativeDate(note.updatedAt)}</span>
-                    {note.flashcardCount > 0 && (
-                        <span>{note.flashcardCount} flashcards</span>
-                    )}
+
+                {/* Footer — meta line */}
+                <div className="flex items-center justify-between text-[10px] text-text-disabled gap-2">
+                    <span className="truncate">
+                        {formatRelativeDate(note.updatedAt)}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {charCount > 0 && (
+                            <span title={`${charCount} characters`}>
+                                {charCount > 1000
+                                    ? `${(charCount / 1000).toFixed(1)}K`
+                                    : charCount}
+                                {" chars"}
+                            </span>
+                        )}
+                        {note.flashcardCount > 0 && (
+                            <span className="flex items-center gap-0.5">
+                                🃏 {note.flashcardCount}
+                            </span>
+                        )}
+                    </div>
                 </div>
             </Link>
+
+            {/* Hover-revealed action bar — top-right of card */}
+            <div
+                className="absolute top-2 right-2 flex items-center gap-1 opacity-0
+                           group-hover:opacity-100 focus-within:opacity-100 transition-opacity
+                           bg-surface-1/95 backdrop-blur-sm border border-border-subtle
+                           rounded-lg p-0.5 shadow-sm"
+            >
+                {!isArchived && (
+                    <CardAction
+                        onClick={onPin}
+                        title={note.pinned ? "Unpin" : "Pin"}
+                        label={note.pinned ? "📌" : "📍"}
+                    />
+                )}
+                {!isArchived && (
+                    <CardAction
+                        onClick={onArchive}
+                        title="Archive (soft delete)"
+                        label="🗄️"
+                    />
+                )}
+                {isArchived && (
+                    <CardAction
+                        onClick={onRestore}
+                        title="Restore from archive"
+                        label="↩️"
+                    />
+                )}
+                <CardAction
+                    onClick={onDelete}
+                    title="Delete permanently"
+                    label="🗑️"
+                    danger
+                />
+            </div>
         </motion.div>
+    );
+}
+
+function CardAction({ onClick, title, label, danger }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            title={title}
+            aria-label={title}
+            className={cn(
+                "px-1.5 py-0.5 rounded-md text-xs transition-colors",
+                "hover:bg-surface-2",
+                danger && "hover:bg-danger-soft",
+            )}
+        >
+            {label}
+        </button>
     );
 }
 
