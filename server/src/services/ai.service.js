@@ -168,6 +168,14 @@ async function callWithModelFallback(buildRequest, primaryModel, label = "ai") {
     }
 }
 
+// In tests the AI service runs through hundreds of mocked calls; the
+// per-call `[AI] request` and `[AI] usage` console.log lines drown the
+// real test output. Keep them in dev/prod, suppress in test (vitest
+// sets `VITEST=true` automatically).
+const IS_TEST_ENV =
+    process.env.NODE_ENV === "test" || !!process.env.VITEST;
+const aiLog = IS_TEST_ENV ? () => {} : (...args) => console.log(...args);
+
 // ── Usage event emitter ─────────────────────────────────────────────
 // Phase 5 of the overhaul subscribes here and writes rows into the
 // UsageTracking table. Today the only built-in subscriber is the
@@ -185,12 +193,15 @@ export function onUsageEvent(handler) {
 // callers and ops eyeballed before this overhaul.
 usageEmitter.on("usage", (e) => {
     if (e.errorCode) {
-        console.warn(
-            `[AI] usage surface=${e.surface || "?"} model=${e.modelUsed} latency=${e.latencyMs}ms error=${e.errorCode}`,
-        );
+        // Errors stay visible even in tests — they signal real issues.
+        if (!IS_TEST_ENV) {
+            console.warn(
+                `[AI] usage surface=${e.surface || "?"} model=${e.modelUsed} latency=${e.latencyMs}ms error=${e.errorCode}`,
+            );
+        }
         return;
     }
-    console.log(
+    aiLog(
         `[AI] usage surface=${e.surface || "?"} model=${e.modelUsed} tokens=${e.totalTokens} (p=${e.promptTokens}/c=${e.completionTokens}) latency=${e.latencyMs}ms`,
     );
 });
@@ -243,7 +254,7 @@ export async function aiComplete({
         return undefined;
     })();
 
-    console.log(
+    aiLog(
         `[AI] request surface=${surface || "?"} model=${model} maxTokens=${maxTokens} jsonMode=${jsonMode} fewShot=${fewShotMessages.length} tools=${tools ? tools.length : 0}`,
     );
 

@@ -15,8 +15,8 @@
 // always renders full-width when open. The collapse toggle button hides
 // itself on mobile.
 // ============================================================================
-import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useState, useMemo } from 'react'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import useAuthStore from '@store/useAuthStore'
 import { useUIStore } from '@store/useUIStore'
@@ -254,34 +254,63 @@ function CollapseToggle({ collapsed, onClick }) {
 
 export default function Sidebar() {
     const navigate = useNavigate()
+    const location = useLocation()
     const { user, switchTeam } = useAuthStore()
     const {
         mobileSidebarOpen,
         sidebarCollapsed,
         toggleSidebar,
+        recentPaths,
     } = useUIStore()
     const [showSwitcher, setShowSwitcher] = useState(false)
     const [switching, setSwitching] = useState(false)
 
-    if (!user) return null
+    const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
+    const isTeamAdmin = !isSuperAdmin && user?.teamRole === 'TEAM_ADMIN'
+    const isPersonal = user?.currentTeamId === user?.personalTeamId
 
-    const isSuperAdmin = user.globalRole === 'SUPER_ADMIN'
-    const isTeamAdmin = !isSuperAdmin && user.teamRole === 'TEAM_ADMIN'
-    const isPersonal = user.currentTeamId === user.personalTeamId
-
-    const teamName = isPersonal ? 'My Practice' : user.currentTeam?.name || 'Team'
+    const teamName = isPersonal ? 'My Practice' : user?.currentTeam?.name || 'Team'
     const apiDocsUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(
         '/api',
         '/api-docs',
     )
 
-    const sections = buildSections({
-        user,
-        isSuperAdmin,
-        isTeamAdmin,
-        isPersonal,
-        apiDocsUrl,
-    })
+    // Computed even when user is missing (returns empty array) so this
+    // hook always runs in the same order — required by react-hooks rules.
+    const sections = useMemo(
+        () =>
+            user
+                ? buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl })
+                : [],
+        [user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl],
+    )
+
+    // ── Recents — top 3 recently-visited routes that map to a nav item.
+    // We exclude the current path (no point linking to where you are)
+    // and external links. If fewer than 2 recents survive the filter,
+    // hide the section to avoid noise on first load.
+    const recentItems = useMemo(() => {
+        const flatNav = sections.flatMap((s) =>
+            s.items
+                .filter((it) => !it.external)
+                .map((it) => ({ ...it, sectionLabel: s.label })),
+        )
+        const byPath = new Map(flatNav.map((it) => [it.to, it]))
+        const out = []
+        const seen = new Set()
+        for (const path of recentPaths) {
+            if (path === location.pathname) continue
+            if (seen.has(path)) continue
+            const item = byPath.get(path)
+            if (!item) continue
+            out.push(item)
+            seen.add(path)
+            if (out.length >= 3) break
+        }
+        return out
+    }, [sections, recentPaths, location.pathname])
+
+    if (!user) return null
 
     // The collapsed flag only takes effect on lg+ screens; on mobile the
     // drawer is always full-width. We pass `collapsedDesktop` to children
@@ -334,6 +363,26 @@ export default function Sidebar() {
 
             {/* ── Sections ──────────────────────────────────── */}
             <nav className={cn('flex-1 overflow-y-auto py-2', collapsed ? 'px-2' : 'px-3')}>
+                {recentItems.length >= 2 && (
+                    <div className={cn(collapsed ? 'mb-2 pb-2 border-b border-border-subtle' : 'mb-3')}>
+                        {!collapsed && (
+                            <p className="text-[10px] font-bold uppercase tracking-widest
+                                          text-text-disabled px-3 mb-1">
+                                Recent
+                            </p>
+                        )}
+                        <div className="space-y-0.5">
+                            {recentItems.map((item) => (
+                                <NavItem
+                                    key={`recent-${item.to}`}
+                                    item={item}
+                                    collapsed={collapsed}
+                                    accent={isSuperAdmin ? 'super-admin' : null}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
                 {sections.map((section, i) => (
                     <div
                         key={section.id}

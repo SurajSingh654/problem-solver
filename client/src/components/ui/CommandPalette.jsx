@@ -7,6 +7,7 @@ import { useUIStore } from '@store/useUIStore'
 import useAuthStore from '@store/useAuthStore'
 import { Badge } from '@components/ui/Badge'
 import { cn } from '@utils/cn'
+import api from '@services/api'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -94,7 +95,6 @@ export function CommandPalette() {
     let cancelled = false
     async function load() {
       try {
-        const api = (await import('@services/api')).default
         const res = await api.get('/problems', { params: { page: 1, limit: 200 } })
         if (!cancelled) {
           setAllProblems(res.data.data.problems || [])

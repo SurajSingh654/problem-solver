@@ -72,12 +72,27 @@ export const useUIStore = create(
       mobileSidebarOpen: false,
       openMobileSidebar: () => set({ mobileSidebarOpen: true }),
       closeMobileSidebar: () => set({ mobileSidebarOpen: false }),
+
+      // ── Recently visited routes ───────────────────────────
+      // Most recent first. Capped at 10 entries; the sidebar
+      // surfaces the top 3 that match a known nav item (deep
+      // routes without a sidebar match are kept here but not
+      // shown — they may match a future nav item).
+      recentPaths: [],
+      pushRecentPath: (path) =>
+        set((s) => {
+          if (typeof path !== "string" || !path.startsWith("/")) return s;
+          const existing = s.recentPaths.filter((p) => p !== path);
+          return { recentPaths: [path, ...existing].slice(0, 10) };
+        }),
+      clearRecentPaths: () => set({ recentPaths: [] }),
     }),
     {
       name: "ps_ui",
       partialize: (state) => ({
         sidebarCollapsed: state.sidebarCollapsed,
         theme: state.theme,
+        recentPaths: state.recentPaths,
       }),
 
       onRehydrateStorage: () => (state) => {

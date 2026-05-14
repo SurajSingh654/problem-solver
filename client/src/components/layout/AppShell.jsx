@@ -35,7 +35,7 @@ function useKeyboardShortcuts() {
 }
 
 export function AppShell() {
-    const { sidebarCollapsed } = useUIStore()
+    const { sidebarCollapsed, pushRecentPath } = useUIStore()
 
     useMe()
 
@@ -56,6 +56,13 @@ export function AppShell() {
         // from deps to avoid redundant redirects.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.mustChangePassword, location.pathname])
+
+    // Track recently visited routes for the sidebar's "Recent" section.
+    // Only top-level routes are useful here — deep routes like /notes/abc123
+    // get tracked too but the Sidebar filters to ones that match a nav item.
+    useEffect(() => {
+        pushRecentPath(location.pathname)
+    }, [location.pathname, pushRecentPath])
     useKeyboardShortcuts()
 
     return (
