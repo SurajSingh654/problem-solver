@@ -22,6 +22,7 @@ import {
   listNotesByEntity,
   searchLinkableEntities,
   listTags,
+  getRelatedForNote,
 } from "../controllers/notes.controller.js";
 
 const router = Router();
@@ -38,6 +39,7 @@ router.get("/tags", listTags);
 router.get("/by-entity/:type/:id", listNotesByEntity);
 
 router.get("/:id", getNote);
+router.get("/:id/related", getRelatedForNote);
 router.patch("/:id", updateNote);
 router.delete("/:id", archiveNote);
 router.post("/:id/restore", restoreNote);

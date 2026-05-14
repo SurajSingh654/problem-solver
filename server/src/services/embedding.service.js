@@ -280,6 +280,101 @@ export async function embedAllExisting() {
   console.log("[Embedding] Batch embedding complete");
 }
 
+// ── Notes ──────────────────────────────────────────────
+//
+// Notes are user-scoped. The text representation includes title + tags +
+// the markdown body so the embedding captures both topic and content.
+// Generation runs from `notes.embedding.js` after every save (debounced).
+
+export function buildNoteText(note) {
+  const parts = [];
+  if (note.title) parts.push(`Title: ${note.title}`);
+  if (Array.isArray(note.tags) && note.tags.length > 0)
+    parts.push(`Tags: ${note.tags.join(", ")}`);
+  if (note.linkedEntityType) parts.push(`Linked: ${note.linkedEntityType}`);
+  if (note.contentMarkdown) parts.push(note.contentMarkdown);
+  return parts.join("\n\n");
+}
+
+export async function embedNote(noteId) {
+  try {
+    const note = await prisma.note.findUnique({ where: { id: noteId } });
+    if (!note) return null;
+    const text = buildNoteText(note);
+    if (!text || text.length < 20) return null;
+
+    const embedding = await generateEmbedding(text);
+    if (!embedding) return null;
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE notes SET embedding = $1::vector WHERE id = $2`,
+      `[${embedding.join(",")}]`,
+      noteId,
+    );
+    return embedding;
+  } catch (error) {
+    console.error(`[Embedding] Note ${noteId} failed:`, error.message);
+    return null;
+  }
+}
+
+// Find similar notes belonging to the same user. Excludes archived rows
+// and the source note itself.
+export async function findSimilarNotes(noteId, userId, limit = 5) {
+  try {
+    const results = await prisma.$queryRawUnsafe(
+      `
+      SELECT n.id, n.title, n.tags, n."updatedAt",
+             n.embedding <=> (SELECT embedding FROM notes WHERE id = $1) AS distance
+      FROM notes n
+      WHERE n.id != $1
+        AND n."userId" = $2
+        AND n."archivedAt" IS NULL
+        AND n.embedding IS NOT NULL
+      ORDER BY distance ASC
+      LIMIT $3
+    `,
+      noteId,
+      userId,
+      limit,
+    );
+    return results;
+  } catch (error) {
+    console.error("[Embedding] Similar notes search failed:", error.message);
+    return [];
+  }
+}
+
+// Cross-table: find Problems similar to a note (within the user's
+// accessible team set). Used for "linked problems" suggestions.
+export async function findProblemsByNoteEmbedding(noteId, teamIds, limit = 5) {
+  try {
+    if (!Array.isArray(teamIds) || teamIds.length === 0) return [];
+    const results = await prisma.$queryRawUnsafe(
+      `
+      SELECT p.id, p.title, p.difficulty, p.category, p.tags,
+             p.embedding <=> (SELECT embedding FROM notes WHERE id = $1) AS distance
+      FROM problems p
+      WHERE p."teamId" = ANY($2::text[])
+        AND p."isPublished" = true
+        AND p.embedding IS NOT NULL
+      ORDER BY distance ASC
+      LIMIT $3
+    `,
+      noteId,
+      teamIds,
+      limit,
+    );
+    return results;
+  } catch (error) {
+    console.error(
+      "[Embedding] Cross-table note→problem search failed:",
+      error.message,
+    );
+    return [];
+  }
+}
+
 // ── Check if embedding service is available ────────────
 export function isEmbeddingEnabled() {
   return process.env.AI_ENABLED === "true" && !!process.env.OPENAI_API_KEY;

@@ -13,6 +13,11 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import { scheduleNoteEmbedding } from "../services/notes.embedding.js";
+import {
+  findSimilarNotes,
+  findProblemsByNoteEmbedding,
+} from "../services/embedding.service.js";
 
 // ── Validation helpers ───────────────────────────────────────
 const TITLE_MAX = 200;
@@ -186,6 +191,7 @@ export async function createNote(req, res) {
       },
     });
 
+    scheduleNoteEmbedding(note.id);
     return success(res, { note: dtoNote(note) }, 201);
   } catch (err) {
     console.error("createNote:", err);
@@ -320,6 +326,17 @@ export async function updateNote(req, res) {
       data,
       include: { _count: { select: { flashcards: true } } },
     });
+
+    // Re-embed only if substantive content changed. Tag/link edits alone
+    // don't need a re-embed (cheap optimization to avoid burning calls
+    // on every pin/archive cycle).
+    if (
+      typeof data.title === "string" ||
+      typeof data.contentMarkdown === "string"
+    ) {
+      scheduleNoteEmbedding(note.id);
+    }
+
     return success(res, { note: dtoNote(note) });
   } catch (err) {
     console.error("updateNote:", err);
@@ -363,6 +380,61 @@ export async function restoreNote(req, res) {
 // ============================================================================
 // PIN / UNPIN
 // ============================================================================
+// ============================================================================
+// RELATED — embedding-driven similarity (no LLM in P3)
+// ============================================================================
+//
+// Returns top similar Notes (own scope) + top similar Problems (across
+// the user's accessible teams). Distance is included so the client can
+// show a confidence indicator. P4 will layer LLM ranking on top of these
+// raw candidates.
+// ============================================================================
+export async function getRelatedForNote(req, res) {
+  try {
+    const userId = req.user.id;
+    const note = await prisma.note.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true },
+    });
+    if (!note) return error(res, "Note not found", 404);
+
+    const teamIds = await userTeamIds(userId);
+    const [notes, problems] = await Promise.all([
+      findSimilarNotes(note.id, userId, 5),
+      findProblemsByNoteEmbedding(note.id, teamIds, 5),
+    ]);
+
+    // Cosine distance is in [0, 2]. Lower = more similar. Coerce to a
+    // 0–1 similarity score for the UI ((2 - d) / 2 → clamped).
+    function score(d) {
+      const num = Number(d);
+      if (Number.isNaN(num)) return 0;
+      return Math.max(0, Math.min(1, (2 - num) / 2));
+    }
+
+    return success(res, {
+      relatedNotes: notes.map((n) => ({
+        id: n.id,
+        title: n.title,
+        tags: n.tags || [],
+        updatedAt: n.updatedAt,
+        similarity: score(n.distance),
+      })),
+      relatedProblems: problems.map((p) => ({
+        id: p.id,
+        title: p.title,
+        difficulty: p.difficulty,
+        category: p.category,
+        tags: p.tags || [],
+        similarity: score(p.distance),
+      })),
+    });
+  } catch (err) {
+    console.error("getRelatedForNote:", err);
+    return error(res, "Failed to load related items", 500);
+  }
+}
+
 // ============================================================================
 // LIST TAGS — distinct tags + usage count for the filter UI
 // ============================================================================

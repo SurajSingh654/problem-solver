@@ -18,4 +18,5 @@ export const notesApi = {
     linkSearch: (type, q = "") =>
         api.get("/notes/link-search", { params: { type, q } }),
     listTags: () => api.get("/notes/tags"),
+    related: (id) => api.get(`/notes/${id}/related`),
 }

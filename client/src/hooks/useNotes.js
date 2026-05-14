@@ -93,6 +93,15 @@ export function useNotesByEntity(type, id) {
     });
 }
 
+export function useRelatedForNote(id) {
+    return useQuery({
+        queryKey: ["notes", "related", id],
+        queryFn: () => notesApi.related(id).then((r) => r.data.data),
+        enabled: Boolean(id),
+        staleTime: 1000 * 60 * 2,
+    });
+}
+
 export function useNoteTags() {
     return useQuery({
         queryKey: ["notes", "tags"],

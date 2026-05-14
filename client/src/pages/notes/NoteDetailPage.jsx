@@ -19,6 +19,7 @@ import {
 import MarkdownEditor from "@components/notes/MarkdownEditor";
 import EntityLinkPicker from "@components/notes/EntityLinkPicker";
 import TagInput from "@components/notes/TagInput";
+import RelatedNotesPanel from "@components/notes/RelatedNotesPanel";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
 import { formatRelativeDate } from "@utils/formatters";
@@ -215,6 +216,8 @@ export default function NoteDetailPage() {
                     setDirty(true);
                 }}
             />
+
+            {!isArchived && <RelatedNotesPanel noteId={note.id} />}
 
             <p className="text-[10px] text-text-disabled text-right">
                 Last edited {formatRelativeDate(note.updatedAt)} · personal note
