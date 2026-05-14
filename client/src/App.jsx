@@ -66,6 +66,7 @@ const TeachingFlagsPage = lazy(() => import('@pages/superadmin/TeachingFlagsPage
 const NotesListPage = lazy(() => import('@pages/notes/NotesListPage'))
 const NoteNewPage = lazy(() => import('@pages/notes/NoteNewPage'))
 const NoteDetailPage = lazy(() => import('@pages/notes/NoteDetailPage'))
+const SuperAdminDiagnosticsPage = lazy(() => import('@pages/superadmin/SuperAdminDiagnosticsPage'))
 const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
 const AdminPage = lazy(() => import('@pages/admin/AdminPage'))
@@ -201,6 +202,7 @@ export default function App() {
             <Route path="/super-admin/feedback" element={<Lazy><FeedbackInboxPage /></Lazy>} />
             <Route path="/super-admin/verdicts" element={<Lazy><VerdictsAuditPage /></Lazy>} />
             <Route path="/super-admin/ai-usage" element={<Lazy><AIUsagePage /></Lazy>} />
+            <Route path="/super-admin/diagnostics" element={<Lazy><SuperAdminDiagnosticsPage /></Lazy>} />
             {import.meta.env.VITE_FEATURE_TEACHING_SESSIONS === 'true' && (
               <Route path="/super-admin/teaching-flags" element={<Lazy><TeachingFlagsPage /></Lazy>} />
             )}

@@ -118,6 +118,21 @@ export const ROADMAP_ITEMS = [
     // ── DEFERRED — pending design discussion ────────────────────────────
 
     {
+        id: 'superadmin-diagnostics-dashboard',
+        phase: 'DONE',
+        shippedAt: '2026-05-14',
+        theme: 'Engineering Hygiene',
+        priority: 'MEDIUM',
+        effort: 'Medium',
+        title: 'SuperAdmin runtime diagnostics dashboard',
+        impact: 'A read-only health view at /super-admin/diagnostics. One server call returns categorized findings across AI Health (per-surface fallback rate, error rate, p95 latency, daily quota saturation), Database (embedding coverage, soft-delete bloat, orphans), Schema & Migrations (failed/rolled-back migrations, last-applied), Runtime (verdict-validator fallback rate, active-user count), and Feature Flags (server state + client mirror reminder). Each finding has severity (INFO/WARNING/ERROR) + a recommended fix written for an admin who needs to act NOW.',
+        description: 'Server: server/src/controllers/diagnostics.controller.js with five check categories. Each category returns a list of {id, severity, title, detail, recommendedFix, metric?}. Aggregator at GET /api/v1/platform/diagnostics (SuperAdmin only). Client: client/src/pages/superadmin/SuperAdminDiagnosticsPage.jsx with header summary (errors/warnings/info counts + overall severity badge + env snapshot) and one card per category. AI category uses raw SQL on UsageTracking for percentile latency; thresholds: > 25% fallback = ERROR, > 5% = WARNING, > 12s p95 = WARNING. DB checks track embedding coverage on Notes + Problems; bloat limits 50 deleted users / 20 deleted teams. Schema check queries _prisma_migrations directly (no shell-out). Runtime check pulls VerdictLog fallback rate + 24h active users.',
+        why: 'Pre-push catches code-time bugs. Diagnostics dashboard catches runtime drift — silent AI degradation, accumulating orphans, missed embeddings, feature-flag mismatches between client and server. Both are needed; neither replaces the other. Read-only by design — no write actions, no shell access, no risk in production.',
+        researchBasis: 'Standard SRE / observability practice. Modern admin panels (Sentry, Datadog) categorize findings + recommend fixes rather than show raw metrics. The threshold values (5% fallback, 12s p95) come from our own UsageTracking baselines.',
+        technicalNotes: 'Five categories registered as a constant array on the server; adding a new check means adding a new findings function + including it in the aggregator. Each check is independently fault-tolerant (catches its own errors and surfaces a check-failed finding). Thresholds are inline constants for now — extract to a config table once we have more.',
+    },
+
+    {
         id: 'strict-prepush-quality-gate',
         phase: 'DONE',
         shippedAt: '2026-05-14',
