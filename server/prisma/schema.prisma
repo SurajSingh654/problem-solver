@@ -2096,6 +2096,7 @@ enum NoteEntityType {
   INTERVIEW_SESSION
   DESIGN_SESSION
   TEACHING_SESSION
+  CUSTOM
 }
 
 model Note {

@@ -36,6 +36,36 @@ export default function AiSummaryCard({ note }) {
         );
     }
 
+    // Distinct UI for fallback — the previous design rendered the
+    // fallback's filler text the same way as a real summary, which made
+    // it look like AI succeeded when it hadn't.
+    if (isFallback) {
+        return (
+            <div className="rounded-xl bg-warning-soft border border-warning-line p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-warning-fg">
+                        ⚠️ AI summary unavailable
+                    </h3>
+                    <Button
+                        size="sm"
+                        onClick={handleGenerate}
+                        disabled={generate.isPending}
+                    >
+                        {generate.isPending ? "Retrying…" : "Retry"}
+                    </Button>
+                </div>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                    The AI service couldn't be reached (rate limit, network, or
+                    temporary outage). No summary was generated. Your note is unchanged.
+                </p>
+                <p className="text-[11px] text-text-disabled">
+                    If this persists, check that <code className="font-mono text-[10px]">OPENAI_API_KEY</code> is set
+                    on the server and that you haven't hit the per-user daily AI limit.
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="rounded-xl bg-surface-1 border border-border-default p-4 space-y-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -43,11 +73,6 @@ export default function AiSummaryCard({ note }) {
                     ✨ AI summary
                 </h3>
                 <div className="flex items-center gap-2">
-                    {isFallback && (
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-warning-fg">
-                            Fallback
-                        </span>
-                    )}
                     <Button
                         size="sm"
                         variant="ghost"

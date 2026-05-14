@@ -51,6 +51,7 @@ const VALID_ENTITY_TYPES = new Set([
   "INTERVIEW_SESSION",
   "DESIGN_SESSION",
   "TEACHING_SESSION",
+  "CUSTOM",
 ]);
 
 function trimTitle(raw) {
@@ -105,11 +106,24 @@ async function userTeamIds(userId) {
 
 // Validate ownership and resolve a snapshot title for a linked entity.
 // Returns { title } if valid, or throws-shaped { error: "..." } if not.
-async function resolveEntitySnapshot({ type, id, userId }) {
+//
+// `customTitle` is only used for CUSTOM links — the user provides both
+// the title and (optionally) a URL stored as the id. Other types
+// resolve their title from the linked row.
+async function resolveEntitySnapshot({ type, id, userId, customTitle }) {
   if (!VALID_ENTITY_TYPES.has(type)) return { error: "Invalid entity type" };
   if (typeof id !== "string" || !id) return { error: "Invalid entity id" };
 
   switch (type) {
+    case "CUSTOM": {
+      // No ownership check — user-controlled free text. The id slot
+      // typically holds an external URL but can be any opaque string;
+      // title is what the user typed.
+      const title =
+        typeof customTitle === "string" ? customTitle.trim().slice(0, 200) : "";
+      if (!title) return { error: "Custom link needs a title" };
+      return { title };
+    }
     case "PROBLEM": {
       const teamIds = await userTeamIds(userId);
       const p = await prisma.problem.findFirst({
@@ -195,6 +209,7 @@ export async function createNote(req, res) {
         type: req.body.linkedEntityType,
         id: req.body.linkedEntityId,
         userId,
+        customTitle: req.body?.linkedEntityTitle,
       });
       if (snap.error) return error(res, snap.error, 400);
       linkedEntityType = req.body.linkedEntityType;
@@ -337,7 +352,12 @@ export async function updateNote(req, res) {
         data.linkedEntityId = null;
         data.linkedEntityTitle = null;
       } else {
-        const snap = await resolveEntitySnapshot({ type: t, id, userId });
+        const snap = await resolveEntitySnapshot({
+          type: t,
+          id,
+          userId,
+          customTitle: req.body?.linkedEntityTitle,
+        });
         if (snap.error) return error(res, snap.error, 400);
         data.linkedEntityType = t;
         data.linkedEntityId = id;

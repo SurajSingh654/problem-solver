@@ -773,29 +773,21 @@ const NOTE_STOPWORDS = new Set([
   "do", "or", "if", "so", "we", "us", "i", "a",
 ]);
 
-export function buildFallbackNoteSummary({
-  title = "Untitled note",
-  contentMarkdown = "",
-} = {}) {
-  const tldr = _firstSentence(
-    contentMarkdown ||
-      `AI summary unavailable for "${title}" — retry to generate one.`,
-    280,
-  );
-  const heads = _markdownHeadings(contentMarkdown, 5);
-  const filler = [
-    "AI summary unavailable — re-run when the service is back online.",
-    "Re-read your own note above; the deterministic fallback can't compress it.",
-    "Pick a single sentence to anchor your future review of this note.",
-  ];
-  const keyTakeaways = [...heads];
-  while (keyTakeaways.length < 3) keyTakeaways.push(filler[keyTakeaways.length]);
+export function buildFallbackNoteSummary() {
+  // Honest fallback — do NOT echo the user's content as if it were a
+  // generated summary. A summary that's just "your note's first 280
+  // characters" looks deceptively real. Make the failure visible so the
+  // user knows to retry rather than thinking the AI did something useful.
   return {
-    tldr,
-    keyTakeaways: keyTakeaways.slice(0, 5),
+    tldr: "AI summary is currently unavailable — your note is unchanged. Retry in a moment.",
+    keyTakeaways: [
+      "AI couldn't generate a summary right now (rate limit, network error, or service offline).",
+      "Re-read your note above to identify the core takeaways yourself.",
+      "Click Regenerate to try again; the AI service may already be back.",
+    ],
     openQuestions: [],
     suggestedReviewFocus:
-      "AI suggestion unavailable. Pick the takeaway you're least sure about and revisit it.",
+      "Open the note above and underline the single most important sentence.",
     _fallback: true,
   };
 }
@@ -838,50 +830,36 @@ function _markdownBullets(text, limit = 7) {
   return out;
 }
 
-export function buildFallbackNoteFlashcards({
-  title = "Untitled note",
-  contentMarkdown = "",
-} = {}) {
-  // Naïve extractor: turn the first three markdown bullets (or first three
-  // sentences) into Q/A pairs. Front = first ~80 chars before colon/period
-  // ending in "?", back = the rest. Always returns at least 3 cards so the
-  // validator's 3-7 cap is satisfied; cards carry _fallback so the UI can
-  // show "AI unavailable" if it cares.
-  const bullets = _markdownBullets(contentMarkdown, 5);
-  const sources =
-    bullets.length >= 3
-      ? bullets
-      : String(contentMarkdown || "")
-          .split(/[.!?]\s+/)
-          .map((s) => s.trim())
-          .filter((s) => s.length >= 20)
-          .slice(0, 5);
-
-  const drafts = [];
-  for (let i = 0; i < Math.min(sources.length, 3); i++) {
-    const text = sources[i].replace(/\s+/g, " ").trim();
-    const colon = text.indexOf(":");
-    const front =
-      colon > 10 && colon < 100
-        ? text.slice(0, colon).trim().replace(/[.!?]+$/, "") + "?"
-        : `What does this point from "${title}" say?`;
-    const back = (colon > -1 ? text.slice(colon + 1) : text).trim().slice(0, 500);
-    drafts.push({
-      front: front.length > 200 ? front.slice(0, 199) + "?" : front,
-      back: back || "AI flashcard generation unavailable. Open the note to recall the full answer.",
-      type: "CONCEPT",
-      tagSuggestions: [],
-    });
-  }
-  while (drafts.length < 3) {
-    drafts.push({
-      front: `What's the single most important takeaway from this note?`,
-      back: "AI generation unavailable — open the note above and recall the answer in your own words.",
-      type: "CONCEPT",
-      tagSuggestions: [],
-    });
-  }
-  return { drafts, _fallback: true };
+export function buildFallbackNoteFlashcards() {
+  // Honest fallback — bullet-splitting the user's content into "front
+  // / back" pairs produces unusable cards (front = arbitrary sentence
+  // fragment, back = the rest of the same line). The user can't tell
+  // these apart from real AI cards and ends up with garbage in their
+  // SM-2 queue. Return placeholder drafts that clearly signal AI is
+  // offline so the user retries instead of accepting garbage.
+  return {
+    drafts: [
+      {
+        front: "AI flashcard generation is currently unavailable — retry?",
+        back: "The AI service couldn't be reached (rate limit, network, or temporary outage). No cards have been created. Close this dialog and click Generate again in a moment.",
+        type: "CONCEPT",
+        tagSuggestions: [],
+      },
+      {
+        front: "What can I do while AI is offline?",
+        back: "Click '+ New card' to create a flashcard manually from your note's content. Manual cards work the same way in the SM-2 review queue.",
+        type: "CONCEPT",
+        tagSuggestions: [],
+      },
+      {
+        front: "Will my note be summarized later?",
+        back: "Yes — once AI is back online, click Generate again. Your note text is unchanged and ready for AI processing.",
+        type: "CONCEPT",
+        tagSuggestions: [],
+      },
+    ],
+    _fallback: true,
+  };
 }
 
 export function buildFallbackNoteRelated({

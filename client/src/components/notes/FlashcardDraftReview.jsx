@@ -34,9 +34,16 @@ export default function FlashcardDraftReview({ noteId, onClose }) {
             onSuccess: (data) => {
                 if (!mounted) return;
                 setDrafts(data?.drafts || []);
-                setFallback(!!data?.fallback);
-                // Default to all accepted; user opts out per card.
-                setAccepted(new Set((data?.drafts || []).map((_, i) => i)));
+                const isFb = !!data?.fallback;
+                setFallback(isFb);
+                // Default to all accepted UNLESS we got fallback — fallback
+                // drafts are placeholder text, accepting them would pollute
+                // the SM-2 queue with unusable cards.
+                setAccepted(
+                    isFb
+                        ? new Set()
+                        : new Set((data?.drafts || []).map((_, i) => i)),
+                );
             },
         });
         return () => {
@@ -128,9 +135,16 @@ export default function FlashcardDraftReview({ noteId, onClose }) {
                     ) : (
                         <>
                             {fallback && (
-                                <div className="p-3 rounded-lg bg-warning-soft border border-warning-line text-[11px] text-warning-fg">
-                                    AI is currently unavailable — these drafts come from a
-                                    deterministic fallback. Edit before accepting.
+                                <div className="p-3 rounded-lg bg-warning-soft border border-warning-line space-y-1">
+                                    <p className="text-xs font-bold text-warning-fg">
+                                        ⚠️ AI flashcard generation unavailable
+                                    </p>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">
+                                        These are placeholder drafts — accepting them
+                                        would pollute your SM-2 queue. Close this dialog
+                                        and click Generate again in a moment, or use
+                                        <span className="font-bold"> + New card</span> to add one manually.
+                                    </p>
                                 </div>
                             )}
                             {drafts.map((d, i) => {
