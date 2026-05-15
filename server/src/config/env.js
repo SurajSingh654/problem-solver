@@ -83,6 +83,22 @@ export const AI_DAILY_LIMIT = parseInt(
   optional('AI_DAILY_LIMIT', process.env.AI_RATE_LIMIT_PER_DAY || '50'),
   10,
 )
+// Per-call hard ceiling on max_tokens. Existing legitimate callers ask for up
+// to 8000 (batch problem generation); a misconfigured caller asking for 100k
+// would silently inflate cost. The clamp inside aiComplete/aiStream enforces
+// this regardless of caller intent.
+export const AI_MAX_TOKENS_HARD_CAP = parseInt(
+  optional('AI_MAX_TOKENS_HARD_CAP', '8000'),
+  10,
+)
+// Per-HTTP-call timeout for the OpenAI SDK. Default is the SDK's 600s, which
+// holds a Node worker for 10 minutes on a stuck request — at any modest
+// concurrency one OAI degradation freezes the server. 30s covers all known
+// completion latencies (verdict P95 ~12s) with headroom.
+export const AI_REQUEST_TIMEOUT_MS = parseInt(
+  optional('AI_REQUEST_TIMEOUT_MS', '30000'),
+  10,
+)
 
 // ── Platform defaults ────────────────────────────────────────
 export const TEAM_MAX_MEMBERS_DEFAULT = parseInt(optional('TEAM_MAX_MEMBERS_DEFAULT', '20'), 10)

@@ -35,6 +35,8 @@ import {
     OPENAI_API_KEY,
     AI_MODEL_FAST,
     AI_DAILY_LIMIT,
+    AI_MAX_TOKENS_HARD_CAP,
+    AI_REQUEST_TIMEOUT_MS,
 } from "../config/env.js";
 
 // ── Initialize OpenAI client (lazy singleton) ───────────────────────
@@ -45,7 +47,14 @@ function getClient() {
         if (!OPENAI_API_KEY) {
             throw new Error("OPENAI_API_KEY is not set");
         }
-        openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+        // timeout: bound a single OpenAI call so a stuck request can't hold a
+        // Node worker. maxRetries: 0 because callWithRetry below does retries
+        // itself with backoff + Retry-After awareness.
+        openai = new OpenAI({
+            apiKey: OPENAI_API_KEY,
+            timeout: AI_REQUEST_TIMEOUT_MS,
+            maxRetries: 0,
+        });
     }
     return openai;
 }
@@ -254,14 +263,23 @@ export async function aiComplete({
         return undefined;
     })();
 
+    // Hard ceiling to prevent runaway cost from a misconfigured caller.
+    // Logs a warning so the call site can be fixed if the clamp is reached.
+    const cappedMaxTokens = Math.min(maxTokens, AI_MAX_TOKENS_HARD_CAP);
+    if (cappedMaxTokens < maxTokens) {
+        console.warn(
+            `[AI] surface=${surface || "?"} requested maxTokens=${maxTokens}, clamped to ${cappedMaxTokens} (cap=${AI_MAX_TOKENS_HARD_CAP})`,
+        );
+    }
+
     aiLog(
-        `[AI] request surface=${surface || "?"} model=${model} maxTokens=${maxTokens} jsonMode=${jsonMode} fewShot=${fewShotMessages.length} tools=${tools ? tools.length : 0}`,
+        `[AI] request surface=${surface || "?"} model=${model} maxTokens=${cappedMaxTokens} jsonMode=${jsonMode} fewShot=${fewShotMessages.length} tools=${tools ? tools.length : 0}`,
     );
 
     const buildRequest = (m) => ({
         model: m,
         temperature,
-        max_tokens: maxTokens,
+        max_tokens: cappedMaxTokens,
         response_format: finalResponseFormat,
         messages: [
             { role: "system", content: systemPrompt },
@@ -363,6 +381,13 @@ export async function aiStream({
         );
     }
 
+    const cappedMaxTokens = Math.min(maxTokens, AI_MAX_TOKENS_HARD_CAP);
+    if (cappedMaxTokens < maxTokens) {
+        console.warn(
+            `[AI] surface=${surface || "?"} requested maxTokens=${maxTokens}, clamped to ${cappedMaxTokens} (cap=${AI_MAX_TOKENS_HARD_CAP})`,
+        );
+    }
+
     const client = getClient();
     const t0 = Date.now();
     try {
@@ -371,7 +396,7 @@ export async function aiStream({
                 client.chat.completions.create({
                     model,
                     temperature,
-                    max_tokens: maxTokens,
+                    max_tokens: cappedMaxTokens,
                     stream: true,
                     messages: [{ role: "system", content: systemPrompt }, ...messages],
                     ...(tools ? { tools, ...(toolChoice ? { tool_choice: toolChoice } : {}) } : {}),

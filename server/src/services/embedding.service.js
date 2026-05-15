@@ -5,15 +5,24 @@
  */
 import OpenAI from "openai";
 import prisma from "../lib/prisma.js";
+import { OPENAI_API_KEY, AI_REQUEST_TIMEOUT_MS } from "../config/env.js";
 
 let openai = null;
 
 function getClient() {
   if (!openai) {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!OPENAI_API_KEY) {
       throw new Error("OPENAI_API_KEY is not set");
     }
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    // Bounded timeout so a stuck embedding request can't hold a worker
+    // indefinitely. Default SDK retries (2) are kept here because there is
+    // no outer retry loop on this code path — a transient failure becomes
+    // a NULL embedding otherwise. The proper retry queue is a separate
+    // roadmap item (embedding-outbox-retry-queue).
+    openai = new OpenAI({
+      apiKey: OPENAI_API_KEY,
+      timeout: AI_REQUEST_TIMEOUT_MS,
+    });
   }
   return openai;
 }
