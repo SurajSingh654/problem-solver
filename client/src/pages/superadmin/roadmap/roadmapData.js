@@ -254,7 +254,7 @@ export const ROADMAP_ITEMS = [
         phase: 'NEXT',
         theme: 'Correctness & Data',
         priority: 'HIGH',
-        effort: 'Large',
+        effort: 'XLarge',
         title: 'Audit and document transactional boundaries across multi-write paths',
         impact: 'Many controllers do multi-step writes — submit solution → update SkillProfile → write embedding → bump usage; finish interview → recompute skills → write debrief → emit metrics — without an explicit atomic boundary. If step 2 throws and is swallowed (the `recomputeSkillsFromInterview` bug pattern), step 1 commits and step 3 may or may not run. The application\'s ground truth becomes inconsistent silently. Today\'s mitigation is "engineer remembers to wrap in $transaction" — that has already failed at least twice in shipped code.',
         description: 'Two-part discipline. (1) AUDIT: catalog every controller mutation path that writes to ≥2 tables. For each: classify as ATOMIC (all-or-nothing — wrap in $transaction) or EVENTUALLY-CONSISTENT (one source-of-truth write + outbox to drive the rest — same pattern as embedding-outbox-retry-queue). Document the choice in a comment header on each controller. (2) ENFORCEMENT: add a custom ESLint rule (or test in server/test/architecture/) that flags any controller function with multiple `prisma.X.create/update/delete` calls outside a $transaction. Forces the choice to be conscious. Build on the existing pre-push gate so violations cannot ship.',
@@ -327,7 +327,7 @@ export const ROADMAP_ITEMS = [
         id: 'client-test-foundation',
         phase: 'LATER',
         theme: 'Engineering Hygiene',
-        priority: 'MEDIUM',
+        priority: 'HIGH',
         effort: 'Medium',
         title: 'Client-side test runner + smoke-test foundation',
         impact: '231 vitest tests on the server, 0 on `client/src/**`. Half the codebase has no automated verification — every regression in auth flow, ProtectedRoute, useAuthStore, query invalidation, modal a11y, error rendering must be caught by manual QA or production complaints. The pre-push gate that caught three recent server bugs has zero coverage on client logic.',
@@ -590,7 +590,7 @@ export const ROADMAP_ITEMS = [
         id: 'pre-session-confidence',
         phase: 'NOW',
         theme: 'Learning Science',
-        priority: 'MEDIUM',
+        priority: 'LOW',
         effort: 'Small',
         title: 'Pre-Session Confidence Calibration',
         impact: 'Before each mock interview, a 10-second "how prepared do you feel?" prompt. AI uses this to adjust the calibration penalty downstream.',
@@ -646,7 +646,7 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'oauth-social-login',
-        phase: 'NEXT',
+        phase: 'LATER',
         theme: 'Growth & Onboarding',
         priority: 'MEDIUM',
         effort: 'Medium',
@@ -661,7 +661,7 @@ export const ROADMAP_ITEMS = [
         id: 'email-notifications',
         phase: 'NEXT',
         theme: 'Retention & Engagement',
-        priority: 'HIGH',
+        priority: 'MEDIUM',
         effort: 'Medium',
         title: 'Transactional Email Notifications',
         impact: 'Members get reminded to review when they have due items, notified when teammates solve a problem they\'re stuck on, and see a weekly digest of team progress.',
@@ -674,7 +674,7 @@ export const ROADMAP_ITEMS = [
         id: 'multi-platform-search',
         phase: 'NEXT',
         theme: 'Content & Problems',
-        priority: 'HIGH',
+        priority: 'MEDIUM',
         effort: 'Medium',
         title: 'Multi-Platform Problem URL Resolution',
         impact: 'Team admins can generate problems from GFG, HackerRank, and InterviewBit — not just LeetCode — with verified, working links.',
@@ -728,7 +728,7 @@ export const ROADMAP_ITEMS = [
         id: 'commitment-contracts',
         phase: 'NEXT',
         theme: 'Retention & Engagement',
-        priority: 'HIGH',
+        priority: 'MEDIUM',
         effort: 'Small',
         title: 'Daily Practice Commitment Contracts',
         impact: 'Members who commit to a daily goal return 2-3x more consistently than those who just track streaks passively.',
@@ -827,7 +827,7 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'competition-system',
-        phase: 'LATER',
+        phase: 'BACKLOG',
         theme: 'Team & Community',
         priority: 'MEDIUM',
         effort: 'Large',
@@ -840,7 +840,7 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'peer-learning-pairs',
-        phase: 'LATER',
+        phase: 'BACKLOG',
         theme: 'Team & Community',
         priority: 'MEDIUM',
         effort: 'Medium',
@@ -854,7 +854,7 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'voice-interviews',
-        phase: 'LATER',
+        phase: 'SOMEDAY',
         theme: 'AI Intelligence',
         priority: 'MEDIUM',
         effort: 'Large',
@@ -881,7 +881,7 @@ export const ROADMAP_ITEMS = [
     {
         id: 'cohort-benchmarking',
         phase: 'LATER',
-        theme: 'AI Intelligence',
+        theme: 'Retention & Engagement',
         priority: 'MEDIUM',
         effort: 'Medium',
         title: 'Role-Appropriate Cohort Benchmarking',
@@ -894,7 +894,7 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'anxiety-calibration',
-        phase: 'LATER',
+        phase: 'BACKLOG',
         theme: 'Learning Science',
         priority: 'MEDIUM',
         effort: 'Small',
@@ -908,7 +908,7 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'process-tracking',
-        phase: 'LATER',
+        phase: 'SOMEDAY',
         theme: 'AI Intelligence',
         priority: 'MEDIUM',
         effort: 'Large',
@@ -977,7 +977,7 @@ export const ROADMAP_ITEMS = [
 
     {
         id: 'mobile-app',
-        phase: 'SOMEDAY',
+        phase: 'BACKLOG',
         theme: 'Growth & Onboarding',
         priority: 'LOW',
         effort: 'XLarge',
