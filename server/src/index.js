@@ -53,7 +53,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import platformRoutes from "./routes/platform.routes.js";
 
 // ── WebSocket ────────────────────────────────────────────────
-import { setupWebSocket } from "./services/websocket.service.js";
+import { setupWebSocket, closeAllWebSockets } from "./services/websocket.service.js";
 
 // ── Feedback routes ───────────────────────────────────────────────
 import feedbackRoutes from "./routes/feedback.routes.js";
@@ -130,15 +130,36 @@ if (FEATURE_TEACHING_SESSIONS) {
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
+// Verifies DB reachability with a 2s timeout. Returns 503 + status:degraded on
+// DB failure so Railway's load-balancer can drain a broken replica instead of
+// routing traffic to it. Does NOT gate on OpenAI — a transient OAI outage
+// shouldn't fail healthchecks and kill all replicas; OAI failures surface via
+// the Diagnostics dashboard separately.
+const HEALTH_DB_TIMEOUT_MS = 2000;
+app.get("/health", async (req, res) => {
+  const base = {
     environment: NODE_ENV,
     uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
     version: "3.0.0",
     apiVersions: ["v1"],
-  });
+  };
+  try {
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("db query timed out")), HEALTH_DB_TIMEOUT_MS),
+      ),
+    ]);
+    res.json({ status: "ok", db: "ok", ...base });
+  } catch (err) {
+    res.status(503).json({
+      status: "degraded",
+      db: "down",
+      error: err?.message || "db check failed",
+      ...base,
+    });
+  }
 });
 
 // ============================================================================
@@ -285,6 +306,18 @@ async function start() {
 // ============================================================================
 async function shutdown(signal) {
   console.log(`\n🛑 ${signal} received. Shutting down gracefully...`);
+  // Drain WebSockets BEFORE closing the HTTP server. Without this, SIGTERM
+  // produces ECONNRESET on every active mock interview / design coaching /
+  // teaching room — users see "connection lost" mid-conversation on every
+  // deploy. With the 1000-code close + reason, client UIs can surface a
+  // clean "server restarting, reconnecting…" instead.
+  const closed = closeAllWebSockets("server restarting");
+  if (closed > 0) {
+    console.log(`   Closed ${closed} WebSocket connection(s).`);
+    // Give clients a brief window to acknowledge the close frame before we
+    // tear down the HTTP server underneath them.
+    await new Promise((r) => setTimeout(r, 1500));
+  }
   server.close(async () => {
     console.log("   HTTP server closed.");
     await prisma.$disconnect();

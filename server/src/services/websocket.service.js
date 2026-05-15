@@ -10,6 +10,29 @@ const HEARTBEAT_INTERVAL = 30000;
 // can broadcast without holding a wss handle. Set on `setupWebSocket()`.
 let _wssRef = null;
 
+// Close every connected ws cleanly during graceful shutdown. Used by the
+// SIGTERM handler in index.js so deploys don't drop active interview /
+// design / teaching sessions with ECONNRESET.
+//
+// Sends a 1000 (normal closure) frame with reason; client UIs can read this
+// and surface "server restarting, reconnecting…" instead of an error toast.
+// Returns the number of sockets closed (informational; useful in logs).
+export function closeAllWebSockets(reason = "server restarting") {
+  if (!_wssRef) return 0;
+  let count = 0;
+  for (const ws of _wssRef.clients) {
+    try {
+      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+        ws.close(1000, reason);
+        count++;
+      }
+    } catch {
+      // Ignore — best-effort drain.
+    }
+  }
+  return count;
+}
+
 // Broadcast to every connected ws scoped to a given team. Used by the
 // teaching scheduler ("starting_soon", "live_now") and the teaching
 // controller's `:end` handler to push status flips to the room.

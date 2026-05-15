@@ -318,46 +318,80 @@ export async function reviewFlashcard(req, res) {
       return error(res, "confidence must be an integer 1-5", 400);
     }
 
-    const card = await prisma.flashcard.findFirst({
-      where: { id: req.params.id, userId, archivedAt: null },
-    });
-    if (!card) return error(res, "Flashcard not found", 404);
-
+    const cardId = req.params.id;
     const quality = confidenceToQuality(confidence);
-    const next = calculateSM2(
-      quality,
-      card.sm2EasinessFactor,
-      card.sm2Interval,
-      card.sm2Repetitions,
-    );
-
-    const reviewDates = Array.isArray(card.reviewDates)
-      ? [...card.reviewDates]
-      : [];
-    reviewDates.push({
-      at: new Date().toISOString(),
-      confidence,
-      quality,
-      newInterval: next.interval,
-    });
-    if (reviewDates.length > 200) reviewDates.splice(0, reviewDates.length - 200);
-
     const lapseDelta = quality < 3 ? 1 : 0;
 
-    const updated = await prisma.flashcard.update({
-      where: { id: card.id },
-      data: {
-        sm2EasinessFactor: next.easinessFactor,
-        sm2Interval: next.interval,
-        sm2Repetitions: next.repetitions,
-        nextReviewDate: next.nextReviewDate,
-        reviewCount: { increment: 1 },
-        lastReviewedAt: new Date(),
-        reviewDates,
-        lapseCount: { increment: lapseDelta },
-      },
-      include: { note: { select: { id: true, title: true } } },
-    });
+    // Read + compute + write inside an interactive transaction with a
+    // row-level lock on the Flashcard row. Same race-condition fix as the
+    // SM-2 review path on solutions.controller.js — concurrent submissions
+    // would otherwise lose one of the writes.
+    // Sentinel for the not-found path inside the row-locked transaction.
+    class ReviewFlashcardNotFound extends Error {
+      constructor() {
+        super("flashcard not found");
+        this.name = "ReviewFlashcardNotFound";
+      }
+    }
+
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw`
+          SELECT id, "sm2EasinessFactor", "sm2Interval", "sm2Repetitions",
+                 "reviewDates"
+          FROM flashcards
+          WHERE id = ${cardId}
+            AND "userId" = ${userId}
+            AND "archivedAt" IS NULL
+          FOR UPDATE
+        `;
+        if (!Array.isArray(rows) || rows.length === 0) {
+          throw new ReviewFlashcardNotFound();
+        }
+        const card = rows[0];
+
+        const next = calculateSM2(
+          quality,
+          card.sm2EasinessFactor,
+          card.sm2Interval,
+          card.sm2Repetitions,
+        );
+
+        const reviewDates = Array.isArray(card.reviewDates)
+          ? [...card.reviewDates]
+          : [];
+        reviewDates.push({
+          at: new Date().toISOString(),
+          confidence,
+          quality,
+          newInterval: next.interval,
+        });
+        if (reviewDates.length > 200) {
+          reviewDates.splice(0, reviewDates.length - 200);
+        }
+
+        return tx.flashcard.update({
+          where: { id: cardId },
+          data: {
+            sm2EasinessFactor: next.easinessFactor,
+            sm2Interval: next.interval,
+            sm2Repetitions: next.repetitions,
+            nextReviewDate: next.nextReviewDate,
+            reviewCount: { increment: 1 },
+            lastReviewedAt: new Date(),
+            reviewDates,
+            lapseCount: { increment: lapseDelta },
+          },
+          include: { note: { select: { id: true, title: true } } },
+        });
+      });
+    } catch (e) {
+      if (e instanceof ReviewFlashcardNotFound) {
+        return error(res, "Flashcard not found", 404);
+      }
+      throw e;
+    }
 
     return success(res, { flashcard: dtoCard(updated) });
   } catch (err) {

@@ -188,94 +188,110 @@ export async function submitReview(req, res) {
     // Bounds enforced by submitReviewSchema in solutions.routes.js.
     const trimmedRecall = typeof recallText === "string" ? recallText.trim() : null;
 
-    // Load current SM-2 state from DB — never trust client-sent state
-    const solution = await prisma.solution.findFirst({
-      where: { id: solutionId, userId, teamId },
-      select: {
-        id: true,
-        sm2EasinessFactor: true,
-        sm2Interval: true,
-        sm2Repetitions: true,
-        reviewCount: true,
-        reviewDates: true,
-        confidence: true,
-        lapseCount: true,
-      },
-    });
-
-    if (!solution) return error(res, "Solution not found.", 404);
-
     // Convert 1-5 confidence to SM-2 quality score
     const quality = confidenceToQuality(confidence);
     const isFailure = quality < 3;
 
-    // Run SM-2 algorithm with current state from DB
-    const sm2Result = calculateSM2(
-      quality,
-      solution.sm2EasinessFactor ?? 2.5,
-      solution.sm2Interval ?? 1,
-      solution.sm2Repetitions ?? 0,
-    );
+    // Read + compute + write inside an interactive transaction with a
+    // row-level lock on the Solution row. Without FOR UPDATE, two concurrent
+    // submissions (double-click, retry-on-flaky-network, two browser tabs)
+    // both read the same SM-2 state, both compute, both write — second
+    // wipes first and one ReviewAttempt is silently lost. With FOR UPDATE,
+    // the second transaction blocks until the first commits, then reads
+    // the post-first state and chains correctly.
+    let txResult;
+    try {
+      txResult = await prisma.$transaction(async (tx) => {
+        // Lock the Solution row. Returns a single-row array or empty.
+        const rows = await tx.$queryRaw`
+          SELECT id, "sm2EasinessFactor", "sm2Interval", "sm2Repetitions",
+                 "reviewDates", "lapseCount"
+          FROM solutions
+          WHERE id = ${solutionId}
+            AND "userId" = ${userId}
+            AND "teamId" = ${teamId}
+          FOR UPDATE
+        `;
+        if (!Array.isArray(rows) || rows.length === 0) {
+          throw new SubmitReviewNotFound();
+        }
+        const solution = rows[0];
 
-    // Append this review date to history
-    const reviewHistory = Array.isArray(solution.reviewDates)
-      ? solution.reviewDates
-      : [];
-    reviewHistory.push(new Date().toISOString());
+        const sm2Result = calculateSM2(
+          quality,
+          solution.sm2EasinessFactor ?? 2.5,
+          solution.sm2Interval ?? 1,
+          solution.sm2Repetitions ?? 0,
+        );
+
+        const reviewHistory = Array.isArray(solution.reviewDates)
+          ? solution.reviewDates
+          : [];
+        reviewHistory.push(new Date().toISOString());
+
+        const newLapseCount = (solution.lapseCount ?? 0) + (isFailure ? 1 : 0);
+
+        await tx.solution.update({
+          where: { id: solutionId },
+          data: {
+            sm2EasinessFactor: sm2Result.easinessFactor,
+            sm2Interval: sm2Result.interval,
+            sm2Repetitions: sm2Result.repetitions,
+            nextReviewDate: sm2Result.nextReviewDate,
+            reviewCount: { increment: 1 },
+            lastReviewedAt: new Date(),
+            reviewDates: reviewHistory,
+            ...(isFailure ? { lapseCount: { increment: 1 } } : {}),
+            confidence,
+          },
+        });
+        await tx.reviewAttempt.create({
+          data: {
+            solutionId,
+            recallText: trimmedRecall || null,
+            confidence,
+            quality,
+            recalled: !isFailure,
+          },
+        });
+
+        return { sm2Result, newLapseCount };
+      });
+    } catch (e) {
+      if (e instanceof SubmitReviewNotFound) {
+        return error(res, "Solution not found.", 404);
+      }
+      throw e;
+    }
 
     const LEECH_THRESHOLD = 8;
-    const newLapseCount = (solution.lapseCount ?? 0) + (isFailure ? 1 : 0);
-    const isLeech = newLapseCount >= LEECH_THRESHOLD;
-
-    // Persist Solution SM-2 state + ReviewAttempt row atomically so the
-    // per-attempt log can never disagree with the rolled-up scheduler state.
-    await prisma.$transaction([
-      prisma.solution.update({
-        where: { id: solutionId },
-        data: {
-          // SM-2 state — always computed server-side
-          sm2EasinessFactor: sm2Result.easinessFactor,
-          sm2Interval: sm2Result.interval,
-          sm2Repetitions: sm2Result.repetitions,
-          nextReviewDate: sm2Result.nextReviewDate,
-          // Review tracking
-          reviewCount: { increment: 1 },
-          lastReviewedAt: new Date(),
-          reviewDates: reviewHistory,
-          // Cumulative failure count — doesn't reset with sm2Repetitions.
-          ...(isFailure ? { lapseCount: { increment: 1 } } : {}),
-          // Update confidence to reflect current review rating
-          confidence,
-        },
-      }),
-      prisma.reviewAttempt.create({
-        data: {
-          solutionId,
-          recallText: trimmedRecall || null,
-          confidence,
-          quality,
-          recalled: !isFailure,
-        },
-      }),
-    ]);
+    const isLeech = txResult.newLapseCount >= LEECH_THRESHOLD;
 
     return success(res, {
       message: "Review saved.",
       nextReview: {
-        date: sm2Result.nextReviewDate,
-        intervalDays: sm2Result.interval,
-        easinessFactor: sm2Result.easinessFactor,
-        repetitions: sm2Result.repetitions,
-        // Tell the client whether this was a pass or reset
-        // so the UI can show appropriate feedback
+        date: txResult.sm2Result.nextReviewDate,
+        intervalDays: txResult.sm2Result.interval,
+        easinessFactor: txResult.sm2Result.easinessFactor,
+        repetitions: txResult.sm2Result.repetitions,
         recalled: quality >= 3,
-        lapseCount: newLapseCount,
+        lapseCount: txResult.newLapseCount,
         isLeech,
       },
     });
   } catch (err) {
     console.error("Submit review error:", err);
     return error(res, "Failed to save review.", 500);
+  }
+}
+
+// Sentinel thrown inside the submitReview transaction when the row lock
+// finds no matching solution — keeps the not-found path clean without
+// abusing string `throw` for control flow.
+class SubmitReviewNotFound extends Error {
+  constructor() {
+    super("solution not found");
+    this.name = "SubmitReviewNotFound";
   }
 }
 
