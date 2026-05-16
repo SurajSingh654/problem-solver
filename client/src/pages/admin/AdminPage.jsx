@@ -410,7 +410,7 @@ export default function AdminPage() {
             <div className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1 mb-5 w-fit">
                 {[
                     { id: 'problems', label: `Problems (${problems.length})` },
-                    { id: 'members', label: `Members` },
+                    { id: 'members', label: `Members (${members.length})` },
                 ].map(t => (
                     <button
                         key={t.id}
