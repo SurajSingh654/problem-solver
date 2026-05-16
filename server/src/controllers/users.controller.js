@@ -30,6 +30,11 @@ export async function getUsers(req, res) {
         activityStatus: true,
         targetCompany: true,
         createdAt: true,
+        // Team name for the SuperAdmin All Users list. Without this the
+        // page rendered targetCompany under a "Team" column header — wrong
+        // field, mostly empty. Now the column shows the user's actual
+        // current team.
+        currentTeam: { select: { id: true, name: true, isPersonal: true } },
         _count: {
           select: {
             solutions: true,
@@ -54,6 +59,15 @@ export async function getUsers(req, res) {
       activityStatus: u.activityStatus,
       targetCompany: u.targetCompany,
       createdAt: u.createdAt,
+      // Personal teams use the user's own name as team name — surface the
+      // distinct concept instead so the list reads "(personal)" rather
+      // than echoing the user's name in the Team column.
+      team: u.currentTeam
+        ? u.currentTeam.isPersonal
+          ? "(personal)"
+          : u.currentTeam.name
+        : null,
+      teamId: u.currentTeam?.id ?? null,
       solutionCount: u._count.solutions,
       simCount: u._count.simSessions,
       quizCount: u._count.quizAttempts,
