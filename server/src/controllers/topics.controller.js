@@ -20,6 +20,7 @@
 
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import { planNextAction, detectStuck } from "../services/mentor.service.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -243,15 +244,50 @@ export async function getTopicState(req, res) {
       },
     });
 
+    // Mentor Orchestrator outputs — what to do next, whether the user is
+    // stuck, and a small progress summary for the UI. Computed in parallel
+    // because the two operations don't share state.
+    const [nextAction, stuck, totalConcepts] = await Promise.all([
+      planNextAction(userId, topic.id),
+      detectStuck(userId, topic.id),
+      prisma.concept.count({ where: { topicId: topic.id, status: "PUBLISHED" } }),
+    ]);
+
+    const progress = summarizeProgress(masteries, totalConcepts);
+
     return success(res, {
       enrolled: true,
       enrollment,
       masteries,
+      nextAction,
+      stuck,
+      progress,
     });
   } catch (err) {
     console.error("getTopicState:", err);
     return error(res, "Failed to fetch topic state.", 500);
   }
+}
+
+// Summarize per-user progress on a topic. Counts "untouched" against the
+// PUBLISHED concept total so users see a real fraction (not just rows in
+// ConceptMastery).
+function summarizeProgress(masteries, totalConcepts) {
+  let mastered = 0;
+  let inProgress = 0;
+  let touched = 0;
+  for (const m of masteries) {
+    if (m.score == null) continue;
+    touched++;
+    if (m.score >= 80) mastered++;
+    else if (m.score >= 1) inProgress++;
+  }
+  return {
+    totalConcepts,
+    mastered,
+    inProgress,
+    untouched: Math.max(0, totalConcepts - touched),
+  };
 }
 
 // ── PATCH /topics/:slug/enrollment — update preferences / lifecycle ──

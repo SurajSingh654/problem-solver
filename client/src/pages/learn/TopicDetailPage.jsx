@@ -45,7 +45,7 @@ export default function TopicDetailPage() {
     }
 
     const { topic, concepts } = topicQ.data
-    const { enrolled, enrollment } = stateQ.data ?? {}
+    const { enrolled, enrollment, nextAction, stuck, progress } = stateQ.data ?? {}
 
     return (
         <div className="p-6 max-w-[1100px] mx-auto space-y-6">
@@ -76,7 +76,12 @@ export default function TopicDetailPage() {
             {!enrolled ? (
                 <EnrollPanel slug={slug} />
             ) : (
-                <EnrollmentPanel slug={slug} enrollment={enrollment} />
+                <>
+                    {stuck?.stuck && <StuckBanner stuck={stuck} />}
+                    {nextAction && <NextActionTile action={nextAction} />}
+                    {progress && <ProgressBar progress={progress} />}
+                    <EnrollmentPanel slug={slug} enrollment={enrollment} />
+                </>
             )}
 
             <section className="space-y-3">
@@ -105,6 +110,125 @@ export default function TopicDetailPage() {
 }
 
 // ── Enroll panel — shown when not yet enrolled ───────────────────────
+
+// ── Next-action tile (Mentor Orchestrator output) ───────────────────
+
+const STAGE_META = {
+    CALIBRATION: { icon: '🎯', tone: 'bg-warning-soft border-warning-line text-warning-fg', cta: 'Take calibration' },
+    INTAKE:      { icon: '📖', tone: 'bg-brand-soft border-brand-line text-brand-fg-soft',  cta: 'Read primer' },
+    EXPLORE:     { icon: '🔬', tone: 'bg-info-soft border-info-line text-info-fg',          cta: 'Practice' },
+    REFLECT:     { icon: '✍️', tone: 'bg-info-soft border-info-line text-info-fg',          cta: 'Reflect' },
+    TEACH:       { icon: '🎓', tone: 'bg-success-soft border-success-line text-success-fg', cta: 'Schedule teaching session' },
+    VALIDATE:    { icon: '✅', tone: 'bg-success-soft border-success-line text-success-fg', cta: 'Run mock interview' },
+    COMPLETE:    { icon: '🏆', tone: 'bg-purple-400/10 border-purple-400/25 text-purple-300', cta: null },
+}
+
+function buildSurfaceUrl(surface) {
+    if (!surface?.route) return null
+    const params = surface.params ?? {}
+    const qs = Object.entries(params)
+        .filter(([, v]) => v != null && v !== '')
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&')
+    return qs ? `${surface.route}?${qs}` : surface.route
+}
+
+function NextActionTile({ action }) {
+    const navigate = useNavigate()
+    const meta = STAGE_META[action.stage] ?? STAGE_META.INTAKE
+    const url = buildSurfaceUrl(action.surface)
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cn('border rounded-2xl p-5 space-y-3', meta.tone)}
+        >
+            <div className="flex items-start gap-3">
+                <span className="text-2xl">{meta.icon}</span>
+                <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                        Today · {action.stage} · ~{action.minutes} min
+                    </p>
+                    <h3 className="text-base font-bold text-text-primary mt-0.5">
+                        {action.concept?.name ??
+                            (action.stage === 'VALIDATE' ? 'Topic-wide validation' :
+                                action.stage === 'COMPLETE' ? 'Track complete' :
+                                    action.stage === 'CALIBRATION' ? 'Calibration quiz' : '—')}
+                    </h3>
+                    <p className="text-xs text-text-tertiary leading-relaxed mt-1">
+                        {action.reason}
+                    </p>
+                </div>
+                {meta.cta && url && (
+                    <Button variant="primary" size="sm" onClick={() => navigate(url)}>
+                        {meta.cta}
+                    </Button>
+                )}
+            </div>
+        </motion.div>
+    )
+}
+
+// ── Stuck banner ─────────────────────────────────────────────────────
+
+function StuckBanner({ stuck }) {
+    if (!stuck.recommendation) return null
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-warning-soft border border-warning-line rounded-2xl p-4 flex items-start gap-3"
+        >
+            <span className="text-xl">⚠️</span>
+            <div className="flex-1">
+                <p className="text-xs font-bold text-warning-fg uppercase tracking-widest mb-0.5">
+                    Mentor noticed something
+                </p>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                    {stuck.recommendation.message}
+                </p>
+            </div>
+        </motion.div>
+    )
+}
+
+// ── Progress bar ─────────────────────────────────────────────────────
+
+function ProgressBar({ progress }) {
+    const { totalConcepts, mastered, inProgress, untouched } = progress
+    if (totalConcepts === 0) return null
+
+    const masteredPct = (mastered / totalConcepts) * 100
+    const inProgressPct = (inProgress / totalConcepts) * 100
+
+    return (
+        <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
+                    Progress
+                </p>
+                <p className="text-[10px] text-text-disabled font-mono">
+                    {mastered} mastered · {inProgress} in progress · {untouched} untouched
+                </p>
+            </div>
+            <div className="h-2 bg-surface-3 rounded-full overflow-hidden flex">
+                <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${masteredPct}%` }}
+                    transition={{ duration: 0.5 }}
+                    className="h-full bg-success"
+                />
+                <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${inProgressPct}%` }}
+                    transition={{ duration: 0.5, delay: 0.1 }}
+                    className="h-full bg-warning"
+                />
+            </div>
+        </div>
+    )
+}
 
 function EnrollPanel({ slug }) {
     const [open, setOpen] = useState(false)
