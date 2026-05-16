@@ -89,6 +89,7 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
             { to: '/quizzes', icon: '🧩', label: 'Quizzes' },
             { to: '/mock-interview', icon: '💬', label: 'Mock Interview' },
             { to: '/design-studio', icon: '🏗️', label: 'Design Studio' },
+            { to: '/learn', icon: '🎓', label: 'Learn' },
         ],
     })
 

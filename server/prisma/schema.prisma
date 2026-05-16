@@ -327,6 +327,11 @@ model User {
 
   authoredDesignReferences DesignReference[] @relation("DesignReferenceAuthor")
 
+  // Topic Mastery Tracks — personalized AI-mentor tracks per topic.
+  // Both user-scoped (no teamId) — a track follows the user across teams.
+  topicEnrollments TopicEnrollment[]
+  conceptMasteries ConceptMastery[]
+
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
   @@index([currentTeamId, activityStatus])
@@ -2206,4 +2211,211 @@ model Flashcard {
   @@index([userId, archivedAt, nextReviewDate])
   @@index([userId, noteId])
   @@map("flashcards")
+}
+
+// ============================================================================
+// TOPIC MASTERY TRACKS
+// ============================================================================
+//
+// A Topic is a domain (System Design first; later LLD / DBMS / OS / Networks /
+// DSA / etc.). Each Topic owns a curated concept graph + per-user mastery
+// tracking. Stages of the learn → reflect → teach → validate workflow are
+// orchestrated by the Mentor service (planNextAction / detectStuck /
+// updateMastery — built in subsequent commits).
+//
+// ANTI-HALLUCINATION SAFETY GATE — the architectural defense that this
+// entry exists for: every Concept (and the Topic itself) carries a `status`
+// (DRAFT | REVIEWED | PUBLISHED). User-facing surfaces render ONLY
+// PUBLISHED rows. DRAFT content is admin-only — author, review, then
+// publish. This is the mandatory mechanism, not an optional polish.
+
+/// Status gate for Topics + Concepts. User-facing endpoints filter to
+/// PUBLISHED; admin endpoints can see DRAFT and REVIEWED.
+enum ConceptStatus {
+  DRAFT
+  REVIEWED
+  PUBLISHED
+}
+
+/// Topic taxonomy — the domain the user is mastering. Distinct from the
+/// existing ProblemCategory enum because topic granularity differs:
+/// "OS", "Networks", and "DBMS" all route to CS_FUNDAMENTALS / SQL Mock
+/// Interview categories but are tracked here as separate Topics.
+enum TopicCategory {
+  SYSTEM_DESIGN
+  LOW_LEVEL_DESIGN
+  DBMS
+  OS
+  NETWORKS
+  DSA
+  BEHAVIORAL
+  HR
+  CS_FUNDAMENTALS
+}
+
+/// Lifecycle of a user's enrollment in a Topic. ABANDONED is set by the
+/// stuck-detector after extended inactivity; user can re-activate.
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ABANDONED
+}
+
+model Topic {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  name        String
+  description String         @db.Text
+  category    TopicCategory
+  status      ConceptStatus  @default(DRAFT)
+
+  // Maps to the existing Mock Interview ProblemCategory so the VALIDATE
+  // stage can route into the right rubric. Stored as String (not the
+  // ProblemCategory enum) to keep the two taxonomies decoupled — adding
+  // a Topic doesn't require touching ProblemCategory.
+  mockInterviewCategory String?
+
+  // Estimated effort to mastery in hours; a hint for planning, not a
+  // guarantee. Mentor uses it with the user's hours-per-week input to
+  // size the path.
+  estimatedHoursToMastery Int?
+
+  concepts    Concept[]
+  enrollments TopicEnrollment[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  publishedAt DateTime?
+
+  @@index([status, category])
+  @@map("topics")
+}
+
+model Concept {
+  id      String @id @default(cuid())
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  slug   String
+  name   String
+  order  Int
+  status ConceptStatus @default(DRAFT)
+
+  // The curated content. JSON for evolving fields; markdown for the
+  // primer body. NEVER LLM-generated for user-facing exposure — admin
+  // authors and reviews. The DRAFT status enforces this gate.
+  primerMarkdown    String  @db.Text
+  workedExample     String? @db.Text
+  // Shape: [{ title, url, type: "book"|"paper"|"blog"|"video"|"docs", author? }]
+  canonicalSources  Json    @default("[]")
+  // Shape: ["When would you use X over Y?", "What's the failure mode of …?", ...]
+  expectedQuestions Json    @default("[]")
+  // Structured rubric for "did the user master this concept?". Used by
+  // the Mentor's updateMastery() to score signals from quizzes, practice,
+  // teaching transcripts, and mock interviews.
+  // Shape: { quizThreshold: 0.8, practiceMin: 2, teachingExpected: bool }
+  assessmentCriteria Json   @default("{}")
+
+  prerequisites ConceptDependency[] @relation("ConceptPrereq")
+  unlocks       ConceptDependency[] @relation("ConceptUnlocks")
+  masteries     ConceptMastery[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  reviewedAt  DateTime?
+  publishedAt DateTime?
+
+  @@unique([topicId, slug])
+  @@index([topicId, status, order])
+  @@map("concepts")
+}
+
+/// Directed prerequisite graph between Concepts. `concept` requires
+/// `prereq` to be at least touched before user can advance. Mentor's
+/// planNextAction respects this when picking the next concept.
+model ConceptDependency {
+  id        String  @id @default(cuid())
+  conceptId String
+  concept   Concept @relation("ConceptPrereq", fields: [conceptId], references: [id], onDelete: Cascade)
+  prereqId  String
+  prereq    Concept @relation("ConceptUnlocks", fields: [prereqId], references: [id], onDelete: Cascade)
+
+  @@unique([conceptId, prereqId])
+  @@index([prereqId])
+  @@map("concept_dependencies")
+}
+
+model TopicEnrollment {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  // Personalization input from the user's enrollment form. JSON-shaped
+  // because fields evolve fast. Mentor reads this to plan the path.
+  // Shape: {
+  //   targetOutcome: "TEACH_TO_TEAM"|"INTERVIEW_PASS"|"BUILD_PRODUCTION"|"RESEARCH",
+  //   timelineWeeks: number,
+  //   hoursPerWeek: number,
+  //   targetCompanies: string[],
+  //   targetLevels: string[],
+  //   learningStyle: ("visual"|"reading"|"video")[],
+  //   energyBudget: "HIGH"|"MEDIUM"|"LOW",
+  //   frictionTolerance: "HIGH"|"LOW"
+  // }
+  preferences Json
+
+  // Calibration quiz results (when the quiz UI ships in a later commit).
+  // null until the user completes it.
+  // Shape: { score: 0-12, perConceptCorrectness: { [conceptSlug]: bool }, takenAt }
+  calibration Json?
+
+  status      EnrollmentStatus @default(ACTIVE)
+  startedAt   DateTime         @default(now())
+  completedAt DateTime?
+  pausedAt    DateTime?
+  lastActiveAt DateTime?
+
+  @@unique([userId, topicId])
+  @@index([userId, status])
+  @@index([topicId, status])
+  @@map("topic_enrollments")
+}
+
+model ConceptMastery {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conceptId String
+  concept   Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  // 0-100 mastery score. Weighted blend across signals — quiz, practice,
+  // teaching transcript quality, mock interview dimension. Null until
+  // first signal arrives. The Mentor's updateMastery() is the only
+  // writer in production; admin can manually override for ground truth.
+  score Int?
+
+  // Signal log — append-only audit trail. Lets us re-derive mastery if
+  // the weighting formula changes, and gives the user transparency
+  // ("you scored 85 because: quiz 9/10, practice 7/10, teaching 8/10").
+  // Shape: [{ source, value, at, evidence? }]
+  signals Json @default("[]")
+
+  // User-declared "I'm ready to teach this" — unlocks TEACH stage even
+  // if computed mastery is below threshold. System surfaces an advisory
+  // ("you might want more practice on X first") rather than blocking.
+  teachingReady Boolean @default(false)
+
+  // Spaced retrieval scheduling — FSRS-driven when SR integration lands.
+  nextReviewAt DateTime?
+
+  firstSeenAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, conceptId])
+  @@index([userId, nextReviewAt])
+  @@index([conceptId])
+  @@map("concept_masteries")
 }

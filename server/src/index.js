@@ -63,6 +63,7 @@ import designReferencesRoutes from "./routes/designReferences.routes.js";
 import teachingRoutes from "./routes/teaching.routes.js";
 import notesRoutes from "./routes/notes.routes.js";
 import flashcardsRoutes from "./routes/flashcards.routes.js";
+import topicsRoutes from "./routes/topics.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
 import { FEATURE_TEACHING_SESSIONS, FEATURE_NOTES_ENABLED } from "./config/env.js";
@@ -231,6 +232,12 @@ function mountRoutes(prefix) {
     app.use(`${prefix}/notes`, apiLimiter, notesRoutes);
     app.use(`${prefix}/flashcards`, apiLimiter, flashcardsRoutes);
   }
+
+  // ── Topic Mastery Tracks (v1 scaffold) ──────────────────
+  // Personal-only — Tracks follow the user across teams, like Notes.
+  // User-facing endpoints render PUBLISHED rows only; the DRAFT/REVIEWED
+  // gate is the architectural anti-hallucination defense.
+  app.use(`${prefix}/topics`, apiLimiter, topicsRoutes);
 }
 
 // Canonical versioned routes

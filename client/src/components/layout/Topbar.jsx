@@ -25,6 +25,7 @@ const PAGE_META = {
     '/notes': { title: 'Notes', crumb: 'Personal' },
     '/notes/new': { title: 'New Note', crumb: 'Personal' },
     '/notes/:id': { title: 'Note', crumb: 'Personal' },
+    '/learn': { title: 'Learn', crumb: 'Practice' },
     '/profile': { title: 'My Profile', crumb: 'Progress' },
     '/admin': { title: 'Admin Panel', crumb: 'Admin' },
     '/admin/problems/new': { title: 'Add Problem', crumb: 'Admin' },
@@ -56,6 +57,7 @@ function getPageMeta(pathname) {
     if (pathname.startsWith('/super-admin/profile/')) return { title: 'User Profile', crumb: 'Platform' }
     if (pathname.startsWith('/profile/')) return { title: 'Profile', crumb: 'Progress' }
     if (pathname.startsWith('/admin/')) return { title: 'Admin', crumb: 'Admin' }
+    if (pathname.startsWith('/learn/')) return { title: 'Topic', crumb: 'Practice' }
     return { title: 'ProbSolver', crumb: '' }
 }
 
