@@ -583,6 +583,28 @@ export async function reviewSolution(req, res) {
       }
     });
 
+    // Fire-and-forget: kick off auto-note + auto-flashcards generation
+    // for this submission. Skipped automatically when the review used a
+    // fallback (no point compounding degraded review with degraded note).
+    // Errors are logged inside the service; never propagate.
+    import("../services/autoNoteFromReview.service.js")
+      .then((m) =>
+        m.generateAutoNoteFromReview({
+          solutionId,
+          userId,
+          teamId,
+          solution,
+          problem: solution.problem,
+          reviewRecord,
+        }),
+      )
+      .catch((err) =>
+        console.error(
+          `[autoNote] solution=${solutionId} dispatch failed:`,
+          err?.message || err,
+        ),
+      );
+
     return success(res, {
       feedback: reviewRecord,
       isFirstReview: existingFeedback.length === 0,

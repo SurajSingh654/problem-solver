@@ -1280,3 +1280,89 @@ export function validateNoteRelated(out, { candidateNoteIds = [], candidateProbl
   checkSection(out.relatedProblems, "relatedProblems", problemIds);
   return { valid: violations.length === 0, violations };
 }
+
+// ── Note from Solution Review ─────────────────────────────────────────
+// Validates the structured study-note output. Lenient on optional sections
+// (empty arrays are fine), strict on required ones (title, topicsExplained
+// must be present and meaningful — that's the whole point of the note).
+const NOTE_FROM_SOLUTION_SEVERITIES = new Set(["HIGH", "MED", "LOW"]);
+export function validateNoteFromSolution(out) {
+  const violations = [];
+  if (!out || typeof out !== "object") {
+    return { valid: false, violations: ["not-an-object"] };
+  }
+
+  if (!isNonEmptyString(out.title)) violations.push("title-empty");
+  else if (out.title.length > 200) violations.push("title-too-long");
+
+  if (!Array.isArray(out.tags)) violations.push("tags-not-array");
+  else {
+    if (out.tags.length > 12) violations.push("tags-too-many");
+    out.tags.forEach((t, i) => {
+      if (typeof t !== "string" || !NOTE_TAG_REGEX.test(t)) {
+        violations.push(`tags[${i}]-not-kebab`);
+      }
+    });
+  }
+
+  // Optional bullet sections — must be arrays of non-empty strings if present.
+  for (const key of [
+    "whatYouGotRight",
+    "mistakes",
+    "howToOvercome",
+    "betterApproachNextTime",
+  ]) {
+    if (!Array.isArray(out[key])) {
+      violations.push(`${key}-not-array`);
+      continue;
+    }
+    out[key].forEach((s, i) => {
+      if (!isNonEmptyString(s)) violations.push(`${key}[${i}]-empty`);
+    });
+  }
+
+  // weakAreas: array of { severity, point }
+  if (!Array.isArray(out.weakAreas)) {
+    violations.push("weakAreas-not-array");
+  } else {
+    out.weakAreas.forEach((w, i) => {
+      const tag = `weakAreas[${i}]`;
+      if (!w || typeof w !== "object") {
+        violations.push(`${tag}-not-object`);
+        return;
+      }
+      if (!NOTE_FROM_SOLUTION_SEVERITIES.has(w.severity)) {
+        violations.push(`${tag}.severity-invalid`);
+      }
+      if (!isNonEmptyString(w.point)) violations.push(`${tag}.point-empty`);
+    });
+  }
+
+  // topicsExplained — required, must have at least one topic with at
+  // least 2 explanation points. The whole point of this note is the
+  // structured topic explanations; if those are missing or trivial,
+  // the AI didn't earn its keep — fall back to the deterministic version.
+  if (!Array.isArray(out.topicsExplained)) {
+    violations.push("topicsExplained-not-array");
+  } else if (out.topicsExplained.length === 0) {
+    violations.push("topicsExplained-empty");
+  } else {
+    out.topicsExplained.forEach((t, i) => {
+      const tag = `topicsExplained[${i}]`;
+      if (!t || typeof t !== "object") {
+        violations.push(`${tag}-not-object`);
+        return;
+      }
+      if (!isNonEmptyString(t.topic)) violations.push(`${tag}.topic-empty`);
+      if (!Array.isArray(t.points)) {
+        violations.push(`${tag}.points-not-array`);
+      } else if (t.points.length < 2) {
+        violations.push(`${tag}.points-too-few`);
+      } else if (t.points.some((p) => !isNonEmptyString(p))) {
+        violations.push(`${tag}.points-empty-item`);
+      }
+    });
+  }
+
+  return { valid: violations.length === 0, violations };
+}

@@ -2789,3 +2789,128 @@ The reason: a fix you can't explain is a fix that won't survive a refactor or a 
 }`,
   },
 ];
+
+// ── Note from Solution Review ─────────────────────────────────────────
+//
+// Auto-generates a personal study note from (problem, solution, AI review).
+// Output is a structured JSON the controller composes into Markdown so the
+// formatting is consistent every time. The note must be POINT-FORM (bullets,
+// not paragraph walls). Topics covered get short bullet explanations rather
+// than essay-style theory dumps.
+//
+// Schema (strict):
+//   { title, tags[], whatYouGotRight[], weakAreas[{severity, point}],
+//     mistakes[], howToOvercome[], topicsExplained[{topic, points[]}],
+//     betterApproachNextTime[] }
+export function noteFromSolutionPrompt({ problem, solution, aiReview }) {
+  const system = `You are creating a personal study note for an engineer who just submitted a solution and received an AI review. The note will live in their notes section and feed flashcards into a spaced-repetition queue. It is a learning artifact — point-form, concrete, tailored to THIS submission.
+
+WHAT THIS NOTE MUST DO:
+- Crystallize what they got right so they can repeat it.
+- Surface their weak areas with severity so flashcards can prioritize.
+- Name specific mistakes (not generic ones).
+- Give concrete actions for how to fix each weakness.
+- Explain the topics covered IN THEIR SOLUTION — not the topic in the abstract. Connect each topic to how it appeared in their work and where it generalizes.
+- Sketch a better approach for next time.
+
+OUTPUT RULES (strict):
+- Bullets, not paragraphs. No 3-line prose blocks anywhere.
+- Concrete > generic. "On line 12 you returned indices+1 but the problem expected 0-indexed" beats "watch out for off-by-one errors."
+- Topic explanations are 3-6 bullets each, covering: idea, why-it-fits, key-mistake-to-avoid, when-NOT-to-use. Not encyclopedia entries.
+- Weak-area severity: HIGH = will cost them an interview; MED = obvious gap that's fixable; LOW = polish.
+- 3-7 tags total (kebab-case): patterns + topics + 1-2 weak-area flags (e.g., "weak:edge-cases").
+- Title: ≤ 80 chars, format like "[Problem title] — your write-up notes" or similar; let the problem title carry it.
+
+ANTI-LAZINESS:
+- Do NOT regurgitate the AI review verbatim. Extract, structure, and add learning context.
+- Do NOT pad with filler bullets to hit minimums. If a section has only 1 real point, return 1.
+- Do NOT invent details not in the inputs. If the solution didn't explain complexity, don't claim they did.
+- Do NOT write paragraphs. Bullets only.
+
+${UNTRUSTED_INPUT_RULE}
+
+RESPOND WITH EXACT JSON:
+{
+  "title": "<≤80 chars>",
+  "tags": ["<kebab-tag>", ...],
+  "whatYouGotRight": ["<bullet>", ...],
+  "weakAreas": [{ "severity": "HIGH" | "MED" | "LOW", "point": "<bullet>" }, ...],
+  "mistakes": ["<bullet>", ...],
+  "howToOvercome": ["<bullet>", ...],
+  "topicsExplained": [
+    { "topic": "<short topic name>", "points": ["<bullet>", "<bullet>", ...] }
+  ],
+  "betterApproachNextTime": ["<bullet>", ...]
+}`;
+
+  const reviewSummary = aiReview
+    ? {
+        overallScore: aiReview.overallScore ?? null,
+        strengths: Array.isArray(aiReview.strengths) ? aiReview.strengths : [],
+        gaps: Array.isArray(aiReview.gaps) ? aiReview.gaps : [],
+        improvement: aiReview.improvement || null,
+        complexityCheck: aiReview.complexityCheck || null,
+        flags: aiReview.flags || {},
+      }
+    : null;
+
+  const userParts = [
+    "Generate the study note JSON for this submission.",
+    "",
+    `<problem_header>`,
+    `Title: ${xmlEscape(problem?.title || "Untitled")}`,
+    `Category: ${xmlEscape(problem?.category || "CODING")}`,
+    `Difficulty: ${xmlEscape(problem?.difficulty || "MEDIUM")}`,
+    `</problem_header>`,
+  ];
+  if (problem?.description) {
+    userParts.push(
+      `<problem_description>${xmlEscape(truncated(problem.description, 1500))}</problem_description>`,
+    );
+  }
+
+  userParts.push(
+    "",
+    `<candidate_input>`,
+    `Patterns claimed: ${xmlEscape((solution?.patterns || []).join(", ") || "none")}`,
+    `Confidence: ${xmlEscape(String(solution?.confidence ?? "?"))}/5`,
+    `Time complexity: ${xmlEscape(solution?.timeComplexity || "not specified")}`,
+    `Space complexity: ${xmlEscape(solution?.spaceComplexity || "not specified")}`,
+    "",
+    "Approach:",
+    xmlEscape(truncated(solution?.approach || solution?.optimizedApproach || "(none provided)", 1200)),
+    "",
+    "Key insight:",
+    xmlEscape(truncated(solution?.keyInsight || "(none provided)", 600)),
+  );
+  if (solution?.feynmanExplanation) {
+    userParts.push(
+      "",
+      "Feynman explanation:",
+      xmlEscape(truncated(solution.feynmanExplanation, 800)),
+    );
+  }
+  if (solution?.code) {
+    userParts.push(
+      "",
+      "Code:",
+      xmlEscape(truncated(solution.code, 1500)),
+    );
+  }
+  userParts.push(`</candidate_input>`);
+
+  if (reviewSummary) {
+    userParts.push(
+      "",
+      `<rag_reference>`,
+      `AI review of this submission:`,
+      `Overall score: ${reviewSummary.overallScore ?? "?"}/10`,
+      `Strengths: ${reviewSummary.strengths.length > 0 ? reviewSummary.strengths.map((s) => `- ${xmlEscape(truncated(s, 300))}`).join("\n") : "(none)"}`,
+      `Gaps: ${reviewSummary.gaps.length > 0 ? reviewSummary.gaps.map((g) => `- ${xmlEscape(truncated(g, 300))}`).join("\n") : "(none)"}`,
+      reviewSummary.improvement ? `Improvement guidance: ${xmlEscape(truncated(reviewSummary.improvement, 500))}` : "",
+      `</rag_reference>`,
+    );
+  }
+
+  return { system, user: userParts.join("\n") };
+}

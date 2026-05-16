@@ -858,3 +858,50 @@ export function buildFallbackNoteRelated({
     _fallback: true,
   };
 }
+
+// Auto-Note from AI Solution Review — deterministic fallback.
+// When the structured-note prompt fails or the validator rejects, we still
+// want to leave SOMETHING useful in the user's notes rather than silently
+// dropping the artifact. This stitches the existing AI review's strengths /
+// gaps / improvement directly into the note schema. The result is honest
+// (no fabricated topic explanations) and clearly marked _fallback so the
+// UI can show "AI summary unavailable — retry to regenerate."
+export function buildFallbackNoteFromSolution({ problem, solution, aiReview }) {
+  const title = `${problem?.title || "Untitled problem"} — review notes`;
+  const tags = Array.isArray(solution?.patterns)
+    ? solution.patterns
+        .map((p) => String(p).toLowerCase().replace(/\s+/g, "-"))
+        .filter((p) => /^[a-z0-9][a-z0-9-]*$/.test(p))
+        .slice(0, 8)
+    : [];
+
+  const strengths = Array.isArray(aiReview?.strengths) ? aiReview.strengths : [];
+  const gaps = Array.isArray(aiReview?.gaps) ? aiReview.gaps : [];
+  const improvement = aiReview?.improvement || null;
+
+  // Synthesize a single placeholder topic so the validator's
+  // topicsExplained-required rule is satisfied; flag _fallback so the UI
+  // can prompt for regeneration.
+  const topicsExplained = [
+    {
+      topic: "AI-generated topic explanations unavailable",
+      points: [
+        "The AI couldn't structure topic-level explanations for this submission right now.",
+        "Re-trigger analysis from the AI Review card to regenerate this note.",
+        improvement || "Re-read the strengths and gaps below — they came from the underlying review and are accurate.",
+      ],
+    },
+  ];
+
+  return {
+    title,
+    tags,
+    whatYouGotRight: strengths.slice(0, 6),
+    weakAreas: gaps.slice(0, 6).map((g) => ({ severity: "MED", point: g })),
+    mistakes: [],
+    howToOvercome: improvement ? [improvement] : [],
+    topicsExplained,
+    betterApproachNextTime: [],
+    _fallback: true,
+  };
+}
