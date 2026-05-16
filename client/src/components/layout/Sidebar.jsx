@@ -45,6 +45,7 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
             items: [
                 { to: '/super-admin/showcase', icon: '🎪', label: 'Showcase' },
                 { to: '/super-admin/roadmap', icon: '🗺️', label: 'Roadmap' },
+                { to: '/super-admin/learning', icon: '🎓', label: 'Learning Content' },
             ],
         })
         sections.push({

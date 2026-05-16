@@ -89,6 +89,7 @@ const EditSolutionPage = lazy(() => import('@pages/problems/EditSolutionPage'))
 const SolutionHistoryPage = lazy(() => import('@pages/problems/SolutionHistoryPage'))
 const AllTeamsPage = lazy(() => import('@pages/superadmin/AllTeamsPage'))
 const AllUsersPage = lazy(() => import('@pages/superadmin/AllUsersPage'))
+const LearningContentPage = lazy(() => import('@pages/superadmin/LearningContentPage'))
 const SuperAdminAnalyticsPage = lazy(() => import('@pages/superadmin/SuperAdminAnalyticsPage'))
 const TodoPage = lazy(() => import('@pages/superadmin/TodoPage'))
 const FeedbackPage = lazy(() => import('@pages/FeedbackPage'))
@@ -214,6 +215,7 @@ export default function App() {
             <Route path="/super-admin/settings" element={<SettingsPage />} />
             <Route path="/super-admin/showcase" element={<Lazy><ShowcasePage /></Lazy>} />
             <Route path="/super-admin/roadmap" element={<Lazy><TodoPage /></Lazy>} />
+            <Route path="/super-admin/learning" element={<Lazy><LearningContentPage /></Lazy>} />
           </Route>
           {/* ============================================================ */}
           {/* MAIN APP ROUTES — Require auth + onboarding + team context  */}

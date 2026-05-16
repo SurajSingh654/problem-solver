@@ -64,6 +64,7 @@ import teachingRoutes from "./routes/teaching.routes.js";
 import notesRoutes from "./routes/notes.routes.js";
 import flashcardsRoutes from "./routes/flashcards.routes.js";
 import topicsRoutes from "./routes/topics.routes.js";
+import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
 import { FEATURE_TEACHING_SESSIONS, FEATURE_NOTES_ENABLED } from "./config/env.js";
@@ -238,6 +239,10 @@ function mountRoutes(prefix) {
   // User-facing endpoints render PUBLISHED rows only; the DRAFT/REVIEWED
   // gate is the architectural anti-hallucination defense.
   app.use(`${prefix}/topics`, apiLimiter, topicsRoutes);
+
+  // ── Topic admin (SuperAdmin) — authoring + publishing ──
+  // Sees ALL rows regardless of status. Publish-time gate for content.
+  app.use(`${prefix}/admin/learning`, apiLimiter, topicsAdminRoutes);
 }
 
 // Canonical versioned routes
