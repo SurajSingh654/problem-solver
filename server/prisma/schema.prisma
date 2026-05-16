@@ -1046,6 +1046,11 @@ model ClarityRating {
 // ============================================================================
 
 /// A timed problem-solving simulation session.
+/// @deprecated — legacy "Timed Simulation" feature; no code path writes to
+/// or reads from this table anymore. Replaced end-to-end by `InterviewSession`
+/// (mock interviews). Model + relations are kept for now so historical rows
+/// aren't silently dropped; remove the model + drop the table in a dedicated
+/// migration when there's appetite for the data-loss decision.
 model SimSession {
   id String @id @default(cuid())
 

@@ -151,7 +151,7 @@ export default function Section3AI({ stats }) {
                             {[
                                 { icon: '🤖', value: stats.aiReviewCount || 0, label: 'AI Reviews' },
                                 { icon: '🧩', value: stats.totalQuizzes || 0, label: 'AI Quizzes' },
-                                { icon: '💬', value: stats.totalSims || 0, label: 'Mock Interviews' },
+                                { icon: '💬', value: stats.totalInterviews || 0, label: 'Mock Interviews' },
                                 { icon: '📐', value: stats.embeddingCount || stats.problemEmbeddings || 0, label: 'Embeddings' },
                             ].map((s) => (
                                 <div key={s.label} className="text-center">

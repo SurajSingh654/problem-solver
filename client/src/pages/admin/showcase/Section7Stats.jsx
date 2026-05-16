@@ -112,7 +112,7 @@ export default function Section7Stats({ stats }) {
                                 { icon: '📋', value: stats.totalProblems || 0, label: 'Problems' },
                                 { icon: '✅', value: stats.totalSolutions || 0, label: 'Solutions' },
                                 { icon: '🧩', value: stats.totalQuizzes || 0, label: 'Quizzes' },
-                                { icon: '💬', value: stats.totalSims || 0, label: 'Interviews' },
+                                { icon: '💬', value: stats.totalInterviews || 0, label: 'Mock Interviews' },
                             ].map((s) => (
                                 <div key={s.label} className="text-center">
                                     <span className="text-2xl">{s.icon}</span>
