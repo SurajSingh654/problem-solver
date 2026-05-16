@@ -9,9 +9,56 @@ import {
   confidenceToQuality,
   estimateRetention,
 } from "../utils/sm2.js";
+import { reviewSolution } from "./ai.controller.js";
 
 // After the existing embedding generation:
 import { recomputeSkillsFromSolution } from '../services/skillComputation.service.js'
+
+// Fire-and-forget AI review trigger. submitSolution / updateSolution call
+// this after the solution row is persisted so the user never has to click
+// "Analyze" — the AI Review card just populates on its own once the call
+// returns. Cached on input-hash so an update with no real changes is free.
+//
+// We mock a minimal Express req/res because reviewSolution expects the
+// controller signature. The same shape is used in test/controllers/_harness.js
+// — keep them in sync if reviewSolution starts using new req/res fields.
+function triggerBackgroundReview({ solutionId, userId, teamId, user }) {
+  const stubReq = {
+    body: {},
+    params: { solutionId },
+    query: {},
+    user,
+    teamId,
+  };
+  const stubRes = {
+    statusCode: 200,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.body = payload; return this; },
+    send(payload) { this.body = payload; return this; },
+    set() { return this; },
+    setHeader() { return this; },
+  };
+  reviewSolution(stubReq, stubRes)
+    .then(() => {
+      if (stubRes.statusCode >= 400) {
+        console.warn(
+          `[autoReview] solution=${solutionId} user=${userId} status=${stubRes.statusCode}`,
+        );
+      } else {
+        const cached = stubRes.body?.data?.cached ?? false;
+        console.log(
+          `[autoReview] solution=${solutionId} user=${userId} ok cached=${cached}`,
+        );
+      }
+    })
+    .catch((err) => {
+      console.error(
+        `[autoReview] solution=${solutionId} user=${userId} threw:`,
+        err?.message || err,
+      );
+    });
+}
 
 // ============================================================================
 // SUBMIT SOLUTION
@@ -163,6 +210,12 @@ export async function submitSolution(req, res) {
     updateStreak(userId).catch(() => {});
     generateSolutionEmbedding(solution.id).catch(() => {});
     recomputeSkillsFromSolution(solution.id).catch(() => {})
+    triggerBackgroundReview({
+      solutionId: solution.id,
+      userId,
+      teamId,
+      user: req.user,
+    });
 
     return success(res, { message: "Solution submitted.", solution }, 201);
   } catch (err) {

@@ -436,7 +436,7 @@ function FollowUpSection({ followUpEvaluations, problemFollowUps, isHR = false }
 // ══════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════
-export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
+export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, problemFollowUps }) {
     const aiReview = useAIReview()
     const [activeTab, setActiveTab] = useState('overview')
     const [expanded, setExpanded] = useState(false)
@@ -524,7 +524,15 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
     }[inferredCategory] || '5-dimension analysis · Flags interview killers · Tracks improvement'
 
     // ── No review yet ──────────────────────────────────
+    // Submit auto-fires AI review in the background. If the solution is
+    // recent (< 90s old), show an "Analyzing..." indicator instead of
+    // the manual button — the parent's pollFreshSolutions refetches every
+    // 5s, so the review will pop in on its own once it lands. After the
+    // 90s window, fall back to the manual "Get AI Review" button (covers
+    // legacy solutions, auto-review failures, or rate-limit hits).
     if (!latestReview) {
+        const recentSubmit = solutionCreatedAt
+            && (Date.now() - new Date(solutionCreatedAt).getTime() < 90_000)
         return (
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
@@ -538,29 +546,48 @@ export function AIReviewCard({ solutionId, existingReview, problemFollowUps }) {
                             🤖
                         </div>
                         <div>
-                            <h3 className="text-sm font-bold text-text-primary">AI Review</h3>
-                            <p className="text-xs text-text-tertiary">{reviewDescription}</p>
+                            <h3 className="text-sm font-bold text-text-primary">
+                                {recentSubmit ? 'AI is analyzing your solution…' : 'AI Review'}
+                            </h3>
+                            <p className="text-xs text-text-tertiary">
+                                {recentSubmit ? 'Usually takes 10–30 seconds — this card will update automatically.' : reviewDescription}
+                            </p>
                         </div>
                     </div>
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        loading={aiReview.isPending}
-                        onClick={handleReview}
-                    >
-                        {aiReview.isPending ? 'Analyzing...' : (
-                            <>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2"
-                                    strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                                    <path d="M2 17l10 5 10-5" />
-                                    <path d="M2 12l10 5 10-5" />
-                                </svg>
-                                Get AI Review
-                            </>
-                        )}
-                    </Button>
+                    {recentSubmit ? (
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-soft border border-brand-line">
+                            <motion.span
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                                className="inline-block text-brand-fg-soft text-sm"
+                            >
+                                ⟳
+                            </motion.span>
+                            <span className="text-xs font-semibold text-brand-fg-soft">
+                                Analyzing
+                            </span>
+                        </div>
+                    ) : (
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            loading={aiReview.isPending}
+                            onClick={handleReview}
+                        >
+                            {aiReview.isPending ? 'Analyzing...' : (
+                                <>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                                        <path d="M2 17l10 5 10-5" />
+                                        <path d="M2 12l10 5 10-5" />
+                                    </svg>
+                                    Get AI Review
+                                </>
+                            )}
+                        </Button>
+                    )}
                 </div>
                 <div className="mt-4 pt-4 border-t border-border-subtle
                                 grid grid-cols-2 sm:grid-cols-5 gap-2">

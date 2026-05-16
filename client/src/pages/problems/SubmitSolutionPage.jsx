@@ -894,8 +894,9 @@ export default function SubmitSolutionPage() {
         try {
             await submitSolution.mutateAsync({ problemId, data })
             toast.success(
-                isHR ? 'Answer submitted! AI will review your authenticity and specificity.'
-                    : 'Solution submitted! AI will analyze it.'
+                isHR
+                    ? 'Answer submitted — AI is analyzing in the background.'
+                    : 'Solution submitted — AI is analyzing in the background.'
             )
             // Bug fix: was navigate`...` — correct function call syntax
             navigate(`/problems/${problemId}`)

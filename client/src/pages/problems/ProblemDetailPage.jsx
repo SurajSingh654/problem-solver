@@ -606,7 +606,10 @@ export default function ProblemDetailPage() {
     const aiEnabled = aiStatus?.enabled
 
     const { data: problem, isLoading, isError } = useProblem(problemId)
-    const { data: solutionsData } = useProblemSolutions(problemId)
+    // pollFreshSolutions: refetches every 5s while a recently-submitted
+    // solution is still waiting on its background AI review (auto-fires on
+    // submit). Stops automatically once feedback lands or after 90s.
+    const { data: solutionsData } = useProblemSolutions(problemId, { pollFreshSolutions: true })
     // Only fetch DS sessions for SD/LLD; other categories don't use Design Studio.
     const isDesignCategory =
         problem?.category === 'SYSTEM_DESIGN' || problem?.category === 'LOW_LEVEL_DESIGN'
@@ -1394,6 +1397,7 @@ export default function ProblemDetailPage() {
                                         <AIReviewCard
                                             solutionId={mySolution.id}
                                             existingReview={mySolution.aiFeedback}
+                                            solutionCreatedAt={mySolution.createdAt}
                                             problemFollowUps={followUpQuestions}
                                         />
                                     </div>
