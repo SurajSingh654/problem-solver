@@ -79,8 +79,14 @@ export const AI_MODEL_PREMIUM = optional('AI_MODEL_PREMIUM', process.env.OPENAI_
 export const AI_EMBEDDING_MODEL = optional('AI_EMBEDDING_MODEL', 'text-embedding-3-small')
 // Daily per-user AI request cap. AI_DAILY_LIMIT is the canonical name;
 // AI_RATE_LIMIT_PER_DAY is the legacy name still read for backward compat.
+//
+// Default raised from 50 → 500: the auto-pipeline (review + note + flashcards
+// + autotag) consumes ~4 calls per submission; combined with mock interview
+// turns and quiz attempts a power-user can hit 50 in an afternoon. 500 is
+// still cheap on gpt-4o-mini (~$0.50 / day at the cap) and gives room.
+// Lower this in prod env vars if cost becomes a real signal.
 export const AI_DAILY_LIMIT = parseInt(
-  optional('AI_DAILY_LIMIT', process.env.AI_RATE_LIMIT_PER_DAY || '50'),
+  optional('AI_DAILY_LIMIT', process.env.AI_RATE_LIMIT_PER_DAY || '500'),
   10,
 )
 // Per-call hard ceiling on max_tokens. Existing legitimate callers ask for up
