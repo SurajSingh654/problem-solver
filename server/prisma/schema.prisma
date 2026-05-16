@@ -1149,6 +1149,12 @@ model InterviewSession {
   difficulty     Difficulty      @default(MEDIUM)
   interviewStyle String?
 
+  // 1-5 self-rated readiness captured BEFORE the session begins. Used by
+  // the debrief to compute a calibration gap ("you rated 4/5 prepared but
+  // scored 2/5 on accuracy") — making self-awareness a measurable signal
+  // rather than a vague feeling. Nullable because it's optional / skippable.
+  preSessionConfidence Int?
+
   // ── Session state ──────────────────────────────────
   status    InterviewStatus @default(IN_PROGRESS)
   phases    Json?

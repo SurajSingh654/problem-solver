@@ -293,6 +293,10 @@ function SetupScreen({ onStart }) {
     const [filter, setFilter] = useState('')
     const [loading, setLoading] = useState(false)
     const [interviewMode, setInterviewMode] = useState('text')
+    // Optional 1-5 self-rated readiness captured before session start. The
+    // debrief later compares this to the actual score to surface a
+    // calibration gap. null = user skipped (not sent to server).
+    const [preSessionConfidence, setPreSessionConfidence] = useState(null)
 
     const { data: problemsData } = useProblems({ limit: '200' })
     const problems = (problemsData?.problems || []).filter(p =>
@@ -316,6 +320,7 @@ function SetupScreen({ onStart }) {
                 category,
                 duration: duration * 60,
                 interviewMode,
+                preSessionConfidence: preSessionConfidence ?? undefined,
             })
             onStart({
                 ...res.data.data,
@@ -644,6 +649,39 @@ function SetupScreen({ onStart }) {
                         ))}
                     </div>
                 </div>
+
+                {/* Pre-session confidence — optional 1-5 rating that feeds the
+                    calibration gap surfaced in the debrief. Skippable. */}
+                <div className="mb-5">
+                    <div className="flex items-baseline justify-between mb-2">
+                        <p className="text-xs font-bold text-text-disabled uppercase tracking-widest">
+                            How prepared do you feel?
+                        </p>
+                        <span className="text-[10px] text-text-disabled">Optional</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        {[1, 2, 3, 4, 5].map(n => (
+                            <button
+                                key={n}
+                                type="button"
+                                onClick={() => setPreSessionConfidence(preSessionConfidence === n ? null : n)}
+                                className={cn(
+                                    'flex-1 py-2 rounded-lg text-xs font-bold border transition-all',
+                                    preSessionConfidence === n
+                                        ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                        : 'bg-surface-2 border-border-default text-text-tertiary hover:text-text-primary',
+                                )}
+                            >
+                                {n}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex justify-between text-[10px] text-text-disabled mt-1.5 px-0.5">
+                        <span>Not at all</span>
+                        <span>Very prepared</span>
+                    </div>
+                </div>
+
                 <Button variant="primary" size="lg" fullWidth loading={loading} onClick={handleStart}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="5 3 19 12 5 21 5 3" />

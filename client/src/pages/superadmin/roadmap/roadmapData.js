@@ -405,7 +405,7 @@ export const ROADMAP_ITEMS = [
         technicalNotes: 'New Prisma model: QAProbeRun (id, probeKey, runStartedAt, runFinishedAt, status enum PASS/FAIL/ERROR/SKIPPED, severity enum, runMode enum, evidence Json, failureReason, triggeredBy userId?). Probes themselves live in code (server/src/qa/probes/*.js, one file per probe with {key, severity, type, run()}) so they version with the schema they test. Test-user isolation: add `isQaBot Boolean @default(false)` flag to Team; pre-seeded qa-bot-{n}@probsolver.test users on a qa-bot team; every journey probe wraps its actions in a transaction with cleanup; safety check refuses to mutate non-isQaBot data. Rate limit isolation: add OPENAI_QA_DAILY_LIMIT env var; QA probes pass a system flag through ai.service.js routing to the QA bucket so probes never eat real users\' daily quota. Cron via node-cron (same pattern as email reminders). FeedbackReport integration with dedupe by (probeKey + open=true). Server: server/src/controllers/qa.controller.js (list runs, run-now, get probe detail) at /api/v1/platform/qa-probes (SuperAdmin only). Client: /super-admin/qa-testing page — table grouped by category showing last run + 7d sparkline of pass/fail per probe; click into a probe shows full evidence Json + last 10 runs. Phased rollout (P1 highest ROI, lowest risk): P1 (1-2 days) — schema + cron + ~15 invariant probes + minimal SuperAdmin page. Catches most silent-failure bugs immediately. P2 (3-4 days) — qa-bot team isolation + 5 journey probes for the canonical scenarios (quiz adaptation, SkillProfile update, SM-2, RAG retrieval non-empty, mock-interview→SkillProfile chain). P3 (2-3 days) — AI-judge probes for "did the AI actually use the context we provided" assertions. P4 (1-2 days) — historical trending, severity-based FeedbackReport auto-creation, manual checklist UI for the genuinely-not-automatable. Open decisions before build: (1) curated catalog (recommended) vs AI-generated-daily-tests vs hybrid; (2) journey probes on prod with isQaBot isolation (recommended — cheapest, most realistic) vs dedicated staging DB; (3) which Phase 1 invariants to ship first.',
     },
 
-    // ── DEFERRED — pending design discussion ────────────────────────────
+    // ── SHIPPED — engineering hygiene batch (May 2026) ──────────────────
 
     {
         id: 'superadmin-diagnostics-dashboard',
@@ -542,7 +542,7 @@ export const ROADMAP_ITEMS = [
         technicalNotes: 'Migration 20260908000000_add_problem_versioning — two additive columns. updateProblem splits content fields from admin flags and only increments version on content changes.',
     },
 
-    // ── NOW — currently building or immediately queued ─────────────────
+    // ── SHIPPED — problem-generation polish batch (May 2026) ───────────
 
     {
         id: 'url-confidence-indicator',
@@ -593,10 +593,10 @@ export const ROADMAP_ITEMS = [
         priority: 'LOW',
         effort: 'Small',
         title: 'Pre-Session Confidence Calibration',
-        impact: 'Before each mock interview, a 10-second "how prepared do you feel?" prompt. AI uses this to adjust the calibration penalty downstream.',
-        description: 'Quick 1-5 prompt on session start. Stored on InterviewSession. Post-session feedback can then say "you rated 4/5 confident going in but scored 2/5 — here\'s the gap."',
-        why: 'Self-awareness is a coachable skill. Making the calibration gap visible is the feedback loop.',
-        technicalNotes: 'Add preSessionConfidence Int? on InterviewSession. MockInterviewPage prompts before first turn. Debrief surfaces the gap.',
+        impact: 'Before each mock interview, an optional 1-5 "how prepared do you feel?" prompt. The rating is stored on InterviewSession so the debrief can later surface a calibration gap ("you rated 4/5 prepared but scored 2/5") — turning self-awareness into a measurable signal.',
+        description: 'Data capture shipped: schema field `preSessionConfidence Int?` on InterviewSession + migration 20261003000000_add_pre_session_confidence + server endpoint validates 1-5 + client prompt on SetupScreen (between "What to expect" and the Start button, optional/skippable). Debrief surfacing is a follow-up — the post-session debrief component already exists; comparing preSessionConfidence to the post-session score will be wired in a separate pass.',
+        why: 'Self-awareness is a coachable skill. Making the calibration gap visible is the feedback loop. Capturing the data first means the debrief surfacing can be added later without losing historical sessions to "no data."',
+        technicalNotes: 'server/prisma/schema.prisma InterviewSession.preSessionConfidence (nullable Int). server/src/controllers/interview.controller.js startInterview accepts + validates 1-5. client/src/pages/MockInterviewPage.jsx SetupScreen state + 5-button picker + sent in start request body. FOLLOW-UP: surface the gap in the debrief component (compare preSessionConfidence to scores.overall on the InterviewSession.debrief render).',
     },
 
     // ── NEXT — 1-3 months ──────────────────────────────────────────────
@@ -642,19 +642,6 @@ export const ROADMAP_ITEMS = [
         why: 'Aggregate trend answers "am I improving?"; per-item decay answers "which one is about to fall off a cliff?"',
         researchBasis: 'Ebbinghaus (1885) forgetting curve. Cepeda et al. (2006) — visualizing retention increases review completion.',
         technicalNotes: 'New ForgettingCurve component (plain SVG, not recharts — 20+ per-row instances would be too heavy). Also fixed a retention-math bug in getReviewQueue that used overdueDays instead of daysSinceReview, systematically over-estimating retention for overdue items.',
-    },
-
-    {
-        id: 'oauth-social-login',
-        phase: 'LATER',
-        theme: 'Growth & Onboarding',
-        priority: 'MEDIUM',
-        effort: 'Medium',
-        title: 'OAuth / Social Sign-In',
-        impact: 'One-click signup with Google or GitHub removes the biggest onboarding friction point — new users land on the dashboard in seconds.',
-        description: 'Passport.js + Google + GitHub OAuth strategies. Auto-provision User on first sign-in. Existing email/password flow stays.',
-        why: 'Password-based signup is measurably worse conversion than OAuth. Every extra field kills ~10% of new signups.',
-        technicalNotes: 'Server: passport + passport-google-oauth20 + passport-github2. Add oauthProvider, oauthId to User. Client: SSO buttons on LoginPage/RegisterPage.',
     },
 
     {
@@ -826,46 +813,6 @@ export const ROADMAP_ITEMS = [
     },
 
     {
-        id: 'competition-system',
-        phase: 'BACKLOG',
-        theme: 'Team & Community',
-        priority: 'MEDIUM',
-        effort: 'Large',
-        title: 'Timed Team Competitions',
-        impact: 'Teams experience the real pressure of timed problem-solving together — the closest simulation of an actual interview environment.',
-        description: 'Timed competition events where team members solve the same problem set simultaneously. Live leaderboard. Competition and CompetitionEntry models already exist in schema.',
-        why: 'Competitions create urgency that regular practice lacks. D5 (Pressure Performance) gets the richest signal from timed events.',
-        technicalNotes: 'Competition + CompetitionEntry models already exist. Server routes + WebSocket leaderboard. Client: lobby, live problem view, real-time leaderboard.',
-    },
-
-    {
-        id: 'peer-learning-pairs',
-        phase: 'BACKLOG',
-        theme: 'Team & Community',
-        priority: 'MEDIUM',
-        effort: 'Medium',
-        title: 'Weekly Peer Learning Pairs',
-        impact: 'Members who explain their solution to a peer show significantly better retention and deeper understanding than those who only self-review.',
-        description: 'Match members into weekly pairs where one explains their solution and receives a clarity rating. Structured session, not just peer rating.',
-        why: 'Explaining to someone slightly less advanced consolidates understanding more than solo practice. Protégé Effect.',
-        researchBasis: 'Chase et al. (2009) — the protégé effect. Roscoe & Chi (2007) — peer tutoring benefits both tutor and tutee.',
-        technicalNotes: 'WeeklyPairingSession model. Sunday pairing algorithm matching by 6D weakness similarity. Dashboard shows this week\'s pair + prompts.',
-    },
-
-    {
-        id: 'voice-interviews',
-        phase: 'SOMEDAY',
-        theme: 'AI Intelligence',
-        priority: 'MEDIUM',
-        effort: 'Large',
-        title: 'Voice-Based Mock Interviews',
-        impact: 'Members practice the actual modality of a real interview — speaking their answer — not just typing it.',
-        description: 'User speaks their answer, Whisper STT transcribes, AI responds. Behavioral and HR rounds especially need verbal fluency that text practice cannot build.',
-        why: 'Most real interviews are spoken. Voice practice builds confidence that text practice structurally cannot.',
-        technicalNotes: 'POST /api/interview-v2/voice/transcribe → Whisper. MediaRecorder client-side. Optional SpeechSynthesis API response.',
-    },
-
-    {
         id: 'problem-catalog',
         phase: 'LATER',
         theme: 'Content & Problems',
@@ -893,31 +840,16 @@ export const ROADMAP_ITEMS = [
     },
 
     {
-        id: 'anxiety-calibration',
-        phase: 'BACKLOG',
-        theme: 'Learning Science',
+        id: 'oauth-social-login',
+        phase: 'LATER',
+        theme: 'Growth & Onboarding',
         priority: 'MEDIUM',
-        effort: 'Small',
-        title: 'Pre-Interview Anxiety Calibration',
-        impact: 'D5 (Pressure Performance) accurately distinguishes "performs poorly under pressure" from "performs well despite high anxiety" — a critical difference for coaching.',
-        description: '3-question anxiety self-report before each mock interview. AI calibrates evaluation accordingly.',
-        why: 'A candidate scoring 9/10 while reporting high anxiety deserves different feedback than one scoring 9/10 calmly.',
-        researchBasis: 'Yerkes & Dodson (1908) — inverted-U arousal/performance. Eysenck et al. (2007) Attentional Control Theory.',
-        technicalNotes: 'preInterviewAnxiety Int on InterviewSession. Pre-interview form in MockInterviewPage. Composite anxiety score + anxiety-adjusted D5 metric.',
-    },
-
-    {
-        id: 'process-tracking',
-        phase: 'SOMEDAY',
-        theme: 'AI Intelligence',
-        priority: 'MEDIUM',
-        effort: 'Large',
-        title: 'Problem-Solving Process Tracking',
-        impact: 'AI feedback can comment on HOW you solved the problem — not just WHAT you submitted. Did you clarify requirements? Try brute force before optimizing?',
-        description: 'Optional session timer and timestamped thinking-log scratchpad during problem solving. AI review has behavioral signal data.',
-        why: 'Deliberate practice research shows process matters more than outcome for learning.',
-        researchBasis: 'Ericsson et al. (1993) — deliberate practice. Process-level feedback is the foundation of expert skill development.',
-        technicalNotes: 'thinkingLog JSON on Solution (array of {timestamp, note}). SubmitSolutionPage expandable panel. Fed into solutionReviewPrompt.',
+        effort: 'Medium',
+        title: 'OAuth / Social Sign-In',
+        impact: 'One-click signup with Google or GitHub removes the biggest onboarding friction point — new users land on the dashboard in seconds.',
+        description: 'Passport.js + Google + GitHub OAuth strategies. Auto-provision User on first sign-in. Existing email/password flow stays.',
+        why: 'Password-based signup is measurably worse conversion than OAuth. Every extra field kills ~10% of new signups.',
+        technicalNotes: 'Server: passport + passport-google-oauth20 + passport-github2. Add oauthProvider, oauthId to User. Client: SSO buttons on LoginPage/RegisterPage.',
     },
 
     // ── SOMEDAY — validated ideas, no committed timeline ────────────────
@@ -976,19 +908,6 @@ export const ROADMAP_ITEMS = [
     },
 
     {
-        id: 'mobile-app',
-        phase: 'BACKLOG',
-        theme: 'Growth & Onboarding',
-        priority: 'LOW',
-        effort: 'XLarge',
-        title: 'Mobile App (Review + Quiz)',
-        impact: 'Members can do their daily reviews and quizzes during commute, lunch, or any 5-10 minute window — dramatically increasing daily engagement.',
-        description: 'React Native app focused on the two highest-frequency, low-friction activities: spaced repetition reviews and AI quizzes. Full platform stays on web.',
-        why: 'Reviews and quizzes are the activities most suitable for mobile. They take 5-10 minutes and don\'t require a keyboard.',
-        technicalNotes: 'React Native + Expo. Shares component logic with web where possible. Same JWT auth, same API endpoints. Scope: Review Queue + Quiz only.',
-    },
-
-    {
         id: 'problem-revisions',
         phase: 'SOMEDAY',
         theme: 'Correctness & Data',
@@ -999,6 +918,33 @@ export const ROADMAP_ITEMS = [
         description: 'Per-edit snapshot of the Problem content, mirroring the SolutionAttempt pattern. Optional on LOAD; mandatory on every content edit.',
         why: 'Forward versioning is enough to flag drift; revision history is needed to audit what changed and roll back if an AI-generated edit goes sideways.',
         technicalNotes: 'ProblemRevision model. updateProblem appends a revision on content change. Admin UI to browse + restore.',
+    },
+
+    {
+        id: 'voice-interviews',
+        phase: 'SOMEDAY',
+        theme: 'AI Intelligence',
+        priority: 'MEDIUM',
+        effort: 'Large',
+        title: 'Voice-Based Mock Interviews',
+        impact: 'Members practice the actual modality of a real interview — speaking their answer — not just typing it.',
+        description: 'User speaks their answer, Whisper STT transcribes, AI responds. Behavioral and HR rounds especially need verbal fluency that text practice cannot build.',
+        why: 'Most real interviews are spoken. Voice practice builds confidence that text practice structurally cannot.',
+        technicalNotes: 'POST /api/interview-v2/voice/transcribe → Whisper. MediaRecorder client-side. Optional SpeechSynthesis API response.',
+    },
+
+    {
+        id: 'process-tracking',
+        phase: 'SOMEDAY',
+        theme: 'AI Intelligence',
+        priority: 'MEDIUM',
+        effort: 'Large',
+        title: 'Problem-Solving Process Tracking',
+        impact: 'AI feedback can comment on HOW you solved the problem — not just WHAT you submitted. Did you clarify requirements? Try brute force before optimizing?',
+        description: 'Optional session timer and timestamped thinking-log scratchpad during problem solving. AI review has behavioral signal data.',
+        why: 'Deliberate practice research shows process matters more than outcome for learning.',
+        researchBasis: 'Ericsson et al. (1993) — deliberate practice. Process-level feedback is the foundation of expert skill development.',
+        technicalNotes: 'thinkingLog JSON on Solution (array of {timestamp, note}). SubmitSolutionPage expandable panel. Fed into solutionReviewPrompt.',
     },
 
     // ── BACKLOG — no committed timeline ─────────────────────────────────
@@ -1079,5 +1025,59 @@ export const ROADMAP_ITEMS = [
         description: 'Add company+stage+frequency metadata to problem categoryData JSON.',
         why: 'Company-specific pattern knowledge is high-value. Encoding it in problem metadata makes AI coaching dramatically more targeted.',
         technicalNotes: 'categoryData JSON: companyPatterns array. ProblemForm "Company Stage Context" section. Read in solutionReviewPrompt + problemSelectionPrompt.',
+    },
+
+    {
+        id: 'competition-system',
+        phase: 'BACKLOG',
+        theme: 'Team & Community',
+        priority: 'MEDIUM',
+        effort: 'Large',
+        title: 'Timed Team Competitions',
+        impact: 'Teams experience the real pressure of timed problem-solving together — the closest simulation of an actual interview environment.',
+        description: 'Timed competition events where team members solve the same problem set simultaneously. Live leaderboard. Competition and CompetitionEntry models already exist in schema.',
+        why: 'Competitions create urgency that regular practice lacks. D5 (Pressure Performance) gets the richest signal from timed events.',
+        technicalNotes: 'Competition + CompetitionEntry models already exist. Server routes + WebSocket leaderboard. Client: lobby, live problem view, real-time leaderboard.',
+    },
+
+    {
+        id: 'peer-learning-pairs',
+        phase: 'BACKLOG',
+        theme: 'Team & Community',
+        priority: 'MEDIUM',
+        effort: 'Medium',
+        title: 'Weekly Peer Learning Pairs',
+        impact: 'Members who explain their solution to a peer show significantly better retention and deeper understanding than those who only self-review.',
+        description: 'Match members into weekly pairs where one explains their solution and receives a clarity rating. Structured session, not just peer rating.',
+        why: 'Explaining to someone slightly less advanced consolidates understanding more than solo practice. Protégé Effect.',
+        researchBasis: 'Chase et al. (2009) — the protégé effect. Roscoe & Chi (2007) — peer tutoring benefits both tutor and tutee.',
+        technicalNotes: 'WeeklyPairingSession model. Sunday pairing algorithm matching by 6D weakness similarity. Dashboard shows this week\'s pair + prompts.',
+    },
+
+    {
+        id: 'anxiety-calibration',
+        phase: 'BACKLOG',
+        theme: 'Learning Science',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'Pre-Interview Anxiety Calibration',
+        impact: 'D5 (Pressure Performance) accurately distinguishes "performs poorly under pressure" from "performs well despite high anxiety" — a critical difference for coaching.',
+        description: '3-question anxiety self-report before each mock interview. AI calibrates evaluation accordingly.',
+        why: 'A candidate scoring 9/10 while reporting high anxiety deserves different feedback than one scoring 9/10 calmly.',
+        researchBasis: 'Yerkes & Dodson (1908) — inverted-U arousal/performance. Eysenck et al. (2007) Attentional Control Theory.',
+        technicalNotes: 'preInterviewAnxiety Int on InterviewSession. Pre-interview form in MockInterviewPage. Composite anxiety score + anxiety-adjusted D5 metric.',
+    },
+
+    {
+        id: 'mobile-app',
+        phase: 'BACKLOG',
+        theme: 'Growth & Onboarding',
+        priority: 'LOW',
+        effort: 'XLarge',
+        title: 'Mobile App (Review + Quiz)',
+        impact: 'Members can do their daily reviews and quizzes during commute, lunch, or any 5-10 minute window — dramatically increasing daily engagement.',
+        description: 'React Native app focused on the two highest-frequency, low-friction activities: spaced repetition reviews and AI quizzes. Full platform stays on web.',
+        why: 'Reviews and quizzes are the activities most suitable for mobile. They take 5-10 minutes and don\'t require a keyboard.',
+        technicalNotes: 'React Native + Expo. Shares component logic with web where possible. Same JWT auth, same API endpoints. Scope: Review Queue + Quiz only.',
     },
 ]

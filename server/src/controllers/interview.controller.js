@@ -18,6 +18,7 @@ export async function startInterview(req, res) {
       difficulty,
       interviewStyle,
       interviewMode,
+      preSessionConfidence,
     } = req.body;
 
     let problem = null;
@@ -29,6 +30,17 @@ export async function startInterview(req, res) {
       if (!problem) return error(res, "Problem not found in your team.", 404);
     }
 
+    // Optional 1-5 readiness rating. Validated here rather than in a
+    // schema layer because it's a single field with simple bounds.
+    let preConfidence = null;
+    if (preSessionConfidence !== undefined && preSessionConfidence !== null) {
+      const n = Number(preSessionConfidence);
+      if (!Number.isInteger(n) || n < 1 || n > 5) {
+        return error(res, "preSessionConfidence must be an integer 1-5.", 400);
+      }
+      preConfidence = n;
+    }
+
     const session = await prisma.interviewSession.create({
       data: {
         userId,
@@ -37,6 +49,7 @@ export async function startInterview(req, res) {
         category: problem?.category || category || "CODING",
         difficulty: problem?.difficulty || difficulty || "MEDIUM",
         interviewStyle: interviewStyle || null,
+        preSessionConfidence: preConfidence,
         status: "IN_PROGRESS",
         phases: getDefaultPhases(problem?.category || category || "CODING"),
         workspace: {
@@ -55,6 +68,7 @@ export async function startInterview(req, res) {
         category: true,
         difficulty: true,
         interviewStyle: true,
+        preSessionConfidence: true,
         status: true,
         phases: true,
         workspace: true,
