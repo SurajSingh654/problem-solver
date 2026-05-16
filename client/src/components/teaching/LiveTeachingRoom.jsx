@@ -47,13 +47,15 @@ export default function LiveTeachingRoom({ session, currentUserId }) {
         join.mutate(sessionId)
 
         const token = localStorage.getItem('token')
-        const url = `${getWsUrl()}?token=${token}`
+        const url = getWsUrl()
         const ws = new WebSocket(url)
         wsRef.current = ws
 
         ws.onopen = () => {
             setConnected(true)
             setErrorBanner(null)
+            // Auth as the first frame — token never travels in the URL.
+            ws.send(JSON.stringify({ type: 'auth', token }))
             ws.send(JSON.stringify({ type: 'teaching:join', sessionId }))
         }
 

@@ -881,12 +881,16 @@ function ChatScreen({ sessionData, onEnd: _onEnd, onDebrief }) {
     // ── WebSocket connection ─────────────────────────
     useEffect(() => {
         const token = localStorage.getItem('token')
-        const wsUrl = `${getWsUrl()}?token=${token}&sessionId=${session.id}`
+        const wsUrl = `${getWsUrl()}?sessionId=${session.id}`
         const ws = new WebSocket(wsUrl)
         wsRef.current = ws
 
         ws.onopen = () => {
             setConnected(true)
+            // Auth as the first frame — token never travels in the URL.
+            // Server processes auth synchronously before the next message,
+            // so queueing interview:start right after is safe.
+            ws.send(JSON.stringify({ type: 'auth', token }))
             ws.send(JSON.stringify({
                 type: 'interview:start',
                 sessionId: session.id,

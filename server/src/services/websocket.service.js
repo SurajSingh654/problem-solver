@@ -80,17 +80,41 @@ export function setupWebSocket(server) {
   server.on("upgrade", (request, socket, head) => {
     try {
       const url = new URL(request.url, `http://${request.headers.host}`);
-      const token = url.searchParams.get("token");
-      if (!token) {
-        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-        socket.destroy();
+      const urlToken = url.searchParams.get("token");
+
+      // ── BACKWARD-COMPAT PATH (DEPRECATED) ──────────────────────────
+      // Old clients pass the token in the URL query string. URL query
+      // strings get logged by proxies, browser history, and access logs —
+      // a leaked token = up to 7 days of account access. Removing this
+      // path requires every deployed client to be on the new auth flow.
+      // Drop in the next release after both ends ship the new path.
+      if (urlToken) {
+        const decoded = verifyToken(urlToken);
+        request.userId = decoded.id;
+        request.globalRole = decoded.globalRole;
+        request.teamId = decoded.currentTeamId || null;
+        request.teamRole = decoded.teamRole || null;
+        request.authMethod = "url-token";
+        console.warn(
+          `[WS] DEPRECATED: client used URL-query token auth (user=${decoded.id}). Migrate to post-handshake auth.`,
+        );
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit("connection", ws, request);
+        });
         return;
       }
-      const decoded = verifyToken(token);
-      request.userId = decoded.id;
-      request.globalRole = decoded.globalRole;
-      request.teamId = decoded.currentTeamId || null;
-      request.teamRole = decoded.teamRole || null;
+
+      // ── NEW PATH ───────────────────────────────────────────────────
+      // Accept the upgrade anonymously; identity is established by the
+      // first message which must be { type: "auth", token }. A 5-second
+      // timer in the connection handler closes the socket if auth never
+      // arrives. This keeps tokens out of URLs and out of every logging
+      // path along the request route.
+      request.userId = null;
+      request.globalRole = null;
+      request.teamId = null;
+      request.teamRole = null;
+      request.authMethod = "post-handshake-pending";
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit("connection", ws, request);
       });
@@ -106,6 +130,7 @@ export function setupWebSocket(server) {
     ws.globalRole = request.globalRole;
     ws.teamId = request.teamId;
     ws.teamRole = request.teamRole;
+    ws.authMethod = request.authMethod;
     ws.isAlive = true;
     ws.sessionId = null;
     ws.interviewMode = "text"; // Phase 4: track mode per connection
@@ -114,7 +139,20 @@ export function setupWebSocket(server) {
     // (you can't be in two rooms at once on the same socket).
     ws.teachingSessionId = null;
 
-    console.log(`🔌 WS connected: user=${ws.userId} team=${ws.teamId}`);
+    if (ws.authMethod === "post-handshake-pending") {
+      // 5-second window for the first message to be { type: "auth", token }.
+      // Timer is cleared on either successful auth or socket close.
+      ws.authTimeout = setTimeout(() => {
+        try {
+          ws.send(JSON.stringify({ type: "auth:error", error: "Auth timeout" }));
+          ws.close(4401, "auth timeout");
+        } catch {
+          /* ignore */
+        }
+      }, 5000);
+    } else {
+      console.log(`🔌 WS connected: user=${ws.userId} team=${ws.teamId}`);
+    }
 
     ws.on("pong", () => {
       ws.isAlive = true;
@@ -123,6 +161,37 @@ export function setupWebSocket(server) {
     ws.on("message", async (raw) => {
       try {
         const message = JSON.parse(raw.toString());
+
+        // ── Auth gate ──────────────────────────────────────────────
+        // Pending sockets accept ONLY an auth message. Anything else is
+        // rejected with a generic error until identity is established.
+        if (ws.authMethod === "post-handshake-pending") {
+          if (message.type === "auth") {
+            try {
+              const decoded = verifyToken(message.token);
+              ws.userId = decoded.id;
+              ws.globalRole = decoded.globalRole;
+              ws.teamId = decoded.currentTeamId || null;
+              ws.teamRole = decoded.teamRole || null;
+              ws.authMethod = "post-handshake";
+              if (ws.authTimeout) {
+                clearTimeout(ws.authTimeout);
+                ws.authTimeout = null;
+              }
+              ws.send(JSON.stringify({ type: "auth:ok" }));
+              console.log(
+                `🔌 WS connected (post-handshake): user=${ws.userId} team=${ws.teamId}`,
+              );
+            } catch {
+              ws.send(JSON.stringify({ type: "auth:error", error: "Invalid token" }));
+              ws.close(4401, "invalid token");
+            }
+            return;
+          }
+          ws.send(JSON.stringify({ type: "error", error: "Not authenticated" }));
+          return;
+        }
+
         switch (message.type) {
           case "interview:start":
             await handleStart(ws, message);
@@ -190,6 +259,12 @@ export function setupWebSocket(server) {
     });
 
     ws.on("close", () => {
+      // Clear pending auth timer if the socket closed before auth arrived
+      // (network drop, client cancel, server-initiated 4401 close, etc.).
+      if (ws.authTimeout) {
+        clearTimeout(ws.authTimeout);
+        ws.authTimeout = null;
+      }
       console.log(`🔌 WS disconnected: user=${ws.userId}`);
       if (ws.sessionId) {
         prisma.interviewSession

@@ -181,12 +181,14 @@ export default function InterviewWorkspace({ session, interviewSession, onEnd })
         if (!interviewId) return
 
         const token = localStorage.getItem('token')
-        const url = `${getWsUrl()}?token=${token}&sessionId=${interviewId}`
+        const url = `${getWsUrl()}?sessionId=${interviewId}`
         const ws = new WebSocket(url)
         wsRef.current = ws
 
         ws.onopen = () => {
             setConnected(true)
+            // Auth as the first frame — token never travels in the URL.
+            ws.send(JSON.stringify({ type: 'auth', token }))
             ws.send(
                 JSON.stringify({
                     type: 'interview:start',
