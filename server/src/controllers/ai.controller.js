@@ -9,6 +9,7 @@
 // This is "pool-based multi-tenant RAG" — same table, filtered queries.
 //
 // ============================================================================
+import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../config/env.js";
@@ -73,6 +74,54 @@ function aiErrorResponse(res, err, defaultMessage) {
 // Hard caps applied in code — not in prompt (more reliable).
 // aiFeedback stored as array of reviews for improvement tracking.
 //
+// ── Stable serialization for the review-input hash ─────────────────
+// JSON.stringify isn't deterministic across object key insertion order,
+// so we walk objects with sorted keys. Anything in the hash input means
+// "changing this re-runs the AI review."
+function stableStringify(value) {
+  if (value == null) return "null";
+  if (typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return "[" + value.map(stableStringify).join(",") + "]";
+  }
+  const keys = Object.keys(value).sort();
+  return (
+    "{" +
+    keys.map((k) => JSON.stringify(k) + ":" + stableStringify(value[k])).join(",") +
+    "}"
+  );
+}
+
+function computeReviewInputHash(solution) {
+  // The review prompt incorporates these fields. If any change → rerun.
+  // RAG context (teammate solutions, pattern baseline) is intentionally
+  // OUTSIDE the hash — those evolve with the team's other activity and
+  // we don't want every teammate submission to invalidate every cache.
+  // The cost of that decision: a user might see the same review even
+  // though new RAG context exists. Force button is the escape hatch.
+  const inputs = {
+    problemVersion: solution.problemVersion ?? null,
+    code: solution.code ?? "",
+    approach: solution.approach ?? "",
+    bruteForce: solution.bruteForce ?? "",
+    optimizedApproach: solution.optimizedApproach ?? "",
+    timeComplexity: solution.timeComplexity ?? "",
+    spaceComplexity: solution.spaceComplexity ?? "",
+    keyInsight: solution.keyInsight ?? "",
+    feynmanExplanation: solution.feynmanExplanation ?? "",
+    realWorldConnection: solution.realWorldConnection ?? "",
+    patterns: [...(solution.patterns ?? [])].sort(),
+    categorySpecificData: stableStringify(solution.categorySpecificData),
+    followUpAnswers: (solution.followUpAnswers ?? [])
+      .slice()
+      .sort((a, b) =>
+        (a.followUpQuestion?.id || "").localeCompare(b.followUpQuestion?.id || ""),
+      )
+      .map((a) => ({ qId: a.followUpQuestion?.id || "", a: a.answer ?? "" })),
+  };
+  return crypto.createHash("sha256").update(stableStringify(inputs)).digest("hex");
+}
+
 export async function reviewSolution(req, res) {
   try {
     if (!AI_ENABLED) {
@@ -81,6 +130,7 @@ export async function reviewSolution(req, res) {
     const { solutionId } = req.params;
     const teamId = req.teamId;
     const userId = req.user.id;
+    const force = req.body?.force === true;
 
     const solution = await prisma.solution.findFirst({
       where: { id: solutionId, userId, teamId },
@@ -117,6 +167,30 @@ export async function reviewSolution(req, res) {
 
     if (!solution) {
       return error(res, "Solution not found.", 404);
+    }
+
+    // ── Cache check ────────────────────────────────────────────────
+    // If the review input hash hasn't changed since the last review,
+    // return the latest stored feedback as a cache hit. No OpenAI call,
+    // no embedding call, no RAG search. Bypass with `force: true`.
+    const inputHash = computeReviewInputHash(solution);
+    if (
+      !force &&
+      solution.aiFeedbackInputHash &&
+      solution.aiFeedbackInputHash === inputHash
+    ) {
+      const existing = Array.isArray(solution.aiFeedback)
+        ? solution.aiFeedback
+        : solution.aiFeedback
+          ? [solution.aiFeedback]
+          : [];
+      if (existing.length > 0) {
+        return success(res, {
+          feedback: existing[existing.length - 1],
+          isFirstReview: false,
+          cached: true,
+        });
+      }
     }
 
     // ── RAG: Find similar teammate solutions ────────────
@@ -479,6 +553,11 @@ export async function reviewSolution(req, res) {
         where: { id: solutionId },
         data: {
           aiFeedback: updatedFeedback,
+          // Persist the input hash so the next call can short-circuit
+          // when nothing has changed. Re-computed up-front in this
+          // request, not at write time, so RAG-context-only changes
+          // don't accidentally rev the cache key.
+          aiFeedbackInputHash: inputHash,
           reviewCount: { increment: 1 },
           lastReviewedAt: new Date(),
           timeComplexity:

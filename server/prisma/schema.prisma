@@ -755,6 +755,13 @@ model Solution {
   // ── AI feedback (stored after review) ──────────────
   aiFeedback Json?
 
+  // SHA-256 hash of the review input fields (problemVersion + content +
+  // patterns + follow-up answers + categorySpecificData). When reviewSolution
+  // runs, if the current hash matches this, return the latest aiFeedback as
+  // a cache hit (no OpenAI call). Bypassed by `force: true` in the request.
+  // Null on legacy rows — first re-analysis populates.
+  aiFeedbackInputHash String?
+
   // ── Spaced repetition — SM-2 Algorithm ─────────────
   // Based on Wozniak (1990) SuperMemo SM-2 algorithm.
   //

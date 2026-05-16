@@ -177,6 +177,48 @@ export const ROADMAP_ITEMS = [
         technicalNotes: 'server/src/controllers/solutions.controller.js submitReview (now interactive transaction with FOR UPDATE on solutions). server/src/controllers/flashcards.controller.js reviewFlashcard (same pattern on flashcards). Sentinel error classes (SubmitReviewNotFound / ReviewFlashcardNotFound) keep the not-found path clean inside the locked block. Concurrency test deferred — meaningful test would need an integration harness against real Postgres (mocked Prisma in vitest does not model row locking).',
     },
 
+    // -- submission pipeline (auto-review + auto-note from review) --
+
+    {
+        id: 'ai-review-input-hash-cache',
+        phase: 'NOW',
+        theme: 'Engineering Hygiene',
+        priority: 'HIGH',
+        effort: 'Small',
+        title: 'Cache AI Solution Review by input hash',
+        impact: 'Today, clicking "AI Analyze" on the same unchanged solution re-bills OpenAI and re-runs the full review prompt — even when nothing has changed. Combined with the upcoming auto-review-on-submit (which fires on every submit), this would double the AI cost for every revisit. Hashing the analysis inputs (problem version + solution content) and reusing prior aiFeedback when the hash matches eliminates redundant calls and makes repeat analysis instant.',
+        description: 'Add `aiFeedbackInputHash String?` field on Solution. When `reviewSolution` runs, hash the relevant input fields (problemVersion, code, optimizedApproach, keyInsight, complexity, follow-up answers, categorySpecificData) via SHA-256. If the latest aiFeedback\'s hash matches the current hash → return existing feedback as a cache hit, no OpenAI call. If hash differs → run analysis, persist feedback + new hash. A "Force re-analyze" button stays for prompt-improvement edge cases (passes a `force: true` flag that bypasses the cache).',
+        why: 'Two prerequisites tee off this: (1) auto-review-on-submit becomes safe to ship without doubling AI cost; (2) auto-note-from-review only triggers on a NEW analysis, so notes don\'t multiply on every refresh. Standalone value: faster repeat-analysis UX, lower OpenAI bill.',
+        technicalNotes: 'Migration adds `aiFeedbackInputHash String?` to Solution. server/src/controllers/ai.controller.js reviewSolution computes hash via crypto.createHash("sha256"). Cache check before aiComplete. Hash includes problemVersion so problem updates invalidate cache automatically. Force flag: `force=true` in request body.',
+    },
+
+    {
+        id: 'auto-review-on-submit',
+        phase: 'NOW',
+        theme: 'Learning Science',
+        priority: 'HIGH',
+        effort: 'Small',
+        title: 'Auto-trigger AI Solution Review on submit',
+        impact: 'Today, after submitting a solution, users have to explicitly click "AI Analyze" to get feedback — and if they don\'t, the leaderboard ranks them with a heavy discount because the SQS formula in stats.controller.js gives un-reviewed submissions only 50% weight (vs 75% AI + 25% confidence when reviewed). The score visibly changes when they finally run analysis. Auto-firing AI review on submit closes the loop: every submission gets feedback, every leaderboard score is final, no "did I forget to click Analyze?" cognitive load.',
+        description: 'After submitSolution persists the row, fire-and-forget kicks off reviewSolution in the background (via the same code path used by the explicit button). Client receives the saved solution immediately and shows an "Analyzing in background…" banner; once analysis lands, useSolution / useAIFeedback queries invalidate and the AI Review card populates. Combined with ai-review-input-hash-cache (prerequisite), re-submitting an unchanged solution doesn\'t re-bill OpenAI. Manual "Re-analyze" button stays for force-rerun.',
+        why: 'Closes the silent failure mode where a user submits, never analyzes, and stares at a discounted leaderboard score wondering why it changed when they later did analyze. Also tightens the learning loop — feedback arrives without requiring a second action.',
+        technicalNotes: 'server/src/controllers/solutions.controller.js submitSolution — after the existing solution.create, kick off `reviewSolution(solutionId).catch(logErr)`. client/src/pages/SubmitSolutionPage.jsx — show a transient "Analyzing in background" banner; existing query invalidation picks up the populated aiFeedback. Existing manual review button becomes a "Re-run analysis" affordance with `force: true` to bypass cache.',
+    },
+
+    {
+        id: 'auto-note-from-review',
+        phase: 'NOW',
+        theme: 'Learning Science',
+        priority: 'HIGH',
+        effort: 'Medium',
+        title: 'Auto-generate study Note + Flashcards from AI review',
+        impact: 'Every submission produces an AI Review with strengths, weaknesses, and topic feedback — but that signal evaporates the moment the user navigates away. There is no consolidated "what to study next" artifact. This wires the existing Notes feature into the analysis path: every fresh AI review also generates a structured study Note (auto-titled, auto-tagged, linked to the Problem) plus auto-extracted Flashcards via the existing note:flashcards pipeline. Notes go into the user\'s personal Notes section and surface via the existing review queue alongside Solutions.',
+        description: 'New AI prompt `note:fromSolution` takes (problem, solution, aiReview) → structured JSON: { title, tags[], whatYouGotRight[], weakAreas[{severity HIGH|MED|LOW, point}], mistakes[], howToOvercome[], topicsExplained[{topic, points[]}], betterApproachNextTime[] }. Validator + fallback (validates required sections, falls back to a minimal "Auto-summary" note on malformed output). Persisted as a Note with linkedEntityType=PROBLEM and `autoGenerated: true`. Topic explanations are POINT-FORM (not paragraphs): each topic gets bullets explaining the idea, when to use it, common mistakes, key insight. Existing note:autotag refines tags. Existing note:flashcards extracts 3-7 cards weighted toward HIGH-severity weak areas. All async; user sees a "Study notes added" toast when complete. Future analyses on the same Solution UPDATE the existing note rather than duplicate.',
+        why: 'Closes the learning loop. Today: review feedback → forgotten in 24h. After this: review feedback → reviewable note + scheduled flashcards → spaced repetition over weeks. Pairs with the existing FSRS / SM-2 review queue so weak-area cards surface at the right cadence. The note format ("topics explained in points, weak areas, mistakes, how to fix, what to do better next time") is the user\'s direct framing — actionable bullets, not theory walls.',
+        researchBasis: 'Karpicke & Roediger (2008) testing effect: spaced retrieval beats re-reading by 50%+ on long-term retention. Reflective practice literature (Kolb, Schön) — structured post-task reflection improves transfer of skill more than the task alone. Auto-extracting flashcards from the reflection is the operationalization that makes it stick.',
+        technicalNotes: 'Depends on auto-review-on-submit + ai-review-input-hash-cache being in place (otherwise notes multiply / re-bill). server/src/services/ai.prompts.js new noteFromSolutionPrompt with strict structured-output schema (~3000 maxTokens, gpt-4o-mini). server/src/services/ai.validators.js validate note shape. server/src/services/ai.fallbacks.js minimal fallback. Triggered after a NEW aiReview lands (cache hit → skip). Existing note:autotag + note:flashcards pipelines reused. Schema flag on Note: `autoGenerated Boolean @default(false)` for filtering / distinguishing from hand-authored. Cost: ~$0.006 per new submission on gpt-4o-mini (note + flashcards + autotag combined).',
+    },
+
     // ════════════════════════════════════════════════════════════════════
     // NEXT — 1-3 months
     // ════════════════════════════════════════════════════════════════════
@@ -373,6 +415,19 @@ export const ROADMAP_ITEMS = [
         description: 'Audit script that connects to staging (or prod with read-only role), runs `EXPLAIN` on a sample findUnique-style query for every table with a `deletedAt` column, and reports tables that aren\'t using a unique index for the rewritten query. For each gap, write a migration adding the partial unique index `(id) WHERE "deletedAt" IS NULL` (smaller and faster than a full composite). Re-run the audit script to verify all tables now use the partial index.',
         why: 'Silent perf bug — probably invisible at current scale (small tables) but compounds into a real outage at 10k+ users per affected table. Cheaper to fix now while the audit can run in seconds and the migration list is short.',
         technicalNotes: 'server/src/lib/prisma.js:63-70 (the middleware that creates the requirement). New server/scripts/audit-soft-delete-indexes.js. Migration files per gap. Probably affects User, Team, Note, Flashcard at minimum.',
+    },
+
+    {
+        id: 'leaderboard-pending-review-indicator',
+        phase: 'LATER',
+        theme: 'Admin Experience',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'Leaderboard "Pending AI review" indicator',
+        impact: 'Auto-review-on-submit (NOW) closes the leaderboard-score-changes-mysteriously loop in 99% of cases. But for the brief window between submit and analysis-complete (or when AI is degraded and the analysis fails), the user is back in the discounted state with no explanation. A small pill on the user\'s own leaderboard row makes the discount visible and not magical.',
+        description: 'Per-row indicator on LeaderboardPage that surfaces when a user\'s score is computed without AI review for any recent submissions. Server adds `pendingReviewCount` to each leaderboard entry; client renders a "⏳ Pending review" pill with a tooltip: "Some recent solutions are still being analyzed — your score will update when complete."',
+        why: 'Mostly polish. The auto-review item resolves the issue at its source; this is defensive UX for when auto-review fails or is delayed.',
+        technicalNotes: 'server/src/controllers/stats.controller.js getLeaderboard — count solutions where aiFeedback IS NULL within last 24h per member, attach to entry. client/src/pages/LeaderboardPage.jsx — conditional pill render with tooltip from existing primitive.',
     },
 
     // -- strategic features (LATER) --
