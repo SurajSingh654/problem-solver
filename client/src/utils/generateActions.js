@@ -21,29 +21,16 @@ export function generateActionItems(stats, solutions = []) {
     });
   }
 
-  // ── Never done a simulation ────────────────────────
-  if (stats.simCount === 0 && total >= 2) {
+  // ── Never done a mock interview ─────────────────────
+  if ((stats.interviewCount ?? 0) === 0 && total >= 2) {
     actions.push({
       priority: 2,
-      icon: "⏱",
-      title: "Try your first interview simulation",
+      icon: "💬",
+      title: "Try your first mock interview",
       desc: "You've solved enough problems to test yourself under timed pressure.",
       color: "brand",
       link: "/interview",
-      linkLabel: "Start Simulation",
-    });
-  }
-
-  // ── Low sim score ──────────────────────────────────
-  if (stats.completedSims > 0 && stats.avgSimScore < 3) {
-    actions.push({
-      priority: 3,
-      icon: "🎯",
-      title: "Improve interview simulation performance",
-      desc: `Your average sim score is ${stats.avgSimScore}/5. Practice thinking out loud while solving.`,
-      color: "danger",
-      link: "/interview",
-      linkLabel: "Practice Again",
+      linkLabel: "Start Mock Interview",
     });
   }
 

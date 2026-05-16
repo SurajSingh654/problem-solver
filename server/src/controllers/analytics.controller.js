@@ -71,7 +71,11 @@ export async function getProductHealth(req, res) {
         activityStatus: true,
         streak: true,
         _count: {
-          select: { solutions: true, simSessions: true, quizAttempts: true },
+          select: {
+            solutions: true,
+            quizAttempts: true,
+            interviewSessions: true,
+          },
         },
       },
     });
@@ -105,7 +109,7 @@ export async function getProductHealth(req, res) {
     const zeroActivityMembers = allUsers.filter(
       (u) =>
         u._count.solutions === 0 &&
-        u._count.simSessions === 0 &&
+        u._count.interviewSessions === 0 &&
         u._count.quizAttempts === 0,
     );
 
@@ -268,47 +272,6 @@ export async function getProductHealth(req, res) {
       .map(([subject, count]) => ({ subject, count }));
 
     // ═════════════════════════════════════════════════
-    // SIMULATION METRICS
-    // ═════════════════════════════════════════════════
-    const simWhere = {};
-    if (teamId) simWhere.teamId = teamId;
-
-    const allSims = await prisma.simSession.findMany({
-      where: simWhere,
-      select: {
-        id: true,
-        userId: true,
-        completed: true,
-        hintsUsed: true,
-        score: true,
-        createdAt: true,
-        timeSpent: true,
-      },
-    });
-
-    const totalSims = allSims.length;
-    const completedSims = allSims.filter((s) => s.completed).length;
-    const simCompletionRate =
-      totalSims > 0 ? Math.round((completedSims / totalSims) * 100) : 0;
-    const simMembersCount = new Set(allSims.map((s) => s.userId)).size;
-    const simAdoptionRate =
-      totalMembers > 0 ? Math.round((simMembersCount / totalMembers) * 100) : 0;
-    const avgSimScore =
-      completedSims > 0
-        ? (
-            allSims
-              .filter((s) => s.completed && s.score)
-              .reduce((sum, s) => sum + s.score, 0) / completedSims
-          ).toFixed(1)
-        : 0;
-    const hintUsageRate =
-      totalSims > 0
-        ? Math.round(
-            (allSims.filter((s) => s.hintsUsed > 0).length / totalSims) * 100,
-          )
-        : 0;
-
-    // ═════════════════════════════════════════════════
     // INTERVIEW METRICS
     // ═════════════════════════════════════════════════
     const interviewWhere = {};
@@ -467,15 +430,6 @@ export async function getProductHealth(req, res) {
         adoptionRate: quizAdoptionRate,
         avgScore: avgQuizScore,
         topSubjects: topQuizSubjects,
-      },
-
-      simulations: {
-        total: totalSims,
-        completed: completedSims,
-        completionRate: simCompletionRate,
-        adoptionRate: simAdoptionRate,
-        avgScore: parseFloat(avgSimScore),
-        hintUsageRate,
       },
 
       interviews: {

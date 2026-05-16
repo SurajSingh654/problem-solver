@@ -285,13 +285,13 @@ export default function ProfilePage() {
             {/* ── Full profile sections (only when not limited) ── */}
             {!isLimited && (
                 <>
-                    {/* Stats grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                    {/* Stats grid — legacy `Sim Sessions` tile removed; the
+                        live mock-interview surface is InterviewSession-backed. */}
+                    <div className="grid grid-cols-3 gap-3 mb-6">
                         {[
                             { label: 'Solved', value: profile.solutionCount || 0, color: 'text-brand-fg-soft' },
                             { label: 'Streak', value: `${profile.streak || 0} 🔥`, color: 'text-warning-fg' },
-                            { label: 'Sim Sessions', value: profile.simCount || 0, color: 'text-info-fg' },
-                            { label: 'Interviews', value: profile.interviewCount || 0, color: 'text-success-fg' },
+                            { label: 'Mock Interviews', value: profile.interviewCount || 0, color: 'text-success-fg' },
                         ].map((s, i) => (
                             <motion.div
                                 key={s.label}

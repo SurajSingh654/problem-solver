@@ -636,21 +636,46 @@ export default function Dashboard() {
 
           {report?.overall == null && (
             <div className="space-y-2">
-              <p className="text-[11px] text-text-disabled leading-relaxed">
-                Submit solutions with AI review to start building your readiness score.
-                Scores unlock as each dimension collects enough evidence.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate('/problems')}
-                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors"
-              >
-                Submit your first solution
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
+              {(stats?.totalSolved ?? 0) === 0 ? (
+                <>
+                  <p className="text-[11px] text-text-disabled leading-relaxed">
+                    Submit solutions with AI review to start building your readiness score.
+                    Scores unlock as each dimension collects enough evidence.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/problems')}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors"
+                  >
+                    Submit your first solution
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-text-disabled leading-relaxed">
+                    Your readiness score is still calibrating —{' '}
+                    {reportCoverage
+                      ? `${reportCoverage.active}/${reportCoverage.total} dimensions are active.`
+                      : 'dimensions need more evidence.'}
+                    {' '}Each new submission auto-runs an AI review and feeds the radar.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/report')}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-fg-soft hover:text-brand-200 transition-colors"
+                  >
+                    See what's missing
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -684,7 +709,7 @@ export default function Dashboard() {
                 <DimensionRow
                   key={dim.id}
                   dim={dim}
-                  score={dimensions[dim.id] || 0}
+                  score={dimensions[dim.id]}
                   index={i}
                 />
               ))}

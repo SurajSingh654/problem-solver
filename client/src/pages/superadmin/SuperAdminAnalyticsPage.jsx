@@ -817,13 +817,12 @@ export default function SuperAdminAnalyticsPage() {
                         <h3 className="text-sm font-bold text-text-primary mb-4 flex items-center gap-2">
                             <span>📦</span> Content Volume (platform-wide)
                         </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {[
                                 { label: 'Problems', value: m.content.totalProblems, new: m.content.newProblemsInPeriod, icon: '📋' },
                                 { label: 'Solutions', value: m.content.totalSolutions, new: m.content.newSolutionsInPeriod, icon: '✅' },
                                 { label: 'Quizzes', value: m.content.totalQuizzes, icon: '🧩' },
-                                { label: 'Interviews', value: m.content.totalInterviews, icon: '💬' },
-                                { label: 'Simulations', value: m.content.totalSims, icon: '⏱' },
+                                { label: 'Mock Interviews', value: m.content.totalInterviews, icon: '💬' },
                             ].map(item => (
                                 <div key={item.label} className="text-center bg-surface-2 rounded-xl p-3">
                                     <span className="text-lg">{item.icon}</span>

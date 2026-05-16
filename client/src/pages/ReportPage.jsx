@@ -839,13 +839,13 @@ function ActivitySummary({ report, analytics }) {
         Activity Summary
       </h2>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center mb-5">
+      {/* Stats grid — `Simulations` (legacy SimSession table) removed; the
+          live experience is `Mock Interviews` driven by InterviewSession. */}
+      <div className="grid grid-cols-3 gap-4 text-center mb-5">
         {[
           { label: 'Solutions', value: report?.totalSolutions || 0, icon: '✅', color: 'text-success-fg' },
           { label: 'Quizzes', value: report?.quizCount || 0, icon: '🧩', color: 'text-brand-fg-soft' },
-          { label: 'Interviews', value: report?.interviewCount || 0, icon: '💬', color: 'text-info-fg' },
-          { label: 'Simulations', value: report?.simCount || 0, icon: '⏱', color: 'text-warning-fg' },
+          { label: 'Mock Interviews', value: report?.interviewCount || 0, icon: '💬', color: 'text-info-fg' },
         ].map((s) => (
           <div key={s.label}>
             <span className="text-xl">{s.icon}</span>

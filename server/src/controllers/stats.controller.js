@@ -877,7 +877,6 @@ export async function get6DReport(req, res) {
     // and pressure data is available for D5.
     // ════════════════════════════════════════════════
     const [
-      sims,
       interviews,
       quizzesForPressure,
       clarityRatings,
@@ -886,10 +885,6 @@ export async function get6DReport(req, res) {
       overdueCount,
       successfulReviewAttempts,
     ] = await Promise.all([
-      prisma.simSession.findMany({
-        where: { userId, teamId, completed: true },
-        select: { score: true, hintsUsed: true },
-      }),
       prisma.interviewSession.findMany({
         where: { userId, teamId, status: "COMPLETED" },
         select: { scores: true, debrief: true },
@@ -1433,20 +1428,10 @@ export async function get6DReport(req, res) {
     // D5: Pressure Performance — normalized blend
     // ════════════════════════════════════════════════
     let d5 = 0;
-    const hasSims = sims.length > 0;
     const hasInterviews = interviews.length > 0;
     const hasQuizzes = quizzesForPressure.length > 0;
 
-    if (hasSims || hasInterviews || hasQuizzes) {
-      let simScore = 0;
-      if (hasSims) {
-        const avgSimScore =
-          sims.reduce((s, r) => s + (r.score || 0), 0) / sims.length;
-        const noHintRate =
-          sims.filter((s) => s.hintsUsed === 0).length / sims.length;
-        simScore = Math.min((avgSimScore / 5) * 80 + noHintRate * 20, 100);
-      }
-
+    if (hasInterviews || hasQuizzes) {
       let interviewScore = 0;
       if (hasInterviews) {
         const interviewsWithScores = interviews.filter(
@@ -1539,20 +1524,10 @@ export async function get6DReport(req, res) {
           quizzesForPressure.length
         : 0;
 
-      if (hasSims && hasInterviews && hasQuizzes) {
-        d5 = Math.round(
-          simScore * 0.35 + interviewScore * 0.3 + quizPressureScore * 0.35,
-        );
-      } else if (hasSims && hasQuizzes) {
-        d5 = Math.round(simScore * 0.5 + quizPressureScore * 0.5);
-      } else if (hasInterviews && hasQuizzes) {
+      if (hasInterviews && hasQuizzes) {
         d5 = Math.round(interviewScore * 0.4 + quizPressureScore * 0.6);
-      } else if (hasSims && hasInterviews) {
-        d5 = Math.round(simScore * 0.6 + interviewScore * 0.4);
       } else if (hasQuizzes) {
         d5 = Math.min(Math.round(quizPressureScore), 75);
-      } else if (hasSims) {
-        d5 = Math.round(simScore);
       } else {
         d5 = Math.round(interviewScore);
       }
@@ -1759,21 +1734,18 @@ export async function get6DReport(req, res) {
       const interviewsWithScoresCount = interviews.filter(
         (i) => i.scores && typeof i.scores === "object" && Object.keys(i.scores).length > 0,
       ).length;
-      const pressureDataPoints = sims.length + interviewsWithScoresCount + quizzesForPressure.length;
-      const hasEnough = sims.length + interviewsWithScoresCount >= 1 || quizzesForPressure.length >= 3;
+      const pressureDataPoints = interviewsWithScoresCount + quizzesForPressure.length;
+      const hasEnough = interviewsWithScoresCount >= 1 || quizzesForPressure.length >= 3;
       if (!hasEnough) {
         d5Score = inactiveDim(
           "pressurePerformance",
-          "Complete 1 mock interview or simulation (or 3 quizzes) to unlock pressure performance",
+          "Complete 1 mock interview (or 3 quizzes) to unlock pressure performance",
           pressureDataPoints,
         );
       } else {
         // Wide CI when n is small; narrows with more data.
         const ci = meanCI(
-          [
-            ...sims.map((s) => ((s.score ?? 0) / 5) * 100),
-            ...quizzesForPressure.map((q) => q.score ?? 0),
-          ],
+          quizzesForPressure.map((q) => q.score ?? 0),
           1.96,
         );
         d5Score = activeDim("pressurePerformance", {
@@ -1781,7 +1753,6 @@ export async function get6DReport(req, res) {
           n: pressureDataPoints,
           ci: ci?.ci ?? [Math.max(0, d5 - 20), Math.min(100, d5 + 20)],
           basis: [
-            `sims: ${sims.length}`,
             `interviews_scored: ${interviewsWithScoresCount}`,
             `quizzes: ${quizzesForPressure.length}`,
           ],
@@ -2087,7 +2058,6 @@ export async function get6DReport(req, res) {
         totalSolutions,
         quizCount,
         interviewCount: interviews.length,
-        simCount: sims.length,
         communicationFromProxy,
         scoringSignals: {
           aiReviewedSolutions: reviewedSolutions,

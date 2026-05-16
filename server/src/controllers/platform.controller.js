@@ -77,7 +77,6 @@ export async function getPlatformHealth(req, res) {
         _count: {
           select: {
             solutions: true,
-            simSessions: true,
             quizAttempts: true,
             interviewSessions: true,
           },
@@ -136,7 +135,6 @@ export async function getPlatformHealth(req, res) {
     const usedInterview = allUsers.filter(
       (u) => u._count.interviewSessions > 0,
     ).length;
-    const usedSim = allUsers.filter((u) => u._count.simSessions > 0).length;
     const weeklyActive = allUsers.filter(
       (u) =>
         u.lastActiveAt &&
@@ -235,7 +233,6 @@ export async function getPlatformHealth(req, res) {
     const totalSolutions = await prisma.solution.count();
     const totalQuizzes = await prisma.quizAttempt.count();
     const totalInterviews = await prisma.interviewSession.count();
-    const totalSims = await prisma.simSession.count();
 
     const newProblemsInPeriod = await prisma.problem.count({
       where: { isPublished: true, createdAt: { gte: periodStart } },
@@ -300,11 +297,6 @@ export async function getPlatformHealth(req, res) {
         users: usedInterview,
         rate: Math.round((usedInterview / Math.max(totalUsers, 1)) * 100),
         label: "Mock Interviews",
-      },
-      simulations: {
-        users: usedSim,
-        rate: Math.round((usedSim / Math.max(totalUsers, 1)) * 100),
-        label: "Timed Simulations",
       },
       aiReviews: {
         total: aiReviewCount,
@@ -372,7 +364,6 @@ export async function getPlatformHealth(req, res) {
         solvedOne: solvedAtLeastOne,
         usedQuiz,
         usedInterview,
-        usedSim,
         weeklyActive,
         unverified,
         stuckInOnboarding: stuckInOnboarding.slice(0, 10),
@@ -406,7 +397,6 @@ export async function getPlatformHealth(req, res) {
         totalSolutions,
         totalQuizzes,
         totalInterviews,
-        totalSims,
         newProblemsInPeriod,
         newSolutionsInPeriod,
       },

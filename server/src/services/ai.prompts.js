@@ -929,7 +929,7 @@ ALWAYS respond in this exact JSON format:
     `  <difficulty_split easy="${Number(data.easy) || 0}" medium="${Number(data.medium) || 0}" hard="${Number(data.hard) || 0}"/>`,
     `  <streak_days>${Number(data.streak) || 0}</streak_days>`,
     `  <reviews_overdue>${Number(data.reviewsDue) || 0}</reviews_overdue>`,
-    `  <sim_sessions_completed>${Number(data.simCount) || 0}</sim_sessions_completed>`,
+    `  <mock_interviews_completed>${Number(data.interviewCount) || 0}</mock_interviews_completed>`,
     `  <avg_confidence>${Number(data.avgConfidence) || 0}/5</avg_confidence>`,
     "</candidate_stats>",
     "",

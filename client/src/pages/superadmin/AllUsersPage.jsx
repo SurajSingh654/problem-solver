@@ -137,7 +137,7 @@ export default function AllUsersPage() {
                                     </td>
                                     <td className="py-3 px-4">
                                         <span className="text-xs text-text-tertiary">
-                                            {u.targetCompany || '—'}
+                                            {u.team || '—'}
                                         </span>
                                     </td>
                                     <td className="py-3 px-4">

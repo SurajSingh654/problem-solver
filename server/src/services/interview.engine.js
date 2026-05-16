@@ -211,7 +211,7 @@ const toolHandlers = {
   },
 
   async getCandidateProfile(_, context) {
-    const [solutionCount, patternRows, avgConfidence, simCount, quizCount] =
+    const [solutionCount, patternRows, avgConfidence, completedInterviewCount, quizCount] =
       await Promise.all([
         prisma.solution.count({
           where: { userId: context.userId, teamId: context.teamId },
@@ -230,11 +230,11 @@ const toolHandlers = {
           where: { userId: context.userId, teamId: context.teamId },
           _avg: { confidence: true },
         }),
-        prisma.simSession.count({
+        prisma.interviewSession.count({
           where: {
             userId: context.userId,
             teamId: context.teamId,
-            completed: true,
+            status: "COMPLETED",
           },
         }),
         prisma.quizAttempt.count({
@@ -255,7 +255,7 @@ const toolHandlers = {
       avgConfidence: avgConfidence._avg.confidence
         ? Math.round(avgConfidence._avg.confidence * 10) / 10
         : 0,
-      completedSimulations: simCount,
+      completedInterviews: completedInterviewCount,
       quizzesTaken: quizCount,
       streak: user?.streak || 0,
     };

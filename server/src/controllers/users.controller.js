@@ -38,7 +38,6 @@ export async function getUsers(req, res) {
         _count: {
           select: {
             solutions: true,
-            simSessions: true,
             quizAttempts: true,
             interviewSessions: true,
           },
@@ -69,7 +68,6 @@ export async function getUsers(req, res) {
         : null,
       teamId: u.currentTeam?.id ?? null,
       solutionCount: u._count.solutions,
-      simCount: u._count.simSessions,
       quizCount: u._count.quizAttempts,
       interviewCount: u._count.interviewSessions,
     }));
@@ -107,7 +105,6 @@ export async function getUserProfile(req, res) {
         _count: {
           select: {
             solutions: true,
-            simSessions: true,
             quizAttempts: true,
             interviewSessions: true,
           },
@@ -167,7 +164,6 @@ export async function getUserProfile(req, res) {
         preferredLanguage: user.preferredLanguage,
         createdAt: user.createdAt,
         solutionCount: user._count.solutions,
-        simCount: user._count.simSessions,
         quizCount: user._count.quizAttempts,
         interviewCount: user._count.interviewSessions,
         recentSolutions,

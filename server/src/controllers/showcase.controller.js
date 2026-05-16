@@ -4,12 +4,12 @@ import { isAIEnabled } from '../services/ai.service.js'
 
 // ── GET /api/stats/showcase ────────────────────────────
 export async function getShowcaseStats(req, res) {
-  const totalUsers     = await prisma.user.count()
-  const totalProblems  = await prisma.problem.count({ where: { isActive: true } })
-  const totalSolutions = await prisma.solution.count()
-  const totalQuizzes   = await prisma.quizAttempt.count()
-  const totalSims      = await prisma.simSession.count()
-  const totalReviews   = await prisma.clarityRating.count()
+  const totalUsers      = await prisma.user.count()
+  const totalProblems   = await prisma.problem.count({ where: { isActive: true } })
+  const totalSolutions  = await prisma.solution.count()
+  const totalQuizzes    = await prisma.quizAttempt.count()
+  const totalInterviews = await prisma.interviewSession.count()
+  const totalReviews    = await prisma.clarityRating.count()
 
   // Category breakdown
   const problemsByCategory = {}
@@ -52,9 +52,9 @@ export async function getShowcaseStats(req, res) {
     _avg: { confidenceLevel: true },
   })
 
-  // Completed sims
-  const completedSims = await prisma.simSession.count({
-    where: { completed: true },
+  // Completed mock interviews
+  const completedInterviews = await prisma.interviewSession.count({
+    where: { status: "COMPLETED" },
   })
 
   return successResponse(res, {
@@ -63,9 +63,9 @@ export async function getShowcaseStats(req, res) {
     totalProblems,
     totalSolutions,
     totalQuizzes,
-    totalSims,
+    totalInterviews,
     totalReviews,
-    completedSims,
+    completedInterviews,
 
     // Breakdowns
     problemsByCategory,

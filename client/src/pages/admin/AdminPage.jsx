@@ -323,20 +323,17 @@ export default function AdminPage() {
         ? problems.filter(p => p.title.toLowerCase().includes(search.toLowerCase()))
         : problems
 
-    // Load members from team API (not /api/users)
+    // Load members on mount so the Overview's "Members" stat is correct
+    // before the user clicks the Members tab. Previously this only fired
+    // when tab === 'members', which left the stat showing "—" (or 0) on
+    // initial load even though the team has members.
     useEffect(() => {
-        if (tab === 'members' && members.length === 0) {
-            setMembersLoading(true)
-            teamsApi.getMembers()
-                .then(res => setMembers(res.data.data.members || []))
-                .catch(err => console.error('Failed to load members:', err))
-                .finally(() => setMembersLoading(false))
-        }
-        // members.length intentionally not a dep — we only want to
-        // refetch when the user navigates to this tab, not on local
-        // state changes that mutate the list.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tab])
+        setMembersLoading(true)
+        teamsApi.getMembers()
+            .then(res => setMembers(res.data.data.members || []))
+            .catch(err => console.error('Failed to load members:', err))
+            .finally(() => setMembersLoading(false))
+    }, [])
 
     function handleEdit(problemId) {
         navigate(`/admin/edit-problem/${problemId}`)
