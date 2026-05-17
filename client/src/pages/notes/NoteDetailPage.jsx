@@ -17,12 +17,14 @@ import {
     useRestoreNote,
     useTogglePinNote,
 } from "@hooks/useNotes";
+import { useNoteFolders } from "@hooks/useNoteFolders";
 import MarkdownEditor from "@components/notes/MarkdownEditor";
 import EntityLinkPicker from "@components/notes/EntityLinkPicker";
 import TagInput from "@components/notes/TagInput";
 import RelatedNotesPanel from "@components/notes/RelatedNotesPanel";
 import AiSummaryCard from "@components/notes/AiSummaryCard";
 import SuggestedTagsBar from "@components/notes/SuggestedTagsBar";
+import MoveToFolderMenu from "@components/notes/MoveToFolderMenu";
 import FlashcardList from "@components/flashcards/FlashcardList";
 import { Button } from "@components/ui/Button";
 import { Spinner } from "@components/ui/Spinner";
@@ -43,6 +45,7 @@ export default function NoteDetailPage() {
     const [tags, setTags] = useState([]);
     const [dirty, setDirty] = useState(false);
     const [savedAt, setSavedAt] = useState(null);
+    const [moveOpen, setMoveOpen] = useState(false);
     const initRef = useRef(false);
     const debounceRef = useRef(null);
 
@@ -118,6 +121,13 @@ export default function NoteDetailPage() {
 
     return (
         <div className="max-w-5xl mx-auto p-6 space-y-4">
+            {/* Breadcrumb */}
+            <FolderBreadcrumb
+                folder={note.folder}
+                noteTitle={note.title}
+                onNavigate={navigate}
+            />
+
             {/* Header */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <button
@@ -127,8 +137,26 @@ export default function NoteDetailPage() {
                 >
                     ← Back to notes
                 </button>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 relative">
                     <SavedIndicator dirty={dirty} pending={update.isPending} savedAt={savedAt} />
+                    {!isArchived && (
+                        <Button
+                            variant="ghost"
+                            onClick={() => setMoveOpen((o) => !o)}
+                            title="Move to folder"
+                        >
+                            📂 {note.folder ? note.folder.name : "Move"}
+                        </Button>
+                    )}
+                    {moveOpen && (
+                        <MoveToFolderMenu
+                            currentFolderId={note.folderId}
+                            onClose={() => setMoveOpen(false)}
+                            onMove={(folderId) => {
+                                update.mutate({ folderId });
+                            }}
+                        />
+                    )}
                     <Button
                         variant="ghost"
                         onClick={() => togglePin.mutate(note.id)}
@@ -289,4 +317,55 @@ function SavedIndicator({ dirty, pending, savedAt }) {
     if (savedAt)
         return <span className="text-[10px] text-text-disabled">Saved</span>;
     return null;
+}
+
+// Walks up the folder.parentId chain via the cached folder list so we
+// can render full nested breadcrumbs without a fresh fetch.
+function FolderBreadcrumb({ folder, noteTitle, onNavigate }) {
+    const { data: allFolders = [] } = useNoteFolders();
+
+    const chain = [];
+    if (folder) {
+        const byId = new Map(allFolders.map((f) => [f.id, f]));
+        let current = byId.get(folder.id);
+        // Defensive cap; folder trees should be shallow.
+        for (let i = 0; i < 100 && current; i++) {
+            chain.unshift(current);
+            current = current.parentId ? byId.get(current.parentId) : null;
+        }
+    }
+
+    return (
+        <div className="text-[11px] text-text-disabled flex items-center gap-1 flex-wrap">
+            <button
+                type="button"
+                onClick={() => onNavigate("/notes")}
+                className="hover:text-text-primary transition-colors"
+            >
+                📂 All notes
+            </button>
+            {chain.map((f) => (
+                <span key={f.id} className="flex items-center gap-1">
+                    <span className="text-text-disabled/60">›</span>
+                    <button
+                        type="button"
+                        onClick={() => onNavigate(`/notes?folder=${f.id}`)}
+                        className="hover:text-text-primary transition-colors"
+                    >
+                        📁 {f.name}
+                    </button>
+                </span>
+            ))}
+            {!folder && (
+                <span className="flex items-center gap-1">
+                    <span className="text-text-disabled/60">›</span>
+                    <span>📭 Uncategorized</span>
+                </span>
+            )}
+            <span className="text-text-disabled/60">›</span>
+            <span className="text-text-tertiary truncate max-w-[20rem]">
+                {noteTitle || "Untitled"}
+            </span>
+        </div>
+    );
 }

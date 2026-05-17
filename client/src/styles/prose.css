@@ -78,3 +78,184 @@
   border-top: 1px solid var(--border-default);
   margin: 1.5rem 0;
 }
+
+/* ─────────────────────────────────────────────────────
+   PROSE-APP — Tailwind Typography overrides
+   Applied alongside `prose prose-invert` so headings,
+   code blocks, tables, task lists all render with our
+   theme tokens instead of Tailwind's hardcoded grays.
+───────────────────────────────────────────────────── */
+
+.prose-app {
+  --tw-prose-body: var(--text-secondary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-secondary);
+  --tw-prose-links: var(--fg-link, #9d93f9);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-tertiary);
+  --tw-prose-bullets: var(--text-disabled);
+  --tw-prose-hr: var(--border-default);
+  --tw-prose-quotes: var(--text-tertiary);
+  --tw-prose-quote-borders: #7c6ff7;
+  --tw-prose-captions: var(--text-tertiary);
+  --tw-prose-code: #9d93f9;
+  --tw-prose-pre-code: var(--text-primary);
+  --tw-prose-pre-bg: var(--surface-2);
+  --tw-prose-th-borders: var(--border-default);
+  --tw-prose-td-borders: var(--border-subtle);
+
+  /* invert duplicates — Tailwind's prose-invert reads these */
+  --tw-prose-invert-body: var(--text-secondary);
+  --tw-prose-invert-headings: var(--text-primary);
+  --tw-prose-invert-lead: var(--text-secondary);
+  --tw-prose-invert-links: var(--fg-link, #9d93f9);
+  --tw-prose-invert-bold: var(--text-primary);
+  --tw-prose-invert-counters: var(--text-tertiary);
+  --tw-prose-invert-bullets: var(--text-disabled);
+  --tw-prose-invert-hr: var(--border-default);
+  --tw-prose-invert-quotes: var(--text-tertiary);
+  --tw-prose-invert-quote-borders: #7c6ff7;
+  --tw-prose-invert-captions: var(--text-tertiary);
+  --tw-prose-invert-code: #9d93f9;
+  --tw-prose-invert-pre-code: var(--text-primary);
+  --tw-prose-invert-pre-bg: var(--surface-2);
+  --tw-prose-invert-th-borders: var(--border-default);
+  --tw-prose-invert-td-borders: var(--border-subtle);
+}
+
+/* Inline code — pill style. Tailwind wraps in backticks; suppress those. */
+.prose-app :where(code):not(:where(pre code)) {
+  background: rgba(124, 111, 247, 0.12);
+  border: 1px solid rgba(124, 111, 247, 0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.875em;
+  font-weight: 500;
+}
+.prose-app :where(code):not(:where(pre code))::before,
+.prose-app :where(code):not(:where(pre code))::after {
+  content: "";
+}
+
+/* Fenced code blocks — surface-2 background, scrollable. */
+.prose-app pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.prose-app pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 1em;
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+/* Tables — borders + zebra header. */
+.prose-app table {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.875em;
+}
+.prose-app thead {
+  background: var(--surface-2);
+}
+.prose-app th {
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-default);
+}
+.prose-app td {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* GFM task lists — flatten the bullet, align checkbox. */
+.prose-app ul li > input[type="checkbox"] {
+  margin-right: 0.5em;
+  vertical-align: -2px;
+  accent-color: #7c6ff7;
+}
+.prose-app ul:has(> li > input[type="checkbox"]) {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+
+/* Blockquote — match the original prose-content style. */
+.prose-app blockquote {
+  border-left: 3px solid #7c6ff7;
+  background: rgba(124, 111, 247, 0.05);
+  border-radius: 0 8px 8px 0;
+  padding: 12px 16px;
+  font-style: italic;
+}
+.prose-app blockquote p::before,
+.prose-app blockquote p::after {
+  content: "";
+}
+
+/* Headings — tighten the top margin so notes don't feel airy. */
+.prose-app h1 { font-size: 1.6em; margin-top: 1.5em; }
+.prose-app h2 { font-size: 1.3em; margin-top: 1.4em; }
+.prose-app h3 { font-size: 1.1em; margin-top: 1.2em; }
+.prose-app h4 { font-size: 1em; }
+
+/* ─────────────────────────────────────────────────────
+   HIGHLIGHT.JS — minimal theme using our brand palette
+   We only set the classes hljs commonly emits; anything
+   else inherits the default code color.
+───────────────────────────────────────────────────── */
+
+.prose-app .hljs-comment,
+.prose-app .hljs-quote {
+  color: var(--text-disabled);
+  font-style: italic;
+}
+.prose-app .hljs-keyword,
+.prose-app .hljs-selector-tag,
+.prose-app .hljs-built_in,
+.prose-app .hljs-name,
+.prose-app .hljs-tag {
+  color: #c4a8ff;
+}
+.prose-app .hljs-string,
+.prose-app .hljs-title,
+.prose-app .hljs-section,
+.prose-app .hljs-attribute,
+.prose-app .hljs-literal,
+.prose-app .hljs-template-tag,
+.prose-app .hljs-template-variable,
+.prose-app .hljs-type,
+.prose-app .hljs-addition {
+  color: #7ecf85;
+}
+.prose-app .hljs-deletion,
+.prose-app .hljs-selector-attr,
+.prose-app .hljs-selector-pseudo,
+.prose-app .hljs-meta {
+  color: #f78c6c;
+}
+.prose-app .hljs-doctag,
+.prose-app .hljs-attr {
+  color: #ffcc80;
+}
+.prose-app .hljs-symbol,
+.prose-app .hljs-bullet,
+.prose-app .hljs-link {
+  color: #9d93f9;
+}
+.prose-app .hljs-number,
+.prose-app .hljs-regexp,
+.prose-app .hljs-variable,
+.prose-app .hljs-template-variable {
+  color: #ff9aa2;
+}
+.prose-app .hljs-emphasis { font-style: italic; }
+.prose-app .hljs-strong { font-weight: 700; }

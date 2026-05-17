@@ -29,6 +29,12 @@ import {
   suggestNoteTags,
   generateNoteFlashcards,
 } from "../controllers/notes.controller.js";
+import {
+  listFolders,
+  createFolder,
+  updateFolder,
+  deleteFolder,
+} from "../controllers/notesFolders.controller.js";
 
 const router = Router();
 
@@ -39,6 +45,10 @@ router.get("/", listNotes);
 
 // Static paths must come before the dynamic `/:id` route so they win
 // routing precedence.
+router.get("/folders", listFolders);
+router.post("/folders", createFolder);
+router.patch("/folders/:id", updateFolder);
+router.delete("/folders/:id", deleteFolder);
 router.get("/link-search", searchLinkableEntities);
 router.get("/tags", listTags);
 router.get("/by-entity/:type/:id", listNotesByEntity);

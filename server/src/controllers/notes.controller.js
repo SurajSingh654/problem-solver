@@ -186,6 +186,10 @@ function dtoNote(note) {
     suggestedTags: note.suggestedTags || [],
     pinned: note.pinned,
     archivedAt: note.archivedAt,
+    folderId: note.folderId ?? null,
+    folder: note.folder
+      ? { id: note.folder.id, name: note.folder.name, parentId: note.folder.parentId }
+      : null,
     flashcardCount: note._count?.flashcards ?? undefined,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
@@ -273,6 +277,17 @@ export async function listNotes(req, res) {
       typeof req.query.entityId === "string" ? req.query.entityId : null;
     const tag = typeof req.query.tag === "string" ? req.query.tag.trim() : "";
 
+    // folderId filter:
+    //   absent              → no folder filter (all notes for the user)
+    //   "null" / "none"     → only uncategorized notes
+    //   <cuid string>       → only that folder
+    let folderFilter = null;
+    if (typeof req.query.folderId === "string") {
+      const raw = req.query.folderId;
+      if (raw === "null" || raw === "none") folderFilter = { folderId: null };
+      else if (raw) folderFilter = { folderId: raw };
+    }
+
     const where = {
       userId,
       archivedAt: archived ? { not: null } : null,
@@ -281,6 +296,7 @@ export async function listNotes(req, res) {
       ...(entityType ? { linkedEntityType: entityType } : {}),
       ...(entityId ? { linkedEntityId: entityId } : {}),
       ...(tag ? { tags: { has: tag } } : {}),
+      ...(folderFilter || {}),
     };
 
     const notes = await prisma.note.findMany({
@@ -288,7 +304,10 @@ export async function listNotes(req, res) {
       orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      include: { _count: { select: { flashcards: true } } },
+      include: {
+        _count: { select: { flashcards: true } },
+        folder: { select: { id: true, name: true, parentId: true } },
+      },
     });
 
     const hasMore = notes.length > limit;
@@ -312,7 +331,10 @@ export async function getNote(req, res) {
     const userId = req.user.id;
     const note = await prisma.note.findFirst({
       where: { id: req.params.id, userId },
-      include: { _count: { select: { flashcards: true } } },
+      include: {
+        _count: { select: { flashcards: true } },
+        folder: { select: { id: true, name: true, parentId: true } },
+      },
     });
     if (!note) return error(res, "Note not found", 404);
     return success(res, { note: dtoNote(note) });
@@ -368,10 +390,31 @@ export async function updateNote(req, res) {
       }
     }
 
+    // Folder reassignment. `null` (or "") moves the note to Uncategorized.
+    // Any other value must be a folder owned by this user.
+    if ("folderId" in (req.body || {})) {
+      const fid = req.body.folderId;
+      if (fid === null || fid === undefined || fid === "") {
+        data.folderId = null;
+      } else if (typeof fid === "string") {
+        const folder = await prisma.noteFolder.findFirst({
+          where: { id: fid, userId },
+          select: { id: true },
+        });
+        if (!folder) return error(res, "Folder not found", 404);
+        data.folderId = fid;
+      } else {
+        return error(res, "Invalid folderId", 400);
+      }
+    }
+
     const note = await prisma.note.update({
       where: { id: existing.id },
       data,
-      include: { _count: { select: { flashcards: true } } },
+      include: {
+        _count: { select: { flashcards: true } },
+        folder: { select: { id: true, name: true, parentId: true } },
+      },
     });
 
     // Re-embed only if substantive content changed. Tag/link edits alone

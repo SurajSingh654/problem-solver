@@ -57,10 +57,17 @@ You'll do precise constraint decoding in Phase 2 — Phase 0 is just the tempera
 A four-bullet anchor list:
 
 ```
-- Genre: <optimization | counting | search | check | construction>
+- Genre: one of —
+    optimization (max / min, single best answer)
+  | counting (how many ways, total)
+  | search / lookup (find element, find position)
+  | check / validate (boolean — is this string valid? does this exist?)
+  | construction (build a new structure)
+  | transformation (modify input → output)
+  | parsing / decoding (interpret structured input)
 - Time budget: O(<class>) only; forbids <class>
-- Input/output shape: <e.g., array → single number>
-- Edge case hints from examples: <e.g., all-decreasing returns 0>
+- Input/output shape: <e.g., array → single number, string → boolean, tree → list>
+- Edge case hints from examples: <e.g., all-decreasing returns 0; one example is positive, one negative>
 ```
 
 ### Discipline rule
@@ -111,6 +118,16 @@ For each sentence, ask all four. Don't skip. If a lens has no answer, write **"n
 | "subarray" vs "subsequence" | Contiguous vs non-contiguous (people get this wrong) |
 | "in-place" | Cannot allocate auxiliary array of size n |
 | "may contain duplicates" | Hashing / counting becomes more nuanced |
+| "valid / invalid / well-formed" | Boolean predicate; can short-circuit on first violation |
+| "matching / balanced / nested" | Pairing structure; almost always **stack** |
+| "open and close" / "begin and end" | Nesting; LIFO; stack |
+| "in the correct order" / "in the same order" | Sequence-dependent; can't shuffle |
+| "consisting of [character set]" | Bounded alphabet; constant-size lookup viable |
+| "must be / cannot be" | Strict requirement; not optional, not "should" |
+| "determine if / return whether" | Boolean answer; one bit out |
+| "every / each [X] has a corresponding [Y]" | Bijection; pair-counting; stack or hash map |
+| "string of length n" | Char-by-char iteration; charset matters |
+| "rotate / reverse / shift" | Geometric/structural transformation |
 
 ### Output shape
 
@@ -343,6 +360,15 @@ Pattern matching to known algorithm classes. Categorization shortcuts you to a *
 | "Kth largest/smallest" | Heap / quickselect |
 | "Intervals" | Sort + sweep |
 | "Cycles in choices" | Graph / Union-Find |
+| **"Match brackets / balanced / nested / well-formed"** | **Stack** |
+| **"Validate / parse structured input"** | **Stack or state machine** |
+| **"Track depth / nesting level"** | **Stack or running counter** |
+| **"Palindrome / mirror / read same forward/backward"** | **Two pointers (or stack)** |
+| **"Reverse-order / undo last operation / LIFO"** | **Stack** |
+| **"Most-recent X"** | **Stack** (most recent open / most recent unmatched) |
+| **"Boolean predicate (true/false)"** | Whatever the structure suggests, but **short-circuit on first violation** |
+| **"Sliding average / running statistic"** | Sliding window |
+| **"Anything with a fixed small alphabet (e.g. 6 chars)"** | Constant-size lookup table; charset-specific shortcuts |
 
 **Sub-step 2 — Identify primary + secondary candidates.** It's fine to list multiple. The primary is the one you'll try first; secondary is your fallback.
 
@@ -778,3 +804,250 @@ That's the abstraction. Buy/Sell Stock II (multiple transactions) breaks the abs
 ## Action item
 
 If you forget everything else: when you see "max profit / max diff between two indices with j > i," your hand should reflexively reach for **track the running min, update the running answer.** That's the pattern; everything else is bookkeeping.
+
+---
+
+# Worked example #2 — LeetCode 20: Valid Parentheses
+
+> Different genre from #1 (validation, not optimization). Demonstrates: stack-based pattern recognition, boolean predicate, LIFO matching. Use this alongside #1 to see how the same template adapts across categories.
+
+**Problem:** Given a string `s` containing just the characters `'('`, `')'`, `'{'`, `'}'`, `'['` and `']'`, determine if the input string is valid. Valid means: every open bracket is closed by the *same type* of bracket, in the *correct order*, and every close bracket has a matching open bracket before it.
+
+Constraints: `1 ≤ s.length ≤ 10⁴`. `s` consists of parentheses only.
+
+---
+
+## Phase 0 — Scan before reading (30s)
+
+```
+- Genre: validation / boolean predicate
+- Complexity ceiling: n ≤ 10⁴ → O(n) comfortable, even O(n log n) fine
+- Input shape: string of bracket characters only
+- Output shape: boolean (valid / invalid)
+```
+
+**Title decode.** "Valid" → boolean predicate. "Parentheses" → bracket matching domain → strong stack signal. The title alone tells me: I'm checking a property of a string, not optimizing or counting.
+
+**Examples silhouette.** Will likely include: matched pairs (`"()"`), nested (`"({[]})"`), interleaved (`"()[]{}"`), mismatched (`"(]"`), unclosed (`"("`), unmatched-close-first (`")"`).
+
+**Return type.** Boolean. No edge case around "what value to return when impossible" — `false` covers everything bad.
+
+---
+
+## Phase 1 — Slow read, line by line
+
+| Phrase | What it really means |
+|---|---|
+| "valid" | Boolean predicate — yes/no, no degree |
+| "open bracket closed by same type" | Type-matching constraint, not just count |
+| "in the correct order" | LIFO ordering — most-recent-open must match next-close |
+| "every close bracket has a matching open before it" | A `)` with no prior `(` is invalid — order matters strictly |
+| "just the characters …" | Closed alphabet of 6 — no other chars to filter |
+
+Already in Phase 1 the **stack signal is screaming**: "most-recent open must match next close" is the textbook LIFO definition.
+
+**Restatement in my own words:** "Walk the string. Each open goes on a stack. Each close must match the top of the stack — if it doesn't, or if the stack is empty when a close arrives, it's invalid. At the end, the stack must be empty."
+
+---
+
+## Phase 2 — Constraints decoding
+
+| Constraint | Implication |
+|---|---|
+| `1 ≤ s.length ≤ 10⁴` | n ≥ 1 (no empty string), so I don't need the "empty = true" branch — but I'll handle it defensively anyway |
+| Only 6 chars possible | No need to validate input alphabet — but I should handle "unexpected char" gracefully if interviewer extends the problem |
+| n ≤ 10⁴ | O(n) is overkill-comfortable. Even O(n²) would pass, but stack solution is naturally O(n) |
+
+The constraint says "consists of parentheses only" — so I don't need a default-case for unknown chars in production. In an interview I'd note this assumption.
+
+---
+
+## Phase 3 — Examples, traced manually
+
+**Example 1: `"()"`** — valid.
+- `(` → push. Stack: `[(]`
+- `)` → matches top `(`. Pop. Stack: `[]`
+- End. Stack empty → return `true`. ✓
+
+**Example 2: `"()[]{}"`** — valid.
+- `(` push. `)` matches top, pop.
+- `[` push. `]` matches top, pop.
+- `{` push. `}` matches top, pop.
+- End. Empty → `true`. ✓
+
+**Example 3: `"(]"`** — invalid.
+- `(` push. Stack: `[(]`
+- `]` arrives. Top is `(` — type mismatch → `false`. ✓
+
+**Example 4: `"([)]"`** — invalid (the *order* test).
+- `(` push. `[` push. Stack: `[(, []`
+- `)` arrives. Top is `[` — mismatch → `false`. ✓
+
+This last example is the discriminator. A naive "count each bracket type" solution returns `true` here (3 pairs balanced numerically) — but it's actually invalid because the *interleaving* breaks LIFO order. **Counting fails; stack succeeds.** That's the lesson.
+
+**Example 5: `"("`** — invalid.
+- `(` push. End reached. Stack non-empty → `false`. ✓
+
+**Example 6: `")"`** — invalid.
+- `)` arrives, stack empty → `false`. ✓
+
+---
+
+## Phase 4 — Brute force first
+
+What does brute force even look like here? "Repeatedly find adjacent matched pairs `()`, `[]`, `{}` and remove them. If the string becomes empty, valid; else invalid."
+
+```
+while changed:
+  s = s.replace("()", "").replace("[]", "").replace("{}", "")
+return s == ""
+```
+
+Time: O(n²) worst case (each pass removes ≥1 pair, each pass scans n). At n=10⁴: ~10⁸ ops — borderline. But the *insight* it gives is everything: "we keep collapsing the most recent matched pair." That collapsing is a stack.
+
+---
+
+## Phase 5 — Pattern recognition
+
+Signals firing:
+
+| Signal | Maps to |
+|---|---|
+| "Match brackets" | **Stack** |
+| "Validate" | **Stack** (or single-pass with state) |
+| "Most-recent X must match next Y" | **Stack** (LIFO) |
+| "Boolean predicate" | Single-pass with early exit |
+| "Bounded alphabet (6 chars)" | Lookup table / map for type matching |
+
+This is the canonical stack problem. The 6-char alphabet means a tiny `Map` from close-char → matching open-char, or vice versa.
+
+---
+
+## Phase 6 — Plan the algorithm (verbal contract)
+
+> "I'll use a stack. Walk each char in `s`:
+> - If it's an open `(`, `[`, `{` — push it.
+> - If it's a close `)`, `]`, `}` — peek the stack:
+>   - If empty → return `false` (close with nothing to match).
+>   - If top is the wrong type → return `false`.
+>   - Else pop and continue.
+> - At end of loop, return `stack.isEmpty()`.
+>
+> Time: O(n) — each char is pushed and popped at most once.
+> Space: O(n) — worst case all opens, e.g. `"((((((..."`.
+>
+> Edge cases I'm watching:
+> - `n=1` with a single open or close → fails the empty-stack-at-end check or the empty-on-close check. Both handled.
+> - All opens (`"((("`) → stack non-empty at end → `false`. Handled.
+> - All closes (`"))) "`) → first char fails empty check → `false`. Handled.
+> - Empty string (constraint says n ≥ 1, but defensively): empty stack at end → `true`. Acceptable."
+
+---
+
+## Phase 7 — Code
+
+### Java
+
+```java
+class Solution {
+    public boolean isValid(String s) {
+        // Map each close-char to its matching open-char.
+        // Tiny fixed alphabet → constant lookup.
+        Map<Character, Character> match = Map.of(
+            ')', '(',
+            ']', '[',
+            '}', '{'
+        );
+        Deque<Character> stack = new ArrayDeque<>();
+        for (char c : s.toCharArray()) {
+            if (c == '(' || c == '[' || c == '{') {
+                stack.push(c);
+            } else {
+                // It's a close-char. Stack must be non-empty AND top must match.
+                if (stack.isEmpty() || stack.pop() != match.get(c)) {
+                    return false;
+                }
+            }
+        }
+        return stack.isEmpty();
+    }
+}
+```
+
+**Time: O(n). Space: O(n) worst case.**
+
+### Why `ArrayDeque` not `Stack`
+
+Java's legacy `Stack` class extends `Vector` and is synchronized — slower and not idiomatic. `ArrayDeque` is the modern recommendation: faster, unsynchronized, same LIFO API via `push` / `pop` / `peek`.
+
+---
+
+## Edge cases & pitfalls
+
+| Case | Why it matters | Handled? |
+|---|---|---|
+| `"("` | Single open → stack non-empty at end | Yes — final `isEmpty()` check returns `false` |
+| `")"` | Single close → stack empty when close arrives | Yes — `stack.isEmpty()` short-circuits to `false` |
+| `"([)]"` | Interleaved — counting fails, stack succeeds | Yes — top mismatch on `)` |
+| `"()[]{}"` | Sequential, all valid | Yes — pushes and pops cleanly |
+| All opens | Stack non-empty at end | Yes |
+| Order of checks in close branch | If you `pop()` before `isEmpty()` check → NoSuchElementException | Yes — short-circuit `isEmpty()` first |
+| Wrong char type | Constraint says only 6 chars, so safe — but defensive code would `else return false` for unknowns | Acceptable given constraint |
+
+---
+
+## Pattern recognition summary
+
+This is the canonical **"LIFO matching"** pattern. Whenever you see:
+- "match X with Y in correct order"
+- "valid nesting"
+- "most-recent open must match next close"
+- bounded alphabet of paired symbols
+
+…your hand reaches for a **stack**. The discriminator that proves a stack is required (vs. counting) is the interleaving case `"([)]"`.
+
+---
+
+## What this problem really teaches
+
+It's not about parentheses. It's about **LIFO order being a fundamentally different constraint than count**. Two problems can have the same set of items in the same multiplicities — but if order matters in a "most-recent-first" way, you need a stack. Counting collapses order; stacks preserve it.
+
+Once you internalize that, you spot stacks in places that don't look like brackets:
+- Function call resolution
+- HTML/XML tag validation
+- Undo history
+- Expression evaluation (Shunting yard, postfix)
+- Monotonic-stack problems (Next Greater Element, Largest Rectangle in Histogram)
+
+---
+
+## Related problems (for spaced repetition later)
+
+- **Min Stack** (LC 155) — augment a stack with O(1) min query
+- **Next Greater Element I/II** (LC 496/503) — monotonic stack
+- **Largest Rectangle in Histogram** (LC 84) — monotonic stack, harder
+- **Decode String** (LC 394) — stack of contexts
+- **Basic Calculator** (LC 224) — stack for operator precedence
+- **Generate Parentheses** (LC 22) — same domain but generation, not validation; uses recursion + invariant tracking
+
+---
+
+## Action item
+
+If you forget everything else: when you see **"validate matched/nested/balanced + LIFO ordering matters,"** your hand should reflexively reach for a **stack with a tiny match-map.** That's the pattern; everything else is iteration mechanics.
+
+---
+
+## Cross-genre reflection (LC 121 vs LC 20)
+
+| Dimension | LC 121 (Optimization) | LC 20 (Validation) |
+|---|---|---|
+| Genre | Optimization (max profit) | Validation (boolean predicate) |
+| Output | Number (≥ 0) | Boolean |
+| Brute force | O(n²) — for each pair | O(n²) — repeated collapse |
+| Optimal | O(n) running min | O(n) stack |
+| Key insight | Inner loop → running aggregate | Counting fails; LIFO needed |
+| Discriminator example | All-decreasing returns 0 | `"([)]"` — interleaving |
+| Data structure | None (two scalars) | Stack |
+
+The template held up for both. The **phrase patterns table in Phase 1** and the **category signals table in Phase 5** are what made this work — they're the entry-points that route different genres to different patterns. Whenever you encounter a third genre (DP, graph, two-pointer, etc.), extend those two tables before solving — that keeps the template current with your growing pattern vocabulary.

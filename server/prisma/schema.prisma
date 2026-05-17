@@ -316,8 +316,9 @@ model User {
 
   // Personal notes + spaced-repetition flashcards. Both are user-scoped
   // (no teamId) — they survive team switches.
-  notes      Note[]
-  flashcards Flashcard[]
+  notes       Note[]
+  noteFolders NoteFolder[]
+  flashcards  Flashcard[]
 
   // Teaching sessions — host + attend + rate + flag back-relations.
   hostedTeachingSessions TeachingSession[]  @relation("TeachingHost")
@@ -2132,6 +2133,12 @@ model Note {
   contentMarkdown String  @db.Text
   tags            String[]
 
+  // Optional folder — null = uncategorized. Folder lives in NoteFolder.
+  // onDelete: SetNull so deleting a folder uncategorizes its notes
+  // rather than destroying them.
+  folderId String?
+  folder   NoteFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
   // Optional entity attachment — null = standalone scratchpad.
   linkedEntityType  NoteEntityType?
   linkedEntityId    String?
@@ -2163,8 +2170,43 @@ model Note {
   @@index([userId, archivedAt, pinned, updatedAt])
   @@index([userId, linkedEntityType, linkedEntityId])
   @@index([userId, archivedAt])
+  @@index([userId, folderId, archivedAt, updatedAt])
   @@index([embedding], map: "idx_notes_embedding_hnsw")
   @@map("notes")
+}
+
+// ============================================================================
+// NOTE FOLDERS — hierarchical organization for personal notes
+// ============================================================================
+//
+// User-scoped tree. parent → children via self-relation "NoteFolderTree".
+// Deleting a folder cascades subfolders; notes detach to "Uncategorized"
+// (Note.folderId is SetNull on folder delete).
+//
+// (userId, parentId, name) is unique → siblings can't share a name. The
+// (userId, parentId) index covers the hot path: load a user's tree.
+// ============================================================================
+
+model NoteFolder {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   NoteFolder?  @relation("NoteFolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children NoteFolder[] @relation("NoteFolderTree")
+
+  name String
+
+  notes Note[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, parentId, name])
+  @@index([userId, parentId])
+  @@map("note_folders")
 }
 
 // ============================================================================

@@ -145,5 +145,8 @@ export default {
       },
     },
   },
-  plugins: [require("@tailwindcss/forms")({ strategy: "class" })],
+  plugins: [
+    require("@tailwindcss/forms")({ strategy: "class" }),
+    require("@tailwindcss/typography"),
+  ],
 };
