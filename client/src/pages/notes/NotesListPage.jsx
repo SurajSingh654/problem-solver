@@ -29,6 +29,7 @@ import { notesApi } from "@services/notes.api";
 import { toast } from "@store/useUIStore";
 import NotesSidebar from "@components/notes/NotesSidebar";
 import MoveToFolderMenu from "@components/notes/MoveToFolderMenu";
+import NewFromNoteMenu from "@components/notes/NewFromNoteMenu";
 import { Button } from "@components/ui/Button";
 import { Skeleton } from "@components/ui/Skeleton";
 import { formatRelativeDate } from "@utils/formatters";
@@ -81,6 +82,7 @@ export default function NotesListPage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [q, setQ] = useState("");
     const [tagFilter, setTagFilter] = useState(null);
+    const [fromTemplateOpen, setFromTemplateOpen] = useState(false);
     const searchRef = useRef(null);
 
     const selection = useMemo(() => selectionFromSearch(searchParams), [searchParams]);
@@ -154,7 +156,21 @@ export default function NotesListPage() {
                             revisit later.
                         </p>
                     </div>
-                    <Button onClick={() => navigate("/notes/new")}>+ New note</Button>
+                    <div className="flex items-center gap-2 relative">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setFromTemplateOpen((o) => !o)}
+                            title="Create a new note from an existing note's content"
+                        >
+                            📑 New from template
+                        </Button>
+                        {fromTemplateOpen && (
+                            <NewFromNoteMenu
+                                onClose={() => setFromTemplateOpen(false)}
+                            />
+                        )}
+                        <Button onClick={() => navigate("/notes/new")}>+ New note</Button>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">

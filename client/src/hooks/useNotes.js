@@ -194,6 +194,19 @@ export function useGenerateNoteFlashcards() {
     });
 }
 
+export function useDuplicateNote() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => notesApi.duplicate(id).then((r) => r.data.data.note),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["notes"] });
+            qc.invalidateQueries({ queryKey: ["note-folders"] });
+            toast.success("Note duplicated.");
+        },
+        onError: (err) => toast.error(pickError(err, "Failed to duplicate note.")),
+    });
+}
+
 export function useTogglePinNote() {
     const qc = useQueryClient();
     return useMutation({

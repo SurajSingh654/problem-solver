@@ -28,6 +28,7 @@ import {
   generateNoteSummary,
   suggestNoteTags,
   generateNoteFlashcards,
+  duplicateNote,
 } from "../controllers/notes.controller.js";
 import {
   listFolders,
@@ -63,5 +64,6 @@ router.delete("/:id", archiveNote);
 router.delete("/:id/permanent", deleteNotePermanent);
 router.post("/:id/restore", restoreNote);
 router.post("/:id/pin", togglePin);
+router.post("/:id/duplicate", duplicateNote);
 
 export default router;
