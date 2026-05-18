@@ -78,6 +78,8 @@ function FormBody({ onClose }) {
     const [problemQuery, setProblemQuery] = useState("");
     const [problemDropdownOpen, setProblemDropdownOpen] = useState(false);
     const [targetFolderId, setTargetFolderId] = useState("");
+    const [topicFocus, setTopicFocus] = useState("");
+    const [includeSubmission, setIncludeSubmission] = useState(false);
 
     // Streaming state
     const [generating, setGenerating] = useState(false);
@@ -146,6 +148,8 @@ function FormBody({ onClose }) {
             templateNoteIds: Array.from(selectedTemplates),
             problemId: problem?.id || null,
             targetFolderId: targetFolderId || null,
+            topicFocus: topicFocus.trim() || null,
+            includeSubmission: Boolean(problem && includeSubmission),
         };
 
         try {
@@ -246,12 +250,52 @@ function FormBody({ onClose }) {
                         >
                             <ProblemPicker
                                 problem={problem}
-                                onChange={setProblem}
+                                onChange={(p) => {
+                                    setProblem(p);
+                                    if (!p) setIncludeSubmission(false);
+                                }}
                                 query={problemQuery}
                                 onQueryChange={setProblemQuery}
                                 results={problemResults || []}
                                 open={problemDropdownOpen}
                                 onOpenChange={setProblemDropdownOpen}
+                            />
+                            {problem && (
+                                <label className="mt-2 flex items-start gap-2 cursor-pointer text-xs">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeSubmission}
+                                        onChange={(e) => setIncludeSubmission(e.target.checked)}
+                                        className="mt-0.5"
+                                    />
+                                    <span className="text-text-secondary leading-relaxed">
+                                        <span className="font-medium text-text-primary">
+                                            Include my latest submitted solution + AI review
+                                        </span>
+                                        <span className="block text-[10px] text-text-disabled mt-0.5">
+                                            Tick this for post-submission review notes (e.g.
+                                            using a Solution Review template). Leave unticked
+                                            for pre-coding analysis. The server will block if
+                                            no submission exists for this problem.
+                                        </span>
+                                    </span>
+                                </label>
+                            )}
+                        </Section>
+
+                        <Section
+                            label="Topic / focus (optional)"
+                            hint="What is this note about? e.g. 'Backpropagation', 'Java concurrency basics'."
+                        >
+                            <textarea
+                                value={topicFocus}
+                                onChange={(e) => setTopicFocus(e.target.value)}
+                                placeholder="Free text — describe the topic or focus for this note. Leave blank for coding notes that pin a Problem above."
+                                maxLength={2000}
+                                rows={2}
+                                className="w-full bg-surface-2 border border-border-subtle rounded-lg
+                                           px-2.5 py-1.5 text-sm text-text-primary outline-none
+                                           resize-y leading-relaxed"
                             />
                         </Section>
 

@@ -28,6 +28,7 @@ import { scheduleNoteEmbedding } from "../services/notes.embedding.js";
 const MAX_TEMPLATES = 3;
 const MIN_OUTPUT_CHARS = 60; // a complete note is at least this long
 const CONTENT_MAX = 50_000;
+const TOPIC_FOCUS_MAX = 2000; // free-text "what is this note about" hint
 
 // Resolve the team IDs the requesting user has access to. Used to gate
 // which Problems they may pin as context (mirrors notes.controller.js).
@@ -51,6 +52,8 @@ export async function generateNoteFromTemplates(req, res) {
     templateNoteIds,
     problemId,
     targetFolderId,
+    topicFocus,
+    includeSubmission,
   } = req.body ?? {};
 
   // ── Validation ────────────────────────────────────────────────────
@@ -84,6 +87,22 @@ export async function generateNoteFromTemplates(req, res) {
     templates.find((t) => t.id === id),
   );
 
+  // Optional free-text "what is this note about" — anchors the LLM for
+  // non-coding topic notes (e.g. "Backpropagation", "Java concurrency").
+  let topicFocusClean = null;
+  if (topicFocus != null) {
+    if (typeof topicFocus !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: { message: "topicFocus must be a string" },
+      });
+    }
+    const trimmed = topicFocus.trim();
+    if (trimmed.length > 0) {
+      topicFocusClean = trimmed.slice(0, TOPIC_FOCUS_MAX);
+    }
+  }
+
   // Optional Problem context.
   let problemSnapshot = null;
   if (problemId) {
@@ -105,6 +124,55 @@ export async function generateNoteFromTemplates(req, res) {
       });
     }
     problemSnapshot = problem;
+  }
+
+  // Optional submission context — opt-in via the form. Used by
+  // submission-review-style templates that need the user's actual code +
+  // AI feedback as raw material.
+  let solutionSnapshot = null;
+  let aiReviewSnapshot = null;
+  if (includeSubmission) {
+    if (!problemSnapshot) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Pick a Problem first — your submission is tied to a problem.",
+        },
+      });
+    }
+    const latestSolution = await prisma.solution.findFirst({
+      where: { userId, problemId: problemSnapshot.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        code: true,
+        language: true,
+        approach: true,
+        timeComplexity: true,
+        spaceComplexity: true,
+        patterns: true,
+        aiFeedback: true,
+      },
+    });
+    if (!latestSolution) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message:
+            "You haven't submitted a solution for this problem yet — uncheck \"Include my submission\" to generate without it, or submit a solution first.",
+        },
+      });
+    }
+    solutionSnapshot = {
+      code: latestSolution.code,
+      language: latestSolution.language,
+      approach: latestSolution.approach,
+      timeComplexity: latestSolution.timeComplexity,
+      spaceComplexity: latestSolution.spaceComplexity,
+      patterns: latestSolution.patterns,
+    };
+    if (latestSolution.aiFeedback && typeof latestSolution.aiFeedback === "object") {
+      aiReviewSnapshot = latestSolution.aiFeedback;
+    }
   }
 
   // Optional target folder must belong to the user (or absent → uncategorized).
@@ -148,6 +216,9 @@ export async function generateNoteFromTemplates(req, res) {
   const { system, user } = noteFromTemplatesPrompt({
     templates: orderedTemplates,
     problem: problemSnapshot,
+    solution: solutionSnapshot,
+    aiReview: aiReviewSnapshot,
+    topicFocus: topicFocusClean,
   });
 
   let stream;
@@ -215,7 +286,7 @@ export async function generateNoteFromTemplates(req, res) {
 
   // Derive the title from the first `# heading` line if present;
   // otherwise fall back to the problem title or a generic stamp.
-  const title = deriveTitle(trimmed, problemSnapshot, orderedTemplates);
+  const title = deriveTitle(trimmed, problemSnapshot, orderedTemplates, topicFocusClean);
 
   let note;
   try {
@@ -253,13 +324,14 @@ export async function generateNoteFromTemplates(req, res) {
 }
 
 // Pull a title from the first markdown H1 (`# ...`) the model emits.
-// Fall back to problem title (when present) or a generic stamp.
-function deriveTitle(markdown, problem, templates) {
+// Fall back to problem title or topic focus or a generic stamp.
+function deriveTitle(markdown, problem, templates, topicFocus) {
   const firstH1 = /^#\s+(.+)$/m.exec(markdown);
   if (firstH1?.[1]) {
     return firstH1[1].trim().slice(0, 200);
   }
   if (problem?.title) return `Notes — ${problem.title}`.slice(0, 200);
+  if (topicFocus) return `Notes — ${topicFocus}`.slice(0, 200);
   if (templates?.[0]?.title) {
     return `From ${templates[0].title}`.slice(0, 200);
   }
