@@ -17,22 +17,24 @@ export async function validationMetrics(results, _items) {
   const samples = [];
 
   for (const r of results) {
-    const v = r?.raw && r?.output != null ? null : (r?.validation || null);
     // The surface adapter sets `output` to the parsed JSON only when
     // validation passed; null otherwise. Anything else means failure.
     const passed = !r.error && r.output != null;
     if (passed) {
       valid++;
     } else {
-      const violations = r?.validation?.violations || [r?.error || "unknown"];
+      const fromValidator = Array.isArray(r?.validation?.violations)
+        ? r.validation.violations
+        : [];
+      const violations = fromValidator.length > 0
+        ? fromValidator
+        : [r?.error || "unknown"];
       for (const code of violations) {
         counts.set(code, (counts.get(code) || 0) + 1);
       }
       if (samples.length < 5) {
         samples.push({ id: r.id, violations });
       }
-      // suppress unused
-      void v;
     }
   }
 

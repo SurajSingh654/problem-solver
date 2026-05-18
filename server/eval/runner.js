@@ -120,6 +120,7 @@ async function runOne(item, surface) {
       output: out?.output ?? null,
       raw: out?.raw ?? null,
       tokens: out?.tokens ?? null,
+      validation: out?.validation ?? null,
       latencyMs: Date.now() - t0,
       error: out?.error ?? null,
     };
@@ -132,6 +133,7 @@ async function runOne(item, surface) {
       output: null,
       raw: null,
       tokens: null,
+      validation: null,
       latencyMs: Date.now() - t0,
       error: err?.message || String(err),
     };
