@@ -14,6 +14,26 @@ import { reviewSolution } from "./ai.controller.js";
 // After the existing embedding generation:
 import { recomputeSkillsFromSolution } from '../services/skillComputation.service.js'
 
+// ── Read-time backfill for legacy `approach` rows ─────────────────────
+// Pre-v3 SubmitSolutionPage wrote a single `approach` column. Edit's
+// SolutionTabs editor reads from `optimizedApproach` / `bruteForce`. For
+// rows where only the legacy column is populated, mirror it into
+// `optimizedApproach` IN THE RESPONSE ONLY so Edit's tabs pre-fill
+// correctly. No DB write — the next save through Edit's flatten logic
+// will populate the new column for real.
+//
+// Becomes inert once the new tabbed Submit ships and writes both
+// columns directly.
+function mirrorLegacyApproach(row) {
+  const out = {};
+  const hasNewOptimized = row.optimizedApproach && String(row.optimizedApproach).trim().length > 0;
+  const hasLegacyApproach = row.approach && String(row.approach).trim().length > 0;
+  if (!hasNewOptimized && hasLegacyApproach) {
+    out.optimizedApproach = row.approach;
+  }
+  return out;
+}
+
 // Fire-and-forget AI review trigger. submitSolution / updateSolution call
 // this after the solution row is persisted so the user never has to click
 // "Analyze" — the AI Review card just populates on its own once the call
@@ -492,6 +512,7 @@ export async function getProblemSolutions(req, res) {
       const userRating = ratings.find((r) => r.raterId === userId);
       return {
         ...s,
+        ...mirrorLegacyApproach(s),
         clarityRatings: undefined,
         avgClarityRating: avgClarity ? Math.round(avgClarity * 10) / 10 : null,
         totalRatings: ratings.length,

@@ -2,14 +2,16 @@
 // AttemptDiff — side-by-side diff between two SolutionAttempt snapshots
 // ============================================================================
 //
-// Uses the `diff` npm package (already transitively installed via Tiptap).
-// Prose fields use character-level diff (diffWordsWithSpace for readability);
-// code uses line-level (diffLines). Other fields (confidence, patterns,
-// problemVersion, AI overallScore) render as compact delta rows rather than
-// free-text diffs.
+// Prose fields are HTML (TipTap RichTextEditor saves HTML to the DB columns).
+// We render them sanitized on each side via DOMPurify. Word-by-word diff
+// doesn't work cleanly with HTML strings — comparing `<p>foo</p>` vs.
+// `<p>bar</p>` highlighted character-by-character is unreadable noise.
+// Instead we show both rendered, side-by-side, with a "changed" badge.
+// Code field keeps line-level diff (still useful for line-aligned source).
 // ============================================================================
 
-import { diffWordsWithSpace, diffLines } from 'diff'
+import { diffLines } from 'diff'
+import DOMPurify from 'dompurify'
 import { cn } from '@utils/cn'
 
 const PROSE_FIELDS = [
@@ -23,29 +25,62 @@ const PROSE_FIELDS = [
     { key: 'spaceComplexity', label: 'Space Complexity' },
 ]
 
+// Same shape used in MarkdownRenderer — keeps standard markup, blocks
+// XSS vectors (event handlers, scripts, styles, iframes).
+const PURIFY_CONFIG = {
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'align', 'colspan', 'rowspan', 'checked', 'disabled', 'type'],
+    FORBID_TAGS: ['iframe', 'object', 'embed', 'form', 'input', 'button', 'script', 'style'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit'],
+}
+
+function looksLikeHtml(s) {
+    if (typeof s !== 'string') return false
+    return /<[a-z][\s\S]*>/i.test(s)
+}
+
+function ProseBlock({ value }) {
+    if (value == null || value === '') {
+        return <span className="text-text-disabled text-xs italic">— empty —</span>
+    }
+    if (looksLikeHtml(value)) {
+        const safe = DOMPurify.sanitize(value, PURIFY_CONFIG)
+        return (
+            <div
+                className="prose prose-invert prose-app prose-sm max-w-none text-xs leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: safe }}
+            />
+        )
+    }
+    // Plain-text legacy field — keep as pre-wrap so newlines survive.
+    return (
+        <div className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">
+            {value}
+        </div>
+    )
+}
+
 function ProseDiff({ before, after }) {
-    // Normalize null/undefined to empty string so diff doesn't blow up.
     const a = before ?? ''
     const b = after ?? ''
     if (a === b && a === '') return <span className="text-text-disabled text-xs italic">— empty in both —</span>
     if (a === b) {
-        return <span className="text-text-secondary whitespace-pre-wrap">{a}</span>
+        // Identical — render once, no badge
+        return <ProseBlock value={a} />
     }
-    const parts = diffWordsWithSpace(a, b)
     return (
-        <div className="whitespace-pre-wrap text-xs leading-relaxed">
-            {parts.map((p, i) => (
-                <span
-                    key={i}
-                    className={cn(
-                        p.added && 'bg-success-soft text-success-fg',
-                        p.removed && 'bg-danger-soft text-danger-fg line-through',
-                        !p.added && !p.removed && 'text-text-secondary',
-                    )}
-                >
-                    {p.value}
-                </span>
-            ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+            <div className="bg-surface-2/40 border border-border-subtle rounded-lg p-3 min-w-0">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-text-disabled mb-1.5">
+                    Before
+                </p>
+                <ProseBlock value={a} />
+            </div>
+            <div className="bg-success-soft/30 border border-success-line/40 rounded-lg p-3 min-w-0">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-success-fg mb-1.5">
+                    After ✱ changed
+                </p>
+                <ProseBlock value={b} />
+            </div>
         </div>
     )
 }

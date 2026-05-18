@@ -9,6 +9,13 @@ import { useSubmitSolution } from '@hooks/useSolutions'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
 import { CodeEditor, SUBMIT_LANGUAGES } from '@components/ui/CodeEditor'
 import { WorkspaceEditor } from '@components/features/solutions/WorkspaceEditor'
+import { SolutionTabs } from '@components/features/solutions/SolutionTabs'
+
+// Feature flag — when on, the CODING path renders the same SolutionTabs
+// editor that EditSolutionPage uses (BRUTE_FORCE / OPTIMIZED tabs). When
+// off, the legacy single-textarea + single-code-editor flow is restored.
+// Triple-declaration: `client/.env`, `client/Dockerfile` ARG/ENV, here.
+const SUBMIT_TABBED_ENABLED = import.meta.env.VITE_FEATURE_SUBMIT_TABBED !== 'false'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { PageSpinner } from '@components/ui/Spinner'
@@ -740,6 +747,13 @@ export default function SubmitSolutionPage() {
     const [code, setCode] = useState('')
     const [language, setLanguage] = useState(localStorage.getItem('ps_last_language') || 'PYTHON')
     const [approach, setApproach] = useState('')
+    // Tabbed-Submit state. Pre-seeds with two empty tabs (BRUTE_FORCE +
+    // OPTIMIZED) so the user immediately sees the structure Edit will
+    // also use. User can add an Alternative or remove BruteForce manually.
+    const [solutionTabs, setSolutionTabs] = useState([
+        { type: 'BRUTE_FORCE', approach: '', timeComplexity: '', spaceComplexity: '', code: '', language: localStorage.getItem('ps_last_language') || 'PYTHON' },
+        { type: 'OPTIMIZED', approach: '', timeComplexity: '', spaceComplexity: '', code: '', language: localStorage.getItem('ps_last_language') || 'PYTHON' },
+    ])
     // Bug 2 fix: patterns is now string[] for multi-select
     const [patterns, setPatterns] = useState([])
     const [keyInsight, setKeyInsight] = useState('')
@@ -876,8 +890,33 @@ export default function SubmitSolutionPage() {
                 patterns: dbProblemType ? [dbProblemType] : [],
                 categorySpecificData: { ...dbData, problemType: dbProblemType },
             }
+        } else if (SUBMIT_TABBED_ENABLED && (category === 'CODING' || hasExternalLink)) {
+            // CODING (tabbed) — write both legacy `approach` (back-compat
+            // with old readers) AND the structured `bruteForce` /
+            // `optimizedApproach` columns Edit reads. Mirrors the flatten
+            // logic in EditSolutionPage.jsx:991-1013 — single source of
+            // truth for "tabs array → flat DB columns."
+            const optimized = solutionTabs.find(s => s.type === 'OPTIMIZED')
+            const brute = solutionTabs.find(s => s.type === 'BRUTE_FORCE')
+            const bestSol = optimized || solutionTabs[0]
+            const tabsLanguage = bestSol?.language || 'PYTHON'
+            if (bestSol?.code) localStorage.setItem('ps_last_language', tabsLanguage)
+            data = {
+                ...base,
+                approach: optimized?.approach || bestSol?.approach || null,
+                code: bestSol?.code || null,
+                language: bestSol?.code ? tabsLanguage : null,
+                bruteForce: brute?.approach || null,
+                optimizedApproach: optimized?.approach || null,
+                timeComplexity: optimized?.timeComplexity || bestSol?.timeComplexity || null,
+                spaceComplexity: optimized?.spaceComplexity || bestSol?.spaceComplexity || null,
+                keyInsight: keyInsight || null,
+                feynmanExplanation: feynmanExplanation || null,
+                realWorldConnection: realWorldConnection || null,
+                patterns,
+            }
         } else {
-            // CODING — generic columns remain canonical.
+            // CODING (legacy) or any non-tabbed path — generic columns canonical.
             data = {
                 ...base,
                 approach: approach || null,
@@ -1087,25 +1126,41 @@ export default function SubmitSolutionPage() {
                     <DatabaseWorkspace dbData={dbData} onDbDataChange={setDbData} problemType={dbProblemType} schemaReference={dbSchemaReference} />
                 ) : (
                     <>
-                        {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
-                            <FormSection icon="💻" title={hasExternalLink ? 'Paste Your Solution Code' : (formConfig.solutionTabConfig?.codeLabel || 'Your Code')}
-                                hint="AI will analyze correctness, complexity, and detect any issues">
-                                <CodeEditor code={code} onChange={setCode} language={language}
-                                    onLanguageChange={lang => { setLanguage(lang); localStorage.setItem('ps_last_language', lang) }}
-                                    selectorStyle="dropdown" languages={SUBMIT_LANGUAGES} height="320px" showLanguageSelector />
+                        {SUBMIT_TABBED_ENABLED && (category === 'CODING' || hasExternalLink) ? (
+                            // Tabbed editor — same component Edit uses. Submit ↔ Edit
+                            // are now structurally identical for CODING.
+                            <FormSection icon="💻" title="Solutions"
+                                hint="Add a Brute Force first, then your Optimized approach. AI reviews both.">
+                                <SolutionTabs
+                                    solutions={solutionTabs}
+                                    onChange={setSolutionTabs}
+                                />
                                 <p className="text-[10px] text-text-disabled mt-2">🤖 AI will check correctness, detect edge cases, analyze complexity, and flag any issues</p>
                             </FormSection>
+                        ) : (
+                            <>
+                                {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
+                                    <FormSection icon="💻" title={hasExternalLink ? 'Paste Your Solution Code' : (formConfig.solutionTabConfig?.codeLabel || 'Your Code')}
+                                        hint="AI will analyze correctness, complexity, and detect any issues">
+                                        <CodeEditor code={code} onChange={setCode} language={language}
+                                            onLanguageChange={lang => { setLanguage(lang); localStorage.setItem('ps_last_language', lang) }}
+                                            selectorStyle="dropdown" languages={SUBMIT_LANGUAGES} height="320px" showLanguageSelector />
+                                        <p className="text-[10px] text-text-disabled mt-2">🤖 AI will check correctness, detect edge cases, analyze complexity, and flag any issues</p>
+                                    </FormSection>
+                                )}
+
+                                <FormSection
+                                    icon={category === 'BEHAVIORAL' ? '🎯' : category === 'LOW_LEVEL_DESIGN' ? '📐' : '📝'}
+                                    title={category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response') : category === 'CS_FUNDAMENTALS' ? 'Your Explanation' : category === 'LOW_LEVEL_DESIGN' ? 'Your Design Approach' : 'Your Approach'}
+                                    hint={hasExternalLink ? 'Explain your thought process. What pattern did you use and why?' : category === 'BEHAVIORAL' ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.') : category === 'LOW_LEVEL_DESIGN' ? 'Walk through your entity identification and class hierarchy.' : 'Describe your approach step by step.'}
+                                >
+                                    <RichTextEditor content={approach} onChange={setApproach}
+                                        placeholder={hasExternalLink ? 'Walk through your approach: pattern identification, why this approach, alternatives considered...' : fields.patternReasoning?.placeholder || 'Write your approach here...'}
+                                        minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'} />
+                                </FormSection>
+                            </>
                         )}
 
-                        <FormSection
-                            icon={category === 'BEHAVIORAL' ? '🎯' : category === 'LOW_LEVEL_DESIGN' ? '📐' : '📝'}
-                            title={category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response') : category === 'CS_FUNDAMENTALS' ? 'Your Explanation' : category === 'LOW_LEVEL_DESIGN' ? 'Your Design Approach' : 'Your Approach'}
-                            hint={hasExternalLink ? 'Explain your thought process. What pattern did you use and why?' : category === 'BEHAVIORAL' ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.') : category === 'LOW_LEVEL_DESIGN' ? 'Walk through your entity identification and class hierarchy.' : 'Describe your approach step by step.'}
-                        >
-                            <RichTextEditor content={approach} onChange={setApproach}
-                                placeholder={hasExternalLink ? 'Walk through your approach: pattern identification, why this approach, alternatives considered...' : fields.patternReasoning?.placeholder || 'Write your approach here...'}
-                                minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'} />
-                        </FormSection>
 
                         {fields.patternIdentified?.show && (
                             <FormSection icon="🧩" title={fields.patternIdentified.label || 'Pattern Identified'}
