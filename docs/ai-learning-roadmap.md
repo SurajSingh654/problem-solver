@@ -78,7 +78,7 @@ The **Day 7 spaced review** is where retention happens. Skip it twice in a row a
 
 | Week | Doc deliverable | Code deliverable | Measurement deliverable |
 |---|---|---|---|
-| 1 | `/docs/concept-reviews/01-evals-as-a-discipline.md` | `server/eval/` harness | First baseline scores for one surface |
+| 1 | `/docs/concept-reviews/01-evals-as-a-discipline.md` ⏳ pending | `server/eval/` harness ✅ shipped | First baseline scores for one surface ✅ captured (note-summary, valid_rate 0.80) |
 | 2 | `02-advanced-rag.md` | Re-ranker + hybrid search in notes pipeline | Eval delta: new RAG vs. old RAG |
 | 3 | `03-tool-calling-deep.md` | Multi-tool surface (interview or solution reviewer) | Tool-call success rate metric |
 | 4 | `04-ai-agents.md` | Auto-Solver agent, observable | End-to-end success rate on a problem set |
@@ -154,4 +154,46 @@ If you skip a week, **don't skip the spaced review of prior weeks**. The roadmap
 
 ## Current week
 
-> **Week 1 — Evals as a discipline.** Started 2026-05-18. Study guide at `/docs/concept-reviews/01-evals-as-a-discipline-study-guide.md`. Eval harness scaffold at `server/eval/`.
+> **Week 1 — Evals as a discipline.** Started 2026-05-18. Mid-week (Day 3–5 build phase). Study guide at `/docs/concept-reviews/01-evals-as-a-discipline-study-guide.md`. Eval harness at `server/eval/`. Progress log below.
+
+---
+
+## Week 1 — progress log
+
+### ✅ Done
+
+- **Eval harness MVP shipped** (`server/eval/`):
+  - Generic runner (`runner.js`) — sequential or bounded-parallel; saves NDJSON-shaped reports to `eval/reports/`
+  - Surface adapter (`surfaces/note-summary.js`) — wraps existing `noteSummaryPrompt` + `validateNoteSummary` + usage-emitter subscription
+  - Basic metrics (`metrics/basic.js`) — error_rate, latency p50/p95/max, token avgs, cost USD, output length stats, declarative assertions, **tag-based slicing** (`by_tag.<tag>`)
+  - Validation metric (`metrics/validation.js`) — valid_rate, top violations, sample failures
+  - LLM-as-judge groundedness (`judges/groundedness.js`) — hallucination detection via gpt-4o judge, opt-in via `EVAL_JUDGE=1`
+  - Cost lookup table (`lib/cost.js`) — USD per 1M tokens for gpt-4o, gpt-4o-mini, gpt-4-turbo, o1, embeddings (last updated 2026-05-18)
+  - Diff script (`scripts/eval-diff.js`) — direction-aware, color-coded, run via `npm run eval:diff -- <a>.json <b>.json`
+  - 5 hand-picked golden items covering typical / empty / code-only / prompt-injection / rambling
+- **First baseline run captured** (2026-05-18 09:34Z) on `note-summary`:
+  - 0 errors, 15/15 assertions passed, valid_rate 0.80
+  - p50 latency 4.3s, p95 6.2s on gpt-4o-mini
+  - Avg cost $0.0043 / call → projected $4.31 per 1k calls
+  - Adversarial vs typical valid_rate split surfaced via tag slicing (adversarial 0.667, typical 1.0)
+- **Real bug surfaced by the eval** — prompt-vs-validator inconsistency: `noteSummaryPrompt` instructs the LLM to "return empty arrays for empty notes," but `validateNoteSummary` rejects `keyTakeaways.length < 3` regardless of `hasContent`. The empty-input case has been silently failing validation in production for weeks.
+
+### ⏳ Pending (the rest of Week 1)
+
+| Task | Owner | Notes |
+|---|---|---|
+| **Experiment 1**: fix the validator-vs-prompt inconsistency in `validateNoteSummary` (gate the keyTakeaways count check on `hasContent`) | You | Predicted: valid_rate 0.80 → 1.00. The "evals find bugs" lesson. |
+| **Experiment 2**: pick one prompt change (reduce few-shot count, lower temperature, or strengthen empty-note instruction), run, diff against baseline | You | Write the hypothesis BEFORE running. The hypothesis-vs-result gap IS the learning. |
+| **Experiment 3** (optional): deliberately game `valid_rate` with placeholder padding to experience Goodhart's law live | You | Skip if time tight. |
+| Run once with `EVAL_JUDGE=1` to see groundedness numbers and worst-offender hallucinations | You | Costs ~$0.005/item × 5 items = ~$0.025 per run |
+| Add 5+ adversarial golden items to `golden-sets/note-summary.json` | You | Templates: foreign-language, self-contradictory, repetition, mixed quality |
+| Day 6 — write the worked-example concept note `/docs/concept-reviews/01-evals-as-a-discipline.md` (using AI Topic Notes Template) | You | Productive failure: §3 mental model BEFORE reading authoritative sources |
+| Day 7 — spaced review of the self-test questions in the concept note (cold) | You | First week, no prior content to review yet |
+
+### 🅿️ Parked (intentionally, until justified)
+
+- **Eval reports UI** — a SuperAdmin page to browse + diff reports visually. Defer until JSON-file review becomes painful (probably after 3–4 surfaces evaluated and 20+ historical reports). Premature UI is procrastination dressed as progress.
+- **More surfaces evaluated** (AI Solution Review, AI Readiness Verdict, Note Auto-Tag, Note Flashcards) — defer until Week 1 surface stabilizes. Each adds ~30 min of adapter + golden-set work.
+- **Token capture for the judge itself** — currently estimated via char-count proxy in `judges/groundedness.js`. Real capture works but adds plumbing; defer.
+- **Persistent baseline pinning** — right now you eyeball "the last report" as baseline. A `baseline.json` symlink / pin would clarify — defer until needed.
+- **Concurrent eval runs** — runner supports it (`concurrency: 3`) but defaults to 1 to keep traces readable. Bump when comfortable.
