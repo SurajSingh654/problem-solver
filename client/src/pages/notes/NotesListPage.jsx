@@ -29,7 +29,7 @@ import { notesApi } from "@services/notes.api";
 import { toast } from "@store/useUIStore";
 import NotesSidebar from "@components/notes/NotesSidebar";
 import MoveToFolderMenu from "@components/notes/MoveToFolderMenu";
-import NewFromNoteMenu from "@components/notes/NewFromNoteMenu";
+import NewFromTemplateForm from "@components/notes/NewFromTemplateForm";
 import { Button } from "@components/ui/Button";
 import { Skeleton } from "@components/ui/Skeleton";
 import { formatRelativeDate } from "@utils/formatters";
@@ -156,22 +156,21 @@ export default function NotesListPage() {
                             revisit later.
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 relative">
+                    <div className="flex items-center gap-2">
                         <Button
                             variant="ghost"
-                            onClick={() => setFromTemplateOpen((o) => !o)}
-                            title="Create a new note from an existing note's content"
+                            onClick={() => setFromTemplateOpen(true)}
+                            title="Generate a new note from one or more templates"
                         >
                             📑 New from template
                         </Button>
-                        {fromTemplateOpen && (
-                            <NewFromNoteMenu
-                                onClose={() => setFromTemplateOpen(false)}
-                            />
-                        )}
                         <Button onClick={() => navigate("/notes/new")}>+ New note</Button>
                     </div>
                 </div>
+                <NewFromTemplateForm
+                    open={fromTemplateOpen}
+                    onClose={() => setFromTemplateOpen(false)}
+                />
 
                 <div className="flex items-center gap-3 flex-wrap">
                     <input

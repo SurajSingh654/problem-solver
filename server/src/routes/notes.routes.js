@@ -36,6 +36,9 @@ import {
   updateFolder,
   deleteFolder,
 } from "../controllers/notesFolders.controller.js";
+import {
+  generateNoteFromTemplates,
+} from "../controllers/notesAiTemplate.controller.js";
 
 const router = Router();
 
@@ -50,6 +53,7 @@ router.get("/folders", listFolders);
 router.post("/folders", createFolder);
 router.patch("/folders/:id", updateFolder);
 router.delete("/folders/:id", deleteFolder);
+router.post("/from-templates", aiLimiter, generateNoteFromTemplates);
 router.get("/link-search", searchLinkableEntities);
 router.get("/tags", listTags);
 router.get("/by-entity/:type/:id", listNotesByEntity);
