@@ -152,13 +152,17 @@ export async function generateNoteFromTemplates(req, res) {
 
   let stream;
   try {
+    // Output budget: 8000 tokens is the env-level hard cap (AI_MAX_TOKENS_HARD_CAP).
+    // We need every bit of it — a real merge of an 8-phase analysis template
+    // + a 12-section solution-review template runs ~6000 tokens of output.
+    // Anything lower forces the LLM to drop sections silently.
     stream = await aiStream({
       systemPrompt: system,
       messages: [{ role: "user", content: user }],
       userId,
       model: AI_MODEL_PRIMARY,
-      temperature: 0.6,
-      maxTokens: 4000,
+      temperature: 0.55,
+      maxTokens: 8000,
       surface: "note:from-templates",
     });
   } catch (err) {
