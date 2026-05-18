@@ -102,18 +102,35 @@ export const LANGUAGE_HLJS = {
 };
 
 // ── Algorithm patterns ─────────────────────────────
+// Canonical taxonomy (~NeetCode roadmap + key Grokking strategies the
+// roadmap collapses). Order is loosely curriculum-style: linear scans →
+// stacks/queues → search → trees/graphs → DP/greedy → math/bits.
+//
+// Custom values typed via PatternSelector's free-text input are accepted
+// and stored, but a server-side normalizer logs any value not in this
+// list so we can promote frequent custom tags later. See
+// server/src/utils/patternTaxonomy.js.
 export const PATTERNS = [
   { id: "array-hashing", label: "Array / Hashing", icon: "Hash" },
   { id: "two-pointers", label: "Two Pointers", icon: "GitMerge" },
+  { id: "fast-slow-pointers", label: "Fast & Slow Pointers", icon: "Rabbit" },
   { id: "sliding-window", label: "Sliding Window", icon: "Maximize2" },
   { id: "stack", label: "Stack", icon: "Layers" },
+  { id: "monotonic-stack", label: "Monotonic Stack", icon: "TrendingUp" },
+  { id: "queue", label: "Queue", icon: "ListOrdered" },
+  { id: "bfs", label: "BFS", icon: "Waves" },
+  { id: "dfs", label: "DFS", icon: "GitFork" },
   { id: "binary-search", label: "Binary Search", icon: "Search" },
   { id: "linked-list", label: "Linked List", icon: "Link" },
   { id: "trees", label: "Trees", icon: "GitBranch" },
   { id: "tries", label: "Tries", icon: "Network" },
   { id: "heap", label: "Heap / Priority Queue", icon: "Triangle" },
+  { id: "top-k-elements", label: "Top K Elements", icon: "Trophy" },
+  { id: "matrix", label: "Matrix", icon: "Grid3x3" },
   { id: "backtracking", label: "Backtracking", icon: "CornerUpLeft" },
   { id: "graphs", label: "Graphs", icon: "Share2" },
+  { id: "union-find", label: "Union-Find", icon: "Combine" },
+  { id: "topological-sort", label: "Topological Sort", icon: "ArrowDownAZ" },
   { id: "dynamic-programming", label: "Dynamic Programming", icon: "Cpu" },
   { id: "greedy", label: "Greedy", icon: "Zap" },
   { id: "intervals", label: "Intervals", icon: "AlignJustify" },

@@ -13,6 +13,7 @@ import { reviewSolution } from "./ai.controller.js";
 
 // After the existing embedding generation:
 import { recomputeSkillsFromSolution } from '../services/skillComputation.service.js'
+import { normalizePatterns } from '../utils/patternTaxonomy.js'
 
 // ── Read-time backfill for legacy `approach` rows ─────────────────────
 // Pre-v3 SubmitSolutionPage wrote a single `approach` column. Edit's
@@ -133,6 +134,10 @@ export async function submitSolution(req, res) {
       return error(res, "Confidence must be an integer between 1 and 5.", 400);
     }
 
+    // Normalize the patterns array: trim, dedupe case-insensitively, cap
+    // length, log non-canonical entries for later promotion.
+    const normalizedPatterns = normalizePatterns(patterns, { userId });
+
     // ── SM-2 initial state ─────────────────────────────
     // Canonical SM-2: EF starts at 2.5, first review tomorrow.
     // Submission confidence is stored but does NOT seed EF — the first
@@ -162,7 +167,7 @@ export async function submitSolution(req, res) {
           feynmanExplanation,
           realWorldConnection,
           confidence,
-          patterns,
+          patterns: normalizedPatterns,
           patternIdentificationTime,
           categorySpecificData: req.body.categorySpecificData || null,
           // SM-2 initial state
@@ -766,6 +771,12 @@ export async function updateSolution(req, res) {
     contentFields.forEach((field) => {
       if (restBody[field] !== undefined) data[field] = restBody[field];
     });
+
+    // Normalize patterns through the same gate as submit so updates can't
+    // bypass length / dedup / canonical-logging.
+    if (data.patterns !== undefined) {
+      data.patterns = normalizePatterns(data.patterns, { userId, solutionId });
+    }
 
     // SM-2 EF is intentionally NOT touched here. EF only updates on an actual
     // scheduled review via submitReview(), when recall is observed. A content
