@@ -2,18 +2,22 @@
 // Basic eval metrics — surface-agnostic
 // ============================================================================
 //
-// Five metrics every surface should track:
-//   - error_rate         : fraction of runs that threw or returned error
-//   - latency_ms         : p50 / p95 / max
-//   - token_usage        : avg total tokens per call
-//   - output_length      : char-length distribution (proxy for verbosity drift)
-//   - assertions_passed  : if items declare assertions, how many passed
+// Surface-agnostic aggregates over the runner's results array.
 //
-// Why these five and no others (yet):
+//   error_rate         : fraction of runs that threw or returned error
+//   latency_ms         : p50 / p95 / max, overall + sliced by tag
+//   tokens             : avg prompt / completion / total
+//   cost_usd           : avg / total cost across the run
+//   output_length_chars: char-length distribution (proxy for verbosity drift)
+//   assertions         : declarative-check pass rate + failure samples
+//
+// Why these and no others (yet):
 //   - Cheap to compute, no LLM judge needed
 //   - Catch the easy regressions before paying for harder metrics
 //   - Decompose well — error_rate spike vs latency spike vs assertion fail
 //     each point at a different root cause
+//   - Tag slicing lets you see if adversarial cases regress while typical
+//     cases stay flat (a frequent failure mode of prompt edits)
 // ============================================================================
 
 export async function basicMetrics(results, _items) {
@@ -26,10 +30,31 @@ export async function basicMetrics(results, _items) {
   const latencies = results.map((r) => r.latencyMs).filter(Number.isFinite);
   const lat = percentiles(latencies);
 
-  const totals = ok
-    .map((r) => r.tokens?.total)
-    .filter((n) => Number.isFinite(n));
-  const avgTokens = totals.length > 0 ? mean(totals) : null;
+  // Token / cost aggregates from the usage emitter (when surface adapter
+  // captured it). Some surfaces won't have these yet — null gracefully.
+  const tokenSamples = ok
+    .map((r) => r.tokens)
+    .filter((t) => t && Number.isFinite(t.totalTokens));
+  const tokens = tokenSamples.length === 0
+    ? null
+    : {
+      avg_prompt: mean(tokenSamples.map((t) => t.promptTokens)),
+      avg_completion: mean(tokenSamples.map((t) => t.completionTokens)),
+      avg_total: mean(tokenSamples.map((t) => t.totalTokens)),
+      models: distinct(tokenSamples.map((t) => t.modelUsed).filter(Boolean)),
+    };
+
+  const costSamples = tokenSamples
+    .map((t) => t.costUsd)
+    .filter(Number.isFinite);
+  const cost = costSamples.length === 0
+    ? null
+    : {
+      avg_usd: mean(costSamples),
+      total_usd: sum(costSamples),
+      // Project to 1k calls — easier to reason about than 5-call totals.
+      projected_per_1k_usd: mean(costSamples) * 1000,
+    };
 
   const outputLengths = ok
     .map((r) => stringifySafe(r.output).length)
@@ -38,12 +63,19 @@ export async function basicMetrics(results, _items) {
 
   const assertionResults = scoreAssertions(results);
 
+  // Tag slicing. For each unique tag, compute the same key metrics over
+  // just the items carrying that tag. Reveals regressions concentrated
+  // in (e.g.) "adversarial" or "long" cases.
+  const byTag = sliceByTag(results);
+
   return {
     error_rate: errors.length / total,
     latency_ms: lat,
-    avg_total_tokens: avgTokens,
+    tokens,
+    cost_usd: cost,
     output_length_chars: lenStats,
     assertions: assertionResults,
+    by_tag: byTag,
   };
 }
 
@@ -65,7 +97,17 @@ function pctile(sorted, p) {
 }
 
 function mean(arr) {
-  return arr.reduce((s, x) => s + x, 0) / arr.length;
+  const xs = arr.filter(Number.isFinite);
+  if (xs.length === 0) return null;
+  return xs.reduce((s, x) => s + x, 0) / xs.length;
+}
+
+function sum(arr) {
+  return arr.filter(Number.isFinite).reduce((s, x) => s + x, 0);
+}
+
+function distinct(arr) {
+  return [...new Set(arr)];
 }
 
 function stringifySafe(v) {
@@ -76,6 +118,34 @@ function stringifySafe(v) {
   } catch {
     return "";
   }
+}
+
+// Per-tag summary of the metrics that move most under prompt changes.
+// Less verbose than the top-level (no assertion details, no token
+// breakdown) — meant to be scanned, not analyzed line-by-line.
+function sliceByTag(results) {
+  const tagToResults = new Map();
+  for (const r of results) {
+    for (const tag of r.tags || []) {
+      if (!tagToResults.has(tag)) tagToResults.set(tag, []);
+      tagToResults.get(tag).push(r);
+    }
+  }
+  const out = {};
+  for (const [tag, rs] of tagToResults.entries()) {
+    const ok = rs.filter((r) => !r.error);
+    const lats = rs.map((r) => r.latencyMs).filter(Number.isFinite);
+    const validRate = rs.length === 0
+      ? null
+      : rs.filter((r) => !r.error && r.output != null).length / rs.length;
+    out[tag] = {
+      n: rs.length,
+      error_rate: rs.length === 0 ? null : (rs.length - ok.length) / rs.length,
+      valid_rate: validRate,
+      latency_ms_p50: lats.length === 0 ? null : pctile([...lats].sort((a, b) => a - b), 0.5),
+    };
+  }
+  return out;
 }
 
 // Assertions are simple structural / textual checks declared per golden-set

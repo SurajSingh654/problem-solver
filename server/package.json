@@ -22,7 +22,8 @@
     "test:ui": "vitest --ui",
     "lint": "eslint src test eval --max-warnings 0",
     "lint:fix": "eslint src test eval --fix",
-    "eval:notes": "node eval/scripts/eval-note-summary.js"
+    "eval:notes": "node eval/scripts/eval-note-summary.js",
+    "eval:diff": "node eval/scripts/eval-diff.js"
   },
   "dependencies": {
     "@langchain/core": "^1.1.40",

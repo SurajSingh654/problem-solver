@@ -6,10 +6,30 @@
 
 ```bash
 cd server
+
+# 1. Run the eval (basic + validation metrics — fast, cheap)
 npm run eval:notes
+
+# 2. Run with LLM-as-judge groundedness (slower, one gpt-4o call per ok item)
+EVAL_JUDGE=1 npm run eval:notes
+
+# 3. Compare two reports (after you've made a prompt change and re-run)
+npm run eval:diff -- eval/reports/<old>.json eval/reports/<new>.json
 ```
 
-Runs the `note-summary` surface against `golden-sets/note-summary.json` and prints a metrics summary. A timestamped JSON report lands in `eval/reports/`.
+Each run prints a metrics summary and saves a timestamped JSON report to `eval/reports/`.
+
+## What gets measured
+
+| Metric | Source | Cost | What it answers |
+|---|---|---|---|
+| `error_rate`, `latency_ms` (p50/p95/max) | runner | free | Did calls succeed? How fast? |
+| `tokens.avg_*`, `cost_usd.*` | usage emitter | free | What does this call cost? |
+| `output_length_chars` | runner | free | Is the LLM getting verbose / terse? |
+| `assertions.pass_rate` | declarative checks per item | free | Are surface-specific invariants holding? |
+| `valid_rate`, `top_violations` | structured-output validator | free | Does the output pass the schema? |
+| `by_tag.*` | tag slicing | free | Are adversarial / typical / long cases regressing differently? |
+| `overall_groundedness` | LLM-as-judge | **~$0.005 / item** | Is the summary actually supported by the source, or hallucinated? |
 
 ## Directory layout
 

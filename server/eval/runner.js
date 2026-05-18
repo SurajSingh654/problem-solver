@@ -89,6 +89,7 @@ export async function runEval({
       tags: r.tags ?? [],
       latencyMs: r.latencyMs,
       tokens: r.tokens ?? null,
+      validation: r.validation ?? null,
       ok: !r.error,
       error: r.error ?? null,
       // Truncate output preview for readability; full output in raw if needed
@@ -143,9 +144,12 @@ async function runOne(item, surface) {
 function printItemLine(r) {
   const status = r.error ? "✗" : "✓";
   const lat = String(r.latencyMs).padStart(5, " ");
-  const tokens = r.tokens?.total != null ? `${r.tokens.total}t` : "—";
+  const tokens = r.tokens?.totalTokens != null ? `${r.tokens.totalTokens}t` : "—";
+  const cost = r.tokens?.costUsd != null ? `$${r.tokens.costUsd.toFixed(5)}` : "";
   const errSuffix = r.error ? `  ERR: ${truncate(r.error, 80)}` : "";
-  console.log(`  ${status}  ${r.id.padEnd(28)}  ${lat}ms  ${tokens.padEnd(6)}${errSuffix}`);
+  console.log(
+    `  ${status}  ${r.id.padEnd(28)}  ${lat}ms  ${tokens.padEnd(7)}${cost.padEnd(10)}${errSuffix}`,
+  );
 }
 
 function printSummary(report) {
