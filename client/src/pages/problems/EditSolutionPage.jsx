@@ -878,26 +878,40 @@ export default function EditSolutionPage() {
             }
 
         } else {
-            // Generic form — pre-fill
+            // Generic form — pre-fill from canonical columns + per-tab JSON
+            // metadata. Optimized maps onto the canonical fields; BruteForce
+            // and Alternative read from their respective {Meta} JSON cols.
             const existingTabs = []
-            if (mySolution.bruteForce) {
+            const bruteMeta = mySolution.bruteForceMeta || {}
+            const altMeta = mySolution.alternativeMeta || {}
+            if (mySolution.bruteForce || mySolution.bruteForceMeta) {
                 existingTabs.push({
                     type: 'BRUTE_FORCE',
                     approach: mySolution.bruteForce || '',
-                    timeComplexity: '',
-                    spaceComplexity: '',
-                    code: '',
-                    language: mySolution.language || 'PYTHON',
+                    timeComplexity: bruteMeta.timeComplexity || '',
+                    spaceComplexity: bruteMeta.spaceComplexity || '',
+                    code: bruteMeta.code || '',
+                    language: bruteMeta.language || mySolution.language || 'PYTHON',
                 })
             }
             existingTabs.push({
-                type: mySolution.bruteForce ? 'OPTIMIZED' : 'BRUTE_FORCE',
+                type: mySolution.bruteForce || mySolution.bruteForceMeta ? 'OPTIMIZED' : 'BRUTE_FORCE',
                 approach: mySolution.optimizedApproach || mySolution.approach || '',
                 timeComplexity: mySolution.timeComplexity || '',
                 spaceComplexity: mySolution.spaceComplexity || '',
                 code: mySolution.code || '',
                 language: mySolution.language || 'PYTHON',
             })
+            if (mySolution.alternativeApproach || mySolution.alternativeMeta) {
+                existingTabs.push({
+                    type: 'ALTERNATIVE',
+                    approach: mySolution.alternativeApproach || '',
+                    timeComplexity: altMeta.timeComplexity || '',
+                    spaceComplexity: altMeta.spaceComplexity || '',
+                    code: altMeta.code || '',
+                    language: altMeta.language || mySolution.language || 'PYTHON',
+                })
+            }
             if (existingTabs.length === 0) {
                 existingTabs.push({ type: 'BRUTE_FORCE', approach: '', timeComplexity: '', spaceComplexity: '', code: '', language: 'PYTHON' })
             }
@@ -988,19 +1002,35 @@ export default function EditSolutionPage() {
                 followUpAnswers: followUpAnswersArray,
             }
         } else {
-            // Generic form
+            // Generic form — symmetric flatten with Submit's tabbed save.
+            // Per-tab meta columns hold the BruteForce + Alternative tabs'
+            // code / language / timeComplexity / spaceComplexity (Optimized
+            // uses the canonical flat columns).
             const optimized = solutionTabs.find(s => s.type === 'OPTIMIZED')
             const brute = solutionTabs.find(s => s.type === 'BRUTE_FORCE')
+            const alt = solutionTabs.find(s => s.type === 'ALTERNATIVE')
             const bestSol = optimized || solutionTabs[0]
             const language = bestSol?.language || 'PYTHON'
             localStorage.setItem('ps_last_language', language)
+
+            const packMeta = (s) => (s && (s.code || s.timeComplexity || s.spaceComplexity)
+                ? {
+                    code: s.code || null,
+                    language: s.language || null,
+                    timeComplexity: s.timeComplexity || null,
+                    spaceComplexity: s.spaceComplexity || null,
+                }
+                : null)
 
             data = {
                 approach: formData.approach || optimized?.approach || bestSol?.approach || null,
                 code: bestSol?.code || null,
                 language,
                 bruteForce: brute?.approach || null,
+                bruteForceMeta: packMeta(brute),
                 optimizedApproach: optimized?.approach || null,
+                alternativeApproach: alt?.approach || null,
+                alternativeMeta: packMeta(alt),
                 timeComplexity: optimized?.timeComplexity || bestSol?.timeComplexity || null,
                 spaceComplexity: optimized?.spaceComplexity || bestSol?.spaceComplexity || null,
                 keyInsight: formData.keyInsight || null,

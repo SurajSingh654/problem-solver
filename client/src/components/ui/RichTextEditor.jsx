@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 // StarterKit bundles Underline as of v2.12 — don't import it separately
@@ -41,6 +42,16 @@ export function RichTextEditor({
     minHeight = '120px',
     className,
 }) {
+    // Keep `onChange` reachable from inside Tiptap's onUpdate without
+    // baking the FIRST render's reference into the editor's closure.
+    // Without this ref, switching tabs in SolutionTabs (or any other
+    // surface that swaps the onChange prop between renders) keeps firing
+    // updates to the WRONG state slot — silent data corruption.
+    const onChangeRef = useRef(onChange)
+    useEffect(() => {
+        onChangeRef.current = onChange
+    }, [onChange])
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -74,9 +85,28 @@ export function RichTextEditor({
             },
         },
         onUpdate: ({ editor }) => {
-            onChange?.(editor.getHTML())
+            // Read through the ref so the latest onChange is always used,
+            // even after tab swaps that change the prop identity.
+            onChangeRef.current?.(editor.getHTML())
         },
     })
+
+    // Sync external content changes (e.g. SolutionTabs swapping the active
+    // tab) back into the editor. Equality guard prevents the keystroke loop:
+    //   user types → onUpdate → parent setState → content prop reflects it
+    //   → this useEffect fires → editor.getHTML() === content → no setContent.
+    // The guard is essential — without it every keystroke would re-set the
+    // editor and reset the cursor.
+    useEffect(() => {
+        if (!editor) return
+        const current = editor.getHTML()
+        const next = content || ''
+        // Tiptap emits an empty doc as `<p></p>`. Treat that as equal to ''
+        // so we don't churn on initially-empty editors.
+        if (current === next) return
+        if (next === '' && current === '<p></p>') return
+        editor.commands.setContent(next, false)
+    }, [content, editor])
 
     if (!editor) return null
 

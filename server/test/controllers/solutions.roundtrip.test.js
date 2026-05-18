@@ -146,6 +146,59 @@ describe("getProblemSolutions — legacy backfill mirror", () => {
         expect(sol.approach).toBeNull();
     });
 
+    it("preserves bruteForceMeta + alternativeMeta JSON columns end-to-end", async () => {
+        // Simulates what the new tabbed Submit form writes: per-tab metadata
+        // packed in JSON for the BruteForce + Alternative tabs.
+        mockSolutionRows = [
+            {
+                id: "sol_full_tabs",
+                userId: "user_test",
+                problemId: "prob_1",
+                teamId: "team_test",
+                approach: "<p>optimized canonical</p>",
+                bruteForce: "<p>brute approach text</p>",
+                bruteForceMeta: {
+                    code: "for i ... for j ...",
+                    language: "PYTHON",
+                    timeComplexity: "O(n²)",
+                    spaceComplexity: "O(1)",
+                },
+                optimizedApproach: "<p>optimized canonical</p>",
+                alternativeApproach: "<p>alt approach text</p>",
+                alternativeMeta: {
+                    code: "// some alt code",
+                    language: "JAVA",
+                    timeComplexity: "O(n log n)",
+                    spaceComplexity: "O(n)",
+                },
+                code: "def twoSum...",
+                language: "PYTHON",
+                timeComplexity: "O(n)",
+                spaceComplexity: "O(n)",
+                clarityRatings: [],
+                followUpAnswers: [],
+                createdAt: new Date(),
+            },
+        ];
+
+        const { status, body } = await invoke(getProblemSolutions, baseReq());
+
+        expect(status).toBe(200);
+        const sol = body.data.solutions[0];
+        // Per-tab JSON columns round-trip intact.
+        expect(sol.bruteForceMeta).toEqual({
+            code: "for i ... for j ...",
+            language: "PYTHON",
+            timeComplexity: "O(n²)",
+            spaceComplexity: "O(1)",
+        });
+        expect(sol.alternativeApproach).toBe("<p>alt approach text</p>");
+        expect(sol.alternativeMeta.timeComplexity).toBe("O(n log n)");
+        // Canonical Optimized columns unaffected.
+        expect(sol.optimizedApproach).toBe("<p>optimized canonical</p>");
+        expect(sol.timeComplexity).toBe("O(n)");
+    });
+
     it("treats whitespace-only `approach` as empty (no spurious mirror)", async () => {
         mockSolutionRows = [
             {

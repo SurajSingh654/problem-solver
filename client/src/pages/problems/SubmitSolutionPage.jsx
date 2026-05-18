@@ -891,23 +891,40 @@ export default function SubmitSolutionPage() {
                 categorySpecificData: { ...dbData, problemType: dbProblemType },
             }
         } else if (SUBMIT_TABBED_ENABLED && (category === 'CODING' || hasExternalLink)) {
-            // CODING (tabbed) — write both legacy `approach` (back-compat
-            // with old readers) AND the structured `bruteForce` /
-            // `optimizedApproach` columns Edit reads. Mirrors the flatten
-            // logic in EditSolutionPage.jsx:991-1013 — single source of
-            // truth for "tabs array → flat DB columns."
+            // CODING (tabbed) — write back the legacy `approach` column
+            // (back-compat with old readers) AND the structured columns:
+            // `bruteForce` / `optimizedApproach` for the Optimized + BF
+            // tab approach text, plus the per-tab JSON metadata columns
+            // (`bruteForceMeta`, `alternativeMeta`) so each tab's
+            // code / language / timeComplexity / spaceComplexity round-trip.
+            // Mirrors the flatten logic in EditSolutionPage.jsx (single
+            // source of truth — tabs array → flat DB columns).
             const optimized = solutionTabs.find(s => s.type === 'OPTIMIZED')
             const brute = solutionTabs.find(s => s.type === 'BRUTE_FORCE')
+            const alt = solutionTabs.find(s => s.type === 'ALTERNATIVE')
             const bestSol = optimized || solutionTabs[0]
             const tabsLanguage = bestSol?.language || 'PYTHON'
             if (bestSol?.code) localStorage.setItem('ps_last_language', tabsLanguage)
+            // Pack per-tab metadata. Null when the tab has nothing meaningful
+            // beyond approach text — keeps the column null, not {}.
+            const packMeta = (s) => (s && (s.code || s.timeComplexity || s.spaceComplexity)
+                ? {
+                    code: s.code || null,
+                    language: s.language || null,
+                    timeComplexity: s.timeComplexity || null,
+                    spaceComplexity: s.spaceComplexity || null,
+                }
+                : null)
             data = {
                 ...base,
                 approach: optimized?.approach || bestSol?.approach || null,
                 code: bestSol?.code || null,
                 language: bestSol?.code ? tabsLanguage : null,
                 bruteForce: brute?.approach || null,
+                bruteForceMeta: packMeta(brute),
                 optimizedApproach: optimized?.approach || null,
+                alternativeApproach: alt?.approach || null,
+                alternativeMeta: packMeta(alt),
                 timeComplexity: optimized?.timeComplexity || bestSol?.timeComplexity || null,
                 spaceComplexity: optimized?.spaceComplexity || bestSol?.spaceComplexity || null,
                 keyInsight: keyInsight || null,

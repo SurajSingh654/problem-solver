@@ -758,6 +758,19 @@ model Solution {
   patterns                  String[] @default([])
   patternIdentificationTime Int?
 
+  // ── Per-tab metadata (BruteForce + Alternative tabs) ──
+  // Schema initially had a single set of canonical metadata columns
+  // (code / language / timeComplexity / spaceComplexity). The tabbed
+  // SolutionTabs editor exposes these per-tab on the UI; the Optimized
+  // tab maps onto the canonical columns, and these JSON columns store
+  // the equivalent for the BruteForce + Alternative tabs.
+  //
+  // JSON shape: { code, language, timeComplexity, spaceComplexity }.
+  // Null when no per-tab data exists. Existing rows untouched.
+  bruteForceMeta      Json?
+  alternativeApproach String?
+  alternativeMeta     Json?
+
   // ── AI feedback (stored after review) ──────────────
   aiFeedback Json?
 
@@ -891,7 +904,10 @@ model SolutionAttempt {
   code                 String?
   language             String?
   bruteForce           String?
+  bruteForceMeta       Json?
   optimizedApproach    String?
+  alternativeApproach  String?
+  alternativeMeta      Json?
   timeComplexity       String?
   spaceComplexity      String?
   keyInsight           String?
