@@ -1,6 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — Solutions Controller (Team-Scoped)
 // ============================================================================
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import {
@@ -157,10 +158,13 @@ export async function submitSolution(req, res) {
           code,
           language,
           bruteForce,
-          bruteForceMeta: bruteForceMeta ?? null,
+          // For Json? on `create`: undefined skips, plain object writes the
+          // value, Prisma.DbNull writes SQL null. Plain `null` is ambiguous
+          // and historically dropped — use the explicit sentinel.
+          bruteForceMeta: bruteForceMeta == null ? Prisma.DbNull : bruteForceMeta,
           optimizedApproach,
           alternativeApproach: alternativeApproach ?? null,
-          alternativeMeta: alternativeMeta ?? null,
+          alternativeMeta: alternativeMeta == null ? Prisma.DbNull : alternativeMeta,
           timeComplexity,
           spaceComplexity,
           keyInsight,
@@ -778,12 +782,40 @@ export async function updateSolution(req, res) {
       data.patterns = normalizePatterns(data.patterns, { userId, solutionId });
     }
 
+    // Prisma 5.x quirk: passing a plain object to a `Json?` field on update
+    // can be silently dropped from the SET clause. Wrap JSON values in a
+    // `{ set: ... }` operator and convert plain `null` writes to the
+    // explicit `Prisma.DbNull` sentinel so the column is actually nulled
+    // (rather than skipped). String-typed columns aren't affected.
+    const jsonFields = ["bruteForceMeta", "alternativeMeta", "categorySpecificData"];
+    for (const f of jsonFields) {
+      if (!(f in data)) continue;
+      if (data[f] === null) {
+        data[f] = Prisma.DbNull;
+      } else if (data[f] !== undefined && typeof data[f] === "object") {
+        data[f] = { set: data[f] };
+      }
+    }
+
     // SM-2 EF is intentionally NOT touched here. EF only updates on an actual
     // scheduled review via submitReview(), when recall is observed. A content
     // edit — even one that changes self-rated confidence — is not a recall
     // event, so letting it move EF would corrupt the scheduler.
 
+    // Bump $transaction timeout from the 5s default. Each query inside this
+    // transaction can take ~700ms on a Railway dev DB; the 5+ queries push
+    // us over budget. 20s gives margin without masking real performance regressions.
     await prisma.$transaction(async (tx) => {
+      // Debug aid for the silent-strip investigation. Remove once the
+      // JSON-field SET-clause bug is conclusively confirmed fixed.
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[update-debug] data keys:",
+          Object.keys(data),
+          "bruteForceMeta present:",
+          "bruteForceMeta" in data,
+        );
+      }
       await tx.solution.update({ where: { id: solutionId }, data });
 
       if (followUpAnswers?.length > 0) {
@@ -898,7 +930,7 @@ export async function updateSolution(req, res) {
           problemVersion: fresh.problemVersion,
         },
       });
-    });
+    }, { timeout: 20_000, maxWait: 5_000 });
 
     const solution = await prisma.solution.findUnique({
       where: { id: solutionId },
