@@ -782,19 +782,15 @@ export async function updateSolution(req, res) {
       data.patterns = normalizePatterns(data.patterns, { userId, solutionId });
     }
 
-    // Prisma 5.x quirk: passing a plain object to a `Json?` field on update
-    // can be silently dropped from the SET clause. Wrap JSON values in a
-    // `{ set: ... }` operator and convert plain `null` writes to the
-    // explicit `Prisma.DbNull` sentinel so the column is actually nulled
-    // (rather than skipped). String-typed columns aren't affected.
+    // Json? fields on update: pass plain object directly. Convert plain
+    // `null` to `Prisma.DbNull` so the column actually nulls (plain `null`
+    // gets ambiguously interpreted by Prisma 5.x). Do NOT wrap in
+    // `{ set: ... }` — the wrapper gets silently stripped from the SET
+    // clause for Json columns and leaves the value un-persisted.
     const jsonFields = ["bruteForceMeta", "alternativeMeta", "categorySpecificData"];
     for (const f of jsonFields) {
       if (!(f in data)) continue;
-      if (data[f] === null) {
-        data[f] = Prisma.DbNull;
-      } else if (data[f] !== undefined && typeof data[f] === "object") {
-        data[f] = { set: data[f] };
-      }
+      if (data[f] === null) data[f] = Prisma.DbNull;
     }
 
     // SM-2 EF is intentionally NOT touched here. EF only updates on an actual
@@ -806,16 +802,6 @@ export async function updateSolution(req, res) {
     // transaction can take ~700ms on a Railway dev DB; the 5+ queries push
     // us over budget. 20s gives margin without masking real performance regressions.
     await prisma.$transaction(async (tx) => {
-      // Debug aid for the silent-strip investigation. Remove once the
-      // JSON-field SET-clause bug is conclusively confirmed fixed.
-      if (process.env.NODE_ENV !== "production") {
-        console.log(
-          "[update-debug] data keys:",
-          Object.keys(data),
-          "bruteForceMeta present:",
-          "bruteForceMeta" in data,
-        );
-      }
       await tx.solution.update({ where: { id: solutionId }, data });
 
       if (followUpAnswers?.length > 0) {
@@ -879,28 +865,6 @@ export async function updateSolution(req, res) {
           problemVersion: true,
         },
       });
-      // ── Defensive: silent-strip detector ─────────────────
-      // Symptom we hit during dev: client sends `bruteForceMeta` as a JSON
-      // object, save returns 200, but the DB row has it as null. Most
-      // common cause is a stale Prisma client in the running Node process
-      // (someone ran `prisma generate` / `prisma migrate dev` while the
-      // server was running, and Node's module cache holds the OLD client
-      // which silently strips unknown fields from update() args).
-      // The fix is a hard server restart. This warning makes the failure
-      // mode loud instead of silent.
-      const flagSilentStrip = (field) => {
-        const sent = data[field];
-        if (sent && typeof sent === "object" && fresh[field] == null) {
-          console.warn(
-            `[solutions:silent-strip] ${field} was sent as an object but persisted as null on solutionId=${solutionId}. ` +
-              `Likely cause: stale Prisma client in the running dev server. ` +
-              `Fix: kill the dev server (Ctrl+C) and run \`npm run dev\` again.`,
-          );
-        }
-      };
-      flagSilentStrip("bruteForceMeta");
-      flagSilentStrip("alternativeMeta");
-
       const lastAttempt = await tx.solutionAttempt.findFirst({
         where: { solutionId },
         orderBy: { attemptNumber: "desc" },

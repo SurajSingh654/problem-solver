@@ -31,7 +31,13 @@ export const createSolutionSchema = z.object({
   code: optStr,
   language: z.enum(SUPPORTED_LANGUAGES).nullable().optional(),
   bruteForce: optStr,
+  // Per-tab JSON metadata for the Brute Force tab (code / language /
+  // timeComplexity / spaceComplexity). Optimized keeps using the
+  // canonical flat columns above; this column packs the BF tab's meta.
+  bruteForceMeta: z.record(z.any()).nullable().optional(),
   optimizedApproach: optStr,
+  alternativeApproach: optStr,
+  alternativeMeta: z.record(z.any()).nullable().optional(),
   timeComplexity: optStr,
   spaceComplexity: optStr,
   keyInsight: optStr,
