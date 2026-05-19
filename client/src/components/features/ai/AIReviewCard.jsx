@@ -4,6 +4,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAIReview } from '@hooks/useAI'
+import { FRESH_REVIEW_WAIT_MS } from '@hooks/useSolutions'
 import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
@@ -87,16 +88,16 @@ function getDimensionLabels(category) {
 }
 
 // ── Infer category from review data ───────────────────
-// AIReviewCard does not receive the problem category directly.
-// We infer it from the review data shape so we can apply the right labels.
-// This avoids threading category through every call site.
+// Used as a FALLBACK when the parent didn't pass a `category` prop and
+// the review record doesn't carry one. The keyword-match heuristic here
+// is fundamentally unreliable — generic AI-feedback prose contains words
+// like "process", "action", "concept" that would misclassify a coding
+// review as CS_FUNDAMENTALS / BEHAVIORAL and hide the Code tab. Always
+// prefer the explicit `category` prop on the call site (sourced from
+// problem.category, which is authoritative).
 function inferCategory(review) {
     if (!review) return 'CODING'
-    // Check for category stored in the review record (future-proofing)
     if (review.category) return review.category
-    // Infer from the presence of category-specific feedback content
-    // This works because the AI prompt produces category-specific feedback text
-    // that contains these signals in the improvement/interviewTip fields
     const text = [
         review.improvement || '',
         review.interviewTip || '',
@@ -436,7 +437,7 @@ function FollowUpSection({ followUpEvaluations, problemFollowUps, isHR = false }
 // ══════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════
-export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, problemFollowUps }) {
+export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, problemFollowUps, category }) {
     const aiReview = useAIReview()
     const [activeTab, setActiveTab] = useState('overview')
     const [expanded, setExpanded] = useState(false)
@@ -452,9 +453,16 @@ export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, pr
         ? localHistory[localHistory.length - 2]
         : null
 
-    // Infer the category from the review content
-    // Used for dimension label selection and tab visibility
-    const inferredCategory = useMemo(() => inferCategory(latestReview), [latestReview])
+    // Resolve category. Prefer the explicit prop (authoritative — comes
+    // from problem.category); fall back to text-keyword inference only
+    // for legacy call sites that didn't pass it. The inference path used
+    // to silently misclassify reviews — words like "process" in generic
+    // AI prose flipped a coding review to CS_FUNDAMENTALS and hid the
+    // Code tab non-deterministically across re-runs.
+    const inferredCategory = useMemo(
+        () => category || inferCategory(latestReview),
+        [category, latestReview],
+    )
     const dimLabels = getDimensionLabels(inferredCategory)
     const isHR = inferredCategory === 'HR'
     const showCodeTab = !NO_CODE_TAB_CATEGORIES.has(inferredCategory)
@@ -524,15 +532,21 @@ export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, pr
     }[inferredCategory] || '5-dimension analysis · Flags interview killers · Tracks improvement'
 
     // ── No review yet ──────────────────────────────────
-    // Submit auto-fires AI review in the background. If the solution is
-    // recent (< 90s old), show an "Analyzing..." indicator instead of
-    // the manual button — the parent's pollFreshSolutions refetches every
-    // 5s, so the review will pop in on its own once it lands. After the
-    // 90s window, fall back to the manual "Get AI Review" button (covers
-    // legacy solutions, auto-review failures, or rate-limit hits).
+    // Submit auto-fires AI review in the background. While the solution is
+    // young (< FRESH_REVIEW_WAIT_MS old), show an "Analyzing…" indicator —
+    // the parent's pollFreshSolutions refetches every 5s, so the review
+    // will pop in on its own once it lands. The window matches the polling
+    // window in useSolutions so the spinner and the polling stop together;
+    // if the window closes with no feedback (auto-review crashed, OAI
+    // outage, or rate-limit hit), we render a clear "taking longer than
+    // expected" state with a manual retry, not a silent revert to the
+    // generic "Get AI Review" button.
     if (!latestReview) {
-        const recentSubmit = solutionCreatedAt
-            && (Date.now() - new Date(solutionCreatedAt).getTime() < 90_000)
+        const ageMs = solutionCreatedAt
+            ? Date.now() - new Date(solutionCreatedAt).getTime()
+            : Infinity
+        const recentSubmit = ageMs < FRESH_REVIEW_WAIT_MS
+        const autoReviewExpired = solutionCreatedAt && !recentSubmit && ageMs < FRESH_REVIEW_WAIT_MS * 4
         return (
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
@@ -547,10 +561,18 @@ export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, pr
                         </div>
                         <div>
                             <h3 className="text-sm font-bold text-text-primary">
-                                {recentSubmit ? 'AI is analyzing your solution…' : 'AI Review'}
+                                {recentSubmit
+                                    ? 'AI is analyzing your solution…'
+                                    : autoReviewExpired
+                                        ? 'AI auto-review didn\'t complete'
+                                        : 'AI Review'}
                             </h3>
                             <p className="text-xs text-text-tertiary">
-                                {recentSubmit ? 'Usually takes 10–30 seconds — this card will update automatically.' : reviewDescription}
+                                {recentSubmit
+                                    ? 'Usually takes 10–30 seconds — this card will update automatically.'
+                                    : autoReviewExpired
+                                        ? 'The background review didn\'t land — likely a transient AI outage or rate-limit. Click to retry.'
+                                        : reviewDescription}
                             </p>
                         </div>
                     </div>

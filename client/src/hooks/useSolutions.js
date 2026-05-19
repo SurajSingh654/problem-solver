@@ -5,10 +5,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@services/api";
 import { useTeamContext } from "./useTeamContext";
 
+// Window in which we keep polling for the auto-review to land. Was 90s,
+// raised to 180s after users hit the previous ceiling on slower environments
+// (Railway connection-pool waits + OpenAI tail latency stack up). The flow
+// stops automatically once feedback shows up; if the window closes with
+// nothing landed, AIReviewCard renders a "taking longer than expected"
+// state with a manual retry button.
+export const FRESH_REVIEW_WAIT_MS = 180_000;
+
 // `pollFreshSolutions` opts in to a 5s refetch loop while ANY solution in
-// the result is < 90s old AND has no AI feedback yet — covers the brief
-// window between submit and the background auto-review landing. Stops
-// automatically once the feedback shows up or the solution ages out.
+// the result is younger than FRESH_REVIEW_WAIT_MS AND has no AI feedback
+// yet. Stops automatically when the feedback arrives or the window closes.
 export function useProblemSolutions(problemId, { pollFreshSolutions = false } = {}) {
   const { teamQueryKey } = useTeamContext();
   return useQuery({
@@ -25,7 +32,7 @@ export function useProblemSolutions(problemId, { pollFreshSolutions = false } = 
           const stillWaiting = solutions.some((s) => {
             if (!s.createdAt) return false;
             const ageMs = Date.now() - new Date(s.createdAt).getTime();
-            if (ageMs > 90_000) return false;
+            if (ageMs > FRESH_REVIEW_WAIT_MS) return false;
             const hasFeedback = Array.isArray(s.aiFeedback)
               ? s.aiFeedback.length > 0
               : !!s.aiFeedback;

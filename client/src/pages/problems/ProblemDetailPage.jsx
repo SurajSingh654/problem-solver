@@ -1399,6 +1399,7 @@ export default function ProblemDetailPage() {
                                             existingReview={mySolution.aiFeedback}
                                             solutionCreatedAt={mySolution.createdAt}
                                             problemFollowUps={followUpQuestions}
+                                            category={category}
                                         />
                                     </div>
                                 )}
