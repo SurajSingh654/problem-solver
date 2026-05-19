@@ -26,6 +26,9 @@ const SUPPORTED_LANGUAGES = [
   "OTHER",
 ];
 
+// `.strict()` so unknown keys produce a 400 instead of being silently
+// dropped. Pairs with the boundary-logger middleware: unknown keys at
+// PR-test time fail loud rather than landing as null in the DB.
 export const createSolutionSchema = z.object({
   approach: optStr,
   code: optStr,
@@ -63,9 +66,9 @@ export const createSolutionSchema = z.object({
     )
     .optional()
     .default([]),
-});
+}).strict();
 
-export const updateSolutionSchema = createSolutionSchema.partial();
+export const updateSolutionSchema = createSolutionSchema.partial().strict();
 
 // ── SM-2 review submission ───────────────────────────────
 // POST /solutions/:solutionId/review
@@ -75,13 +78,17 @@ export const updateSolutionSchema = createSolutionSchema.partial();
 // solution. Optional: users can skip typing and still submit a review.
 // Cap at 10k chars to prevent abusive payloads; real recall attempts
 // are typically under 2k.
-export const submitReviewSchema = z.object({
-  confidence: z.number().int().min(1).max(5),
-  recallText: z.string().max(10000).nullable().optional(),
-});
+export const submitReviewSchema = z
+  .object({
+    confidence: z.number().int().min(1).max(5),
+    recallText: z.string().max(10000).nullable().optional(),
+  })
+  .strict();
 
 // ── Peer clarity rating ──────────────────────────────────
 // POST /solutions/:solutionId/rate
-export const rateSolutionClaritySchema = z.object({
-  rating: z.number().int().min(1).max(5),
-});
+export const rateSolutionClaritySchema = z
+  .object({
+    rating: z.number().int().min(1).max(5),
+  })
+  .strict();

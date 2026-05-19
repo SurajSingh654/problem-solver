@@ -33,6 +33,9 @@ const followUpSchema = z.object({
   order: z.number().int().min(0).optional(),
 });
 
+// `.strict()` everywhere so unknown keys produce a 400 instead of being
+// silently dropped. Pairs with the boundary-logger in validate.middleware.
+
 // ── Create ───────────────────────────────────────────────────
 export const createProblemSchema = z.object({
   title: z.string().min(2).max(200),
@@ -53,32 +56,38 @@ export const createProblemSchema = z.object({
   adminNotes: z.string().nullable().optional(),
   isPinned: z.boolean().default(false),
   followUps: z.array(followUpSchema).max(10).default([]),
-});
+}).strict();
 
 // ── Update ───────────────────────────────────────────────────
 // `source` is intentionally absent — immutable after creation.
 // Admin-only flags (isPublished, isPinned, isHidden) are included here.
-export const updateProblemSchema = z.object({
-  title: z.string().min(2).max(200).optional(),
-  description: z.string().nullable().optional(),
-  difficulty: DIFFICULTY.optional(),
-  category: CATEGORY.optional(),
-  categoryData: z.record(z.any()).nullable().optional(),
-  tags: z.array(z.string().min(1).max(50)).max(30).optional(),
-  realWorldContext: z.string().nullable().optional(),
-  useCases: z.union([z.string(), z.array(z.string())]).nullable().optional(),
-  adminNotes: z.string().nullable().optional(),
-  isPublished: z.boolean().optional(),
-  isPinned: z.boolean().optional(),
-  isHidden: z.boolean().optional(),
-});
+export const updateProblemSchema = z
+  .object({
+    title: z.string().min(2).max(200).optional(),
+    description: z.string().nullable().optional(),
+    difficulty: DIFFICULTY.optional(),
+    category: CATEGORY.optional(),
+    categoryData: z.record(z.any()).nullable().optional(),
+    tags: z.array(z.string().min(1).max(50)).max(30).optional(),
+    realWorldContext: z.string().nullable().optional(),
+    useCases: z.union([z.string(), z.array(z.string())]).nullable().optional(),
+    adminNotes: z.string().nullable().optional(),
+    isPublished: z.boolean().optional(),
+    isPinned: z.boolean().optional(),
+    isHidden: z.boolean().optional(),
+  })
+  .strict();
 
 // ── Batch create — capped at 5 to match Railway timeout budget ──
-export const batchCreateProblemsSchema = z.object({
-  problems: z.array(createProblemSchema).min(1).max(5),
-});
+export const batchCreateProblemsSchema = z
+  .object({
+    problems: z.array(createProblemSchema).min(1).max(5),
+  })
+  .strict();
 
 // ── Pin/hide toggle ──────────────────────────────────────────
-export const toggleProblemFlagSchema = z.object({
-  flag: z.enum(["pin", "hide"]),
-});
+export const toggleProblemFlagSchema = z
+  .object({
+    flag: z.enum(["pin", "hide"]),
+  })
+  .strict();

@@ -199,3 +199,10 @@ Path aliases (`@/`, `@components`, `@pages`, `@hooks`, `@store`, `@services`, `@
 - For any read-modify-write on shared mutable state (SM-2 review submit, future spaced-repetition / leaderboard updates): use an interactive `prisma.$transaction(async tx => ...)` with `SELECT ... FOR UPDATE` as the first step. Postgres at READ COMMITTED otherwise allows the lost-update anomaly under concurrent submissions.
 - For new heavy client pages: `React.lazy` + `<Lazy>` wrapper, and add a `manualChunks` entry in `vite.config.js` if it brings a large dependency.
 - For new `VITE_*` env flags: declare in **three** places — Railway runtime env, `client/Dockerfile` ARG/ENV, and the call site. Runtime Railway env does NOT auto-flow into `vite build`. First diagnostic for "VITE flag isn't working" is grepping the deployed bundle.
+- **For a new field on any mutation request body**, all five touch points must change together — skipping #3 silently strips the field at the route boundary with no error:
+  1. **Prisma migration** — `server/prisma/migrations/.../migration.sql` adds the column.
+  2. **`schema.prisma`** — Prisma model field declared (regenerates the client).
+  3. **Zod request schema** — `server/src/schemas/*.schema.js` lists the field. The schemas are `.strict()`, so unknown keys → 400; missing-from-schema fields are silently dropped from `req.body` by `validate()`. The validate middleware logs `[validate:stripped]` in dev when this happens.
+  4. **Controller `contentFields` allow-list** (or equivalent allow-list pattern in the controller).
+  5. **Client payload builder** — the page that POSTs/PUTs the new field.
+  Add a wire-level integration test for the new field via the pattern in `server/test/integration/solutions.update.integration.test.js` — that test catches all five drift cases, including the "field missing from Zod schema" silent strip. First diagnostic for "field is in the request payload but the DB column is null" is logging `Object.keys(req.body)` at controller entry; if the field is missing there, it's a Zod schema problem, not a Prisma problem.
