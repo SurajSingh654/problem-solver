@@ -408,6 +408,20 @@ export const ROADMAP_ITEMS = [
     },
 
     {
+        id: 'leetcode-difficulty-verification',
+        phase: 'LATER',
+        theme: 'Correctness & Data',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'Verify problem difficulty against LeetCode at create-time',
+        impact: 'Today Problem.difficulty is set by whoever created the row — admin typing it in, or the AI generation pipeline guessing from a title. There is no cross-check against the platform of origin, so a problem can ship as Easy in our DB while LeetCode classifies it as Medium. Users notice the discrepancy when they click through to the source URL; trust in the platform\'s curation drops. The only existing fix path is manual admin edit, which scales linearly with the bug count.',
+        description: 'New service `server/src/services/leetcodeVerification.service.js` (~80 LOC) that hits LeetCode\'s public GraphQL endpoint (`https://leetcode.com/graphql`) for any problem with `categoryData.platform === \'LEETCODE\'` and a `sourceUrl`. Returns `{ difficulty, titleSlug, questionId, isPaidOnly, verifiedAt }`. Three integration layers: (a) verify-at-creation in createProblem / batchCreateProblems / AI-generated path — flag mismatches for admin to confirm rather than auto-overwriting; (b) on-demand "Verify against LeetCode" button on the problem detail page (super-admin only); (c) weekly cron sweep over all LEETCODE problems to catch reclassifications and surface drift in SuperAdmin Diagnostics. Stores verification metadata in `categoryData.verifiedDifficulty` / `verifiedAt` / `verificationSource` — no migration needed since `categoryData` is already a JSON blob. Phase 2 is a one-shot backfill script that verifies every existing LEETCODE problem and reports discrepancies for bulk admin fix. Phase 3 (optional): Codeforces API support (same shape, different endpoint) for breadth.',
+        why: 'The bug class is "AI or admin guessed difficulty wrong, no signal exists to catch it." A free, stable, public API solves it deterministically for LeetCode-sourced problems (the majority of categoryData.platform values). Pairs with the generic Problem-issue-report channel — verification handles the LeetCode case automatically, reports cover everything else (non-LeetCode platforms, typos, broken sample I/O, missing follow-ups). Together they form a layered correctness story: automated where we can, crowdsourced everywhere else.',
+        researchBasis: 'LeetCode\'s GraphQL endpoint is unofficial but historically stable for 5+ years; used by every open-source LeetCode tracker (leetcode-cli, leetcoder, multiple Chrome extensions). Returns the platform\'s authoritative difficulty + questionFrontendId + isPaidOnly without auth or API key. The endpoint changing would break a large ecosystem of tools, so failure risk is low; we still wrap in try/catch and fail-soft.',
+        technicalNotes: 'No new npm dependencies — Node 20 native `fetch` + `AbortSignal.timeout` handles the call. Failure mode: LeetCode endpoint unreachable → log warning, do not block problem creation. Cron runs alongside teaching.scheduler.js. titleSlug extracted from sourceUrl with a single regex. Difficulty mapping: Easy/Medium/Hard → EASY/MEDIUM/HARD. Estimated cost: ~half day for Phase 1+2 (service + creation + button + backfill), additional half day for Phase 3 cron + admin queue.',
+    },
+
+    {
         id: 'staging-environment-and-rollback',
         phase: 'LATER',
         theme: 'Engineering Hygiene',
