@@ -847,6 +847,28 @@ export async function updateSolution(req, res) {
           problemVersion: true,
         },
       });
+      // ── Defensive: silent-strip detector ─────────────────
+      // Symptom we hit during dev: client sends `bruteForceMeta` as a JSON
+      // object, save returns 200, but the DB row has it as null. Most
+      // common cause is a stale Prisma client in the running Node process
+      // (someone ran `prisma generate` / `prisma migrate dev` while the
+      // server was running, and Node's module cache holds the OLD client
+      // which silently strips unknown fields from update() args).
+      // The fix is a hard server restart. This warning makes the failure
+      // mode loud instead of silent.
+      const flagSilentStrip = (field) => {
+        const sent = data[field];
+        if (sent && typeof sent === "object" && fresh[field] == null) {
+          console.warn(
+            `[solutions:silent-strip] ${field} was sent as an object but persisted as null on solutionId=${solutionId}. ` +
+              `Likely cause: stale Prisma client in the running dev server. ` +
+              `Fix: kill the dev server (Ctrl+C) and run \`npm run dev\` again.`,
+          );
+        }
+      };
+      flagSilentStrip("bruteForceMeta");
+      flagSilentStrip("alternativeMeta");
+
       const lastAttempt = await tx.solutionAttempt.findFirst({
         where: { solutionId },
         orderBy: { attemptNumber: "desc" },
