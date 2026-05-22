@@ -2309,6 +2309,7 @@ enum TopicCategory {
   BEHAVIORAL
   HR
   CS_FUNDAMENTALS
+  AI_ENGINEERING
 }
 
 /// Lifecycle of a user's enrollment in a Topic. ABANDONED is set by the
