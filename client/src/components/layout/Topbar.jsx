@@ -3,6 +3,7 @@ import { useLocation, useNavigate, NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import useAuthStore from '@store/useAuthStore'
 import { useUIStore } from '@store/useUIStore'
+import { useLearnAiPaletteStore } from '@store/useLearnAiPaletteStore'
 import { Avatar } from '@components/ui/Avatar'
 import { Tooltip } from '@components/ui/Tooltip'
 import { cn } from '@utils/cn'
@@ -342,6 +343,11 @@ export function Topbar() {
                     </button>
                 </Tooltip>
 
+                {/* Learn-AI Brain — gated by VITE_LEARN_AI_ENABLED + runtime server
+                    disabled flag (set by useLearnAiCall on 503). Keyboard shortcut
+                    ⌘⇧K is registered inside the palette itself. */}
+                <LearnAiTrigger />
+
                 {/* Theme toggle */}
                 <Tooltip content={theme === 'dark' ? 'Light mode' : 'Dark mode'} side="bottom">
                     <button
@@ -414,5 +420,39 @@ export function Topbar() {
 
             </div>
         </header>
+    )
+}
+
+// ── Learn-AI Brain trigger ────────────────────────────────────────────
+// Co-located so the Topbar's main export stays tidy. Reads two pieces of
+// state: a build-time env flag (so the bundle never ships the button when
+// the feature is off) and a runtime "server says it's off" flag (set by
+// useLearnAiCall after the first 503). Hidden if either fails.
+function LearnAiTrigger() {
+    const buildTimeEnabled = import.meta.env.VITE_LEARN_AI_ENABLED === 'true'
+    const serverDisabled = useLearnAiPaletteStore((s) => s.serverDisabled)
+    const open = useLearnAiPaletteStore((s) => s.open)
+
+    if (!buildTimeEnabled || serverDisabled) return null
+
+    return (
+        <Tooltip content="Learn-AI Brain  ⌘⇧K" side="bottom">
+            <button
+                onClick={open}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl
+                       bg-surface-2 border border-border-default
+                       text-text-tertiary hover:text-text-primary
+                       hover:border-border-strong hover:bg-surface-3
+                       transition-all text-xs font-medium"
+            >
+                <span aria-hidden>🧠</span>
+                <span className="hidden md:inline">Brain</span>
+                <kbd className="hidden md:inline-block text-[10px] bg-surface-3
+                            border border-border-strong rounded px-1.5 py-0.5
+                            font-mono text-text-disabled">
+                    ⌘⇧K
+                </kbd>
+            </button>
+        </Tooltip>
     )
 }

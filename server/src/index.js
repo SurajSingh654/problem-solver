@@ -65,9 +65,17 @@ import notesRoutes from "./routes/notes.routes.js";
 import flashcardsRoutes from "./routes/flashcards.routes.js";
 import topicsRoutes from "./routes/topics.routes.js";
 import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
+import learnAiRoutes from "./routes/learnAi.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
-import { FEATURE_TEACHING_SESSIONS, FEATURE_NOTES_ENABLED } from "./config/env.js";
+import {
+  FEATURE_TEACHING_SESSIONS,
+  FEATURE_NOTES_ENABLED,
+  LEARN_AI_ENABLED,
+} from "./config/env.js";
+
+// ── Learn-AI MCP shutdown hook ───────────────────────────────
+import { closeMcpClient } from "./services/mcp.service.js";
 
 // ============================================================================
 // APP SETUP
@@ -243,6 +251,14 @@ function mountRoutes(prefix) {
   // ── Topic admin (SuperAdmin) — authoring + publishing ──
   // Sees ALL rows regardless of status. Publish-time gate for content.
   app.use(`${prefix}/admin/learning`, apiLimiter, topicsAdminRoutes);
+
+  // ── Learn-AI Brain (external Python MCP server, gated by feature flag) ──
+  // Disabled by default; when on, /learn-ai/* proxies the 7 repo-brain tools.
+  // The MCP subprocess is lazy-spawned on the first call — no startup cost
+  // when no one queries it.
+  if (LEARN_AI_ENABLED) {
+    app.use(`${prefix}/learn-ai`, aiLimiter, learnAiRoutes);
+  }
 }
 
 // Canonical versioned routes
@@ -330,6 +346,11 @@ async function shutdown(signal) {
     // tear down the HTTP server underneath them.
     await new Promise((r) => setTimeout(r, 1500));
   }
+  // Tear down the MCP subprocess (if any) before HTTP close so its stdio
+  // pipes are released cleanly; no-op if the brain was never invoked.
+  await closeMcpClient().catch((err) =>
+    console.warn("   MCP cleanup failed:", err?.message || err),
+  );
   server.close(async () => {
     console.log("   HTTP server closed.");
     await prisma.$disconnect();
