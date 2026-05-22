@@ -4,7 +4,6 @@ import { motion } from 'framer-motion'
 import Sidebar from './Sidebar'
 import { Topbar } from './Topbar'
 import { CommandPalette } from '@components/ui/CommandPalette'
-import { LearnAiPalette } from '@components/features/learnAi/LearnAiPalette'
 import { useUIStore } from '@store/useUIStore'
 import useAuthStore from '@store/useAuthStore'
 import { useMe } from '@hooks/useAuth'
@@ -107,10 +106,6 @@ export function AppShell() {
 
             {/* Global overlays */}
             <CommandPalette />
-            {/* Learn-AI palette mounts unconditionally; visibility is governed
-                by VITE_LEARN_AI_ENABLED + the runtime server-disabled flag.
-                Cmd+Shift+K toggles open. */}
-            <LearnAiPalette />
 
         </div>
     )

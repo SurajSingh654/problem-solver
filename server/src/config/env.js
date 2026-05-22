@@ -131,16 +131,3 @@ export const FEATURE_NOTES_ENABLED = optional('FEATURE_NOTES_ENABLED', 'false') 
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null
-
-// ── Learn-AI Brain (external Python MCP server) ─────────────────────────────
-// When enabled, the server spawns `learn-ai mcp-repo-brain` (Python, via uv)
-// as a stdio subprocess on first /api/v1/learn-ai/* call and proxies the 7
-// MCP tools as REST endpoints. Mirror with VITE_LEARN_AI_ENABLED in the
-// client .env AND declare ARG/ENV in client/Dockerfile.
-export const LEARN_AI_ENABLED = optional('LEARN_AI_ENABLED', 'false') === 'true'
-export const LEARN_AI_REPO_PATH = optional('LEARN_AI_REPO_PATH', '')
-// Bounded timeouts so a stuck Python subprocess can never hold a Node worker
-// indefinitely. Spawn covers cold-start indexing (load BM25 + Chroma + symbols);
-// call covers a single tool invocation. Both surface as 504 to the client.
-export const LEARN_AI_SPAWN_TIMEOUT_MS = parseInt(optional('LEARN_AI_SPAWN_TIMEOUT_MS', '15000'), 10)
-export const LEARN_AI_CALL_TIMEOUT_MS = parseInt(optional('LEARN_AI_CALL_TIMEOUT_MS', '20000'), 10)
