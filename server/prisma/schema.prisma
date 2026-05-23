@@ -2345,6 +2345,7 @@ model Topic {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  reviewedAt DateTime?
   publishedAt DateTime?
 
   @@index([status, category])
