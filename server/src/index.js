@@ -190,7 +190,9 @@ function mountRoutes(prefix) {
   app.use(`${prefix}/auth`, authRoutes);
 
   // ── Platform (SuperAdmin only — no team context) ─────────
-  app.use(`${prefix}/platform`, aiLimiter, platformRoutes);
+  // apiLimiter for read-only diagnostics; the one OpenAI-calling endpoint
+  // (POST /platform/health/analyze) layers aiLimiter inside the router.
+  app.use(`${prefix}/platform`, apiLimiter, platformRoutes);
 
   // ── Teams ────────────────────────────────────────────────
   app.use(`${prefix}/teams`, apiLimiter, teamRoutes);

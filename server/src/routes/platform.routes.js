@@ -4,6 +4,7 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requireSuperAdmin } from "../middleware/superAdmin.middleware.js";
+import { aiLimiter } from "../middleware/rateLimit.middleware.js";
 import {
   getPlatformHealth,
   analyzePlatformHealth,
@@ -18,7 +19,10 @@ router.use(authenticate);
 router.use(requireSuperAdmin);
 
 router.get("/health", getPlatformHealth);
-router.post("/health/analyze", analyzePlatformHealth);
+// AI quota only on the OpenAI-calling endpoint. Read-only siblings stay on
+// apiLimiter (mounted in index.js) so browsing diagnostics doesn't burn
+// the AI bucket.
+router.post("/health/analyze", aiLimiter, analyzePlatformHealth);
 router.get("/health/analysis", getLatestAnalysis);
 
 // Verdict audit viewer — paginated VerdictLog rows + 7-day fallback rate.

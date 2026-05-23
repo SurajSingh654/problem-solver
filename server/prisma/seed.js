@@ -14,14 +14,59 @@ import { seedAIEngineering } from './seeds/topic-ai-engineering.js'
 
 const prisma = new PrismaClient()
 
+async function ensurePersonalTeam(user) {
+  // Mirrors the personal-team creation in auth.controller.js individual-mode
+  // path. Idempotent: if the user already has personalTeamId, no-op.
+  if (user.personalTeamId) return
+
+  await prisma.$transaction(async (tx) => {
+    const personalTeam = await tx.team.create({
+      data: {
+        name: `${user.name}'s Space`,
+        description: 'Personal practice space',
+        isPersonal: true,
+        status: 'ACTIVE',
+        createdById: user.id,
+        maxMembers: 1,
+        aiProblemsEnabled: true,
+      },
+    })
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        personalTeamId: personalTeam.id,
+        currentTeamId: personalTeam.id,
+        teamRole: 'TEAM_ADMIN',
+      },
+    })
+    await tx.teamMembership.create({
+      data: {
+        userId: user.id,
+        teamId: personalTeam.id,
+        role: 'TEAM_ADMIN',
+        isActive: true,
+      },
+    })
+  })
+  console.log(`   ✓ Personal team attached to ${user.email}`)
+}
+
 async function ensureSuperAdmin() {
   const email = process.env.SUPER_ADMIN_EMAIL || 'admin@probsolver.com'
   const password = process.env.SUPER_ADMIN_PASSWORD || 'Admin@123456'
   const name = process.env.SUPER_ADMIN_NAME || 'Platform Admin'
 
-  const existing = await prisma.user.findUnique({ where: { email } })
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, name: true, email: true, personalTeamId: true },
+  })
   if (existing) {
-    console.log(`✅ SUPER_ADMIN already exists: ${email}\n`)
+    console.log(`✅ SUPER_ADMIN already exists: ${email}`)
+    // Self-heal admins seeded before the personal-team logic was added.
+    // Without a team, requireTeamContext rejects every team-scoped endpoint
+    // (including /stats/showcase) with SUPER_ADMIN_NEEDS_TEAM_OVERRIDE.
+    await ensurePersonalTeam(existing)
+    console.log('')
     return
   }
 
@@ -44,7 +89,10 @@ async function ensureSuperAdmin() {
   console.log(`   Password: ${password}`)
   console.log(`   ID:       ${admin.id}`)
   console.log(`   Role:     ${admin.globalRole}`)
-  console.log('⚠️  Change the password after first login!\n')
+  console.log('⚠️  Change the password after first login!')
+
+  await ensurePersonalTeam(admin)
+  console.log('')
 }
 
 async function ensurePgVector() {
