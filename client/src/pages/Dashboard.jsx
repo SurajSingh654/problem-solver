@@ -392,6 +392,9 @@ export default function Dashboard() {
   // Pattern coverage. Default `total` falls back to PATTERNS.length so a
   // missing-server-data state doesn't show a stale "/16".
   const patternCoverage = report?.analytics?.patternCoverage || { used: 0, total: PATTERNS.length, missing: [] }
+  // Coding Pattern Mastery v2 — null when flag off. When present, the widget
+  // surfaces FAANG-core SOLID+ as a stronger headline signal.
+  const patternMasteryCounts = report?.analytics?.patternMastery?.counts ?? null
 
   if (isLoading) {
     return (
@@ -894,6 +897,20 @@ export default function Dashboard() {
             </span>
             <span className="text-base font-bold text-text-disabled">/ {patternCoverage.total}</span>
           </div>
+          {patternMasteryCounts && (
+            <p className="text-[10px] text-text-tertiary mb-2 -mt-1">
+              <span className="font-mono font-bold text-success-fg">
+                {patternMasteryCounts.coreSolidOrAbove}
+              </span>
+              <span className="text-text-disabled">/{patternMasteryCounts.totalCore}</span>
+              <span className="ml-1">FAANG-core at Solid+</span>
+              {patternMasteryCounts.owned > 0 && (
+                <span className="ml-2 text-success-fg font-semibold">
+                  · {patternMasteryCounts.owned} Owned
+                </span>
+              )}
+            </p>
+          )}
           <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden mb-3">
             <motion.div
               initial={{ width: 0 }}

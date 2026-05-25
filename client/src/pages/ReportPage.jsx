@@ -12,6 +12,13 @@ import { RadarChart } from '@components/charts/RadarChart'
 import { cn } from '@utils/cn'
 import { useWeeklyPlan } from '@hooks/useAI'
 import { PATTERNS } from '@utils/constants'
+import { PatternMasteryCard } from '@components/report/PatternMasteryCard'
+
+// Phase 5 flag — when on AND server returns analytics.patternMastery,
+// PatternMasteryCard replaces the legacy PatternCoverageCard. Three-place
+// declaration per CLAUDE.md: Railway env, client/Dockerfile ARG/ENV, here.
+const PATTERN_MASTERY_V2_ENABLED =
+    import.meta.env.VITE_FEATURE_PATTERN_MASTERY_V2 === 'true'
 
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
@@ -1535,8 +1542,14 @@ export default function ReportPage() {
 
       <DimensionCards dimByKey={dimByKey} communicationFromProxy={report?.communicationFromProxy} />
 
-      {/* ── Section 6: Pattern Coverage ─────────────────── */}
-      <PatternCoverageCard analytics={analytics} />
+      {/* ── Section 6: Pattern Coverage / Mastery ────────
+          Mastery v2 supersedes the legacy "X of 25" card when both the
+          flag is on AND the server returned patternMastery. Otherwise
+          fall through to PatternCoverageCard so flag-off users see no
+          regression. */}
+      {PATTERN_MASTERY_V2_ENABLED && analytics?.patternMastery
+        ? <PatternMasteryCard patternMastery={analytics.patternMastery} />
+        : <PatternCoverageCard analytics={analytics} />}
 
       {/* ── Section 7: Activity Summary + Velocity ──────── */}
       <ActivitySummary report={report} analytics={analytics} />
