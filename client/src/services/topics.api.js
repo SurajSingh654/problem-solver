@@ -14,4 +14,7 @@ export const topicsApi = {
         api.post(`/topics/${slug}/enroll`, { preferences }),
     updateEnrollment: (slug, data) =>
         api.patch(`/topics/${slug}/enrollment`, data),
+    getCalibration: (slug) => api.get(`/topics/${slug}/calibration`),
+    submitCalibration: (slug, responses) =>
+        api.post(`/topics/${slug}/calibration/submit`, { responses }),
 }

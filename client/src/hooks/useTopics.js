@@ -8,6 +8,7 @@ const KEYS = {
     list: ["topics"],
     detail: (slug) => ["topics", slug],
     state: (slug) => ["topics", slug, "state"],
+    calibration: (slug) => ["topics", slug, "calibration"],
 };
 
 export function useTopics() {
@@ -51,6 +52,31 @@ export function useUpdateEnrollment() {
         onSuccess: (_data, { slug }) => {
             qc.invalidateQueries({ queryKey: KEYS.list });
             qc.invalidateQueries({ queryKey: KEYS.state(slug) });
+        },
+    });
+}
+
+export function useTopicCalibration(slug) {
+    return useQuery({
+        queryKey: KEYS.calibration(slug),
+        queryFn: async () => (await topicsApi.getCalibration(slug)).data.data,
+        enabled: !!slug,
+        // Calibration questions don't change in-session; cache aggressively.
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+export function useSubmitCalibration(slug) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (responses) => topicsApi.submitCalibration(slug, responses),
+        onSuccess: () => {
+            // Mentor next-action depends on calibration; invalidate state.
+            // Calibration query also refetches so the existing-result banner
+            // updates if the user re-takes from the same session.
+            qc.invalidateQueries({ queryKey: KEYS.list });
+            qc.invalidateQueries({ queryKey: KEYS.state(slug) });
+            qc.invalidateQueries({ queryKey: KEYS.calibration(slug) });
         },
     });
 }

@@ -101,7 +101,7 @@ export async function planNextAction(userId, topicId) {
     return {
       stage: "CALIBRATION",
       concept: null,
-      surface: { route: `/learn/${await topicSlugFor(topicId)}`, params: {} },
+      surface: { route: `/learn/${await topicSlugFor(topicId)}/calibration`, params: {} },
       minutes: STAGE_MINUTES.CALIBRATION,
       reason:
         "Day-1 calibration quiz required before the mentor can personalize the path.",

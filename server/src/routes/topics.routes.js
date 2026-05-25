@@ -15,6 +15,8 @@ import {
   enrollInTopic,
   getTopicState,
   updateEnrollment,
+  getTopicCalibration,
+  submitTopicCalibration,
 } from "../controllers/topics.controller.js";
 
 const router = Router();
@@ -26,5 +28,7 @@ router.get("/:slug", getTopic);
 router.get("/:slug/state", getTopicState);
 router.post("/:slug/enroll", enrollInTopic);
 router.patch("/:slug/enrollment", updateEnrollment);
+router.get("/:slug/calibration", getTopicCalibration);
+router.post("/:slug/calibration/submit", submitTopicCalibration);
 
 export default router;

@@ -21,6 +21,11 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { planNextAction, detectStuck } from "../services/mentor.service.js";
+import {
+  getCalibrationForTopic,
+  scoreCalibration,
+  CalibrationError,
+} from "../services/calibration.service.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -351,5 +356,134 @@ export async function updateEnrollment(req, res) {
   } catch (err) {
     console.error("updateEnrollment:", err);
     return error(res, "Failed to update enrollment.", 500);
+  }
+}
+
+// ── Calibration ──────────────────────────────────────────────────────
+
+/**
+ * GET /topics/:slug/calibration
+ *
+ * Returns the wire-safe question list (no `correct`, no `rationale`) plus
+ * the user's existing calibration result if they have one. Requires the
+ * user to be enrolled — gating is at the controller layer because mentor
+ * orchestration only makes sense for enrolled users.
+ */
+export async function getTopicCalibration(req, res) {
+  try {
+    const userId = req.user.id;
+    const { slug } = req.params;
+
+    const topic = await prisma.topic.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!topic) return error(res, "Topic not found.", 404);
+
+    const enrollment = await prisma.topicEnrollment.findUnique({
+      where: { userId_topicId: { userId, topicId: topic.id } },
+      select: { calibration: true, status: true },
+    });
+    if (!enrollment) {
+      return error(res, "You must enroll before taking the calibration.", 404);
+    }
+
+    let bank;
+    try {
+      bank = getCalibrationForTopic(slug);
+    } catch (err) {
+      if (err instanceof CalibrationError && err.code === "BANK_NOT_FOUND") {
+        return error(res, "No calibration is available for this topic yet.", 404);
+      }
+      throw err;
+    }
+
+    return success(res, {
+      questions: bank.questions,
+      existing: enrollment.calibration ?? null,
+    });
+  } catch (err) {
+    console.error("getTopicCalibration:", err);
+    return error(res, "Failed to load calibration.", 500);
+  }
+}
+
+/**
+ * POST /topics/:slug/calibration/submit
+ *
+ * Body: { responses: Array<{ questionId: string, answer: 'A'|'B'|'C'|'D' }> }
+ *
+ * Scores server-side, persists to TopicEnrollment.calibration, returns
+ * score + per-concept breakdown + per-question rationales (released only
+ * AFTER submit). Also returns the recomputed nextAction so the result
+ * screen can deep-link to INTAKE without an extra round-trip.
+ */
+export async function submitTopicCalibration(req, res) {
+  try {
+    const userId = req.user.id;
+    const { slug } = req.params;
+    const { responses } = req.body ?? {};
+
+    const topic = await prisma.topic.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!topic) return error(res, "Topic not found.", 404);
+
+    const enrollment = await prisma.topicEnrollment.findUnique({
+      where: { userId_topicId: { userId, topicId: topic.id } },
+      select: { id: true },
+    });
+    if (!enrollment) {
+      return error(res, "You must enroll before submitting calibration.", 404);
+    }
+
+    let result;
+    try {
+      result = scoreCalibration(slug, responses);
+    } catch (err) {
+      if (err instanceof CalibrationError) {
+        const status = err.code === "BANK_NOT_FOUND" ? 404 : 400;
+        return res.status(status).json({
+          success: false,
+          error: { message: err.message, code: err.code, details: err.details },
+        });
+      }
+      throw err;
+    }
+
+    const calibrationPayload = {
+      score: result.score,
+      total: result.total,
+      perConceptCorrectness: result.perConceptCorrectness,
+      perQuestionCorrectness: result.perQuestionCorrectness,
+      takenAt: new Date().toISOString(),
+    };
+
+    await prisma.topicEnrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        calibration: calibrationPayload,
+        lastActiveAt: new Date(),
+      },
+    });
+
+    // Recompute next action so the result screen can deep-link.
+    let nextAction = null;
+    try {
+      nextAction = await planNextAction(userId, topic.id);
+    } catch (err) {
+      // Non-fatal — frontend can refetch /state if this fails.
+      console.error("submitTopicCalibration: planNextAction failed:", err);
+    }
+
+    return success(res, {
+      ...calibrationPayload,
+      rationales: result.rationales,
+      nextAction,
+    });
+  } catch (err) {
+    console.error("submitTopicCalibration:", err);
+    return error(res, "Failed to submit calibration.", 500);
   }
 }
