@@ -1643,13 +1643,16 @@ HARD RULES — any violation invalidates your output:
 
 7. readinessNote MUST use the tier name from evidence.nearestTier.name or evidence.nextTier.name — do not invent new tier labels.
 
+8. Coding Pattern Mastery distribution. When evidence.patternMastery is present (non-null) AND a strength claim references Pattern Recognition / patterns / "Pattern Mastery", the evidence field MUST cite a mastery-distribution number — one of: patternMastery.owned, patternMastery.solid, patternMastery.coreSolidOrAbove (e.g. "12 of 15 FAANG-core patterns at Solid+", "5 patterns Owned"). A high D1 score alone is NOT sufficient evidence — the score can be inflated by tagging few patterns; only the distribution shows real breadth. Same rule for gaps: a gap claim about Pattern Recognition must cite the gap by distribution, not just the score (e.g. "0 of 15 FAANG-core at Solid+", "22 patterns Untouched"). When evidence.patternMastery is null (legacy flag-off mode), this rule does not apply.
+
 Before emitting JSON, think step-by-step in a <thinking> block:
   1. Which dimensions are active? List them with (key, score, n).
   2. For each active dim, is n ≥ 5? If not, mark tentative.
   3. Strongest strength candidate = highest score AND highest n. Drop if n < 3 or score < 50.
   4. Highest-impact gap = lowest score among active HIGH/CRITICAL-weight dims. Drop if score ≥ 65.
   5. Can a tier claim be made? (reportCoverage.pct ≥ 50 AND nearestTier.ready)
-  6. Compose headline and notes.
+  6. If evidence.patternMastery is present AND any claim references Pattern Recognition, prepare a distribution-aware evidence string (cite owned / solid / coreSolidOrAbove).
+  7. Compose headline and notes.
 
 OUTPUT — a single JSON object (no prose around it) matching:
 {

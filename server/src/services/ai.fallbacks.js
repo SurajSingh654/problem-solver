@@ -78,19 +78,48 @@ export function buildFallbackVerdict(evidence) {
     .filter((d) => d.score != null && d.score < 65)
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
 
+  const pm = evidence.patternMastery; // null when v2 flag is off
+
+  // Helper — build evidence string for a Pattern Recognition claim under v2.
+  // Satisfies validator Rule 8: cite mastery distribution, not just score.
+  const patternEvidenceWithMastery = (dim) => {
+    if (!pm) return `score=${dim.score} over n=${dim.n} data points`;
+    return `score=${dim.score} with ${pm.coreSolidOrAbove} of ${pm.totalCore} FAANG-core patterns at Solid+ and ${pm.owned} Owned`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
+    const isPattern = topDim.key === "patternRecognition";
     strengths.push({
       claim: `${prettyDimName(topDim.key)} is your leading dimension`,
-      evidence: `score=${topDim.score} over n=${topDim.n} data points`,
+      evidence: isPattern
+        ? patternEvidenceWithMastery(topDim)
+        : `score=${topDim.score} over n=${topDim.n} data points`,
       confidence: topDim.n >= 5 ? "high" : "tentative",
     });
   }
   const gapsOut = [];
-  if (weakDim) {
+
+  // When v2 mastery is present AND core coverage is critically low, surface
+  // it as the priority gap — the score-based weakDim path can miss this
+  // entirely (e.g. D1=84 from 3 patterns, weakDim=Communication at 53,
+  // distribution gap goes unmentioned).
+  if (pm && pm.coreSolidOrAbove < 5) {
+    gapsOut.push({
+      claim: "Limited core-pattern coverage",
+      evidence: `${pm.coreSolidOrAbove} of ${pm.totalCore} FAANG-core patterns at Solid+, ${pm.untouched} patterns Untouched`,
+      action:
+        "Pick 2 untouched FAANG-core patterns and solve a Medium problem in each — under cold conditions, no peeking at the approach.",
+    });
+  }
+
+  if (weakDim && gapsOut.length < 2) {
+    const isPatternWeak = weakDim.key === "patternRecognition";
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,
-      evidence: `score=${weakDim.score} over n=${weakDim.n} data points`,
+      evidence: isPatternWeak
+        ? patternEvidenceWithMastery(weakDim)
+        : `score=${weakDim.score} over n=${weakDim.n} data points`,
       action: `Focus practice sessions on ${prettyDimName(
         weakDim.key,
       ).toLowerCase()} over the next week`,

@@ -282,6 +282,122 @@ describe('validateVerdict — rule-by-rule rejections', () => {
     })
 })
 
+// ── validateVerdict — Rule 8 (Pattern Mastery distribution awareness) ──
+//
+// Active only when evidence.patternMastery is non-null (Coding Pattern
+// Mastery v2 flag on). Forces any Pattern Recognition claim to cite a
+// distribution number (owned/solid/coreSolidOrAbove) — not just the score.
+//
+// The score-only path is exactly the "85 from 3 patterns" failure mode
+// the v2 redesign addresses; if the verdict prose can hide that, the
+// improvement is invisible to users.
+describe('validateVerdict — Rule 8 (Pattern Mastery distribution)', () => {
+    const FULL_EVIDENCE_WITH_MASTERY = {
+        ...FULL_EVIDENCE,
+        patternMastery: {
+            owned: 5, solid: 4, working: 3, touched: 2, untouched: 11,
+            coreSolidOrAbove: 12, coreOwned: 5, totalCore: 15,
+        },
+    }
+
+    it('accepts a Pattern Recognition strength claim that cites mastery distribution', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition shows real breadth',
+                    evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+ and 5 Owned',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [
+                { claim: 'Pressure performance trails the rest', evidence: 'score=66 over n=5 sessions', action: 'Run more timed mock sessions' },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness; FAANG is 9 points away.',
+            dataQualityNote: '6 of 6 dimensions active at 100% coverage.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_MASTERY)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Pattern Recognition strength claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is the strongest signal',
+                    // Score + n only — no distribution. The exact failure
+                    // mode the legacy formula could hide.
+                    evidence: 'score=78 over n=12 data points',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_MASTERY)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-pattern-claim-no-mastery-distribution')
+    })
+
+    it('rejects a Pattern Recognition gap claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Pattern recognition is your weakest dimension',
+                    evidence: 'score=42 over n=4 solutions',
+                    action: 'Practice more patterns',
+                },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_MASTERY)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('gaps[0]-pattern-claim-no-mastery-distribution')
+    })
+
+    it('does NOT trigger Rule 8 when patternMastery is absent (legacy flag-off mode)', () => {
+        // The exact same verdict as the rejection test above passes when
+        // mastery is not in evidence — preserves backward compatibility
+        // for users on flag-off Railway services.
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is the strongest signal',
+                    evidence: 'score=78 over n=12 data points',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 8 when claim is about a different dimension', () => {
+        // Communication claim, no mention of patterns — Rule 8 should not
+        // fire even when patternMastery is in evidence.
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                { claim: 'Communication is well-rounded', evidence: 'score=70 over n=8 ratings', confidence: 'high' },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_MASTERY)
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {
@@ -305,6 +421,55 @@ describe('buildFallbackVerdict', () => {
         const v = buildFallbackVerdict(FULL_EVIDENCE)
         expect(v.headline).toMatch(/Tier 2/i)
         expect(v.readinessNote).toMatch(/FAANG|Tier 2/i)
+    })
+
+    it('fallback output for v2-mastery evidence passes Rule 8 (no self-contradiction)', () => {
+        // Regression guard: the fallback MUST produce evidence strings that
+        // its own validator accepts. If we ever add a Pattern Recognition
+        // strength path that cites only the score, validateVerdict would
+        // reject the fallback — and there's no further fallback.
+        const FULL_WITH_MASTERY = {
+            ...FULL_EVIDENCE,
+            patternMastery: {
+                owned: 5, solid: 4, working: 3, touched: 2, untouched: 11,
+                coreSolidOrAbove: 12, coreOwned: 5, totalCore: 15,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_MASTERY)
+        const r = validateVerdict(v, FULL_WITH_MASTERY)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces a "limited core-pattern coverage" gap when coreSolidOrAbove < 5', () => {
+        // The original-report user fixture: dims at-or-above thresholds,
+        // but mastery distribution is empty. Score-only weakDim path
+        // would miss this — the v2 fallback adds it as the priority gap.
+        const ORIGINAL_REPORT_WITH_MASTERY = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 4, score: 26 }, // post-v2 score
+                { key: 'solutionDepth', status: 'active', n: 4, score: 71 },
+                { key: 'communication', status: 'active', n: 4, score: 53 },
+                { key: 'optimization', status: 'active', n: 4, score: 56 },
+                { key: 'pressurePerformance', status: 'active', n: 4, score: 60 },
+                { key: 'retention', status: 'active', n: 4, score: 93 },
+            ],
+            overall: { score: 50 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: { name: 'Tier 2 Tech', threshold: 65, gap: 15 },
+            patternMastery: {
+                owned: 0, solid: 0, working: 0, touched: 3, untouched: 22,
+                coreSolidOrAbove: 0, coreOwned: 0, totalCore: 15,
+            },
+        }
+        const v = buildFallbackVerdict(ORIGINAL_REPORT_WITH_MASTERY)
+        const hasCoverageGap = v.gaps.some((g) =>
+            /core-pattern coverage|FAANG-core/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasCoverageGap).toBe(true)
+        // And the whole verdict still validates against Rule 8.
+        const r = validateVerdict(v, ORIGINAL_REPORT_WITH_MASTERY)
+        expect(r.valid).toBe(true)
     })
 })
 

@@ -198,6 +198,47 @@ export function validateVerdict(verdict, evidence) {
     }
   }
 
+  // Rule 8 — Pattern Mastery distribution awareness.
+  //
+  // When evidence.patternMastery is present (Coding Pattern Mastery v2
+  // flag is on), any claim referencing Pattern Recognition MUST cite the
+  // mastery distribution, not just the score. The score can be inflated
+  // by tagging a few patterns repeatedly; only the distribution
+  // (owned / solid / coreSolidOrAbove) shows real breadth.
+  //
+  // Distribution detection uses word-boundary regexes so "core" doesn't
+  // false-match inside "score" — that bug would let "score=78" pass.
+  if (evidence.patternMastery) {
+    const PATTERN_TERMS = KEY_LABELS.patternrecognition;
+    const DISTRIBUTION_PATTERNS = [
+      /\bowned\b/i,
+      /\bsolid\b/i,
+      /\bcore\b/i,                 // word-boundary: matches "FAANG-core", not "score"
+      /\buntouched\b/i,
+      /\btouched\b/i,
+      /\bworking\b/i,
+      /\bmastery\b/i,
+      /\d+\s*\/\s*15\b/,           // "12/15"
+      /\bof\s+15\b/i,              // "12 of 15"
+      /\d+\s*\/\s*25\b/,           // "3/25"
+      /\bof\s+25\b/i,              // "3 of 25"
+    ];
+    const checkDistribution = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const haystack = `${item.claim ?? ""} ${item.evidence ?? ""}`.toLowerCase();
+      const mentionsPattern = PATTERN_TERMS.some((t) => haystack.includes(t));
+      if (!mentionsPattern) return;
+      const citesDistribution = DISTRIBUTION_PATTERNS.some((rx) =>
+        rx.test(haystack),
+      );
+      if (!citesDistribution) {
+        violations.push(`${label}-pattern-claim-no-mastery-distribution`);
+      }
+    };
+    strengths.forEach((s, i) => checkDistribution(s, `strengths[${i}]`));
+    gaps.forEach((g, i) => checkDistribution(g, `gaps[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 

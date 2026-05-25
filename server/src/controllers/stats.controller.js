@@ -2454,6 +2454,25 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Coding Pattern Mastery v2 (when flag is on) — surface only the counts,
+  // not the full matrix. Matrix is too large for the prompt and irrelevant
+  // to verdict reasoning; counts give the LLM the breadth/depth distribution
+  // it needs to satisfy Rule 8 (no D1 strength claim without referencing
+  // mastery distribution).
+  const masteryCounts = report.analytics?.patternMastery?.counts;
+  const patternMastery = masteryCounts
+    ? {
+        owned: masteryCounts.owned,
+        solid: masteryCounts.solid,
+        working: masteryCounts.working,
+        touched: masteryCounts.touched,
+        untouched: masteryCounts.untouched,
+        coreSolidOrAbove: masteryCounts.coreSolidOrAbove,
+        coreOwned: masteryCounts.coreOwned,
+        totalCore: masteryCounts.totalCore,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -2461,6 +2480,7 @@ function buildVerdictEvidence(report) {
     reportCoverage: report.reportCoverage,
     nearestTier,
     nextTier,
+    patternMastery,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,
