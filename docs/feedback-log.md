@@ -36,11 +36,11 @@ When a new export arrives (e.g. `probsolver-feedback-YYYY-MM-DDTHH-MM.md`):
 
 | #   | Title                               | Type | Severity   | Status        | Feedback ID                  | Resolution                                                  |
 | --- | ----------------------------------- | ---- | ---------- | ------------- | ---------------------------- | ----------------------------------------------------------- |
-| 1   | Problems review not working as expected | 🐛 | `CRITICAL` | `IN PROGRESS` | `cmpl5lefk0006bvxu3gppm9ph`  | Building structured fields + AI grading + calibration nudge |
+| 1   | Problems review not working as expected | 🐛 | `CRITICAL` | `RESOLVED`    | `cmpl5lefk0006bvxu3gppm9ph`  | Commit [`dac9e19`](#1--problems-review-not-working-as-expected) |
 | 2   | Unable to review past quizzes       | 🐛   | `CRITICAL` | `RESOLVED`    | `cmpl0q6n0001c1q9w58rt1ey1`  | Commit [`ac5e6f6`](#2--unable-to-review-past-quizzes)       |
 | 3   | Time complexity hint per problem    | ❓   | `LOW`      | `PLANNED`     | `cmpc65upk000d45v2b6xz1gi4`  | Roadmap [`problem-optimal-complexity-fields`](#3--time-complexity-hints-on-coding-problems) |
 
-**Counts:** 1 resolved · 1 in progress · 1 planned · 0 open · 0 won't fix
+**Counts:** 2 resolved · 1 planned · 0 in progress · 0 open · 0 won't fix
 **Last updated:** 2026-05-25 (export `probsolver-feedback-2026-05-25T12-07.md`)
 
 ---
@@ -54,9 +54,10 @@ When a new export arrives (e.g. `probsolver-feedback-YYYY-MM-DDTHH-MM.md`):
 | **Feedback ID**  | `cmpl5lefk0006bvxu3gppm9ph`                               |
 | **Type**         | 🐛 BUG                                                    |
 | **Severity**     | `CRITICAL`                                                |
-| **Status**       | `IN PROGRESS` · started 2026-05-25                        |
+| **Status**       | `RESOLVED` · shipped 2026-05-25                           |
 | **Submitter**    | Sooraj Singh (surajsinghj1654@gmail.com) · Binary Thinkers |
 | **Reported**     | 2026-05-25                                                |
+| **Resolved**     | 2026-05-25                                                |
 | **Affected area**| Review Queue                                              |
 
 #### Original report
@@ -85,19 +86,19 @@ Three distinct bugs sharing the same modal (`client/src/pages/ReviewQueuePage.js
 
 The AI infrastructure to fix #2 and #3 already exists (`useReviewHints` at `client/src/hooks/useAI.js:58` calls `POST /ai/review-hints/:solutionId` for follow-up questions); same shape extends to grading.
 
-#### Resolution plan
+#### Resolution
 
-`IN PROGRESS` — building three coupled fixes in one slice:
+Shipped in commit `dac9e19` — *Fix recall review: structured fields + AI semantic grading + calibration nudge*. Three coupled changes:
 
-1. **Structured 3-field recall input** — replace the single textarea with Pattern (line input), Key Insight (textarea), Complexity (line input with format hint). Persists structured shape so AI can grade per-field.
-2. **AI grading endpoint** `POST /api/v1/ai/review-grade/:solutionId` — takes structured recall, returns `{ pattern: {match, feedback}, keyInsight: {match, feedback}, complexity: {match, feedback}, overall, suggestedConfidence }`. Uses validate→fallback pattern. Replaces word-diff with three semantic match cards.
-3. **Calibration nudge in Rate phase** — show AI-suggested confidence next to user's selector; soft advisory if gap ≥ 2.
+1. **Structured 3-field recall input** — `client/src/pages/ReviewQueuePage.jsx` `ReviewModal`. Replaced the single free-form textarea with Pattern (line input, placeholder *"e.g. HashMap, Two Pointers, Sliding Window"*), Key Insight (textarea, placeholder *"In one sentence — what's the 'aha'?"*), and Complexity (line input with format hint *"Time: O(?), Space: O(?)"*). Each field carries clear inline guidance so the user knows what to fill where.
+2. **AI semantic grading endpoint** `POST /api/v1/ai/review-grade/:solutionId` — new `gradeReviewRecall` controller in `server/src/controllers/ai.controller.js`. Takes the structured recall, runs the LLM grader (gpt-4o-mini, temperature 0.2, surface `review-grade`), and returns `{ pattern: {match, feedback}, keyInsight: {match, feedback}, complexity: {match, feedback}, overall, suggestedConfidence, fallback }`. Synonyms count as matches per the system prompt's explicit rules ("HashMap matches Hashing or Hash Table"; "O(n) matches linear time"). Validate→fallback pattern: malformed AI output → deterministic conservative grade with `fallback: true`. AI failures don't 500 the modal — they degrade gracefully. Wire-level test in `server/test/controllers/ai.reviewGrade.test.js` (6 cases: empty rejection, valid, malformed, throws, 404, confidence clamp).
+3. **AI Grade view + calibration nudge** — new `AiGradeView` component in `ReviewQueuePage.jsx` renders per-field ✓ / ◐ / ✗ cards with the AI's feedback. Added as the default tab in the reveal phase (with Side-by-side and Diff retained as fallbacks for users who want the legacy views). In the Rate phase, the user's confidence picker now shows the AI's suggested rating inline; if the gap between user and AI is ≥ 2, a soft *"Calibration check"* advisory surfaces — non-blocking, so users keep agency over the SM-2 input.
 
-Will update this entry to `RESOLVED` with commit hash on landing.
+**Files changed (6):** `server/src/controllers/ai.controller.js` (+~140 LOC for `gradeReviewRecall` + helpers), `server/src/routes/ai.routes.js` (+1 route), `server/test/controllers/ai.reviewGrade.test.js` (new, +160 LOC), `client/src/hooks/useAI.js` (+`useReviewGrade`), `client/src/pages/ReviewQueuePage.jsx` (structured fields, AiGradeView, calibration nudge), `docs/feedback-log.md` (this entry). 278/278 server tests pass; client lint + build clean.
 
-#### Reply-to-user copy *(draft — paste after resolution)*
+#### Reply-to-user copy
 
-> Hi Sooraj — confirmed all three issues. The recall form is now structured (Pattern / Key Insight / Complexity as separate fields with format hints), the comparison uses AI semantic matching instead of word-by-word diff (so "HashMap" and "Array / Hashing" correctly count as a match), and the confidence rating is now paired with an AI-suggested score plus a calibration nudge if the gap is wide. Shipped in commit `<TBD>`. Thank you for the detailed report — your example with HashMap vs Hashing is exactly what convinced us to swap to semantic grading.
+> Hi Sooraj — confirmed all three issues and shipped the fix in `dac9e19`. The recall form is now structured (Pattern / Key Insight / Complexity as separate fields with format hints), the comparison uses AI semantic matching instead of word-by-word diff (so "HashMap" and "Hashing" correctly count as a match), and the confidence rating is now paired with an AI-suggested score plus a calibration nudge if the gap is wide. Your detailed example with HashMap vs Hashing is exactly what convinced us to swap to semantic grading — thank you.
 
 ---
 
