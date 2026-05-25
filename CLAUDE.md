@@ -163,6 +163,16 @@ Three realtime-ish AI-driven experiences, all WebSocket-fronted:
 
 User-scoped (no team filter) markdown notes with optional `linkedEntityType`/`linkedEntityId` to a Problem / Session / Teaching / free-text CUSTOM target. AI surfaces (summarize, autotag, related, flashcards) follow the validate→fallback→few-shot pattern. Embeddings written debounced (5s) by `notes.embedding.js`. Flashcards (manual or AI-extracted) flow into the same review queue alongside Solutions, sharing the SM-2 scheduler. Both gated by `FEATURE_NOTES_ENABLED` (server) + `VITE_FEATURE_NOTES_ENABLED` (client + Dockerfile ARG).
 
+### Readiness verdict + Coding Pattern Mastery
+
+The 6D Intelligence Report (`get6DReport` in `stats.controller.js`) feeds an AI-generated `VerdictLog` cached for 5 minutes per `(userId, teamId, evidenceHash)`. Verdict generation is decoupled from the report endpoint so the report renders immediately while the verdict card loads progressively. Eight hard rules in `ai.validators.js::validateVerdict` are enforced server-side; on any violation `ai.fallbacks.js::buildFallbackVerdict` substitutes a deterministic conservative output (the safe state — no retry).
+
+**Coding Pattern Mastery v2** (`patternMastery.js`) replaces the legacy "Pattern Recognition" formula (gameable: 30 free pts for self-tagging) with a 5-state per-pattern machine: `UNTOUCHED → TOUCHED → WORKING → SOLID → OWNED`. Score is `0.6 × saturating-breadth + 0.4 × depth`, where breadth saturates against the 15-pattern FAANG-core list and the other 10 contribute a small bonus. NULL `solveMethod` on rows created before `SOLVE_METHOD_REQUIRED_AFTER` is treated as COLD-equivalent (legacy permissive); post-deploy NULLs are not. Tier readiness is a **dual gate** in `readinessTiers.js` — overall score AND `masteryRequirements` (`coreSolidOrAbove`, `owned`, `workingOrAbove` per tier) must both pass. Verdict prose enforces Rule 8: any Pattern Recognition claim must cite mastery distribution, not just the score.
+
+**Pattern taxonomy single source of truth** is `server/src/utils/patternTaxonomy.js` — `CANONICAL_PATTERN_LABELS` (25 entries) and `FAANG_CORE_PATTERNS` (15-entry subset). Both have invariant tests in `test/utils/patternTaxonomy.test.js` (counts, subset relation, no greppable `/16` regression in `stats.controller.js`). Client mirror in `client/src/utils/constants.js::PATTERNS` — must stay in lock-step (same labels, same order).
+
+Whole rollout is gated behind `FEATURE_PATTERN_MASTERY_V2` (server) + `VITE_FEATURE_PATTERN_MASTERY_V2` (client + Dockerfile ARG). Flag OFF: legacy formula, no `masteryRequirements` enforcement, legacy `PatternCoverageCard` UI, no Rule 8. Flag ON: v2 score, dual tier gate, `PatternMasteryCard` (per-pattern matrix), Rule 8.
+
 ### Client routing (`client/src/App.jsx`)
 
 Three layered route groups under `BrowserRouter`, all inside a `QueryClientProvider` (staleTime 2m, gcTime 10m, retry 1, no refetch-on-focus):
@@ -201,6 +211,12 @@ Path aliases (`@/`, `@components`, `@pages`, `@hooks`, `@store`, `@services`, `@
 - For any read-modify-write on shared mutable state (SM-2 review submit, future spaced-repetition / leaderboard updates): use an interactive `prisma.$transaction(async tx => ...)` with `SELECT ... FOR UPDATE` as the first step. Postgres at READ COMMITTED otherwise allows the lost-update anomaly under concurrent submissions.
 - For new heavy client pages: `React.lazy` + `<Lazy>` wrapper, and add a `manualChunks` entry in `vite.config.js` if it brings a large dependency.
 - For new `VITE_*` env flags: declare in **three** places — Railway runtime env, `client/Dockerfile` ARG/ENV, and the call site. Runtime Railway env does NOT auto-flow into `vite build`. First diagnostic for "VITE flag isn't working" is grepping the deployed bundle.
+- **For a new coding pattern** (e.g. promoting a frequently-typed custom tag from `[patterns:custom]` log lines): five touchpoints, all in lock-step.
+  1. `server/src/utils/patternTaxonomy.js` → add to `CANONICAL_PATTERN_LABELS`. Decide whether it's FAANG-core; if so, also add to `FAANG_CORE_PATTERNS`.
+  2. `client/src/utils/constants.js` → mirror in `PATTERNS` with same exact label.
+  3. `server/test/utils/patternTaxonomy.test.js` → bump the `expect(CANONICAL_PATTERN_LABELS).toHaveLength(N)` assertion. The greppable `/16` regression test guards against future hardcoded denominators.
+  4. Mastery score implications — adding a non-core pattern barely moves scores (it lives under the small non-core bonus); adding to FAANG-core changes every user's `coreSolidOrAbove` denominator. Reconsider tier `masteryRequirements` thresholds in `readinessTiers.js` if FAANG-core grows past 15.
+  5. Telemetry — search `[patterns:custom]` log lines to confirm users are actually typing this pattern with non-trivial frequency before promoting.
 - **For a new field on any mutation request body**, all five touch points must change together — skipping #3 silently strips the field at the route boundary with no error:
   1. **Prisma migration** — `server/prisma/migrations/.../migration.sql` adds the column.
   2. **`schema.prisma`** — Prisma model field declared (regenerates the client).
