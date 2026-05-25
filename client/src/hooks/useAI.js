@@ -66,6 +66,17 @@ export function useReviewHints() {
   });
 }
 
+// Semantic AI grading of a structured recall attempt against the solution's
+// stored notes. Replaces the legacy word-diff which produced false negatives
+// when synonymous concepts were used (e.g. "HashMap" vs "Hashing").
+// Reported by Sooraj Singh, 2026-05-25 (feedback ID cmpl5lefk0006bvxu3gppm9ph).
+export function useReviewGrade() {
+  return useMutation({
+    mutationFn: ({ solutionId, recall }) =>
+      api.post(`/ai/review-grade/${solutionId}`, { recall }),
+  });
+}
+
 export function useAIStatus() {
   return { data: { enabled: true }, isLoading: false };
 }

@@ -1873,3 +1873,189 @@ Generate 2 questions that will test if they truly remember and understand this p
     return error(res, "Failed to generate review hints.", 500);
   }
 }
+
+// ============================================================================
+// REVIEW GRADE — semantic match of structured recall vs stored notes
+// ============================================================================
+//
+// Why this exists: the legacy word-diff in RecallDiff.jsx returns harshly
+// false negatives when the user uses synonymous concepts ("HashMap" ≈
+// "Hashing"). This endpoint runs an LLM as a semantic grader on three
+// structured fields (pattern, keyInsight, complexity) and surfaces a
+// calibrated suggestedConfidence so the user can self-rate honestly.
+//
+// Reported by Sooraj Singh (Binary Thinkers, 2026-05-25, feedback ID
+// cmpl5lefk0006bvxu3gppm9ph).
+//
+// Validate→fallback pattern: if the LLM returns a malformed shape, the
+// controller emits a deterministic conservative grade so the UI never
+// crashes.
+// ============================================================================
+
+const VALID_MATCH = new Set(["YES", "PARTIAL", "NO"]);
+const VALID_OVERALL = new Set(["pass", "partial", "miss"]);
+
+function stripHtmlServer(html) {
+  if (typeof html !== "string") return "";
+  return html.replace(/<[^>]*>/g, "").trim();
+}
+
+function clampConfidence(n) {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return 3;
+  return Math.max(1, Math.min(5, v));
+}
+
+function validateRecallGrade(parsed) {
+  if (!parsed || typeof parsed !== "object") return null;
+  const fields = ["pattern", "keyInsight", "complexity"];
+  const out = {};
+  for (const f of fields) {
+    const slot = parsed[f];
+    if (!slot || typeof slot !== "object") return null;
+    const match = String(slot.match ?? "").toUpperCase();
+    if (!VALID_MATCH.has(match)) return null;
+    const feedback = typeof slot.feedback === "string" ? slot.feedback.trim().slice(0, 400) : "";
+    out[f] = { match, feedback };
+  }
+  const overall = String(parsed.overall ?? "").toLowerCase();
+  if (!VALID_OVERALL.has(overall)) return null;
+  out.overall = overall;
+  out.suggestedConfidence = clampConfidence(parsed.suggestedConfidence);
+  return out;
+}
+
+function buildFallbackRecallGrade(recall) {
+  // Conservative: when the LLM is unavailable, mark every field PARTIAL with
+  // an honest "AI offline" message and suggest the middle confidence rating.
+  const partial = {
+    match: "PARTIAL",
+    feedback: "AI grading is unavailable right now — review your notes manually and rate honestly.",
+  };
+  const empty = {
+    match: "NO",
+    feedback: "Nothing recalled in this field.",
+  };
+  return {
+    pattern: recall?.pattern?.trim() ? partial : empty,
+    keyInsight: recall?.keyInsight?.trim() ? partial : empty,
+    complexity: recall?.complexity?.trim() ? partial : empty,
+    overall: "partial",
+    suggestedConfidence: 3,
+  };
+}
+
+export async function gradeReviewRecall(req, res) {
+  try {
+    if (!AI_ENABLED) {
+      return error(res, "AI features are disabled.", 503);
+    }
+
+    const { solutionId } = req.params;
+    const teamId = req.teamId;
+    const userId = req.user.id;
+
+    const recall = req.body?.recall ?? {};
+    const pattern = typeof recall.pattern === "string" ? recall.pattern.trim().slice(0, 500) : "";
+    const keyInsight = typeof recall.keyInsight === "string" ? recall.keyInsight.trim().slice(0, 1500) : "";
+    const complexity = typeof recall.complexity === "string" ? recall.complexity.trim().slice(0, 200) : "";
+
+    // Reject completely empty submissions — there's nothing to grade.
+    if (!pattern && !keyInsight && !complexity) {
+      return error(res, "Recall is empty — type something in at least one field.", 400);
+    }
+
+    const solution = await prisma.solution.findFirst({
+      where: { id: solutionId, userId, teamId },
+      select: {
+        id: true,
+        patterns: true,
+        keyInsight: true,
+        optimizedApproach: true,
+        feynmanExplanation: true,
+        timeComplexity: true,
+        spaceComplexity: true,
+        problem: {
+          select: { title: true, difficulty: true, category: true },
+        },
+      },
+    });
+    if (!solution) return error(res, "Solution not found.", 404);
+
+    const referencePattern = (solution.patterns ?? []).join(", ") || "(not recorded)";
+    const referenceInsight =
+      stripHtmlServer(solution.keyInsight) ||
+      stripHtmlServer(solution.feynmanExplanation) ||
+      stripHtmlServer(solution.optimizedApproach) ||
+      "(not recorded)";
+    const referenceComplexity = [solution.timeComplexity, solution.spaceComplexity]
+      .filter(Boolean)
+      .join(" / ") || "(not recorded)";
+
+    const systemPrompt = `You are a strict but fair spaced-repetition grader for coding problems. The user has just attempted to recall a problem they previously solved. You are comparing their recall (in three fields: pattern, keyInsight, complexity) against their own stored notes from when they originally solved it.
+
+Grading rules:
+- Match SEMANTICALLY, not by surface words. "HashMap" matches "Hashing" or "Hash Table"; "Two Pointers" matches "two-pointer technique"; "O(n)" matches "linear time".
+- A field is YES if the user's recall captures the same concept as the reference, even with different wording.
+- A field is PARTIAL if the user got the right idea but missed an important detail, or named a related-but-not-identical concept.
+- A field is NO if the user's recall is empty, wrong, or unrelated.
+- For complexity: if user says "O(n)" and reference is "O(n log n)", that's NO (different time class). If user says "Time: O(n)" and reference is "O(n)" without specifying space, that's YES on time (PARTIAL if reference also has space and user omits it).
+- suggestedConfidence is an integer 1-5 calibrated to the SM-2 scale: 5 = perfect recall (all fields YES), 4 = strong with one PARTIAL, 3 = mostly right but one NO or two PARTIAL, 2 = rough idea but multiple gaps, 1 = mostly wrong or empty. Be honest — overconfident ratings hurt long-term retention.
+
+Return JSON ONLY, no prose:
+{
+  "pattern":     { "match": "YES"|"PARTIAL"|"NO", "feedback": "<one short sentence>" },
+  "keyInsight":  { "match": "YES"|"PARTIAL"|"NO", "feedback": "<one short sentence>" },
+  "complexity":  { "match": "YES"|"PARTIAL"|"NO", "feedback": "<one short sentence>" },
+  "overall":     "pass"|"partial"|"miss",
+  "suggestedConfidence": <1-5 integer>
+}
+
+The "feedback" strings are shown directly to the user — be specific and constructive. If a recall is exactly right, say so plainly; don't pad with praise.`;
+
+    const userPrompt = `Problem: ${solution.problem.title} (${solution.problem.difficulty} ${solution.problem.category})
+
+<reference_pattern>${referencePattern}</reference_pattern>
+<reference_key_insight>${referenceInsight.slice(0, 1500)}</reference_key_insight>
+<reference_complexity>${referenceComplexity}</reference_complexity>
+
+<user_recall_pattern>${pattern || "(empty)"}</user_recall_pattern>
+<user_recall_key_insight>${keyInsight || "(empty)"}</user_recall_key_insight>
+<user_recall_complexity>${complexity || "(empty)"}</user_recall_complexity>
+
+Grade each field semantically. Return JSON only.`;
+
+    let parsed;
+    try {
+      parsed = await aiComplete({
+        systemPrompt,
+        userPrompt,
+        userId,
+        teamId,
+        model: AI_MODEL_FAST,
+        temperature: 0.2,
+        maxTokens: 600,
+        jsonMode: true,
+        surface: "review-grade",
+      });
+    } catch (aiErr) {
+      // Fall through to deterministic fallback rather than 500 — this surface
+      // is interactive; user is staring at the modal waiting for a response.
+      console.error("review-grade aiComplete failed:", aiErr);
+      const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity });
+      return success(res, { ...fallback, fallback: true });
+    }
+
+    const validated = validateRecallGrade(parsed);
+    if (!validated) {
+      console.warn("review-grade: validator rejected LLM output, using fallback");
+      const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity });
+      return success(res, { ...fallback, fallback: true });
+    }
+
+    return success(res, { ...validated, fallback: false });
+  } catch (err) {
+    console.error("Review grade error:", err);
+    return error(res, "Failed to grade recall.", 500);
+  }
+}

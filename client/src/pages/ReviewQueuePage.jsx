@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useReviewQueue, useSubmitReview } from '@hooks/useSolutions'
-import { useReviewHints } from '@hooks/useAI'
+import { useReviewHints, useReviewGrade } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
@@ -109,48 +109,157 @@ function RecallTimer({ seconds, onExpire }) {
 }
 
 // ══════════════════════════════════════════════════════
+// AI GRADE VIEW — semantic recall verdict (replaces word-diff)
+// ══════════════════════════════════════════════════════
+//
+// Renders the per-field match cards from the /ai/review-grade endpoint.
+// Synonyms count as matches ("HashMap" ≈ "Hashing"); empty fields are
+// marked NO. Falls back gracefully when the AI is unavailable: the
+// controller returns a deterministic conservative grade with
+// `fallback: true`, and we surface that so the user knows.
+function AiGradeView({ grade, loading, recall }) {
+    if (loading && !grade) {
+        return (
+            <div className="rounded-xl border border-border-default bg-surface-2 p-6 flex items-center justify-center gap-3">
+                <Spinner size="sm" />
+                <p className="text-xs text-text-tertiary">Grading your recall against your notes…</p>
+            </div>
+        )
+    }
+    if (!grade) {
+        return (
+            <p className="text-xs text-text-disabled italic px-1">
+                No AI grade available — type a recall in any field to enable semantic grading next review.
+            </p>
+        )
+    }
+
+    const fields = [
+        { key: 'pattern', label: 'Pattern', icon: '🧩', userValue: recall?.pattern },
+        { key: 'keyInsight', label: 'Key Insight', icon: '💡', userValue: recall?.keyInsight },
+        { key: 'complexity', label: 'Complexity', icon: '⏱', userValue: recall?.complexity },
+    ]
+    const matchTone = (m) =>
+        m === 'YES' ? 'bg-success-soft border-success-line text-success-fg'
+            : m === 'PARTIAL' ? 'bg-warning-soft border-warning-line text-warning-fg'
+            : 'bg-danger-soft border-danger-line text-danger-fg'
+    const matchIcon = (m) => m === 'YES' ? '✓' : m === 'PARTIAL' ? '◐' : '✗'
+
+    return (
+        <div className="space-y-3">
+            <div className="space-y-2">
+                {fields.map(f => {
+                    const v = grade[f.key]
+                    return (
+                        <div
+                            key={f.key}
+                            className={cn(
+                                'rounded-xl border p-3 flex items-start gap-3',
+                                matchTone(v.match),
+                            )}
+                        >
+                            <div className="text-base font-bold leading-none mt-0.5">
+                                {matchIcon(v.match)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-sm">{f.icon}</span>
+                                    <span className="text-xs font-bold uppercase tracking-widest">
+                                        {f.label}
+                                    </span>
+                                    <span className="text-[9px] font-bold ml-auto opacity-80">
+                                        {v.match}
+                                    </span>
+                                </div>
+                                {f.userValue && (
+                                    <p className="text-[11px] italic opacity-80 mb-1">
+                                        You: "{f.userValue.length > 100 ? f.userValue.slice(0, 100) + '…' : f.userValue}"
+                                    </p>
+                                )}
+                                <p className="text-xs leading-relaxed opacity-95">
+                                    {v.feedback}
+                                </p>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+            {grade.fallback && (
+                <p className="text-[10px] text-text-disabled italic">
+                    AI grading was unavailable — these are conservative placeholder grades. Try again on the next review.
+                </p>
+            )}
+        </div>
+    )
+}
+
+// ══════════════════════════════════════════════════════
 // REVIEW MODAL — Three-phase active recall
 // ══════════════════════════════════════════════════════
 function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const navigate = useNavigate()
     const reviewHints = useReviewHints()
+    const reviewGrade = useReviewGrade()
 
     // Phase: 'recall' | 'reveal' | 'rate'
     const [phase, setPhase] = useState('recall')
-    const [recallText, setRecallText] = useState('')
+    // Structured recall — Sooraj reported (2026-05-25) that a single textarea
+    // gave no format guidance and the word-diff produced harshly false negatives
+    // when the user used synonyms (e.g. "HashMap" vs "Hashing"). Three labeled
+    // fields + AI semantic grading address both.
+    const [recall, setRecall] = useState({ pattern: '', keyInsight: '', complexity: '' })
     // null = unset. Server's submitReview endpoint rejects anything outside 1-5.
     const [confidence, setConfidence] = useState(solution.confidence || null)
     const [timerExpired, setTimerExpired] = useState(false)
     const [aiQuestions, setAiQuestions] = useState(null)
     const [showAiHints, setShowAiHints] = useState(false)
-    // 'side-by-side' (default, legacy view) vs 'diff' (word-level recall
-    // vs stored-notes comparison). The diff view surfaces the gap that
-    // is literally the learning signal for retrieval practice, but users
-    // who just want to re-read their notes can keep the default.
+    const [aiGrade, setAiGrade] = useState(null)
+    // 'ai-grade' (default when AI grade exists) | 'side-by-side' | 'diff' (legacy
+    // word-diff, kept as a fallback for users who want the raw view).
     const [revealView, setRevealView] = useState('side-by-side')
-    const textareaRef = useRef(null)
+    const patternRef = useRef(null)
+    // For backward compat with the existing onSave signature, we join the
+    // three fields into a single recallText blob. The shape stays parseable
+    // if we ever want to migrate the column to JSON.
+    const recallText = [
+        recall.pattern && `Pattern: ${recall.pattern}`,
+        recall.keyInsight && `Key Insight: ${recall.keyInsight}`,
+        recall.complexity && `Complexity: ${recall.complexity}`,
+    ].filter(Boolean).join('\n')
+    const hasAnyRecall = Boolean(recall.pattern.trim() || recall.keyInsight.trim() || recall.complexity.trim())
 
-    // Focus textarea on recall phase mount
+    // Focus first input on recall phase mount
     useEffect(() => {
         if (phase === 'recall') {
-            setTimeout(() => textareaRef.current?.focus(), 200)
+            setTimeout(() => patternRef.current?.focus(), 200)
         }
     }, [phase])
 
-    // Fetch AI hints when revealing — fire-and-forget, non-blocking.
-    // Pass the recall attempt so the AI can ask targeted follow-ups instead
-    // of generic per-problem questions.
+    // Fetch AI hints AND AI grade when revealing — fired in parallel.
+    // Hints are enhancement (silent failure ok). Grade is the primary
+    // comparison surface; if it returns we default the reveal view to
+    // 'ai-grade' so the user sees the semantic verdict immediately.
     async function handleReveal() {
         setPhase('reveal')
-        try {
-            const res = await reviewHints.mutateAsync({
+        const hintsP = reviewHints.mutateAsync({
+            solutionId: solution.id,
+            recallText: recallText?.trim() || undefined,
+        }).then((res) => setAiQuestions(res.data.data)).catch(() => { })
+
+        const gradeP = hasAnyRecall
+            ? reviewGrade.mutateAsync({
                 solutionId: solution.id,
-                recallText: recallText?.trim() || undefined,
-            })
-            setAiQuestions(res.data.data)
-        } catch {
-            // Silent — AI hints are enhancement, not critical path
-        }
+                recall: {
+                    pattern: recall.pattern.trim(),
+                    keyInsight: recall.keyInsight.trim(),
+                    complexity: recall.complexity.trim(),
+                },
+            }).then((res) => {
+                setAiGrade(res.data.data)
+                setRevealView('ai-grade')
+            }).catch(() => { })
+            : Promise.resolve()
+        await Promise.allSettled([hintsP, gradeP])
     }
 
     // SM-2 preview — uses same algorithm as server for consistent display
@@ -278,43 +387,65 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     </p>
                                 </div>
 
-                                {/* Recall prompt cards */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    {[
-                                        { icon: '🧩', label: 'Pattern', q: 'What algorithm pattern?' },
-                                        { icon: '💡', label: 'Key Insight', q: "What's the \"aha\" moment?" },
-                                        { icon: '⏱', label: 'Complexity', q: 'Time & space complexity?' },
-                                    ].map(p => (
-                                        <div
-                                            key={p.label}
-                                            className="bg-surface-2 border border-border-default rounded-xl p-3 text-center"
-                                        >
-                                            <span className="text-lg">{p.icon}</span>
-                                            <p className="text-[10px] font-bold text-text-primary mt-1">{p.label}</p>
-                                            <p className="text-[10px] text-text-disabled mt-0.5 leading-tight">{p.q}</p>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Recall textarea */}
-                                <div>
-                                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">
-                                        Your recall (optional — typing strengthens memory encoding)
-                                    </label>
-                                    <textarea
-                                        ref={textareaRef}
-                                        value={recallText}
-                                        onChange={e => setRecallText(e.target.value)}
-                                        placeholder="Write what you remember... pattern, approach, key insight, complexity..."
-                                        rows={4}
-                                        className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                                   text-sm text-text-primary placeholder:text-text-disabled
-                                                   px-3.5 py-2.5 outline-none resize-none
-                                                   focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                                                   transition-all"
-                                    />
-                                    <p className="text-[10px] text-text-disabled mt-1">
-                                        Roediger & Butler (2011): retrieval practice produces stronger long-term retention than re-reading.
+                                {/* Structured recall inputs — three labeled fields with format hints.
+                                    All optional individually; submitting the recall as long as ANY
+                                    field has content. Grader gets per-field signals so it can call
+                                    out which area is weak instead of returning one blended verdict. */}
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary mb-1.5">
+                                            <span>🧩</span> Pattern
+                                            <span className="text-[10px] font-normal text-text-disabled">— What algorithm or data structure?</span>
+                                        </label>
+                                        <input
+                                            ref={patternRef}
+                                            type="text"
+                                            value={recall.pattern}
+                                            onChange={e => setRecall(r => ({ ...r, pattern: e.target.value }))}
+                                            placeholder="e.g. HashMap, Two Pointers, Sliding Window"
+                                            className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                                       text-sm text-text-primary placeholder:text-text-disabled
+                                                       px-3.5 py-2 outline-none
+                                                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                                                       transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary mb-1.5">
+                                            <span>💡</span> Key Insight
+                                            <span className="text-[10px] font-normal text-text-disabled">— The "aha" in one sentence</span>
+                                        </label>
+                                        <textarea
+                                            value={recall.keyInsight}
+                                            onChange={e => setRecall(r => ({ ...r, keyInsight: e.target.value }))}
+                                            placeholder="e.g. Store value→index in a map, then for each element check if its complement is already stored."
+                                            rows={3}
+                                            className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                                       text-sm text-text-primary placeholder:text-text-disabled
+                                                       px-3.5 py-2.5 outline-none resize-none
+                                                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                                                       transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary mb-1.5">
+                                            <span>⏱</span> Complexity
+                                            <span className="text-[10px] font-normal text-text-disabled">— Format: Time: O(?), Space: O(?)</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={recall.complexity}
+                                            onChange={e => setRecall(r => ({ ...r, complexity: e.target.value }))}
+                                            placeholder="e.g. Time: O(n), Space: O(n)"
+                                            className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                                       text-sm text-text-primary placeholder:text-text-disabled
+                                                       px-3.5 py-2 outline-none font-mono
+                                                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                                                       transition-all"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-text-disabled">
+                                        Roediger & Butler (2011): retrieval practice produces stronger long-term retention than re-reading. Synonyms are fine — the AI grader matches concepts, not exact words.
                                     </p>
                                 </div>
                             </div>
@@ -325,10 +456,39 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                             ════════════════════════════════════════ */}
                         {phase === 'reveal' && (
                             <div className="p-5 space-y-4">
-                                {/* View toggle: side-by-side vs diff.
-                                    Diff is disabled if there's no recall text
-                                    to compare (nothing to diff against). */}
+                                {/* View toggle: AI Grade (default) vs Side-by-side vs Diff.
+                                    AI Grade is the semantic comparison and is the default
+                                    when a grade was successfully fetched. Side-by-side and
+                                    Diff stay as fallbacks for when AI is unavailable or for
+                                    users who want the raw word-level view. */}
                                 <div className="flex items-center gap-1 bg-surface-2 border border-border-default rounded-lg p-1 w-fit">
+                                    <button
+                                        type="button"
+                                        onClick={() => setRevealView('ai-grade')}
+                                        disabled={!aiGrade && !reviewGrade.isPending}
+                                        className={cn(
+                                            'text-[11px] font-semibold px-3 py-1 rounded-md transition-colors',
+                                            revealView === 'ai-grade'
+                                                ? 'bg-surface-4 text-text-primary'
+                                                : 'text-text-tertiary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed',
+                                        )}
+                                        title={
+                                            aiGrade
+                                                ? 'Semantic AI grade — synonyms count as matches'
+                                                : reviewGrade.isPending
+                                                    ? 'Grading…'
+                                                    : 'Type a recall to unlock AI grading'
+                                        }
+                                    >
+                                        AI Grade {aiGrade && (
+                                            <span className={cn(
+                                                'ml-1 text-[9px] px-1 rounded',
+                                                aiGrade.overall === 'pass' ? 'bg-success-soft text-success-fg' :
+                                                aiGrade.overall === 'partial' ? 'bg-warning-soft text-warning-fg' :
+                                                'bg-danger-soft text-danger-fg',
+                                            )}>{aiGrade.overall}</span>
+                                        )}
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setRevealView('side-by-side')}
@@ -353,7 +513,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         )}
                                         title={
                                             recallText.trim()
-                                                ? 'Word-level diff — see exactly what you forgot'
+                                                ? 'Word-level diff — exact text comparison (legacy view)'
                                                 : 'Type a recall next time to unlock the diff view'
                                         }
                                     >
@@ -361,7 +521,9 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     </button>
                                 </div>
 
-                                {revealView === 'diff' ? (
+                                {revealView === 'ai-grade' ? (
+                                    <AiGradeView grade={aiGrade} loading={reviewGrade.isPending} recall={recall} />
+                                ) : revealView === 'diff' ? (
                                     <RecallDiff recallText={recallText} solution={solution} />
                                 ) : (
                                 <>
@@ -533,9 +695,44 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         Be honest — this drives the SM-2 algorithm.
                                         Review #{(solution.reviewCount || 0) + 1}
                                         {solution.sm2Repetitions > 0 && ` · Current EF: ${(solution.sm2EasinessFactor ?? 2.5).toFixed(2)}`}
+                                        {aiGrade?.suggestedConfidence && (
+                                            <>
+                                                {' · '}
+                                                <span className="font-semibold text-brand-fg-soft">
+                                                    AI suggests {aiGrade.suggestedConfidence}/5
+                                                </span>
+                                            </>
+                                        )}
                                     </p>
                                     <ConfidencePicker value={confidence} onChange={setConfidence} />
                                 </div>
+
+                                {/* Calibration nudge — when the user's self-rating diverges
+                                    from the AI's grade by ≥ 2, surface a soft advisory.
+                                    Don't override; honest calibration is a metacognitive
+                                    skill (Lesson 11 — Production concerns). */}
+                                {aiGrade?.suggestedConfidence && confidence != null
+                                    && Math.abs(confidence - aiGrade.suggestedConfidence) >= 2 && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 4 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="bg-warning-soft border border-warning-line rounded-xl p-3 flex items-start gap-3"
+                                    >
+                                        <span className="text-base mt-0.5">⚖️</span>
+                                        <div className="flex-1">
+                                            <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-0.5">
+                                                Calibration check
+                                            </p>
+                                            <p className="text-xs text-text-secondary leading-relaxed">
+                                                You rated {confidence}/5 but the AI graded this recall closer to {aiGrade.suggestedConfidence}/5.
+                                                {confidence > aiGrade.suggestedConfidence
+                                                    ? ' Overconfidence pushes the next review out further than the recall justifies — consider lowering toward the AI estimate.'
+                                                    : ' Undervaluing yourself shrinks intervals unnecessarily — your recall was stronger than you think.'}
+                                                {' '}You can keep your rating; this is just a nudge.
+                                            </p>
+                                        </div>
+                                    </motion.div>
+                                )}
 
                                 {/* SM-2 next review preview */}
                                 {confidence > 0 && nextDate && (

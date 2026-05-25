@@ -12,6 +12,7 @@ import {
   findSimilarProblems,
   generateProblemsAI,
   generateReviewHints,
+  gradeReviewRecall,
 } from "../controllers/ai.controller.js";
 
 const router = Router();
@@ -22,6 +23,11 @@ router.post(
   "/review-hints/:solutionId",
   requireTeamContext,
   generateReviewHints,
+);
+router.post(
+  "/review-grade/:solutionId",
+  requireTeamContext,
+  gradeReviewRecall,
 );
 router.post("/hint/:problemId", requireTeamContext, getHint);
 router.get("/weekly-plan", requireTeamContext, getWeeklyPlan);

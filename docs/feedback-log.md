@@ -6,7 +6,7 @@ Living document for triaging user-reported feedback from the in-app feedback wid
 
 When a new export arrives (e.g. `probsolver-feedback-YYYY-MM-DDTHH-MM.md`):
 
-1. **Don't overwrite.** Open this file and append/update entries — never rewrite from scratch.
+1. **Don't overwrite this file.** Open it and append/update entries — never rewrite from scratch.
 2. **Match by `Feedback ID`** (the `cmpXXX...` cuid the export carries). If the ID already exists below, update the existing entry's status / add notes — do not duplicate.
 3. **Triage in priority order**: 🐛 Bugs first (highest severity first within bugs), then ❓ Questions, then 💡 Suggestions.
 4. **For each item** record:
@@ -34,19 +34,74 @@ When a new export arrives (e.g. `probsolver-feedback-YYYY-MM-DDTHH-MM.md`):
 
 ## Summary
 
-| #   | Title                               | Type | Severity   | Status     | Feedback ID                  | Resolution                                                  |
-| --- | ----------------------------------- | ---- | ---------- | ---------- | ---------------------------- | ----------------------------------------------------------- |
-| 1   | Unable to review past quizzes       | 🐛   | `CRITICAL` | `RESOLVED` | `cmpl0q6n0001c1q9w58rt1ey1`  | Commit [`ac5e6f6`](#1--unable-to-review-past-quizzes)       |
-| 2   | Time complexity hint per problem    | ❓   | `LOW`      | `PLANNED`  | `cmpc65upk000d45v2b6xz1gi4`  | Roadmap [`problem-optimal-complexity-fields`](#2--time-complexity-hints-on-coding-problems) |
+| #   | Title                               | Type | Severity   | Status        | Feedback ID                  | Resolution                                                  |
+| --- | ----------------------------------- | ---- | ---------- | ------------- | ---------------------------- | ----------------------------------------------------------- |
+| 1   | Problems review not working as expected | 🐛 | `CRITICAL` | `IN PROGRESS` | `cmpl5lefk0006bvxu3gppm9ph`  | Building structured fields + AI grading + calibration nudge |
+| 2   | Unable to review past quizzes       | 🐛   | `CRITICAL` | `RESOLVED`    | `cmpl0q6n0001c1q9w58rt1ey1`  | Commit [`ac5e6f6`](#2--unable-to-review-past-quizzes)       |
+| 3   | Time complexity hint per problem    | ❓   | `LOW`      | `PLANNED`     | `cmpc65upk000d45v2b6xz1gi4`  | Roadmap [`problem-optimal-complexity-fields`](#3--time-complexity-hints-on-coding-problems) |
 
-**Counts:** 1 resolved · 1 planned · 0 open · 0 won't fix
-**Last updated:** 2026-05-25 (export `probsolver-feedback-2026-05-25T09-43.md`)
+**Counts:** 1 resolved · 1 in progress · 1 planned · 0 open · 0 won't fix
+**Last updated:** 2026-05-25 (export `probsolver-feedback-2026-05-25T12-07.md`)
 
 ---
 
 ## Items
 
-### #1 — Unable to review past quizzes
+### #1 — Problems review not working as expected
+
+| Field            | Value                                                     |
+| ---------------- | --------------------------------------------------------- |
+| **Feedback ID**  | `cmpl5lefk0006bvxu3gppm9ph`                               |
+| **Type**         | 🐛 BUG                                                    |
+| **Severity**     | `CRITICAL`                                                |
+| **Status**       | `IN PROGRESS` · started 2026-05-25                        |
+| **Submitter**    | Sooraj Singh (surajsinghj1654@gmail.com) · Binary Thinkers |
+| **Reported**     | 2026-05-25                                                |
+| **Affected area**| Review Queue                                              |
+
+#### Original report
+
+> When you are trying to review any problem. It is asking for three things: Pattern, Key Insight and Complexity and below we have Text-area to fill details. Nothing mentioned the format what to fill and how to fill. Everything is plain text.
+>
+> When we filled details for review:
+> **New (recall):** HashMap · Array Element stored as key and Element as Value · Complexity: Time=O(n), Space=O(n)
+> **Old (notes):** Pattern: Array / Hashing · Key Insight: "The moment I saw, find pair of number from an array. I am able to think of HashMap" · Complexity: T: O(n) · S: O(n)
+>
+> There is Diff checker that is just checking for words, nothing else... There is no check if current recall is correct or not.
+>
+> After Review, we need to select confidence level — there is no measurement if current confidence level is correct or not...
+>
+> There are multiple bugs here....
+
+**Steps to reproduce:** Click on any review for problem.
+
+#### Root cause
+
+Three distinct bugs sharing the same modal (`client/src/pages/ReviewQueuePage.jsx:114` `ReviewModal`):
+
+1. **Format guidance is decorative, not functional.** The 3 prompt cards (Pattern / Key Insight / Complexity) at lines 282-297 are display-only. The actual input is a single free-form textarea at line 304 with placeholder *"Write what you remember... pattern, approach, key insight, complexity..."* — no structure, no per-field hint. Users dump everything into one box.
+2. **The diff is purely string-matching, not semantic.** `client/src/components/features/solutions/RecallDiff.jsx:72` calls `diffWordsWithSpace` from the `diff` library. Sooraj's recall ("HashMap") vs notes ("Array / Hashing") share zero words but reference the same data structure family — word-diff says ~15% coverage, the user reads "you failed" when they got it right. False-negative feedback erodes trust in the platform.
+3. **Confidence rating is uncalibrated.** Phase 3 lets the user self-rate 1-5; that score flows into `sm2EasinessFactor` and schedules the next review. There's no signal anywhere measuring whether the rating is accurate. Overconfident users get pushed out by ~2× the spacing — system reinforces the bias.
+
+The AI infrastructure to fix #2 and #3 already exists (`useReviewHints` at `client/src/hooks/useAI.js:58` calls `POST /ai/review-hints/:solutionId` for follow-up questions); same shape extends to grading.
+
+#### Resolution plan
+
+`IN PROGRESS` — building three coupled fixes in one slice:
+
+1. **Structured 3-field recall input** — replace the single textarea with Pattern (line input), Key Insight (textarea), Complexity (line input with format hint). Persists structured shape so AI can grade per-field.
+2. **AI grading endpoint** `POST /api/v1/ai/review-grade/:solutionId` — takes structured recall, returns `{ pattern: {match, feedback}, keyInsight: {match, feedback}, complexity: {match, feedback}, overall, suggestedConfidence }`. Uses validate→fallback pattern. Replaces word-diff with three semantic match cards.
+3. **Calibration nudge in Rate phase** — show AI-suggested confidence next to user's selector; soft advisory if gap ≥ 2.
+
+Will update this entry to `RESOLVED` with commit hash on landing.
+
+#### Reply-to-user copy *(draft — paste after resolution)*
+
+> Hi Sooraj — confirmed all three issues. The recall form is now structured (Pattern / Key Insight / Complexity as separate fields with format hints), the comparison uses AI semantic matching instead of word-by-word diff (so "HashMap" and "Array / Hashing" correctly count as a match), and the confidence rating is now paired with an AI-suggested score plus a calibration nudge if the gap is wide. Shipped in commit `<TBD>`. Thank you for the detailed report — your example with HashMap vs Hashing is exactly what convinced us to swap to semantic grading.
+
+---
+
+### #2 — Unable to review past quizzes
 
 | Field            | Value                                                       |
 | ---------------- | ----------------------------------------------------------- |
@@ -56,13 +111,14 @@ When a new export arrives (e.g. `probsolver-feedback-YYYY-MM-DDTHH-MM.md`):
 | **Status**       | `RESOLVED` · shipped 2026-05-25                             |
 | **Submitter**    | Jayshree (jayshreeprajapati426@gmail.com) · Binary Thinkers |
 | **Reported**     | 2026-05-25                                                  |
+| **Resolved**     | 2026-05-25                                                  |
 | **Affected area**| Quizzes                                                     |
 
 #### Original report
 
 > I attempted a Quiz. After submitting it, i am not able to review my quiz again.
 
-**Steps to reproduce (verbatim):**
+**Steps to reproduce:**
 1. Attempt a Quiz
 2. Click on submit quiz
 3. Refresh / close the window
@@ -70,15 +126,15 @@ When a new export arrives (e.g. `probsolver-feedback-YYYY-MM-DDTHH-MM.md`):
 
 #### Root cause
 
-`QuizPage.jsx` was a single-component state machine: `screen: 'setup' | 'active' | 'results'`. After submit, `ResultsScreen` rendered from in-component memory (`quizData`, `gradedAnswers`, `quizId`). On refresh / close, all four state values reset; `screen` reverted to `'setup'`. The `QuizHistory` cards offered only **"New Questions"** (fresh quiz, different content) and **"Retry Last"** (clones the questions into a new attempt) — neither path opened the saved review screen for an existing attempt. There was no `/quizzes/:id` client route either.
+`QuizPage.jsx` was a single-component state machine: `screen: 'setup' | 'active' | 'results'`. After submit, `ResultsScreen` rendered from in-component memory (`quizData`, `gradedAnswers`, `quizId`). On refresh / close, all four state values reset; `screen` reverted to `'setup'`. The `QuizHistory` cards offered only **"New Questions"** (fresh quiz, different content) and **"Retry Last"** (clones questions into a new attempt) — neither path opened the saved review screen for an existing attempt. There was no `/quizzes/:id` client route either.
 
-The data was always persisted server-side: `submitQuizAnswers` (`server/src/controllers/quiz.controller.js:345`) writes the full graded answers + `score` + `completedAt` to `QuizAttempt`, and `GET /quizzes/:quizId` (`quiz.controller.js:504`) returns them. The hook `useQuiz(quizId)` (`client/src/hooks/useQuiz.js:83`) already fetched them. The bug was purely "no client surface to consume what the server already returned."
+The data was always persisted server-side: `submitQuizAnswers` (`server/src/controllers/quiz.controller.js:345`) writes the full graded answers + `score` + `completedAt` to `QuizAttempt`, and `GET /quizzes/:quizId` (`quiz.controller.js:504`) returns them. `useQuiz(quizId)` (`client/src/hooks/useQuiz.js:83`) already fetched them. The bug was purely "no client surface to consume what the server already returned."
 
 #### Resolution
 
-Shipped in commit [`ac5e6f6`](https://github.com/) — *Fix quiz review path + roadmap entry for complexity hints*.
+Shipped in commit `ac5e6f6` — *Fix quiz review path + roadmap entry for complexity hints*.
 
-- **New page** `client/src/pages/QuizReviewPage.jsx` at route `/quizzes/:quizId/review` — fetches the saved attempt, maps `quiz.answers` → `gradedAnswers` shape, renders the existing `ResultsScreen` (now exported) read-only with the persisted graded answers + AI analysis. Defensive 404 + "not yet submitted" empty states.
+- **New page** `client/src/pages/QuizReviewPage.jsx` at `/quizzes/:quizId/review` — fetches the saved attempt, maps `quiz.answers` → `gradedAnswers` shape, renders the existing `ResultsScreen` (now exported) read-only with the persisted graded answers + AI analysis. Defensive 404 + "not yet submitted" empty states.
 - **Review button** added to each `QuizHistory` card in `client/src/pages/QuizPage.jsx`, alongside "New Questions" and "Retry Last". Disabled with tooltip if the latest attempt isn't yet submitted.
 - **Retry-from-review** flow: navigates back to `/quizzes` with `location.state.resumeQuiz`; QuizPage picks up the active session on mount — single-click retry, no double-navigation.
 - **Route** registered in `client/src/App.jsx`.
@@ -91,7 +147,7 @@ No server change required. No schema change.
 
 ---
 
-### #2 — Time complexity hints on coding problems
+### #3 — Time complexity hints on coding problems
 
 | Field            | Value                                                  |
 | ---------------- | ------------------------------------------------------ |
@@ -111,7 +167,7 @@ No server change required. No schema change.
 
 The `Problem` model in `server/prisma/schema.prisma:535` has **no** `optimalTimeComplexity` / `optimalSpaceComplexity` field today. Complexity columns exist only on `Solution` (the user's own claim) and on `AIReview` (post-submit estimate). The platform has no curated "this problem's optimal target is O(n log n)" data anywhere — there's literally nothing to display before submission.
 
-Three possible directions were considered:
+Three possible directions:
 
 1. **Admin-curated `optimalTimeComplexity` + `optimalSpaceComplexity` on `Problem`**, gated by a "Reveal" toggle on the problem page so it doesn't spoil. Faithful to the user's ask. **Recommended.**
 2. AI-generated complexity computed at the post-submit AI review — no schema change, but each problem's "optimal" is recomputed per submission and varies; drift risk.
@@ -119,7 +175,7 @@ Three possible directions were considered:
 
 #### Resolution
 
-`PLANNED` — roadmap item **`problem-optimal-complexity-fields`** was added to NEXT phase (Content & Problems theme, Medium effort). Captures option 1: schema migration, admin form with optional AI-suggest button, and a reveal-on-click chip on `ProblemDetailPage`. Research-backed (Bjork desirable difficulties, Sweller cognitive load, Wieman) — curated rather than AI-generated to avoid hallucinated complexities. See `client/src/pages/superadmin/roadmap/roadmapData.js`.
+`PLANNED` — roadmap item **`problem-optimal-complexity-fields`** added to NEXT phase (Content & Problems theme, Medium effort). Captures option 1: schema migration, admin form with optional AI-suggest button, reveal-on-click chip on `ProblemDetailPage`. Research-backed (Bjork desirable difficulties, Sweller cognitive load, Wieman) — curated rather than AI-generated to avoid hallucinated complexities. See `client/src/pages/superadmin/roadmap/roadmapData.js`.
 
 #### Reply-to-user copy
 
@@ -139,8 +195,7 @@ For reference when adding new entries, the export format includes:
 - `Submitter` — name + email
 - `Team` — team name (multi-tenant context)
 - `Created` — ISO timestamp
+- `Resolved` — ISO timestamp (present once admin marks the export-side status RESOLVED)
 - `Description` — free-form
 - `Steps to Reproduce` (bugs only) — sometimes HTML-escaped from a rich-text editor; un-escape before quoting
 - `Admin Note` — internal comment if any
-
-If the export adds a `Resolved By` / `Resolved At` field in the future, mirror it in the table above.
