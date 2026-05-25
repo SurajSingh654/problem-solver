@@ -26,6 +26,13 @@ const PATTERN_MASTERY_V2_ENABLED =
 const SOLUTION_DEPTH_V2_ENABLED =
     import.meta.env.VITE_FEATURE_SOLUTION_DEPTH_V2 === 'true'
 
+// D3 Communication v2 flag — when on AND the D3 dim has communicationCeiling
+// attached, the dim card renders a source-quality chip (Written-only / Live
+// + AI / Peer-validated) instead of the legacy "estimated from written
+// explanations" text. Three-place declaration per CLAUDE.md.
+const COMMUNICATION_V2_ENABLED =
+    import.meta.env.VITE_FEATURE_COMMUNICATION_V2 === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -674,11 +681,49 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                   </div>
                 )}
 
-                {isCommProxy && (
-                  <p className="text-[10px] text-text-disabled mt-1 italic">
-                    Estimated from written explanations. Peer ratings give a stronger signal.
-                  </p>
-                )}
+                {/* D3 v2 source-quality chip — replaces the legacy "estimated
+                    from written explanations" italics. Renders only when the
+                    flag is on AND the server attached communicationCeiling.
+                    Falls through to the legacy text for flag-off users. */}
+                {dim.key === 'communication'
+                  && COMMUNICATION_V2_ENABLED
+                  && typeof info?.communicationCeiling === 'number'
+                  && (() => {
+                    const ceiling = info.communicationCeiling
+                    const isPeer = ceiling >= 100
+                    const isLive = !isPeer && ceiling >= 80
+                    const tone = isPeer
+                      ? 'bg-success-soft text-success-fg border-success-line'
+                      : isLive
+                        ? 'bg-info-soft text-info-fg border-info-line'
+                        : 'bg-warning-soft text-warning-fg border-warning-line'
+                    const label = isPeer
+                      ? 'Peer-validated'
+                      : isLive
+                        ? 'Live + AI'
+                        : 'Written-only'
+                    return (
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <span className={cn(
+                          'text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded-full border',
+                          tone,
+                        )}>
+                          {label}
+                        </span>
+                        <span className="text-[10px] text-text-disabled font-mono">
+                          Ceiling {ceiling}
+                        </span>
+                      </div>
+                    )
+                  })()}
+
+                {isCommProxy
+                  && !(COMMUNICATION_V2_ENABLED && typeof info?.communicationCeiling === 'number')
+                  && (
+                    <p className="text-[10px] text-text-disabled mt-1 italic">
+                      Estimated from written explanations. Peer ratings give a stronger signal.
+                    </p>
+                  )}
               </>
             )}
           </motion.div>
