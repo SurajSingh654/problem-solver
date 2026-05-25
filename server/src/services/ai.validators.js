@@ -278,6 +278,58 @@ export function validateVerdict(verdict, evidence) {
     gaps.forEach((g, i) => checkDepthDistribution(g, `gaps[${i}]`));
   }
 
+  // Rule 10 — Communication source-quality awareness.
+  //
+  // When evidence.communication is present (D3 v2 flag is on), any claim
+  // that is *about* communication MUST cite the source. A high D3 score
+  // from written-only signal is not "strong communication" — Levashina
+  // 2014 puts written-only validity at r ≈ 0.20 vs structured live at
+  // r ≈ 0.51. The dim's source quality must be transparent.
+  //
+  // Phrase anchoring (Plan agent push): word-boundary alone matches
+  // incidental phrases like "communication style was clear" which are
+  // NOT subject claims. We require the term to appear at the start of
+  // the claim sentence OR after a copula ("is the strongest", "is your
+  // weakest"). False-positive guard test pinned in validators.test.js.
+  if (evidence.communication) {
+    // SUBJECT_PATTERNS — the claim is *about* communication, not a
+    // passing reference. "X is/was [adjective] communication" or
+    // "Communication is/shows [...]" both qualify; "communication style"
+    // mid-sentence does not.
+    const COMM_SUBJECT_PATTERNS = [
+      /\bcommunication\b\s+(is|was|are|shows|remains|stands|leads)/i,
+      /^communication\b/i,
+      /\bcommunication\b\s+(skill|skills|ability|performance)\b/i,
+      /\bexplanation\s+quality\b/i,
+      /\bweakest.{0,30}\bcommunication\b/i,
+      /\bstrongest.{0,30}\bcommunication\b/i,
+      /\bstrong.{0,12}\bcommunication\b/i,
+      /\bweak.{0,12}\bcommunication\b/i,
+    ];
+    const COMM_SOURCE_PATTERNS = [
+      /\bpeer ratings?\b/i,
+      /\bmock interview/i,
+      /\blive\b/i,
+      /\b(verbal|verbally)\b/i,
+      /\bwritten[- ]only\b/i,
+      /\bsource[- ]quality\b/i,
+      /\bceiling\b/i,
+      /\bAI[- ]rated\b/i,
+    ];
+    const checkCommSource = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isCommSubject = COMM_SUBJECT_PATTERNS.some((rx) => rx.test(text));
+      if (!isCommSubject) return;
+      const citesSource = COMM_SOURCE_PATTERNS.some((rx) => rx.test(text));
+      if (!citesSource) {
+        violations.push(`${label}-comm-claim-no-source`);
+      }
+    };
+    strengths.forEach((s, i) => checkCommSource(s, `strengths[${i}]`));
+    gaps.forEach((g, i) => checkCommSource(g, `gaps[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 

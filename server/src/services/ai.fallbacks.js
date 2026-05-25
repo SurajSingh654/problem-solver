@@ -80,6 +80,7 @@ export function buildFallbackVerdict(evidence) {
 
   const pm = evidence.patternMastery; // null when D1 v2 flag is off
   const sd = evidence.solutionDepth;   // null when D2 v2 flag is off
+  const cm = evidence.communication;   // null when D3 v2 flag is off
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -95,13 +96,28 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} with ${sd.defendedOrAbove} of ${sd.totalCoding} solutions at Defended+ and ${sd.owned} Owned`;
   };
 
+  // Helper — build evidence string for a Communication claim under v2.
+  // Satisfies validator Rule 10: cite source, not just score.
+  const commEvidenceWithSource = (dim) => {
+    if (!cm) return `score=${dim.score} over n=${dim.n} data points`;
+    if (cm.sourceQuality === "peer-validated") {
+      return `score=${dim.score} with peer ratings (ceiling 100) and ${cm.mockCount} mock interview${cm.mockCount === 1 ? "" : "s"}`;
+    }
+    if (cm.sourceQuality === "live-and-ai") {
+      return `score=${dim.score} with ${cm.mockCount} mock interview${cm.mockCount === 1 ? "" : "s"} (ceiling 80) — no peer ratings yet`;
+    }
+    return `score=${dim.score} from written-only signal (ceiling 55) — no mock interviews yet`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
     const isDepth = topDim.key === "solutionDepth";
+    const isComm = topDim.key === "communication";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
+    else if (isComm) evidenceStr = commEvidenceWithSource(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     strengths.push({
       claim: `${prettyDimName(topDim.key)} is your leading dimension`,
@@ -136,12 +152,28 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When v2 communication is present AND the user has no live signal
+  // (no mock interviews with comm scores AND no peer ratings), surface
+  // it as a priority gap. A high D3 score from written-only is research-
+  // capped at 55; the user needs live signal to credibly call comm a
+  // strength — and Tier 2 readiness *requires* ≥1 mock with comm scores.
+  if (cm && cm.mockCount < 1 && cm.peerCount < 1 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Communication has no live signal",
+      evidence: `score from written-only signal (ceiling ${cm.ceiling}, ${cm.writtenCount} AI-rated explanation${cm.writtenCount === 1 ? "" : "s"}, 0 mock interviews, 0 peer ratings)`,
+      action:
+        "Complete a mock interview to lift the source ceiling and validate communication beyond AI-rated text.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
+    const isCommWeak = weakDim.key === "communication";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
+    else if (isCommWeak) evidenceStr = commEvidenceWithSource(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,

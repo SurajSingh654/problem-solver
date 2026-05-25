@@ -1647,6 +1647,8 @@ HARD RULES — any violation invalidates your output:
 
 9. Solution Depth distribution. When evidence.solutionDepth is present (non-null) AND a strength/gap claim references Solution Depth / depth / "understanding", the evidence field MUST cite a depth-distribution number — one of: solutionDepth.owned, solutionDepth.defended, solutionDepth.defendedOrAbove (e.g. "5 of 12 solutions at Defended+", "2 Owned solutions"). A high D2 score alone is NOT sufficient evidence — the score can come from polished writing without probe-passing or retrieval; only the distribution shows real depth. Same rule for gaps (e.g. "0 of 4 solutions at Defended+", "all 4 stuck at Documented"). When evidence.solutionDepth is null (legacy flag-off mode), this rule does not apply.
 
+10. Communication source quality. When evidence.communication is present (non-null) AND a strength/gap claim is *about* Communication (subject of the sentence — not just a mention of "communication style" in passing), the evidence field MUST cite the source — one of: peer ratings, mock interview, live signal, written-only, source quality, ceiling, AI-rated. A high D3 score from written-only signal is NOT "strong communication" — it's writing discipline (Levashina 2014: written-only signal r ≈ 0.20 vs structured live r ≈ 0.51). Examples that satisfy: "score=72 with 8 of 12 mock interviews at Defended+" or "ceiling 55 from written-only signal — no mock interviews yet". Same rule for gaps. When evidence.communication is null (legacy flag-off mode), this rule does not apply.
+
 Before emitting JSON, think step-by-step in a <thinking> block:
   1. Which dimensions are active? List them with (key, score, n).
   2. For each active dim, is n ≥ 5? If not, mark tentative.

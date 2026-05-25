@@ -526,6 +526,171 @@ describe('validateVerdict — Rule 9 (Solution Depth distribution)', () => {
     })
 })
 
+// ── validateVerdict — Rule 10 (Communication source-quality awareness) ──
+//
+// Active only when evidence.communication is non-null (D3 v2 flag on).
+// Forces any Communication subject claim to cite the source — written-only
+// signal is research-capped at r ≈ 0.20 (Levashina 2014); calling it
+// "strong communication" without acknowledging the source quality is
+// exactly the kind of overclaim the verdict layer is engineered to block.
+//
+// Phrase-anchored regex (lessons from Rule 8's "core/score" + Rule 9):
+// word-boundary alone matches incidental phrases like "communication
+// style was clear" — those are NOT subject claims. We require the term
+// to be the SUBJECT of the claim sentence (start of claim, after
+// "is/was/are", or qualified by strong/weak).
+describe('validateVerdict — Rule 10 (Communication source quality)', () => {
+    const FULL_EVIDENCE_WITH_COMM = {
+        ...FULL_EVIDENCE,
+        communication: {
+            ceiling: 80,
+            sourceQuality: 'live-and-ai',
+            peerCount: 0,
+            mockCount: 2,
+            writtenCount: 6,
+        },
+    }
+    const WRITTEN_ONLY_COMM = {
+        ...FULL_EVIDENCE,
+        communication: {
+            ceiling: 55,
+            sourceQuality: 'written-only',
+            peerCount: 0,
+            mockCount: 0,
+            writtenCount: 4,
+        },
+    }
+
+    it('accepts a Communication strength claim that cites source', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Communication is your strongest dimension',
+                    evidence: 'score=72 with 2 mock interviews (ceiling 80) and AI-rated explanations',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_COMM)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Communication strength claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Communication is your strongest dimension',
+                    evidence: 'score=72 over n=10 reviews',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_COMM)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-comm-claim-no-source')
+    })
+
+    it('rejects a Communication gap claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Communication is your weakest dimension',
+                    evidence: 'score=42 over n=4 reviews',
+                    action: 'Practice more',
+                },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, WRITTEN_ONLY_COMM)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('gaps[0]-comm-claim-no-source')
+    })
+
+    it('FALSE-POSITIVE GUARD: incidental "communication style" mid-sentence does NOT trigger', () => {
+        // "Their communication style was clear" is not a subject claim
+        // about the dim — the subject is "their style". Plan agent push:
+        // word-boundary alone admits this kind of noise. Phrase-anchored
+        // patterns require subject framing.
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is the strongest signal',
+                    evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+ — communication style across submissions is consistent',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_COMM)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 10 when communication is absent (legacy flag-off mode)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Communication is your strongest dimension',
+                    evidence: 'score=72 over n=10 reviews',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 10 for non-Communication claims', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                { claim: 'Pattern recognition shows real breadth', evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+ and 5 Owned', confidence: 'high' },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_COMM)
+        expect(r.valid).toBe(true)
+    })
+
+    it('matches "weakest dimension" + "communication" pattern even mid-sentence', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Your weakest active dimension is Communication',
+                    evidence: 'score=42 over n=4',
+                    action: 'Practice more',
+                },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, WRITTEN_ONLY_COMM)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('gaps[0]-comm-claim-no-source')
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {
@@ -608,6 +773,56 @@ describe('buildFallbackVerdict', () => {
         )
         expect(hasProbeDepthGap).toBe(true)
         const r = validateVerdict(v, ORIGINAL_REPORT_WITH_DEPTH)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback output for v2-comm evidence passes Rule 10 (no self-contradiction)', () => {
+        const FULL_WITH_COMM = {
+            ...FULL_EVIDENCE,
+            communication: {
+                ceiling: 80,
+                sourceQuality: 'live-and-ai',
+                peerCount: 0,
+                mockCount: 2,
+                writtenCount: 6,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_COMM)
+        const r = validateVerdict(v, FULL_WITH_COMM)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces a "no live signal" gap when commMocksWithScores < 1 and no peer ratings', () => {
+        // Original-report user under D3 v2: 4 AI explanation scores, 0
+        // mocks, 0 peer → ceiling=55 (written-only). Fallback should
+        // prepend "Communication has no live signal" as a priority gap.
+        const ORIGINAL_REPORT_WITH_COMM = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 4, score: 26 },
+                { key: 'solutionDepth', status: 'active', n: 4, score: 32 },
+                { key: 'communication', status: 'active', n: 4, score: 55 },
+                { key: 'optimization', status: 'active', n: 4, score: 56 },
+                { key: 'pressurePerformance', status: 'active', n: 4, score: 60 },
+                { key: 'retention', status: 'active', n: 4, score: 93 },
+            ],
+            overall: { score: 50 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: { name: 'Tier 2 Tech', threshold: 65, gap: 15 },
+            communication: {
+                ceiling: 55,
+                sourceQuality: 'written-only',
+                peerCount: 0,
+                mockCount: 0,
+                writtenCount: 4,
+            },
+        }
+        const v = buildFallbackVerdict(ORIGINAL_REPORT_WITH_COMM)
+        const hasLiveSignalGap = v.gaps.some((g) =>
+            /no live signal|written-only|mock interview/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasLiveSignalGap).toBe(true)
+        const r = validateVerdict(v, ORIGINAL_REPORT_WITH_COMM)
         expect(r.valid).toBe(true)
     })
 
