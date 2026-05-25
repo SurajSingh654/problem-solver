@@ -9,6 +9,7 @@ const KEYS = {
     detail: (slug) => ["topics", slug],
     state: (slug) => ["topics", slug, "state"],
     calibration: (slug) => ["topics", slug, "calibration"],
+    concept: (slug, conceptSlug) => ["topics", slug, "concepts", conceptSlug],
 };
 
 export function useTopics() {
@@ -77,6 +78,28 @@ export function useSubmitCalibration(slug) {
             qc.invalidateQueries({ queryKey: KEYS.list });
             qc.invalidateQueries({ queryKey: KEYS.state(slug) });
             qc.invalidateQueries({ queryKey: KEYS.calibration(slug) });
+        },
+    });
+}
+
+export function useConcept(slug, conceptSlug) {
+    return useQuery({
+        queryKey: KEYS.concept(slug, conceptSlug),
+        queryFn: async () =>
+            (await topicsApi.getConcept(slug, conceptSlug)).data.data,
+        enabled: !!slug && !!conceptSlug,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+export function useMarkConceptRead(slug, conceptSlug) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: () => topicsApi.markConceptRead(slug, conceptSlug),
+        onSuccess: () => {
+            // Mark-read changes mastery + nextAction; refresh both views.
+            qc.invalidateQueries({ queryKey: KEYS.state(slug) });
+            qc.invalidateQueries({ queryKey: KEYS.concept(slug, conceptSlug) });
         },
     });
 }

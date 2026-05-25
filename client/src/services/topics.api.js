@@ -17,4 +17,8 @@ export const topicsApi = {
     getCalibration: (slug) => api.get(`/topics/${slug}/calibration`),
     submitCalibration: (slug, responses) =>
         api.post(`/topics/${slug}/calibration/submit`, { responses }),
+    getConcept: (slug, conceptSlug) =>
+        api.get(`/topics/${slug}/concepts/${conceptSlug}`),
+    markConceptRead: (slug, conceptSlug) =>
+        api.post(`/topics/${slug}/concepts/${conceptSlug}/mark-read`),
 }

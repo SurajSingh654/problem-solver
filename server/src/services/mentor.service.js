@@ -55,6 +55,11 @@ const SIGNAL_WEIGHTS = {
   practice: 0.30,
   teaching: 0.30,
   mock: 0.20,
+  // Reading the primer is logged but does NOT contribute to the mastery
+  // score — knowledge isn't proven by reading. The mentor uses the
+  // presence of this signal as a "skip in INTAKE" marker so the user
+  // advances through unread concepts in order.
+  primer_read: 0,
 };
 const VALID_SIGNAL_SOURCES = new Set(Object.keys(SIGNAL_WEIGHTS));
 
@@ -124,10 +129,11 @@ export async function planNextAction(userId, topicId) {
     concepts.map((c) => [c.id, conceptState(c, masteryById.get(c.id))]),
   );
 
-  // 1) INTAKE: untouched, all prereqs at developing+
+  // 1) INTAKE: untouched, all prereqs at developing+, primer not yet read
   for (const c of concepts) {
     const s = stateById.get(c.id);
     if (s.score >= MASTERY.developing) continue;
+    if (s.primerRead) continue; // already read — let EXPLORE / next concept claim it
     const prereqOk = c.prerequisites.every((p) => {
       const ps = stateById.get(p.prereqId);
       return ps && ps.score >= MASTERY.developing;
@@ -136,7 +142,7 @@ export async function planNextAction(userId, topicId) {
       return {
         stage: "INTAKE",
         concept: { id: c.id, slug: c.slug, name: c.name },
-        surface: { route: `/learn/${topic.slug}`, params: { concept: c.slug } },
+        surface: { route: `/learn/${topic.slug}/concepts/${c.slug}`, params: {} },
         minutes: STAGE_MINUTES.INTAKE,
         reason:
           s.score === 0
@@ -385,9 +391,12 @@ async function loadTopicState(userId, topicId) {
 }
 
 function conceptState(concept, mastery) {
+  const log = Array.isArray(mastery?.signals) ? mastery.signals : [];
+  const primerRead = log.some((s) => s?.source === "primer_read");
   return {
     score: mastery?.score ?? 0,
     teachingReady: mastery?.teachingReady ?? false,
+    primerRead,
   };
 }
 

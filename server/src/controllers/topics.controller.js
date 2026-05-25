@@ -20,7 +20,7 @@
 
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
-import { planNextAction, detectStuck } from "../services/mentor.service.js";
+import { planNextAction, detectStuck, updateMastery } from "../services/mentor.service.js";
 import {
   getCalibrationForTopic,
   scoreCalibration,
@@ -485,5 +485,135 @@ export async function submitTopicCalibration(req, res) {
   } catch (err) {
     console.error("submitTopicCalibration:", err);
     return error(res, "Failed to submit calibration.", 500);
+  }
+}
+
+// ── Concept primer ───────────────────────────────────────────────────
+
+/**
+ * GET /topics/:slug/concepts/:conceptSlug
+ *
+ * Returns the concept primer — only PUBLISHED concepts are user-visible
+ * (DRAFT/REVIEWED are admin-only). Includes the user's mastery state for
+ * the concept and the prereq satisfaction map so the page can show
+ * "you should be at developing+ on X first" advisories.
+ */
+export async function getTopicConcept(req, res) {
+  try {
+    const userId = req.user.id;
+    const { slug, conceptSlug } = req.params;
+
+    const topic = await prisma.topic.findFirst({
+      where: { slug, status: "PUBLISHED" },
+      select: { id: true, slug: true, name: true },
+    });
+    if (!topic) return error(res, "Topic not found.", 404);
+
+    const concept = await prisma.concept.findFirst({
+      where: { topicId: topic.id, slug: conceptSlug, status: "PUBLISHED" },
+      include: {
+        prerequisites: { select: { prereqId: true } },
+      },
+    });
+    if (!concept) return error(res, "Concept not found.", 404);
+
+    // Mastery row for this concept (may not exist yet).
+    const mastery = await prisma.conceptMastery.findUnique({
+      where: { userId_conceptId: { userId, conceptId: concept.id } },
+      select: { score: true, signals: true, teachingReady: true },
+    });
+
+    const log = Array.isArray(mastery?.signals) ? mastery.signals : [];
+    const primerRead = log.some((s) => s?.source === "primer_read");
+
+    // Prereq satisfaction — fetch each prereq concept + the user's mastery for it.
+    const prereqIds = concept.prerequisites.map((p) => p.prereqId);
+    const prereqs = prereqIds.length
+      ? await prisma.concept.findMany({
+          where: { id: { in: prereqIds } },
+          select: { id: true, slug: true, name: true },
+        })
+      : [];
+    const prereqMasteries = prereqIds.length
+      ? await prisma.conceptMastery.findMany({
+          where: { userId, conceptId: { in: prereqIds } },
+          select: { conceptId: true, score: true },
+        })
+      : [];
+    const masteryByConceptId = new Map(prereqMasteries.map((m) => [m.conceptId, m]));
+    const prereqState = prereqs.map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      score: masteryByConceptId.get(p.id)?.score ?? null,
+    }));
+
+    return success(res, {
+      topic: { slug: topic.slug, name: topic.name },
+      concept: {
+        id: concept.id,
+        slug: concept.slug,
+        name: concept.name,
+        order: concept.order,
+        primerMarkdown: concept.primerMarkdown,
+        workedExample: concept.workedExample,
+        canonicalSources: concept.canonicalSources,
+        expectedQuestions: concept.expectedQuestions,
+      },
+      mastery: mastery
+        ? {
+            score: mastery.score,
+            teachingReady: mastery.teachingReady,
+            primerRead,
+          }
+        : { score: null, teachingReady: false, primerRead: false },
+      prereqs: prereqState,
+    });
+  } catch (err) {
+    console.error("getTopicConcept:", err);
+    return error(res, "Failed to load concept.", 500);
+  }
+}
+
+/**
+ * POST /topics/:slug/concepts/:conceptSlug/mark-read
+ *
+ * Records that the user has read the primer. The primer_read signal has
+ * weight 0 so it does NOT bump mastery score — reading isn't proof of
+ * understanding. The mentor uses its presence as a "skip in INTAKE"
+ * marker so the user advances through unread concepts.
+ *
+ * Idempotent: a second call appends a second entry; mentor only checks
+ * for at-least-one. Returns the recomputed nextAction.
+ */
+export async function markConceptRead(req, res) {
+  try {
+    const userId = req.user.id;
+    const { slug, conceptSlug } = req.params;
+
+    const topic = await prisma.topic.findFirst({
+      where: { slug, status: "PUBLISHED" },
+      select: { id: true },
+    });
+    if (!topic) return error(res, "Topic not found.", 404);
+
+    const concept = await prisma.concept.findFirst({
+      where: { topicId: topic.id, slug: conceptSlug, status: "PUBLISHED" },
+      select: { id: true },
+    });
+    if (!concept) return error(res, "Concept not found.", 404);
+
+    await updateMastery(userId, concept.id, { source: "primer_read", value: 0 });
+
+    let nextAction = null;
+    try {
+      nextAction = await planNextAction(userId, topic.id);
+    } catch (err) {
+      console.error("markConceptRead: planNextAction failed:", err);
+    }
+
+    return success(res, { ok: true, nextAction });
+  } catch (err) {
+    console.error("markConceptRead:", err);
+    return error(res, "Failed to mark concept read.", 500);
   }
 }

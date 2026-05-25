@@ -17,6 +17,8 @@ import {
   updateEnrollment,
   getTopicCalibration,
   submitTopicCalibration,
+  getTopicConcept,
+  markConceptRead,
 } from "../controllers/topics.controller.js";
 
 const router = Router();
@@ -30,5 +32,7 @@ router.post("/:slug/enroll", enrollInTopic);
 router.patch("/:slug/enrollment", updateEnrollment);
 router.get("/:slug/calibration", getTopicCalibration);
 router.post("/:slug/calibration/submit", submitTopicCalibration);
+router.get("/:slug/concepts/:conceptSlug", getTopicConcept);
+router.post("/:slug/concepts/:conceptSlug/mark-read", markConceptRead);
 
 export default router;

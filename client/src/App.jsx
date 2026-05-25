@@ -69,6 +69,7 @@ const NoteDetailPage = lazy(() => import('@pages/notes/NoteDetailPage'))
 const LearnPage = lazy(() => import('@pages/learn/LearnPage'))
 const TopicDetailPage = lazy(() => import('@pages/learn/TopicDetailPage'))
 const CalibrationPage = lazy(() => import('@pages/learn/CalibrationPage'))
+const ConceptPage = lazy(() => import('@pages/learn/ConceptPage'))
 const SuperAdminDiagnosticsPage = lazy(() => import('@pages/superadmin/SuperAdminDiagnosticsPage'))
 const DesignStudioPage = lazy(() => import('@pages/DesignStudioPage'))
 // ── Admin pages (lazy — only TEAM_ADMIN accesses these) ──────
@@ -269,6 +270,7 @@ export default function App() {
             <Route path="learn" element={<Lazy><LearnPage /></Lazy>} />
             <Route path="learn/:slug" element={<Lazy><TopicDetailPage /></Lazy>} />
             <Route path="learn/:slug/calibration" element={<Lazy><CalibrationPage /></Lazy>} />
+            <Route path="learn/:slug/concepts/:conceptSlug" element={<Lazy><ConceptPage /></Lazy>} />
             {/* ── Leaderboard ───────────────────────────────────────── */}
             <Route path="leaderboard" element={<LeaderboardPage />} />
             {/* ── Intelligence Report ───────────────────────────────── */}
