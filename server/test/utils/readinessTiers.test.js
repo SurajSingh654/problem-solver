@@ -32,6 +32,8 @@ const tier2ReadyMastery = {
   solutionsNone: 1, solutionsAtDocumented: 6, solutionsAtExplained: 4, solutionsAtDefended: 5, solutionsAtOwned: 2,
   solutionsAtDocumentedOrAbove: 17, solutionsAtExplainedOrAbove: 11, solutionsAtDefendedOrAbove: 7, solutionsAtOwnedOrAbove: 2,
   totalCoding: 18,
+  // D3 communication — meets tier2 (≥1 mock), not FAANG (≥3 mocks)
+  commCeiling: 80, commMocksWithScores: 2, commHasPeerRatings: 0,
 };
 
 // The original-report user — high score from gameable formula but tiny breadth.
@@ -46,6 +48,8 @@ const originalReportMastery = {
   solutionsNone: 0, solutionsAtDocumented: 4, solutionsAtExplained: 0, solutionsAtDefended: 0, solutionsAtOwned: 0,
   solutionsAtDocumentedOrAbove: 4, solutionsAtExplainedOrAbove: 0, solutionsAtDefendedOrAbove: 0, solutionsAtOwnedOrAbove: 0,
   totalCoding: 4,
+  // D3 communication — 0 mocks, 0 peer, written-only ceiling
+  commCeiling: 55, commMocksWithScores: 0, commHasPeerRatings: 0,
 };
 
 // ── Schema ───────────────────────────────────────────────────────────
@@ -229,10 +233,10 @@ describe("classifyReadiness — D2 solution depth gates", () => {
 // ── Legacy regression: flag-off behavior preserved ───────────────────
 
 describe("classifyReadiness — flag-off legacy regression", () => {
-  it("when masteryCounts is null, mastery + depth requirements both ignored", () => {
-    // Under flag-off (both D1 and D2 v2 disabled), passing only the score
-    // gates should yield ready=true. Locks in: legacy users see no behavior
-    // change from the v2 changes to readinessTiers.js.
+  it("when masteryCounts is null, mastery + depth + comm requirements all ignored", () => {
+    // Under flag-off (D1 + D2 + D3 v2 all disabled), passing only the
+    // score gates should yield ready=true. Locks in: legacy users see no
+    // behavior change from the v2 changes to readinessTiers.js.
     const out = classifyReadiness(70, dimsAtTier2Floor, null);
     const tier2 = tierById(out, "tier2");
     expect(tier2.ready).toBe(true);
@@ -244,5 +248,93 @@ describe("classifyReadiness — flag-off legacy regression", () => {
     const tier2 = tierById(out, "tier2");
     expect(tier2.ready).toBe(true);
     expect(tier2.failingMastery).toEqual([]);
+  });
+});
+
+// ── D3 Communication source-quality gates ────────────────────────────
+
+describe("classifyReadiness — D3 communication gates", () => {
+  it("user passing all dim/depth gates but with 0 mocks is NOT tier2 ready", () => {
+    const masteryWithoutMocks = {
+      ...tier2ReadyMastery,
+      commMocksWithScores: 0,
+      commCeiling: 55,
+    };
+    const out = classifyReadiness(70, dimsAtTier2Floor, masteryWithoutMocks);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    expect(tier2.failingMastery.map((f) => f.key)).toContain(
+      "commMocksWithScores",
+    );
+  });
+
+  it("user with exactly 1 mock + everything else passes Tier 2", () => {
+    const masteryWithOneMock = {
+      ...tier2ReadyMastery,
+      commMocksWithScores: 1,
+    };
+    const out = classifyReadiness(70, dimsAtTier2Floor, masteryWithOneMock);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+  });
+
+  it("user with 2 mocks fails FAANG mastery on D3 alone", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    // tier2ReadyMastery has commMocksWithScores=2 — passes tier2 (≥1) but
+    // fails FAANG (≥3). To keep this scoped to D3, give them strong D1/D2
+    // numbers that pass FAANG on patterns + depth.
+    const strongPatternsAndDepth = {
+      ...tier2ReadyMastery,
+      coreSolidOrAbove: 14,
+      owned: 10,
+      solutionsAtDefendedOrAbove: 12,
+      solutionsAtOwned: 6,
+      commMocksWithScores: 2,
+    };
+    const out = classifyReadiness(80, dimsAtFaangFloor, strongPatternsAndDepth);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    expect(faang.failingMastery.map((f) => f.key)).toContain(
+      "commMocksWithScores",
+    );
+  });
+
+  it("original-report user (0 mocks, 0 peer) NOT Tier 2 ready", () => {
+    // The original-report user fails BOTH the D1 (coreSolidOrAbove) AND
+    // D2 (solutionsAtDefendedOrAbove) AND D3 (commMocksWithScores) gates.
+    // This locks in the priority outcome: D3 is *also* a blocker, not
+    // just one of the two prior dims.
+    const out = classifyReadiness(69, dimsAtTier2Floor, originalReportMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    const failedKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failedKeys).toContain("commMocksWithScores");
+    expect(failedKeys).toContain("coreSolidOrAbove");
+    expect(failedKeys).toContain("solutionsAtDefendedOrAbove");
+  });
+
+  it("3 mocks unlocks FAANG D3 gate (tier-A peer signal not yet required)", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const faangReadyMastery = {
+      ...tier2ReadyMastery,
+      coreSolidOrAbove: 14,
+      owned: 10,
+      solutionsAtDefendedOrAbove: 12,
+      solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, faangReadyMastery);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(true);
   });
 });

@@ -17,7 +17,12 @@ import { classifyReadiness } from "../utils/readinessTiers.js";
 import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 import { computePatternMastery, masteryScore } from "../utils/patternMastery.js";
 import { computeSolutionDepth } from "../utils/solutionDepth.js";
-import { FEATURE_PATTERN_MASTERY_V2, FEATURE_SOLUTION_DEPTH_V2 } from "../config/env.js";
+import { computeCommunicationStats } from "../utils/communicationStats.js";
+import {
+  FEATURE_PATTERN_MASTERY_V2,
+  FEATURE_SOLUTION_DEPTH_V2,
+  FEATURE_COMMUNICATION_V2,
+} from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
   readinessVerdictPrompt,
@@ -1060,6 +1065,19 @@ export async function get6DReport(req, res) {
     // calibration calc as the single source of truth).
     let depth = null;
 
+    // COMMUNICATION (D3 v2) — source-tier ceiling scoring. Pure function
+    // of inputs that are all already loaded (clarityRatings, interviews,
+    // aiExplanationScores), so we compute eagerly when the flag is on.
+    // Fixes the score-outside-CI bug + adds tier mastery gates that
+    // require ≥1 mock with comm scores for Tier 2 readiness.
+    const communication = FEATURE_COMMUNICATION_V2
+      ? computeCommunicationStats({
+          clarityRatings,
+          interviews,
+          aiExplanationScores,
+        })
+      : null;
+
     // ════════════════════════════════════════════════
     // INTERVIEW DIMENSION CROSS-FEED
     //
@@ -1409,7 +1427,17 @@ export async function get6DReport(req, res) {
     let d3;
     let communicationFromProxy = false;
 
-    if (clarityRatings.length > 0) {
+    if (communication) {
+      // ── D3 v2: source-tier ceiling scoring ──────────
+      // computeCommunicationStats does the entire thing — peer/live/written
+      // blend, ceiling clamp, asymmetric CI. The legacy if-else cascade
+      // is fully replaced. communicationFromProxy is preserved for client
+      // back-compat: true iff the active source is written-only (the
+      // signal-quality concern the legacy flag also tried to surface).
+      d3 = communication.score ?? 0;
+      communicationFromProxy = communication.sourceQuality === "written-only";
+    } else if (clarityRatings.length > 0) {
+      // ── D3 v1 (legacy) — preserved verbatim for flag-off rollback ──
       d3 = Math.round(
         (clarityRatings.reduce((s, r) => s + r.rating, 0) /
           clarityRatings.length /
@@ -1434,18 +1462,24 @@ export async function get6DReport(req, res) {
       );
     }
 
-    // Quiz cross-feed
+    // Quiz cross-feed. Under v2 the headroom cap is the source ceiling
+    // (so quiz can't lift past what the source-tier earns); under legacy
+    // it stays at 70.
     if (quizSignalD3 !== null) {
       const quizBonus = Math.round(
         (quizSignalD3 / 100) *
           QUIZ_DIMENSION_MAP.d3_communication.maxContribution,
       );
-      const headroom = Math.max(0, 70 - d3);
+      const quizHeadroomCap = communication ? communication.ceiling : 70;
+      const headroom = Math.max(0, quizHeadroomCap - d3);
       d3 = Math.min(d3 + Math.min(quizBonus, headroom), 100);
     }
 
-    // Interview cross-feed — higher weight when no peer ratings
-    if (ivD3 !== null) {
+    // Interview cross-feed — UNDER V2 THIS IS DELETED to avoid double-
+    // counting. computeCommunicationStats already reads `interviews` as a
+    // first-class source (live tier). Re-blending via ivD3 here would
+    // weight mock signal twice. Legacy path keeps the cross-feed.
+    if (!communication && ivD3 !== null) {
       const d3InterviewWeight =
         clarityRatings.length === 0
           ? Math.min(ivBlendWeight * 1.5, 0.5)
@@ -1840,36 +1874,66 @@ export async function get6DReport(req, res) {
       }
     }
 
-    // D3 active iff ≥ 2 peer clarity ratings OR ≥ 2 AI explanation scores.
-    // Pure "approach-length" proxy is not a real communication signal and
-    // doesn't activate the dim.
     let d3Score;
     {
-      const hasEnoughRatings = clarityRatings.length >= 2;
-      const hasEnoughAI = aiExplanationScores.length >= 2;
-      if (!hasEnoughRatings && !hasEnoughAI) {
-        const ratingsNeeded = Math.max(0, 2 - clarityRatings.length);
-        const aiNeeded = Math.max(0, 2 - aiExplanationScores.length);
-        d3Score = inactiveDim(
-          "communication",
-          `Get ${ratingsNeeded} more peer clarity rating${ratingsNeeded === 1 ? "" : "s"} or ${aiNeeded} more AI review${aiNeeded === 1 ? "" : "s"}`,
-          clarityRatings.length + aiExplanationScores.length,
-        );
+      if (communication) {
+        // ── D3 v2 activation: source-tier ceiling gate ──
+        // ceiling === null when no source meets its min-N (≥2 written, ≥1
+        // live, or ≥1 peer). When active, score + CI come from the
+        // already-clamped utility output (asymmetric CI fixes the
+        // legacy score-outside-CI bug).
+        if (communication.ceiling === null) {
+          d3Score = inactiveDim(
+            "communication",
+            "Submit ≥2 solutions for AI review, complete a mock interview, or get peer ratings to activate Communication tracking.",
+            communication.aiExplanationCount
+              + communication.mocksWithCommScores
+              + communication.peerRatingsCount,
+          );
+        } else {
+          d3Score = activeDim("communication", {
+            score: d3,
+            n:
+              communication.peerRatingsCount
+              + communication.mocksWithCommScores
+              + communication.aiExplanationCount,
+            ci: communication.ci,
+            basis: communication.basis,
+          });
+          // Surface the ceiling on the dim object for the Phase 5 UI chip.
+          d3Score.communicationCeiling = communication.ceiling;
+          d3Score.communicationSourceQuality = communication.sourceQuality;
+        }
       } else {
-        // Prefer peer ratings for the CI (more directly measures communication).
-        const ci = hasEnoughRatings
-          ? meanCI(clarityRatings.map((r) => (r.rating / 5) * 100)).ci
-          : meanCI(aiExplanationScores.map((s) => (s / 10) * 100)).ci;
-        d3Score = activeDim("communication", {
-          score: d3,
-          n: Math.max(clarityRatings.length, aiExplanationScores.length),
-          ci,
-          basis: [
-            `peer_ratings: ${clarityRatings.length}`,
-            `ai_explanation_scores: ${aiExplanationScores.length}`,
-            ...(communicationFromProxy ? ["source: proxy (no peer ratings)"] : []),
-          ],
-        });
+        // ── D3 v1 (legacy) activation ──────────────────
+        // ≥2 peer ratings OR ≥2 AI explanation scores. Approach-proxy
+        // doesn't activate the dim.
+        const hasEnoughRatings = clarityRatings.length >= 2;
+        const hasEnoughAI = aiExplanationScores.length >= 2;
+        if (!hasEnoughRatings && !hasEnoughAI) {
+          const ratingsNeeded = Math.max(0, 2 - clarityRatings.length);
+          const aiNeeded = Math.max(0, 2 - aiExplanationScores.length);
+          d3Score = inactiveDim(
+            "communication",
+            `Get ${ratingsNeeded} more peer clarity rating${ratingsNeeded === 1 ? "" : "s"} or ${aiNeeded} more AI review${aiNeeded === 1 ? "" : "s"}`,
+            clarityRatings.length + aiExplanationScores.length,
+          );
+        } else {
+          // Prefer peer ratings for the CI (more directly measures communication).
+          const ci = hasEnoughRatings
+            ? meanCI(clarityRatings.map((r) => (r.rating / 5) * 100)).ci
+            : meanCI(aiExplanationScores.map((s) => (s / 10) * 100)).ci;
+          d3Score = activeDim("communication", {
+            score: d3,
+            n: Math.max(clarityRatings.length, aiExplanationScores.length),
+            ci,
+            basis: [
+              `peer_ratings: ${clarityRatings.length}`,
+              `ai_explanation_scores: ${aiExplanationScores.length}`,
+              ...(communicationFromProxy ? ["source: proxy (no peer ratings)"] : []),
+            ],
+          });
+        }
       }
     }
 
@@ -2055,13 +2119,26 @@ export async function get6DReport(req, res) {
         .filter((d) => d.status === "active")
         .map((d) => [d.key, d.score]),
     );
-    // Merge mastery (D1 v2) + depth (D2 v2) counts into a single object.
-    // Keys are non-overlapping (mastery uses `core*`/`owned`/`solidOrAbove`/...
-    // for patterns; depth uses `solutionsAt*` prefix). When both flags off,
-    // pass null and classifyReadiness uses score-only gates (legacy preserved).
+    // Merge mastery (D1 v2) + depth (D2 v2) + communication (D3 v2) counts
+    // into a single object. Keys are non-overlapping by convention:
+    //   D1 → core*, owned, solidOrAbove, …  (patterns)
+    //   D2 → solutionsAt* prefix              (solutions)
+    //   D3 → comm* prefix                     (communication source quality)
+    // When all flags off, pass null and classifyReadiness uses score-only
+    // gates (legacy preserved).
     const masteryAndDepthCounts =
-      mastery || depth
-        ? { ...(mastery?.counts ?? {}), ...(depth?.counts ?? {}) }
+      mastery || depth || communication
+        ? {
+            ...(mastery?.counts ?? {}),
+            ...(depth?.counts ?? {}),
+            ...(communication
+              ? {
+                  commCeiling: communication.ceiling ?? 0,
+                  commMocksWithScores: communication.mocksWithCommScores,
+                  commHasPeerRatings: communication.sources.peer ? 1 : 0,
+                }
+              : {}),
+          }
         : null;
     const tierInfo = classifyReadiness(
       overall?.score ?? 0,
@@ -2283,6 +2360,22 @@ export async function get6DReport(req, res) {
                 counts: depth.counts,
                 baseScore: depth.baseScore,
                 calibrationModifier: depth.calibrationModifier,
+              }
+            : null,
+          // Communication v2 — null when flag off. When on, the client
+          // reads `communicationCeiling` + `communicationSourceQuality`
+          // off the D3 dim object directly (Phase 5 chip); the analytics
+          // block keeps the full breakdown for the verdict evidence builder.
+          communication: communication
+            ? {
+                ceiling: communication.ceiling,
+                score: communication.score,
+                ci: communication.ci,
+                sources: communication.sources,
+                sourceQuality: communication.sourceQuality,
+                peerRatingsCount: communication.peerRatingsCount,
+                mocksWithCommScores: communication.mocksWithCommScores,
+                aiExplanationCount: communication.aiExplanationCount,
               }
             : null,
           aiReview: {
@@ -2598,6 +2691,20 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Communication v2 — surface source-quality breakdown so the verdict
+  // prompt can satisfy Rule 10 (no D3 strength claim without citing
+  // source). Independent of D1/D2 flag state.
+  const commBlock = report.analytics?.communication;
+  const communication = commBlock
+    ? {
+        ceiling: commBlock.ceiling,
+        sourceQuality: commBlock.sourceQuality,
+        peerCount: commBlock.peerRatingsCount,
+        mockCount: commBlock.mocksWithCommScores,
+        writtenCount: commBlock.aiExplanationCount,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -2607,6 +2714,7 @@ function buildVerdictEvidence(report) {
     nextTier,
     patternMastery,
     solutionDepth,
+    communication,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

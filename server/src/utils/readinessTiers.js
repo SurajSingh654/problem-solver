@@ -58,6 +58,12 @@ export const READINESS_TIERS = [
       // gap — too narrow for tier separation).
       solutionsAtDefendedOrAbove: 10,
       solutionsAtOwned: 5,
+      // D3 v2 (Communication) gates — only checked when comm counts are
+      // passed (FEATURE_COMMUNICATION_V2 on). FAANG requires ≥3 mocks
+      // with comm scores (Anderson & Shackleton 1990 rater-stability
+      // result: ratings stabilize after 3-4 sessions). Peer ratings are
+      // a future tightening once the peer-rating UI ships.
+      commMocksWithScores: 3,
     },
     icon: "🏆",
   },
@@ -77,6 +83,10 @@ export const READINESS_TIERS = [
       owned: 3,
       solutionsAtDefendedOrAbove: 4,
       solutionsAtOwned: 2,
+      // D3 v2: Tier 2 requires ≥1 mock with comm scores. A user with only
+      // AI-rated written explanations cannot honestly be Tier 2 ready on
+      // communication (Levashina 2014: written-only signal r ≈ 0.20).
+      commMocksWithScores: 1,
     },
     icon: "🥈",
   },
