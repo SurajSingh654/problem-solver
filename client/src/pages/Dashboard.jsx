@@ -33,7 +33,7 @@ import { ReviewPreview } from '@components/features/ReviewPreview'
 import { RecallSparkline } from '@components/features/charts/RecallSparkline'
 import { Spinner } from '@components/ui/Spinner'
 import { cn } from '@utils/cn'
-import { PROBLEM_CATEGORIES, DIMENSIONS } from '@utils/constants'
+import { PROBLEM_CATEGORIES, DIMENSIONS, PATTERNS } from '@utils/constants'
 
 // ── Inline mini radar — 6D hexagon ────────────────────
 // Renders a compact SVG radar chart of the 6 dimensions.
@@ -389,8 +389,9 @@ export default function Dashboard() {
   // Weeks to next tier — keyed by tier.id (junior/tier3/tier2/faang)
   const weeksToTiers = report?.analytics?.weeksToTiers || {}
 
-  // Pattern coverage
-  const patternCoverage = report?.analytics?.patternCoverage || { used: 0, total: 16, missing: [] }
+  // Pattern coverage. Default `total` falls back to PATTERNS.length so a
+  // missing-server-data state doesn't show a stale "/16".
+  const patternCoverage = report?.analytics?.patternCoverage || { used: 0, total: PATTERNS.length, missing: [] }
 
   if (isLoading) {
     return (

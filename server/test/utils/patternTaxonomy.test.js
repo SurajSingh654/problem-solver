@@ -4,9 +4,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
     CANONICAL_PATTERN_LABELS,
+    FAANG_CORE_PATTERNS,
     normalizePatterns,
     isCanonicalPattern,
+    isFaangCorePattern,
 } from "../../src/utils/patternTaxonomy.js";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 describe("normalizePatterns", () => {
     let warnSpy;
@@ -116,5 +121,95 @@ describe("CANONICAL_PATTERN_LABELS", () => {
 
     it("has 25 entries total", () => {
         expect(CANONICAL_PATTERN_LABELS).toHaveLength(25);
+    });
+});
+
+describe("FAANG_CORE_PATTERNS", () => {
+    it("has exactly 15 entries", () => {
+        expect(FAANG_CORE_PATTERNS).toHaveLength(15);
+    });
+
+    it("is a subset of CANONICAL_PATTERN_LABELS — every core pattern is canonical", () => {
+        const canonicalSet = new Set(CANONICAL_PATTERN_LABELS);
+        for (const p of FAANG_CORE_PATTERNS) {
+            expect(canonicalSet.has(p)).toBe(true);
+        }
+    });
+
+    it("contains the foundational coding-interview patterns", () => {
+        // Sanity check on the ones that empirically dominate FAANG loops.
+        // If any of these drop out of core, that's a deliberate decision and
+        // this test should be updated alongside the constant.
+        const mustHave = [
+            "Array / Hashing",
+            "Two Pointers",
+            "Trees",
+            "Graphs",
+            "Dynamic Programming",
+        ];
+        for (const p of mustHave) {
+            expect(FAANG_CORE_PATTERNS).toContain(p);
+        }
+    });
+
+    it("does NOT include niche patterns (Bit Manipulation, Math & Geometry, Tries, etc.)", () => {
+        // Those exist in the canonical taxonomy as bonus coverage, not as
+        // core requirements. If FAANG-core grows to include them, revisit
+        // tier requirements (readinessTiers.js) too.
+        const niche = ["Bit Manipulation", "Math & Geometry", "Tries", "Top K Elements"];
+        for (const p of niche) {
+            expect(FAANG_CORE_PATTERNS).not.toContain(p);
+        }
+    });
+});
+
+describe("isFaangCorePattern", () => {
+    it("returns true for core patterns (case-insensitive)", () => {
+        expect(isFaangCorePattern("Trees")).toBe(true);
+        expect(isFaangCorePattern("trees")).toBe(true);
+        expect(isFaangCorePattern("  Two Pointers ")).toBe(true);
+    });
+
+    it("returns false for canonical-but-non-core patterns", () => {
+        expect(isFaangCorePattern("Bit Manipulation")).toBe(false);
+        expect(isFaangCorePattern("Tries")).toBe(false);
+        expect(isFaangCorePattern("Math & Geometry")).toBe(false);
+    });
+
+    it("returns false for invalid input", () => {
+        expect(isFaangCorePattern(null)).toBe(false);
+        expect(isFaangCorePattern(undefined)).toBe(false);
+        expect(isFaangCorePattern("")).toBe(false);
+        expect(isFaangCorePattern(42)).toBe(false);
+    });
+});
+
+describe("pattern-count denominator consistency", () => {
+    // Greppable invariant: no source file should hardcode "/16" as a pattern
+    // denominator. Earlier code had this in 4 places; if a new one creeps in
+    // it'll show up here as a regression. Counts pattern-related references
+    // only — string content of /16 elsewhere (regex, dates, etc) is fine.
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const repoRoot = resolve(__dirname, "../../..");
+
+    it("server stats.controller.js no longer hardcodes /16 as a pattern denominator", () => {
+        const f = readFileSync(
+            resolve(repoRoot, "server/src/controllers/stats.controller.js"),
+            "utf8",
+        );
+        // Only assert that no `uniquePatterns.size / 16` style expression survives.
+        // Plain `/16` could appear in unrelated math.
+        expect(f).not.toMatch(/uniquePatterns\.size\s*\/\s*16\b/);
+        expect(f).not.toMatch(/CANONICAL_PATTERN_COUNT\s*=\s*16\b/);
+    });
+
+    it("server stats.controller.js no longer redefines an inline 16-pattern array", () => {
+        const f = readFileSync(
+            resolve(repoRoot, "server/src/controllers/stats.controller.js"),
+            "utf8",
+        );
+        // The inline duplicate `const CANONICAL_PATTERNS = [...]` is gone —
+        // canonical taxonomy is imported from patternTaxonomy.js.
+        expect(f).not.toMatch(/const\s+CANONICAL_PATTERNS\s*=\s*\[/);
     });
 });

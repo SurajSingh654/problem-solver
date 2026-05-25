@@ -41,9 +41,41 @@ export const CANONICAL_PATTERN_LABELS = [
   "Bit Manipulation",
 ];
 
+// FAANG-core 15: subset of canonical patterns that empirically dominate
+// FAANG coding rounds (per public LeetCode tag aggregations + Educative /
+// interviewing.io frequency data). Used by the Coding Pattern Mastery
+// dimension as the saturating-breadth denominator: covering all 15 = 100;
+// the other 10 patterns contribute a small bonus, not a hard requirement.
+//
+// Every entry MUST also appear in CANONICAL_PATTERN_LABELS — enforced by
+// patternTaxonomy.test.js. When you add or rename a canonical pattern,
+// reconsider whether the FAANG-core list should change.
+export const FAANG_CORE_PATTERNS = [
+  "Array / Hashing",
+  "Two Pointers",
+  "Sliding Window",
+  "Stack",
+  "Binary Search",
+  "Linked List",
+  "Trees",
+  "BFS",
+  "DFS",
+  "Heap / Priority Queue",
+  "Backtracking",
+  "Graphs",
+  "Dynamic Programming",
+  "Greedy",
+  "Intervals",
+];
+
 // Lowercase set for fast O(1) canonical lookup.
 const CANONICAL_LOWER = new Set(
   CANONICAL_PATTERN_LABELS.map((p) => p.toLowerCase()),
+);
+
+// Lowercase set for fast O(1) FAANG-core lookup.
+const FAANG_CORE_LOWER = new Set(
+  FAANG_CORE_PATTERNS.map((p) => p.toLowerCase()),
 );
 
 const MAX_PATTERN_LEN = 60;
@@ -106,4 +138,14 @@ export function normalizePatterns(patterns, { userId, solutionId } = {}) {
 export function isCanonicalPattern(label) {
   if (typeof label !== "string") return false;
   return CANONICAL_LOWER.has(label.trim().toLowerCase());
+}
+
+/**
+ * True iff the label is in the FAANG-core 15 (case-insensitive).
+ * Used by the mastery score formula to weight FAANG-relevant patterns
+ * more heavily than niche / nice-to-have patterns.
+ */
+export function isFaangCorePattern(label) {
+  if (typeof label !== "string") return false;
+  return FAANG_CORE_LOWER.has(label.trim().toLowerCase());
 }

@@ -14,6 +14,7 @@ import {
   stabilityAfterReps,
 } from "../utils/fsrsRetention.js";
 import { classifyReadiness } from "../utils/readinessTiers.js";
+import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
   readinessVerdictPrompt,
@@ -460,7 +461,7 @@ export async function getLeaderboard(req, res) {
     });
 
     const now = Date.now();
-    const CANONICAL_PATTERN_COUNT = 16;
+    const CANONICAL_PATTERN_COUNT = CANONICAL_PATTERN_LABELS.length;
 
     // ══════════════════════════════════════════════════
     // COMPUTE COMPOSITE SCORE PER MEMBER
@@ -654,8 +655,10 @@ export async function getLeaderboard(req, res) {
       // ─────────────────────────────────────────────
       // COMPONENT 5: Pattern Breadth Score (PBS) — 5%
       //
-      // How many of the 16 canonical interview patterns has this
-      // user practiced? Breadth bonus (10%) if > 8 patterns covered.
+      // How many of the canonical interview patterns has this user
+      // practiced? Breadth bonus (10%) at >50% coverage.
+      // CANONICAL_PATTERN_COUNT comes from patternTaxonomy.js — single
+      // source of truth shared across all dimension code.
       // ─────────────────────────────────────────────
       const uniquePatterns = new Set(
         solutions.flatMap((s) => s.patterns ?? []),
@@ -663,7 +666,8 @@ export async function getLeaderboard(req, res) {
       let pbs = Math.round(
         (uniquePatterns.size / CANONICAL_PATTERN_COUNT) * 100,
       );
-      if (uniquePatterns.size > 8) pbs = Math.min(Math.round(pbs * 1.1), 100);
+      const breadthBonusThreshold = Math.floor(CANONICAL_PATTERN_COUNT / 2);
+      if (uniquePatterns.size > breadthBonusThreshold) pbs = Math.min(Math.round(pbs * 1.1), 100);
 
       // ─────────────────────────────────────────────
       // COMPOSITE SCORE
@@ -1202,7 +1206,7 @@ export async function get6DReport(req, res) {
       patternQualityScore =
         withPattern > 0 ? Math.min((withPattern / totalSolutions) * 30, 30) : 0;
     }
-    const diversityBonus = Math.min(uniquePatterns.size / 16, 1) * 20;
+    const diversityBonus = Math.min(uniquePatterns.size / CANONICAL_PATTERN_LABELS.length, 1) * 20;
     const wrongPatternPenalty =
       reviewedSolutions > 0 ? (wrongPatternCount / reviewedSolutions) * 20 : 0;
 
@@ -1897,29 +1901,10 @@ export async function get6DReport(req, res) {
 
     const avgWeeklyVelocity = weeklyBuckets.reduce((a, b) => a + b, 0) / 4;
 
-    const CANONICAL_PATTERNS = [
-      "Array / Hashing",
-      "Two Pointers",
-      "Sliding Window",
-      "Stack",
-      "Binary Search",
-      "Linked List",
-      "Trees",
-      "Tries",
-      "Heap / Priority Queue",
-      "Backtracking",
-      "Graphs",
-      "Dynamic Programming",
-      "Greedy",
-      "Intervals",
-      "Math & Geometry",
-      "Bit Manipulation",
-    ];
-
     const usedPatterns = new Set(
       solutions.flatMap((s) => s.patterns ?? []),
     );
-    const missingPatterns = CANONICAL_PATTERNS.filter(
+    const missingPatterns = CANONICAL_PATTERN_LABELS.filter(
       (p) => !usedPatterns.has(p),
     );
 
@@ -2092,7 +2077,7 @@ export async function get6DReport(req, res) {
           },
           patternCoverage: {
             used: usedPatterns.size,
-            total: CANONICAL_PATTERNS.length,
+            total: CANONICAL_PATTERN_LABELS.length,
             missing: missingPatterns,
           },
           aiReview: {

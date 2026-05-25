@@ -11,6 +11,7 @@ import { Spinner } from '@components/ui/Spinner'
 import { RadarChart } from '@components/charts/RadarChart'
 import { cn } from '@utils/cn'
 import { useWeeklyPlan } from '@hooks/useAI'
+import { PATTERNS } from '@utils/constants'
 
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
@@ -1140,8 +1141,8 @@ function CoachingPlanCard() {
                 {[
                   {
                     label: 'Pattern coverage',
-                    value: `${plan.diagnosticSummary.patternCoverage}/16`,
-                    alert: plan.diagnosticSummary.patternCoverage < 8,
+                    value: `${plan.diagnosticSummary.patternCoverage}/${PATTERNS.length}`,
+                    alert: plan.diagnosticSummary.patternCoverage < Math.floor(PATTERNS.length / 2),
                   },
                   {
                     label: 'Optimization rate',

@@ -43,12 +43,12 @@ Workflow for any new schema change:
 
 1. Edit `schema.prisma`.
 2. Pre-create the migration file by hand: `prisma/migrations/YYYYMMDD000000_my_change/migration.sql` containing the raw SQL.
-3. Run `npm run db:migrate`. Prisma applies your migration, then prompts "Enter a name for the new migration" — **Ctrl+C**. The prompt is for a *second* migration to "fix" the vector drift; letting it run produces harmful SQL.
+3. Run `npm run db:migrate`. Prisma applies your migration, then prompts "Enter a name for the new migration" — **Ctrl+C**. The prompt is for a _second_ migration to "fix" the vector drift; letting it run produces harmful SQL.
 4. Verify: `npx prisma migrate status` should say "Database schema is up to date." That's the authoritative check.
 
 The pre-push gate uses `migrate status` (not `migrate dev`), so the drift never blocks a push.
 
-Alternative if the prompt annoys you: `npx prisma migrate dev --create-only --name my_change` generates the migration file *without* applying or drift-checking, then `npx prisma migrate deploy` applies it.
+Alternative if the prompt annoys you: `npx prisma migrate dev --create-only --name my_change` generates the migration file _without_ applying or drift-checking, then `npx prisma migrate deploy` applies it.
 
 ### Pre-push gate (required)
 
@@ -69,6 +69,7 @@ The hook runs (in order, ~30s end-to-end):
 Bypass with `git push --no-verify` only in genuine emergencies. The hook is intentionally fast (~30s) so the cost is well under the cost of any prod regression.
 
 **Test runners:**
+
 - Server: vitest. Layered tests:
   - `test/ai/validators.test.js` — pure-function validator + fallback unit tests (golden cases per rule)
   - `test/utils/notesCompression.test.js` — utility unit tests
@@ -105,6 +106,7 @@ Shared DB, shared schema, `teamId` FK on every tenant-scoped table. Two middlewa
 SUPER_ADMIN users can override team context with `?teamId=...` or the `X-Team-Id` header — this is intentional for cross-team admin tooling. Regular users cannot.
 
 Roles live in two dimensions:
+
 - `globalRole`: `USER` | `SUPER_ADMIN` (platform-wide)
 - `teamRole`: `MEMBER` | `TEAM_ADMIN` (per-team, travels with `currentTeamId`)
 
@@ -205,4 +207,4 @@ Path aliases (`@/`, `@components`, `@pages`, `@hooks`, `@store`, `@services`, `@
   3. **Zod request schema** — `server/src/schemas/*.schema.js` lists the field. The schemas are `.strict()`, so unknown keys → 400; missing-from-schema fields are silently dropped from `req.body` by `validate()`. The validate middleware logs `[validate:stripped]` in dev when this happens.
   4. **Controller `contentFields` allow-list** (or equivalent allow-list pattern in the controller).
   5. **Client payload builder** — the page that POSTs/PUTs the new field.
-  Add a wire-level integration test for the new field via the pattern in `server/test/integration/solutions.update.integration.test.js` — that test catches all five drift cases, including the "field missing from Zod schema" silent strip. First diagnostic for "field is in the request payload but the DB column is null" is logging `Object.keys(req.body)` at controller entry; if the field is missing there, it's a Zod schema problem, not a Prisma problem.
+     Add a wire-level integration test for the new field via the pattern in `server/test/integration/solutions.update.integration.test.js` — that test catches all five drift cases, including the "field missing from Zod schema" silent strip. First diagnostic for "field is in the request payload but the DB column is null" is logging `Object.keys(req.body)` at controller entry; if the field is missing there, it's a Zod schema problem, not a Prisma problem.
