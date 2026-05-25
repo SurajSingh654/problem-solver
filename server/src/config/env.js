@@ -144,6 +144,16 @@ export const FEATURE_PATTERN_MASTERY_V2 = optional('FEATURE_PATTERN_MASTERY_V2',
 // Independent rollout from D1's flag — flip separately. Client mirror:
 // VITE_FEATURE_SOLUTION_DEPTH_V2 (must also be in client/Dockerfile ARG).
 export const FEATURE_SOLUTION_DEPTH_V2 = optional('FEATURE_SOLUTION_DEPTH_V2', 'false') === 'true'
+// Communication v2 — replaces the legacy if-else cascade (peer / AI-text /
+// approach-length proxy) with source-tier ceiling scoring: written-only
+// caps at 55, live mock signal lifts to 80, peer ratings unlock 100.
+// Fixes the score-outside-CI bug (legacy CI used raw values; score used
+// post-cap value — they disagreed). New CI is asymmetric: half-width from
+// raw distribution, recentered at capped score, clamped at ceiling on
+// upper side. Adds tier gates that require ≥1 mock with comm scores for
+// Tier 2, ≥3 for FAANG. Independent rollout from D1/D2 — flip separately.
+// Client mirror: VITE_FEATURE_COMMUNICATION_V2 (also in client/Dockerfile ARG).
+export const FEATURE_COMMUNICATION_V2 = optional('FEATURE_COMMUNICATION_V2', 'false') === 'true'
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null
