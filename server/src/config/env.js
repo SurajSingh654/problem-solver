@@ -128,6 +128,13 @@ export const FEATURE_TEACHING_SESSIONS = optional('FEATURE_TEACHING_SESSIONS', '
 // Dockerfile must declare a matching ARG/ENV pair so the var reaches
 // `vite build` — runtime Railway env vars do not auto-flow into ARGs.
 export const FEATURE_NOTES_ENABLED = optional('FEATURE_NOTES_ENABLED', 'false') === 'true'
+// Coding Pattern Mastery v2 — replaces the legacy "Pattern Recognition"
+// formula (free pts for self-tagging) with a 5-state per-pattern mastery
+// scheme + saturating-breadth scoring + dual tier gates (score AND
+// per-mastery counts). When OFF, D1 falls through to the legacy formula
+// and tier classification ignores masteryRequirements. Client mirror:
+// VITE_FEATURE_PATTERN_MASTERY_V2.
+export const FEATURE_PATTERN_MASTERY_V2 = optional('FEATURE_PATTERN_MASTERY_V2', 'false') === 'true'
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

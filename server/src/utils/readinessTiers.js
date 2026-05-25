@@ -23,6 +23,14 @@
  * threshold plus hard per-dimension requirements. A user is "ready" for
  * a tier when overall ≥ tier.threshold AND all per-dim requirements met.
  *
+ * `masteryRequirements` are an additional gate enforced only when the
+ * Coding Pattern Mastery v2 flag is on. They check counts on the per-
+ * pattern mastery breakdown returned by computePatternMastery() — e.g.
+ * `coreSolidOrAbove >= 10` means at least 10 of the 15 FAANG-core
+ * patterns must be at SOLID or OWNED. When the flag is off (or
+ * masteryCounts is not passed to classifyReadiness), these are ignored
+ * and tier readiness uses the legacy score-only behavior.
+ *
  * Thresholds were picked by product feel, not fit from data. Intentional —
  * we don't have outcome data yet. The VerdictLog table is how we'll
  * calibrate once we do.
@@ -39,6 +47,12 @@ export const READINESS_TIERS = [
       pressurePerformance: 70,
       solutionDepth: 65,
     },
+    masteryRequirements: {
+      // 13/15 FAANG-core at SOLID+ leaves room for genuine specialization
+      // gaps without letting a 3-pattern-only user pass.
+      coreSolidOrAbove: 13,
+      owned: 8,
+    },
     icon: "🏆",
   },
   {
@@ -52,6 +66,10 @@ export const READINESS_TIERS = [
       pressurePerformance: 55,
       solutionDepth: 50,
     },
+    masteryRequirements: {
+      coreSolidOrAbove: 10,
+      owned: 3,
+    },
     icon: "🥈",
   },
   {
@@ -64,6 +82,9 @@ export const READINESS_TIERS = [
       optimization: 35,
       pressurePerformance: 40,
     },
+    masteryRequirements: {
+      solidOrAbove: 6,
+    },
     icon: "🥉",
   },
   {
@@ -75,28 +96,43 @@ export const READINESS_TIERS = [
       patternRecognition: 30,
       optimization: 20,
     },
+    masteryRequirements: {
+      workingOrAbove: 4,
+    },
     icon: "🌱",
   },
 ];
 
 /**
- * Given an overall score (0-100) and a dimension-score object keyed by
- * dimension name, return tier-readiness info.
+ * Given an overall score (0-100), per-dimension scores, and (optionally)
+ * mastery counts from computePatternMastery(), return tier-readiness info.
  *
  * Returns an object with:
  *   tiers: array of per-tier {id, name, companies, threshold, icon,
- *          ready, close, overallGap, failingDimensions}
+ *          ready, close, overallGap, failingDimensions, failingMastery}
  *   highest: the tier the user is currently ready for (or null)
  *   next: the next-higher tier they are NOT ready for (or null if already top)
  *
- * A tier is "ready" only if BOTH conditions hold:
+ * A tier is "ready" only if ALL of these hold:
  *   1. overall ≥ threshold
- *   2. every requirement key is met by the matching dim score
+ *   2. every dimension requirement key is met by the matching dim score
+ *   3. every mastery requirement key is met by the matching count
+ *      (when masteryCounts is provided)
  *
  * Dimensions with score = null (inactive) count as not-meeting the
  * requirement — you can't claim readiness on an unmeasured skill.
+ *
+ * @param {number} overallScore  0-100
+ * @param {Record<string,number>} [dimScoresByKey]  e.g. { patternRecognition: 60, ... }
+ * @param {object} [masteryCounts]  shape from computePatternMastery().counts.
+ *   When omitted, mastery gates are NOT checked (legacy behavior). Pass it
+ *   only when the Pattern Mastery v2 flag is on.
  */
-export function classifyReadiness(overallScore, dimScoresByKey = {}) {
+export function classifyReadiness(
+  overallScore,
+  dimScoresByKey = {},
+  masteryCounts = null,
+) {
   const overall = Number.isFinite(overallScore) ? overallScore : 0;
 
   const tiers = READINESS_TIERS.map((tier) => {
@@ -107,9 +143,30 @@ export function classifyReadiness(overallScore, dimScoresByKey = {}) {
         failing.push({ dimension: dim, needed, actual: dimScore ?? null });
       }
     }
+
+    const failingMastery = [];
+    if (masteryCounts && tier.masteryRequirements) {
+      for (const [key, needed] of Object.entries(tier.masteryRequirements)) {
+        const actual = masteryCounts[key];
+        if (!Number.isFinite(actual) || actual < needed) {
+          failingMastery.push({ key, needed, actual: actual ?? 0 });
+        }
+      }
+    }
+
     const overallGap = Math.max(0, tier.threshold - overall);
-    const ready = overall >= tier.threshold && failing.length === 0;
-    const close = !ready && overallGap <= 10 && failing.length <= 1;
+    const ready =
+      overall >= tier.threshold
+      && failing.length === 0
+      && failingMastery.length === 0;
+    // "close" — within 10 points overall AND at most one failing dim AND
+    // at most one failing mastery requirement. Mastery gates can't make a
+    // user "ready", but they can pull them out of "close" when far away.
+    const close =
+      !ready
+      && overallGap <= 10
+      && failing.length <= 1
+      && failingMastery.length <= 1;
 
     return {
       id: tier.id,
@@ -121,6 +178,7 @@ export function classifyReadiness(overallScore, dimScoresByKey = {}) {
       close,
       overallGap,
       failingDimensions: failing,
+      failingMastery,
     };
   });
 

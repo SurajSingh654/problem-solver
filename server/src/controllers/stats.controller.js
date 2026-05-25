@@ -15,6 +15,8 @@ import {
 } from "../utils/fsrsRetention.js";
 import { classifyReadiness } from "../utils/readinessTiers.js";
 import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
+import { computePatternMastery, masteryScore } from "../utils/patternMastery.js";
+import { FEATURE_PATTERN_MASTERY_V2 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
   readinessVerdictPrompt,
@@ -836,8 +838,13 @@ export async function get6DReport(req, res) {
     const solutions = await prisma.solution.findMany({
       where: { userId, teamId },
       select: {
+        // Pattern Mastery v2 needs: id (to correlate with reviewAttempts),
+        // solveMethod (gates COLD-counted solves), problem.difficulty
+        // (gates SOLID transitions on multi-difficulty exposure).
+        id: true,
         patterns: true,
         patternIdentificationTime: true,
+        solveMethod: true,
         keyInsight: true,
         feynmanExplanation: true,
         realWorldConnection: true,
@@ -856,7 +863,7 @@ export async function get6DReport(req, res) {
         reviewCount: true,
         aiFeedback: true,
         createdAt: true,
-        problem: { select: { category: true } },
+        problem: { select: { category: true, difficulty: true } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -1021,6 +1028,18 @@ export async function get6DReport(req, res) {
         ? aiCodeCorrectnessScores.reduce((a, b) => a + b, 0) /
           aiCodeCorrectnessScores.length
         : null;
+
+    // ════════════════════════════════════════════════
+    // CODING PATTERN MASTERY (D1 v2) — computed once, used by the D1
+    // score formula AND the tier-readiness gate. When the flag is off,
+    // mastery is null and both code paths fall back to legacy behavior.
+    // ════════════════════════════════════════════════
+    const mastery = FEATURE_PATTERN_MASTERY_V2
+      ? computePatternMastery({
+          solutions,
+          reviewAttempts: successfulReviewAttempts,
+        })
+      : null;
 
     // ════════════════════════════════════════════════
     // INTERVIEW DIMENSION CROSS-FEED
@@ -1198,27 +1217,44 @@ export async function get6DReport(req, res) {
       solutions.flatMap((s) => s.patterns ?? []),
     );
 
-    const patternAttemptRate = (withPattern / totalSolutions) * 30;
-    let patternQualityScore;
-    if (avgAiPatternAccuracy !== null) {
-      patternQualityScore = (avgAiPatternAccuracy / 10) * 50;
-    } else {
-      patternQualityScore =
-        withPattern > 0 ? Math.min((withPattern / totalSolutions) * 30, 30) : 0;
-    }
-    const diversityBonus = Math.min(uniquePatterns.size / CANONICAL_PATTERN_LABELS.length, 1) * 20;
     const wrongPatternPenalty =
       reviewedSolutions > 0 ? (wrongPatternCount / reviewedSolutions) * 20 : 0;
 
-    let d1 = Math.max(
-      Math.round(
-        patternAttemptRate +
-          patternQualityScore +
-          diversityBonus -
-          wrongPatternPenalty,
-      ),
-      0,
-    );
+    let d1;
+    if (mastery) {
+      // ── D1 v2: Coding Pattern Mastery ─────────────────
+      // Score = 0.6 * saturating-breadth + 0.4 * depth, with FAANG-core
+      // saturation. wrongPatternPenalty preserved as a cross-cutting
+      // penalty independent of the mastery state machine (an across-
+      // pattern signal of mis-claiming).
+      d1 = Math.max(
+        masteryScore({ breadth: mastery.breadth, depth: mastery.depth })
+          - Math.round(wrongPatternPenalty),
+        0,
+      );
+    } else {
+      // ── D1 v1 (legacy): tag + AI-agreement + diversity ─
+      // Kept for flag-off rollback. Removed once V2 is fully launched.
+      const patternAttemptRate = (withPattern / totalSolutions) * 30;
+      let patternQualityScore;
+      if (avgAiPatternAccuracy !== null) {
+        patternQualityScore = (avgAiPatternAccuracy / 10) * 50;
+      } else {
+        patternQualityScore =
+          withPattern > 0 ? Math.min((withPattern / totalSolutions) * 30, 30) : 0;
+      }
+      const diversityBonus = Math.min(uniquePatterns.size / CANONICAL_PATTERN_LABELS.length, 1) * 20;
+
+      d1 = Math.max(
+        Math.round(
+          patternAttemptRate +
+            patternQualityScore +
+            diversityBonus -
+            wrongPatternPenalty,
+        ),
+        0,
+      );
+    }
 
     // Quiz cross-feed
     if (quizSignalD1 !== null) {
@@ -1604,30 +1640,79 @@ export async function get6DReport(req, res) {
     // (self-reported patterns need external validation to be trusted).
     let d1Score;
     {
-      const hasMinPatterns = withPattern >= 3;
-      const hasValidation = reviewedSolutions >= 1;
-      if (!hasMinPatterns || !hasValidation) {
-        const parts = [];
-        if (!hasMinPatterns) {
-          parts.push(`claim patterns on ${3 - withPattern} more solution${3 - withPattern === 1 ? "" : "s"}`);
+      if (mastery) {
+        // ── D1 v2 activation: mastery-aware gate ────────
+        // Need ≥3 patterns at TOUCHED-or-above (real exposure) AND ≥2 AI
+        // reviews (validation that the user's claims are credible).
+        const hasMinTouched = mastery.counts.touchedOrAbove >= 3;
+        const hasValidation = reviewedSolutions >= 2;
+        if (!hasMinTouched || !hasValidation) {
+          const parts = [];
+          if (!hasMinTouched) {
+            const need = 3 - mastery.counts.touchedOrAbove;
+            parts.push(`solve a problem under ${need} more pattern${need === 1 ? "" : "s"}`);
+          }
+          if (!hasValidation) {
+            const need = 2 - reviewedSolutions;
+            parts.push(`get ${need} more AI review${need === 1 ? "" : "s"} to validate`);
+          }
+          d1Score = inactiveDim(
+            "patternRecognition",
+            parts.join(" and "),
+            mastery.counts.touchedOrAbove,
+          );
+        } else {
+          // CI from Wilson on (solid+ patterns / canonical total) — measures
+          // the actual claim D1 v2 makes: "what fraction of canonical
+          // patterns the user has Solid mastery of". Naturally widens for
+          // users with few patterns covered.
+          const { ci } = wilsonCI(
+            mastery.counts.solidOrAbove,
+            CANONICAL_PATTERN_LABELS.length,
+          );
+          d1Score = activeDim("patternRecognition", {
+            score: d1,
+            n: mastery.counts.touchedOrAbove,
+            ci,
+            basis: [
+              `patterns_owned: ${mastery.counts.owned}`,
+              `patterns_solid: ${mastery.counts.solid}`,
+              `patterns_working: ${mastery.counts.working}`,
+              `patterns_touched: ${mastery.counts.touched}`,
+              `patterns_untouched: ${mastery.counts.untouched}`,
+              `core_solid_or_above: ${mastery.counts.coreSolidOrAbove}/${mastery.counts.totalCore}`,
+              `ai_reviews: ${reviewedSolutions}`,
+              ...(wrongPatternCount > 0 ? [`wrong_pattern_flags: ${wrongPatternCount}`] : []),
+            ],
+          });
+          // Attach the per-pattern matrix for the client UI (Phase 5).
+          d1Score.patternMatrix = mastery.matrix;
         }
-        if (!hasValidation) parts.push("get at least 1 AI review to validate");
-        d1Score = inactiveDim("patternRecognition", parts.join(" and "), withPattern);
       } else {
-        // CI from Wilson on the pattern-attempt proportion, score from
-        // the existing multi-signal computation (preserves cross-feeds).
-        const { ci } = wilsonCI(withPattern, totalSolutions);
-        d1Score = activeDim("patternRecognition", {
-          score: d1,
-          n: withPattern,
-          ci,
-          basis: [
-            `patterns_claimed: ${withPattern}`,
-            `unique_patterns: ${uniquePatterns.size}`,
-            `ai_reviews: ${reviewedSolutions}`,
-            ...(wrongPatternCount > 0 ? [`wrong_pattern_flags: ${wrongPatternCount}`] : []),
-          ],
-        });
+        // ── D1 v1 (legacy) activation ───────────────────
+        const hasMinPatterns = withPattern >= 3;
+        const hasValidation = reviewedSolutions >= 1;
+        if (!hasMinPatterns || !hasValidation) {
+          const parts = [];
+          if (!hasMinPatterns) {
+            parts.push(`claim patterns on ${3 - withPattern} more solution${3 - withPattern === 1 ? "" : "s"}`);
+          }
+          if (!hasValidation) parts.push("get at least 1 AI review to validate");
+          d1Score = inactiveDim("patternRecognition", parts.join(" and "), withPattern);
+        } else {
+          const { ci } = wilsonCI(withPattern, totalSolutions);
+          d1Score = activeDim("patternRecognition", {
+            score: d1,
+            n: withPattern,
+            ci,
+            basis: [
+              `patterns_claimed: ${withPattern}`,
+              `unique_patterns: ${uniquePatterns.size}`,
+              `ai_reviews: ${reviewedSolutions}`,
+              ...(wrongPatternCount > 0 ? [`wrong_pattern_flags: ${wrongPatternCount}`] : []),
+            ],
+          });
+        }
       }
     }
 
@@ -1878,7 +1963,14 @@ export async function get6DReport(req, res) {
         .filter((d) => d.status === "active")
         .map((d) => [d.key, d.score]),
     );
-    const tierInfo = classifyReadiness(overall?.score ?? 0, dimScoresByKey);
+    // Pass mastery.counts only when v2 is on — when null, classifyReadiness
+    // skips masteryRequirements entirely and falls back to the score-only
+    // gate (legacy behavior preserved).
+    const tierInfo = classifyReadiness(
+      overall?.score ?? 0,
+      dimScoresByKey,
+      mastery?.counts ?? null,
+    );
 
     // ════════════════════════════════════════════════
     // ANALYTICS LAYER
@@ -2080,6 +2172,12 @@ export async function get6DReport(req, res) {
             total: CANONICAL_PATTERN_LABELS.length,
             missing: missingPatterns,
           },
+          // Coding Pattern Mastery v2 — null when flag off so client falls
+          // through to the legacy PatternCoverageCard. When on, the client
+          // renders PatternMasteryCard (Phase 5) from this block.
+          patternMastery: mastery
+            ? { matrix: mastery.matrix, counts: mastery.counts }
+            : null,
           aiReview: {
             avgScore:
               aiAvgOverall !== null ? Math.round(aiAvgOverall * 10) / 10 : null,
