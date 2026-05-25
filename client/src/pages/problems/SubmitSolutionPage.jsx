@@ -66,6 +66,40 @@ function FormSection({ icon, title, hint, badge, required, children, className }
     )
 }
 
+// ── Solve method picker ────────────────────────────────
+// Three-way radio: COLD / HINTS / SAW_APPROACH. Stored on the Solution
+// row and read by AI review (confidence calibration) and the Coding
+// Pattern Mastery dim (only COLD solves count toward WORKING transitions).
+const SOLVE_METHODS = [
+    { value: 'COLD',         label: 'Cold',         hint: 'No hints, no peeking',           icon: '🧊' },
+    { value: 'HINTS',        label: 'With hints',   hint: 'Used a small nudge',             icon: '💡' },
+    { value: 'SAW_APPROACH', label: 'Saw approach', hint: 'Looked at the canonical answer', icon: '👀' },
+]
+function SolveMethodPicker({ value, onChange }) {
+    return (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {SOLVE_METHODS.map(m => (
+                <button key={m.value} type="button" onClick={() => onChange(m.value)}
+                    className={cn(
+                        'border rounded-xl px-3 py-2.5 text-left transition-all',
+                        value === m.value
+                            ? 'bg-brand-soft border-brand-line scale-[1.01]'
+                            : 'bg-surface-3 border-border-default hover:border-border-strong',
+                    )}>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm">{m.icon}</span>
+                        <span className={cn('text-xs font-bold',
+                            value === m.value ? 'text-brand-fg-soft' : 'text-text-primary')}>
+                            {m.label}
+                        </span>
+                    </div>
+                    <p className="text-[10px] text-text-tertiary mt-1 leading-tight">{m.hint}</p>
+                </button>
+            ))}
+        </div>
+    )
+}
+
 // ── Multi-select Pattern Selector ──────────────────────
 // Bug 2 fix: upgraded from single-select string to multi-select array.
 // value is string[], onChange receives string[].
@@ -759,6 +793,10 @@ export default function SubmitSolutionPage() {
     const [keyInsight, setKeyInsight] = useState('')
     const [feynmanExplanation, setFeynmanExplanation] = useState('')
     const [realWorldConnection, setRealWorldConnection] = useState('')
+    // Default to COLD on new submissions. AI review uses this to discount
+    // confidence (SAW_APPROACH ⇒ heavy discount); leaving it null on a
+    // freshly-typed solution is almost always wrong.
+    const [solveMethod, setSolveMethod] = useState('COLD')
     // Confidence is null until the user picks a level. The server rejects
     // anything outside 1-5, so we gate submission on a real value.
     const [confidence, setConfidence] = useState(null)
@@ -931,6 +969,7 @@ export default function SubmitSolutionPage() {
                 feynmanExplanation: feynmanExplanation || null,
                 realWorldConnection: realWorldConnection || null,
                 patterns,
+                solveMethod,
             }
         } else {
             // CODING (legacy) or any non-tabbed path — generic columns canonical.
@@ -943,6 +982,7 @@ export default function SubmitSolutionPage() {
                 feynmanExplanation: feynmanExplanation || null,
                 realWorldConnection: realWorldConnection || null,
                 patterns,
+                solveMethod,
                 // categorySpecificData omitted for CODING
             }
         }
@@ -1183,6 +1223,13 @@ export default function SubmitSolutionPage() {
                             <FormSection icon="🧩" title={fields.patternIdentified.label || 'Pattern Identified'}
                                 hint="AI will verify if your identified pattern matches your solution">
                                 <PatternSelector config={fields.patternIdentified} value={patterns} onChange={setPatterns} />
+                            </FormSection>
+                        )}
+
+                        {fields.patternIdentified?.show && (
+                            <FormSection icon="🧭" title="How did you solve it?"
+                                hint="Honest signal for AI calibration. SAW_APPROACH heavily discounts confidence; only solves marked COLD count toward Pattern Mastery progression.">
+                                <SolveMethodPicker value={solveMethod} onChange={setSolveMethod} />
                             </FormSection>
                         )}
 

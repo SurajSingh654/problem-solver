@@ -53,6 +53,10 @@ export const createSolutionSchema = z.object({
   // Cap at 10 to prevent abusive payloads; labels capped at 100 chars.
   patterns: z.array(z.string().min(1).max(100)).max(10).default([]),
   patternIdentificationTime: z.number().int().positive().nullable().optional(),
+  // How the user arrived at the solution. Mirrors DB CHECK constraint.
+  // Treated as honesty signal by AI review (SAW_APPROACH discounts
+  // confidence) and as a gate by Coding Pattern Mastery scoring.
+  solveMethod: z.enum(["COLD", "HINTS", "SAW_APPROACH"]).nullable().optional(),
   // Category-specific structured data (HR/Behavioral/TK/DB workspaces etc.)
   // Stored as Prisma `Json?` — shape varies per category.
   categorySpecificData: z.record(z.any()).nullable().optional(),

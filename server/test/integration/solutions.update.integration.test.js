@@ -187,6 +187,45 @@ describe("PUT /api/solutions/:solutionId — wire-level", () => {
     expect(mockUpdates[0].data.alternativeMeta).toEqual(payload.alternativeMeta);
   });
 
+  it("forwards solveMethod from request body to Prisma update args", async () => {
+    // Pinned regression for the live-bug fix: solveMethod was being read in
+    // ai.controller.js / ai.prompts.js as if it existed before this column
+    // was added. If a future refactor strips it from the Zod schema or the
+    // controller's contentFields list, AI confidence-discount math goes back
+    // to undefined and Pattern Mastery WORKING transitions silently overcount.
+    const payload = {
+      approach: "<p>opt</p>",
+      confidence: 4,
+      patterns: ["Sliding Window"],
+      solveMethod: "HINTS",
+    };
+
+    const { status } = await call(server.url, "PUT", "/api/solutions/sol_1", payload, principal);
+    expect(status).toBe(200);
+    expect(mockUpdates).toHaveLength(1);
+    expect(mockUpdates[0].data.solveMethod).toBe("HINTS");
+  });
+
+  it("rejects invalid solveMethod values with 400", async () => {
+    // Catches: Zod enum widened by mistake, DB CHECK constraint dropped,
+    // or someone aliasing a typo'd value through the API.
+    const payload = {
+      confidence: 3,
+      patterns: [],
+      solveMethod: "GUESSED",
+    };
+
+    const { status, body } = await call(
+      server.url,
+      "PUT",
+      "/api/solutions/sol_1",
+      payload,
+      principal,
+    );
+    expect(status).toBe(400);
+    expect(body?.error?.code).toBe("VALIDATION_ERROR");
+  });
+
   it("rejects unknown keys with 400 (strict-mode regression guard)", async () => {
     // If schema strict-mode is removed in a refactor, this test fails —
     // alerting us that we lost the loud-failure signal for schema drift.

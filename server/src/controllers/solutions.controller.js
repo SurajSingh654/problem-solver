@@ -126,6 +126,7 @@ export async function submitSolution(req, res) {
       confidence,
       patterns,
       patternIdentificationTime,
+      solveMethod,
       followUpAnswers,
     } = req.body;
 
@@ -173,6 +174,7 @@ export async function submitSolution(req, res) {
           confidence,
           patterns: normalizedPatterns,
           patternIdentificationTime,
+          solveMethod: solveMethod ?? null,
           categorySpecificData: req.body.categorySpecificData || null,
           // SM-2 initial state
           nextReviewDate: sm2.nextReviewDate,
@@ -770,6 +772,7 @@ export async function updateSolution(req, res) {
       "confidence",
       "patterns",
       "patternIdentificationTime",
+      "solveMethod",
       "categorySpecificData",
     ];
     contentFields.forEach((field) => {

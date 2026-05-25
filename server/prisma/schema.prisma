@@ -758,6 +758,13 @@ model Solution {
   patterns                  String[] @default([])
   patternIdentificationTime Int?
 
+  // How the user arrived at the solution. NULL = legacy (pre-2026-05).
+  // Allowed values: "COLD" | "HINTS" | "SAW_APPROACH". Constraint enforced
+  // at the DB layer (see migration 20261011000000_add_solve_method). Used
+  // by AI review prompt to discount confidence (SAW_APPROACH ⇒ heavy
+  // discount) and by Coding Pattern Mastery to gate WORKING transitions.
+  solveMethod               String?
+
   // ── Per-tab metadata (BruteForce + Alternative tabs) ──
   // Schema initially had a single set of canonical metadata columns
   // (code / language / timeComplexity / spaceComplexity). The tabbed

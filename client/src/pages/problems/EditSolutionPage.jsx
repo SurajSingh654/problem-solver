@@ -112,6 +112,41 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
 
 // ── Multi-select Pattern Selector ──────────────────────
 // Bug 2 fix: upgraded from single-select string to multi-select array.
+// ── Solve method picker (edit page) ────────────────────
+// Three-way radio: COLD / HINTS / SAW_APPROACH. Stored on the Solution
+// row and read by AI review (confidence calibration) and the Coding
+// Pattern Mastery dim. Allows null on legacy rows; user can opt-in to
+// claim a value.
+const EDIT_SOLVE_METHODS = [
+    { value: 'COLD',         label: 'Cold',         hint: 'No hints, no peeking',           icon: '🧊' },
+    { value: 'HINTS',        label: 'With hints',   hint: 'Used a small nudge',             icon: '💡' },
+    { value: 'SAW_APPROACH', label: 'Saw approach', hint: 'Looked at the canonical answer', icon: '👀' },
+]
+function EditSolveMethodPicker({ value, onChange }) {
+    return (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {EDIT_SOLVE_METHODS.map(m => (
+                <button key={m.value} type="button" onClick={() => onChange(m.value)}
+                    className={cn(
+                        'border rounded-xl px-3 py-2.5 text-left transition-all',
+                        value === m.value
+                            ? 'bg-brand-soft border-brand-line scale-[1.01]'
+                            : 'bg-surface-3 border-border-default hover:border-border-strong',
+                    )}>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm">{m.icon}</span>
+                        <span className={cn('text-xs font-bold',
+                            value === m.value ? 'text-brand-fg-soft' : 'text-text-primary')}>
+                            {m.label}
+                        </span>
+                    </div>
+                    <p className="text-[10px] text-text-tertiary mt-1 leading-tight">{m.hint}</p>
+                </button>
+            ))}
+        </div>
+    )
+}
+
 // value is string[], onChange receives string[].
 // Custom patterns added via Enter key (additive, not replacement).
 // Selected patterns shown as dismissible chips.
@@ -765,6 +800,10 @@ export default function EditSolutionPage() {
     const [tkConfidence, setTkConfidence] = useState(3)
 
     // ── Generic form state ─────────────────────────────
+    // solveMethod state — null preserved on first edit so legacy rows keep
+    // their NULL value unless the user explicitly picks one. The submit
+    // payload only includes solveMethod when it's non-null.
+    const [editSolveMethod, setEditSolveMethod] = useState(null)
     // Bug 2 fix: pattern is now a separate string[] state (editPatterns)
     // instead of being inside formData as a single string.
     // This keeps formData clean and makes the multi-select logic explicit.
@@ -920,6 +959,8 @@ export default function EditSolutionPage() {
 
             // patterns is now a native String[] on the server; assign directly.
             setEditPatterns(mySolution.patterns ?? [])
+            // solveMethod: null on legacy rows; explicit value otherwise.
+            setEditSolveMethod(mySolution.solveMethod ?? null)
 
             setFormData({
                 approach: mySolution.approach || '',
@@ -1038,6 +1079,10 @@ export default function EditSolutionPage() {
                 realWorldConnection: formData.realWorldConnection || commonNotes || null,
                 confidence: formData.confidence || 3,
                 patterns: editPatterns,
+                // Only send solveMethod when the user has picked one. Sending
+                // null on legacy rows would write the column to null explicitly,
+                // which is fine, but skipping is cleaner for the no-op case.
+                ...(editSolveMethod ? { solveMethod: editSolveMethod } : {}),
                 followUpAnswers: followUpAnswersArray,
             }
         }
@@ -1253,6 +1298,22 @@ export default function EditSolutionPage() {
                                 value={editPatterns}
                                 onChange={setEditPatterns}
                             />
+                        </div>
+
+                        {/* Solve method — honesty signal for Pattern Mastery */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                                <span>🧭</span> How did you solve it?
+                                {editSolveMethod === null && (
+                                    <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-warning-soft text-warning-fg border border-warning-line">
+                                        Legacy (unset)
+                                    </span>
+                                )}
+                            </h3>
+                            <p className="text-xs text-text-tertiary">
+                                Honest signal for AI calibration. SAW_APPROACH heavily discounts confidence; only solves marked COLD count toward Pattern Mastery progression.
+                            </p>
+                            <EditSolveMethodPicker value={editSolveMethod} onChange={setEditSolveMethod} />
                         </div>
 
                         {/* Solutions */}
