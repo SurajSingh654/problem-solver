@@ -48,6 +48,7 @@ import LeaderboardPage from '@pages/LeaderboardPage'
 import ReportPage from '@pages/ReportPage'
 import ReviewQueuePage from '@pages/ReviewQueuePage'
 import QuizPage from '@pages/QuizPage'
+import QuizReviewPage from '@pages/QuizReviewPage'
 import ProfilePage from '@pages/ProfilePage'
 import SettingsPage from '@pages/SettingsPage'
 import InterviewHistoryPage from '@pages/InterviewHistoryPage'
@@ -243,6 +244,7 @@ export default function App() {
             <Route path="review" element={<ReviewQueuePage />} />
             {/* ── Quizzes ───────────────────────────────────────────── */}
             <Route path="quizzes" element={<QuizPage />} />
+            <Route path="quizzes/:quizId/review" element={<QuizReviewPage />} />
             {/* ── Mock Interview (lazy — heavy: Excalidraw + WS) ────── */}
             <Route path="mock-interview" element={<Lazy><MockInterviewPage /></Lazy>} />
             {/* ── Design Studio (lazy — heavy: Excalidraw + AI) ─────── */}

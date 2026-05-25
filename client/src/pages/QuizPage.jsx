@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     useGenerateQuiz, useSubmitQuiz, useQuizHistory,
@@ -534,6 +534,7 @@ function SetupScreen({ onStart, onRetry }) {
 // PAST QUIZZES — Redesigned as subject-grouped cards
 // ══════════════════════════════════════════════════════
 function QuizHistory({ onRetry, onPracticeAgain }) {
+    const navigate = useNavigate()
     const { data: historyData, isLoading } = useQuizHistory()
     const quizzes = useMemo(
         () => historyData?.quizzes || [],
@@ -700,6 +701,24 @@ function QuizHistory({ onRetry, onPracticeAgain }) {
 
                             {/* Action buttons */}
                             <div className="flex gap-2">
+                                <button
+                                    onClick={() => navigate(`/quizzes/${group.latestId}/review`)}
+                                    disabled={!group.attempts[0]?.completedAt}
+                                    title={!group.attempts[0]?.completedAt ? 'Latest attempt not yet submitted' : 'Review your latest attempt'}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2
+                                               rounded-xl border border-border-default bg-surface-2
+                                               text-xs font-semibold text-text-secondary
+                                               hover:border-success-line hover:text-success-fg transition-all
+                                               disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border-default disabled:hover:text-text-secondary"
+                                >
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2.5"
+                                        strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                    Review
+                                </button>
                                 <button
                                     onClick={() => onPracticeAgain(group.subject, group.latestDifficulty)}
                                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2
@@ -1034,7 +1053,9 @@ function ActiveQuizScreen({ quizData, onComplete }) {
 // ══════════════════════════════════════════════════════
 // SCREEN 3 — Results
 // ══════════════════════════════════════════════════════
-function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, onRetry }) {
+// Exported so QuizReviewPage can render past attempts read-only without
+// duplicating ~400 lines of carefully tuned UI. Reuse is intentional.
+export function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNewQuiz, onRetry }) {
     const navigate = useNavigate()
     const saveQuizFeedback = useSaveQuizFeedback()
 
@@ -1438,6 +1459,22 @@ export default function QuizPage() {
 
     const submitQuiz = useSubmitQuiz()
     const retryQuiz = useRetryQuiz()
+
+    // Resume an in-progress retry that was kicked off from the Review page.
+    // Consumed once, then cleared from history state to avoid re-firing on
+    // a back-navigation.
+    const location = useLocation()
+    const navigate = useNavigate()
+    useEffect(() => {
+        const resume = location.state?.resumeQuiz
+        if (!resume) return
+        setQuizData({ ...resume, timerSecs: null })
+        setGradedAnswers([])
+        setTimeUsed(0)
+        setQuizId(null)
+        setScreen('active')
+        navigate(location.pathname, { replace: true, state: null })
+    }, [location.state, location.pathname, navigate])
 
     function handleStart(data) {
         setQuizData(data)
