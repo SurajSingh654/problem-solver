@@ -135,6 +135,15 @@ export const FEATURE_NOTES_ENABLED = optional('FEATURE_NOTES_ENABLED', 'false') 
 // and tier classification ignores masteryRequirements. Client mirror:
 // VITE_FEATURE_PATTERN_MASTERY_V2.
 export const FEATURE_PATTERN_MASTERY_V2 = optional('FEATURE_PATTERN_MASTERY_V2', 'false') === 'true'
+// Solution Depth v2 — replaces the legacy "Solution Depth" formula
+// (length-threshold theatre + free pts for self-confidence) with a
+// 5-state per-solution machine: NONE → DOCUMENTED → EXPLAINED →
+// DEFENDED → OWNED. Reads research-backed signals D2 currently ignores:
+// solveMethod, follow-up answer scores, ReviewAttempt.recallText. Adds
+// depth tier mastery gates (solutionsAtDefendedOrAbove, solutionsAtOwned).
+// Independent rollout from D1's flag — flip separately. Client mirror:
+// VITE_FEATURE_SOLUTION_DEPTH_V2 (must also be in client/Dockerfile ARG).
+export const FEATURE_SOLUTION_DEPTH_V2 = optional('FEATURE_SOLUTION_DEPTH_V2', 'false') === 'true'
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

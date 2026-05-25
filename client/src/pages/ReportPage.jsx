@@ -20,6 +20,12 @@ import { PatternMasteryCard } from '@components/report/PatternMasteryCard'
 const PATTERN_MASTERY_V2_ENABLED =
     import.meta.env.VITE_FEATURE_PATTERN_MASTERY_V2 === 'true'
 
+// D2 Solution Depth v2 flag — when on AND a dim has depthMatrix attached,
+// the D2 dim card renders a 5-state stacked bar inline. Three-place
+// declaration per CLAUDE.md: Railway env, client/Dockerfile ARG/ENV, here.
+const SOLUTION_DEPTH_V2_ENABLED =
+    import.meta.env.VITE_FEATURE_SOLUTION_DEPTH_V2 === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -519,6 +525,48 @@ function CriticalGapCard({ criticalGap, criticalScore, analytics }) {
 }
 
 // ── Dimension cards (contextual) ───────────────────────
+// D2 v2 inline component — 5-state stacked bar showing per-solution
+// depth distribution. Reads `depthMatrix` attached by stats.controller.js
+// on the D2 dim when FEATURE_SOLUTION_DEPTH_V2 is on. Color tokens match
+// PatternMasteryCard for visual consistency.
+function DepthDistributionBar({ depthMatrix }) {
+  if (!Array.isArray(depthMatrix) || depthMatrix.length === 0) return null
+  const total = depthMatrix.length
+  // Tally each state. Order matters for the stacked bar fill direction:
+  // gaps on the left (NONE → DOCUMENTED), mastery on the right (OWNED).
+  const buckets = [
+    { state: 'NONE',       cls: 'bg-surface-3',    fg: 'text-text-disabled', label: 'None' },
+    { state: 'DOCUMENTED', cls: 'bg-warning',      fg: 'text-warning-fg',    label: 'Documented' },
+    { state: 'EXPLAINED',  cls: 'bg-info',         fg: 'text-info-fg',       label: 'Explained' },
+    { state: 'DEFENDED',   cls: 'bg-brand-400',    fg: 'text-brand-fg-soft', label: 'Defended' },
+    { state: 'OWNED',      cls: 'bg-success',      fg: 'text-success-fg',    label: 'Owned' },
+  ].map(b => ({ ...b, count: depthMatrix.filter(m => m.state === b.state).length }))
+
+  return (
+    <div className="mt-2 mb-2">
+      {/* Stacked horizontal bar */}
+      <div className="flex w-full h-1.5 rounded-full overflow-hidden bg-surface-3">
+        {buckets.map(b => b.count > 0 && (
+          <div
+            key={b.state}
+            className={cn('h-full', b.cls)}
+            style={{ width: `${(b.count / total) * 100}%` }}
+            title={`${b.count} ${b.label}`}
+          />
+        ))}
+      </div>
+      {/* Compact label line */}
+      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] font-mono mt-1">
+        {buckets.filter(b => b.count > 0).reverse().map(b => (
+          <span key={b.state} className={b.fg}>
+            {b.count} {b.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function DimensionCards({ dimByKey, communicationFromProxy }) {
   // teachingContributions (D7) is opt-in — the server only includes it
   // in dimensions[] once the user has hosted ≥1 session. Hide its card
@@ -601,6 +649,15 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                   <span>n = {n}</span>
                   {ci && <span>95% CI {ci[0]}–{ci[1]}</span>}
                 </div>
+
+                {/* D2 v2 — 5-state depth distribution bar (only when flag on
+                    AND server attached depthMatrix). Replaces the no-op
+                    space; doesn't displace existing content. */}
+                {SOLUTION_DEPTH_V2_ENABLED
+                  && dim.key === 'solutionDepth'
+                  && Array.isArray(info?.depthMatrix)
+                  && info.depthMatrix.length > 0
+                  && <DepthDistributionBar depthMatrix={info.depthMatrix} />}
 
                 {/* Contextual insight */}
                 <p className="text-[11px] text-text-tertiary leading-relaxed mb-2">

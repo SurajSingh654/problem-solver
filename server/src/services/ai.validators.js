@@ -208,6 +208,7 @@ export function validateVerdict(verdict, evidence) {
   //
   // Distribution detection uses word-boundary regexes so "core" doesn't
   // false-match inside "score" — that bug would let "score=78" pass.
+  // Rule 9 below replicates this pattern for Solution Depth.
   if (evidence.patternMastery) {
     const PATTERN_TERMS = KEY_LABELS.patternrecognition;
     const DISTRIBUTION_PATTERNS = [
@@ -237,6 +238,44 @@ export function validateVerdict(verdict, evidence) {
     };
     strengths.forEach((s, i) => checkDistribution(s, `strengths[${i}]`));
     gaps.forEach((g, i) => checkDistribution(g, `gaps[${i}]`));
+  }
+
+  // Rule 9 — Solution Depth distribution awareness.
+  //
+  // When evidence.solutionDepth is present (Solution Depth v2 flag is on),
+  // any claim referencing Solution Depth / depth / understanding MUST cite
+  // a depth-distribution number — not just the score. A high D2 score can
+  // come from polished Feynman writing without any probe-passing or
+  // retrieval; only the distribution shows real depth.
+  //
+  // Same word-boundary regex discipline as Rule 8 — "owned" inside "owner"
+  // would false-match without \b anchors.
+  if (evidence.solutionDepth) {
+    // "understanding" is intentionally a substring match (not word-bounded)
+    // so "understandingDepth" / "understanding depth" both match.
+    const DEPTH_TERMS = ["solution depth", "depth", "understanding"];
+    const DEPTH_DISTRIBUTION_PATTERNS = [
+      /\bowned\b/i,
+      /\bdefended\b/i,
+      /\bexplained\b/i,
+      /\bdocumented\b/i,
+      /\d+\s+(of|at)\s+\d+\s+(solutions?|defended|owned)/i,
+      /\d+\s+(owned|defended|explained|documented)\b/i,
+    ];
+    const checkDepthDistribution = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const haystack = `${item.claim ?? ""} ${item.evidence ?? ""}`.toLowerCase();
+      const mentionsDepth = DEPTH_TERMS.some((t) => haystack.includes(t));
+      if (!mentionsDepth) return;
+      const citesDistribution = DEPTH_DISTRIBUTION_PATTERNS.some((rx) =>
+        rx.test(haystack),
+      );
+      if (!citesDistribution) {
+        violations.push(`${label}-depth-claim-no-distribution`);
+      }
+    };
+    strengths.forEach((s, i) => checkDepthDistribution(s, `strengths[${i}]`));
+    gaps.forEach((g, i) => checkDepthDistribution(g, `gaps[${i}]`));
   }
 
   return { valid: violations.length === 0, violations };

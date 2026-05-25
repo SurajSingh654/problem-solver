@@ -52,6 +52,12 @@ export const READINESS_TIERS = [
       // gaps without letting a 3-pattern-only user pass.
       coreSolidOrAbove: 13,
       owned: 8,
+      // D2 v2 (Solution Depth) gates — only checked when depth counts
+      // are passed (FEATURE_SOLUTION_DEPTH_V2 on). 10/5 tier2→FAANG spread
+      // is real (vs 5/8 in the original sketch which was only a 3-defended
+      // gap — too narrow for tier separation).
+      solutionsAtDefendedOrAbove: 10,
+      solutionsAtOwned: 5,
     },
     icon: "🏆",
   },
@@ -69,6 +75,8 @@ export const READINESS_TIERS = [
     masteryRequirements: {
       coreSolidOrAbove: 10,
       owned: 3,
+      solutionsAtDefendedOrAbove: 4,
+      solutionsAtOwned: 2,
     },
     icon: "🥈",
   },
@@ -84,6 +92,7 @@ export const READINESS_TIERS = [
     },
     masteryRequirements: {
       solidOrAbove: 6,
+      solutionsAtDocumentedOrAbove: 5,
     },
     icon: "🥉",
   },
@@ -98,6 +107,7 @@ export const READINESS_TIERS = [
     },
     masteryRequirements: {
       workingOrAbove: 4,
+      solutionsAtDocumentedOrAbove: 3,
     },
     icon: "🌱",
   },

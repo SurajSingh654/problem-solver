@@ -16,7 +16,8 @@ import {
 import { classifyReadiness } from "../utils/readinessTiers.js";
 import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 import { computePatternMastery, masteryScore } from "../utils/patternMastery.js";
-import { FEATURE_PATTERN_MASTERY_V2 } from "../config/env.js";
+import { computeSolutionDepth } from "../utils/solutionDepth.js";
+import { FEATURE_PATTERN_MASTERY_V2, FEATURE_SOLUTION_DEPTH_V2 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
   readinessVerdictPrompt,
@@ -895,6 +896,10 @@ export async function get6DReport(req, res) {
       allQuizzesForDimensions,
       overdueCount,
       successfulReviewAttempts,
+      // D2 v2 (Solution Depth) needs ALL review attempts (incl. failed)
+      // to compute OWNED-state denial. Only fetched when flag is on so
+      // legacy users don't pay for an extra query. Returns [] when off.
+      allReviewAttemptsForDepth,
     ] = await Promise.all([
       prisma.interviewSession.findMany({
         where: { userId, teamId, status: "COMPLETED" },
@@ -960,6 +965,15 @@ export async function get6DReport(req, res) {
         },
         orderBy: { createdAt: "desc" },
       }),
+      // D2 v2: ALL review attempts (no quality filter) — distinguishes
+      // "tried and failed" from "never tried" for OWNED state evaluation.
+      // Skipped entirely when the flag is off (resolves to []).
+      FEATURE_SOLUTION_DEPTH_V2
+        ? prisma.reviewAttempt.findMany({
+            where: { solution: { userId, teamId } },
+            select: { solutionId: true, quality: true, recallText: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     // ════════════════════════════════════════════════
@@ -1040,6 +1054,11 @@ export async function get6DReport(req, res) {
           reviewAttempts: successfulReviewAttempts,
         })
       : null;
+
+    // SOLUTION DEPTH (D2 v2) — declared here, computed inside the D2
+    // block once metacognitiveAccuracy is available (keeps the existing
+    // calibration calc as the single source of truth).
+    let depth = null;
 
     // ════════════════════════════════════════════════
     // INTERVIEW DIMENSION CROSS-FEED
@@ -1332,28 +1351,49 @@ export async function get6DReport(req, res) {
       }
     }
 
-    const baseDepth = Math.round(
-      (withMeaningfulInsight / totalSolutions) * 20 +
-        (withMeaningfulFeynman / totalSolutions) * 25 +
-        (withMeaningfulRealWorld / totalSolutions) * 15 +
-        calibratedConfScore * 20 +
-        (metacognitiveAccuracy !== null ? metacognitiveAccuracy * 20 : 10),
-    );
-
-    let d2;
-    if (avgAiUnderstanding !== null) {
-      const aiDepthScore = (avgAiUnderstanding / 10) * 100;
-      d2 = Math.round(aiDepthScore * 0.6 + baseDepth * 0.4);
-    } else {
-      d2 = baseDepth;
+    // ── D2 v2 (Solution Depth) — flag-gated ──────────
+    // When FEATURE_SOLUTION_DEPTH_V2 is on, depth.score replaces the
+    // entire legacy formula. Calibration multiplier inside computeSolutionDepth
+    // reuses the metacognitiveAccuracy already computed above.
+    if (FEATURE_SOLUTION_DEPTH_V2) {
+      depth = computeSolutionDepth({
+        solutions,
+        reviewAttempts: allReviewAttemptsForDepth,
+        metacognitiveAccuracy,
+      });
     }
 
-    // Quiz cross-feed
+    let d2;
+    if (depth) {
+      // V2: score is `0.6 * baseScore (state mean) + ... ` already applied
+      // inside computeSolutionDepth via state-points mean × calibration.
+      d2 = depth.score;
+    } else {
+      // Legacy formula preserved for flag-off rollback.
+      const baseDepth = Math.round(
+        (withMeaningfulInsight / totalSolutions) * 20 +
+          (withMeaningfulFeynman / totalSolutions) * 25 +
+          (withMeaningfulRealWorld / totalSolutions) * 15 +
+          calibratedConfScore * 20 +
+          (metacognitiveAccuracy !== null ? metacognitiveAccuracy * 20 : 10),
+      );
+      if (avgAiUnderstanding !== null) {
+        const aiDepthScore = (avgAiUnderstanding / 10) * 100;
+        d2 = Math.round(aiDepthScore * 0.6 + baseDepth * 0.4);
+      } else {
+        d2 = baseDepth;
+      }
+    }
+
+    // Quiz cross-feed. Under D2 v2, lower headroom cap to ~50 (DOCUMENTED-
+    // equivalent ceiling) so an all-NONE user can't be lifted to 80 by quiz
+    // performance alone — quiz knowledge ≠ depth of solution understanding.
     if (quizSignalD2 !== null) {
       const quizBonus = Math.round(
         (quizSignalD2 / 100) * QUIZ_DIMENSION_MAP.d2_depth.maxContribution,
       );
-      const headroom = Math.max(0, 80 - d2);
+      const quizHeadroomCap = depth ? 50 : 80;
+      const headroom = Math.max(0, quizHeadroomCap - d2);
       d2 = Math.min(d2 + Math.min(quizBonus, headroom), 100);
     }
 
@@ -1716,35 +1756,87 @@ export async function get6DReport(req, res) {
       }
     }
 
-    // D2 active iff ≥ 3 solutions with reflective content (insight, Feynman,
-    // or real-world — any of them).
     let d2Score;
     {
-      const withAnyReflection = solutions.filter(hasReflectiveContent).length;
-      if (withAnyReflection < 3) {
-        d2Score = inactiveDim(
-          "solutionDepth",
-          `Add reflective content (insight / Feynman / real-world) to ${3 - withAnyReflection} more solution${3 - withAnyReflection === 1 ? "" : "s"}`,
-          withAnyReflection,
-        );
+      if (depth) {
+        // ── D2 v2 activation: depth-aware gate ──────────
+        // ≥3 solutions at DOCUMENTED+ AND ≥2 AI reviews. The DOCUMENTED+
+        // gate is meaningful: a user who only typed reflective text but
+        // also marked SAW_APPROACH won't activate the dim — they have to
+        // earn at least DOCUMENTED honestly.
+        const hasMin = depth.counts.solutionsAtDocumentedOrAbove >= 3;
+        const hasReviews = reviewedSolutions >= 2;
+        if (!hasMin || !hasReviews) {
+          const parts = [];
+          if (!hasMin) {
+            const need = 3 - depth.counts.solutionsAtDocumentedOrAbove;
+            parts.push(`add insight + Feynman explanation to ${need} more cold-solved solution${need === 1 ? "" : "s"}`);
+          }
+          if (!hasReviews) {
+            const need = 2 - reviewedSolutions;
+            parts.push(`get ${need} more AI review${need === 1 ? "" : "s"} to validate`);
+          }
+          d2Score = inactiveDim(
+            "solutionDepth",
+            parts.join(" and "),
+            depth.counts.solutionsAtDocumentedOrAbove,
+          );
+        } else {
+          // CI on (defendedOrAbove / totalCoding): the actual claim D2 v2
+          // makes — what fraction of your coding solutions survived a
+          // probe. Score outside CI bug from legacy is fixed because both
+          // are computed on the same quantity.
+          const { ci } = wilsonCI(depth.counts.solutionsAtDefendedOrAbove, depth.counts.totalCoding);
+          d2Score = activeDim("solutionDepth", {
+            score: d2,
+            n: depth.counts.solutionsAtDocumentedOrAbove,
+            ci,
+            basis: [
+              `solutions_owned: ${depth.counts.solutionsAtOwned}`,
+              `solutions_defended: ${depth.counts.solutionsAtDefended}`,
+              `solutions_explained: ${depth.counts.solutionsAtExplained}`,
+              `solutions_documented: ${depth.counts.solutionsAtDocumented}`,
+              `solutions_none: ${depth.counts.solutionsNone}`,
+              `calibration: ${depth.calibrationModifier}×`,
+              `ai_reviews: ${reviewedSolutions}`,
+              ...(avgAiUnderstanding !== null
+                ? [`ai_understanding: ${avgAiUnderstanding.toFixed(1)}/10`]
+                : []),
+            ],
+          });
+          // Per-solution matrix for Phase 5 UI (the inline stacked bar).
+          d2Score.depthMatrix = depth.matrix;
+        }
       } else {
-        const { ci } = wilsonCI(withMeaningfulInsight + withMeaningfulFeynman, totalSolutions * 2);
-        d2Score = activeDim("solutionDepth", {
-          score: d2,
-          n: withAnyReflection,
-          ci,
-          basis: [
-            `reflective_solutions: ${withAnyReflection}`,
-            `meaningful_insights: ${withMeaningfulInsight}`,
-            `feynman_explanations: ${withMeaningfulFeynman}`,
-            ...(avgAiUnderstanding !== null
-              ? [`ai_understanding: ${avgAiUnderstanding.toFixed(1)}/10`]
-              : []),
-            ...(metacognitiveAccuracy !== null
-              ? [`metacognitive_accuracy: ${(metacognitiveAccuracy * 100).toFixed(0)}%`]
-              : []),
-          ],
-        });
+        // ── D2 v1 (legacy) activation ───────────────────
+        // ≥3 solutions with reflective content (any of insight / Feynman /
+        // real-world). Lenient gate — D2 v2 narrows it.
+        const withAnyReflection = solutions.filter(hasReflectiveContent).length;
+        if (withAnyReflection < 3) {
+          d2Score = inactiveDim(
+            "solutionDepth",
+            `Add reflective content (insight / Feynman / real-world) to ${3 - withAnyReflection} more solution${3 - withAnyReflection === 1 ? "" : "s"}`,
+            withAnyReflection,
+          );
+        } else {
+          const { ci } = wilsonCI(withMeaningfulInsight + withMeaningfulFeynman, totalSolutions * 2);
+          d2Score = activeDim("solutionDepth", {
+            score: d2,
+            n: withAnyReflection,
+            ci,
+            basis: [
+              `reflective_solutions: ${withAnyReflection}`,
+              `meaningful_insights: ${withMeaningfulInsight}`,
+              `feynman_explanations: ${withMeaningfulFeynman}`,
+              ...(avgAiUnderstanding !== null
+                ? [`ai_understanding: ${avgAiUnderstanding.toFixed(1)}/10`]
+                : []),
+              ...(metacognitiveAccuracy !== null
+                ? [`metacognitive_accuracy: ${(metacognitiveAccuracy * 100).toFixed(0)}%`]
+                : []),
+            ],
+          });
+        }
       }
     }
 
@@ -1963,13 +2055,18 @@ export async function get6DReport(req, res) {
         .filter((d) => d.status === "active")
         .map((d) => [d.key, d.score]),
     );
-    // Pass mastery.counts only when v2 is on — when null, classifyReadiness
-    // skips masteryRequirements entirely and falls back to the score-only
-    // gate (legacy behavior preserved).
+    // Merge mastery (D1 v2) + depth (D2 v2) counts into a single object.
+    // Keys are non-overlapping (mastery uses `core*`/`owned`/`solidOrAbove`/...
+    // for patterns; depth uses `solutionsAt*` prefix). When both flags off,
+    // pass null and classifyReadiness uses score-only gates (legacy preserved).
+    const masteryAndDepthCounts =
+      mastery || depth
+        ? { ...(mastery?.counts ?? {}), ...(depth?.counts ?? {}) }
+        : null;
     const tierInfo = classifyReadiness(
       overall?.score ?? 0,
       dimScoresByKey,
-      mastery?.counts ?? null,
+      masteryAndDepthCounts,
     );
 
     // ════════════════════════════════════════════════
@@ -2177,6 +2274,16 @@ export async function get6DReport(req, res) {
           // renders PatternMasteryCard (Phase 5) from this block.
           patternMastery: mastery
             ? { matrix: mastery.matrix, counts: mastery.counts }
+            : null,
+          // Solution Depth v2 — null when flag off. When on, the client
+          // renders the inline 5-state stacked bar inside the D2 dim card.
+          solutionDepth: depth
+            ? {
+                matrix: depth.matrix,
+                counts: depth.counts,
+                baseScore: depth.baseScore,
+                calibrationModifier: depth.calibrationModifier,
+              }
             : null,
           aiReview: {
             avgScore:
@@ -2473,6 +2580,24 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Solution Depth v2 — same pattern as patternMastery. Surfaces depth-state
+  // distribution counts so the verdict prompt can satisfy Rule 9 (no D2
+  // strength claim without referencing depth distribution). Keys are
+  // `solutionsAt*` prefixed to disambiguate from D1's `owned`/etc.
+  const depthCounts = report.analytics?.solutionDepth?.counts;
+  const solutionDepth = depthCounts
+    ? {
+        owned: depthCounts.solutionsAtOwned,
+        defended: depthCounts.solutionsAtDefended,
+        explained: depthCounts.solutionsAtExplained,
+        documented: depthCounts.solutionsAtDocumented,
+        none: depthCounts.solutionsNone,
+        defendedOrAbove: depthCounts.solutionsAtDefendedOrAbove,
+        ownedOrAbove: depthCounts.solutionsAtOwnedOrAbove,
+        totalCoding: depthCounts.totalCoding,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -2481,6 +2606,7 @@ function buildVerdictEvidence(report) {
     nearestTier,
     nextTier,
     patternMastery,
+    solutionDepth,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

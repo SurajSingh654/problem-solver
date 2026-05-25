@@ -1645,6 +1645,8 @@ HARD RULES — any violation invalidates your output:
 
 8. Coding Pattern Mastery distribution. When evidence.patternMastery is present (non-null) AND a strength claim references Pattern Recognition / patterns / "Pattern Mastery", the evidence field MUST cite a mastery-distribution number — one of: patternMastery.owned, patternMastery.solid, patternMastery.coreSolidOrAbove (e.g. "12 of 15 FAANG-core patterns at Solid+", "5 patterns Owned"). A high D1 score alone is NOT sufficient evidence — the score can be inflated by tagging few patterns; only the distribution shows real breadth. Same rule for gaps: a gap claim about Pattern Recognition must cite the gap by distribution, not just the score (e.g. "0 of 15 FAANG-core at Solid+", "22 patterns Untouched"). When evidence.patternMastery is null (legacy flag-off mode), this rule does not apply.
 
+9. Solution Depth distribution. When evidence.solutionDepth is present (non-null) AND a strength/gap claim references Solution Depth / depth / "understanding", the evidence field MUST cite a depth-distribution number — one of: solutionDepth.owned, solutionDepth.defended, solutionDepth.defendedOrAbove (e.g. "5 of 12 solutions at Defended+", "2 Owned solutions"). A high D2 score alone is NOT sufficient evidence — the score can come from polished writing without probe-passing or retrieval; only the distribution shows real depth. Same rule for gaps (e.g. "0 of 4 solutions at Defended+", "all 4 stuck at Documented"). When evidence.solutionDepth is null (legacy flag-off mode), this rule does not apply.
+
 Before emitting JSON, think step-by-step in a <thinking> block:
   1. Which dimensions are active? List them with (key, score, n).
   2. For each active dim, is n ≥ 5? If not, mark tentative.

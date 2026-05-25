@@ -398,6 +398,134 @@ describe('validateVerdict — Rule 8 (Pattern Mastery distribution)', () => {
     })
 })
 
+// ── validateVerdict — Rule 9 (Solution Depth distribution awareness) ──
+//
+// Active only when evidence.solutionDepth is non-null (D2 v2 flag on).
+// Forces any Solution Depth claim to cite a distribution number — not just
+// the score. The score can come from polished Feynman writing without
+// probe-passing or retrieval; only the distribution shows real depth.
+//
+// Mirrors Rule 8's structure (with the same word-boundary regex discipline
+// — Rule 8 had a "core" / "score" false-positive that was fixed via \b
+// anchors; Rule 9 must not reintroduce that bug).
+describe('validateVerdict — Rule 9 (Solution Depth distribution)', () => {
+    const FULL_EVIDENCE_WITH_DEPTH = {
+        ...FULL_EVIDENCE,
+        solutionDepth: {
+            owned: 3, defended: 5, explained: 2, documented: 2, none: 0,
+            defendedOrAbove: 8, ownedOrAbove: 3, totalCoding: 12,
+        },
+    }
+
+    it('accepts a Solution Depth strength claim that cites distribution', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Solution depth shows real probe-passing strength',
+                    evidence: 'score=72 with 8 of 12 solutions at Defended+ and 3 Owned',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_DEPTH)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Solution Depth strength claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Solution depth is your strongest dimension',
+                    evidence: 'score=72 over n=10 solutions',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_DEPTH)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-depth-claim-no-distribution')
+    })
+
+    it('rejects a Solution Depth gap claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Solution depth is your weakest dimension',
+                    evidence: 'score=42 over n=4 solutions',
+                    action: 'Write more reflective text',
+                },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_DEPTH)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('gaps[0]-depth-claim-no-distribution')
+    })
+
+    it('matches "understanding" as a depth term (catches probe-the-LLM phrasing)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    // No literal "depth" — only "understanding". Should still trigger Rule 9.
+                    claim: 'Understanding is your strongest dimension',
+                    evidence: 'score=78 over n=12 reviews',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_DEPTH)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-depth-claim-no-distribution')
+    })
+
+    it('does NOT trigger Rule 9 when solutionDepth is absent (legacy flag-off mode)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Solution depth is your strongest dimension',
+                    evidence: 'score=72 over n=10 solutions',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 9 when claim is about a non-depth dimension', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                { claim: 'Communication is well-rounded', evidence: 'score=70 over n=8 ratings', confidence: 'high' },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_DEPTH)
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {
@@ -437,6 +565,49 @@ describe('buildFallbackVerdict', () => {
         }
         const v = buildFallbackVerdict(FULL_WITH_MASTERY)
         const r = validateVerdict(v, FULL_WITH_MASTERY)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback output for v2-depth evidence passes Rule 9 (no self-contradiction)', () => {
+        const FULL_WITH_DEPTH = {
+            ...FULL_EVIDENCE,
+            solutionDepth: {
+                owned: 3, defended: 5, explained: 2, documented: 2, none: 0,
+                defendedOrAbove: 8, ownedOrAbove: 3, totalCoding: 12,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_DEPTH)
+        const r = validateVerdict(v, FULL_WITH_DEPTH)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces a "limited probe-passing depth" gap when defendedOrAbove < 3', () => {
+        // The original-report user under D2 v2: 4 solutions, all DOCUMENTED
+        // at most, no follow-ups. defendedOrAbove=0 → distribution gap fires.
+        const ORIGINAL_REPORT_WITH_DEPTH = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 4, score: 26 },
+                { key: 'solutionDepth', status: 'active', n: 4, score: 32 },
+                { key: 'communication', status: 'active', n: 4, score: 53 },
+                { key: 'optimization', status: 'active', n: 4, score: 56 },
+                { key: 'pressurePerformance', status: 'active', n: 4, score: 60 },
+                { key: 'retention', status: 'active', n: 4, score: 93 },
+            ],
+            overall: { score: 50 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: { name: 'Tier 2 Tech', threshold: 65, gap: 15 },
+            solutionDepth: {
+                owned: 0, defended: 0, explained: 0, documented: 4, none: 0,
+                defendedOrAbove: 0, ownedOrAbove: 0, totalCoding: 4,
+            },
+        }
+        const v = buildFallbackVerdict(ORIGINAL_REPORT_WITH_DEPTH)
+        const hasProbeDepthGap = v.gaps.some((g) =>
+            /probe-passing depth|defended\+/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasProbeDepthGap).toBe(true)
+        const r = validateVerdict(v, ORIGINAL_REPORT_WITH_DEPTH)
         expect(r.valid).toBe(true)
     })
 

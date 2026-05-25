@@ -78,7 +78,8 @@ export function buildFallbackVerdict(evidence) {
     .filter((d) => d.score != null && d.score < 65)
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
 
-  const pm = evidence.patternMastery; // null when v2 flag is off
+  const pm = evidence.patternMastery; // null when D1 v2 flag is off
+  const sd = evidence.solutionDepth;   // null when D2 v2 flag is off
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -87,14 +88,24 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} with ${pm.coreSolidOrAbove} of ${pm.totalCore} FAANG-core patterns at Solid+ and ${pm.owned} Owned`;
   };
 
+  // Helper — build evidence string for a Solution Depth claim under v2.
+  // Satisfies validator Rule 9: cite depth distribution, not just score.
+  const depthEvidenceWithDistribution = (dim) => {
+    if (!sd) return `score=${dim.score} over n=${dim.n} data points`;
+    return `score=${dim.score} with ${sd.defendedOrAbove} of ${sd.totalCoding} solutions at Defended+ and ${sd.owned} Owned`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
+    const isDepth = topDim.key === "solutionDepth";
+    let evidenceStr;
+    if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
+    else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
+    else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     strengths.push({
       claim: `${prettyDimName(topDim.key)} is your leading dimension`,
-      evidence: isPattern
-        ? patternEvidenceWithMastery(topDim)
-        : `score=${topDim.score} over n=${topDim.n} data points`,
+      evidence: evidenceStr,
       confidence: topDim.n >= 5 ? "high" : "tentative",
     });
   }
@@ -113,13 +124,28 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When v2 depth is present AND probe-passing depth is critically low,
+  // surface it as a priority gap — same reasoning. A user can have D2=70
+  // from polished writing while having 0 follow-up answers scored ≥7.
+  if (sd && sd.defendedOrAbove < 3 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Limited probe-passing depth",
+      evidence: `${sd.defendedOrAbove} of ${sd.totalCoding} solutions at Defended+ (follow-up answers AI-graded ≥7), ${sd.owned} Owned (recalled under spaced repetition)`,
+      action:
+        "Answer follow-up questions on your next 3 solutions; aim for AI scores ≥7 to advance from Explained to Defended.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
+    const isDepthWeak = weakDim.key === "solutionDepth";
+    let evidenceStr;
+    if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
+    else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
+    else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,
-      evidence: isPatternWeak
-        ? patternEvidenceWithMastery(weakDim)
-        : `score=${weakDim.score} over n=${weakDim.n} data points`,
+      evidence: evidenceStr,
       action: `Focus practice sessions on ${prettyDimName(
         weakDim.key,
       ).toLowerCase()} over the next week`,
