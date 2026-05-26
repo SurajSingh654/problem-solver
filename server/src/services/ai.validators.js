@@ -507,6 +507,45 @@ export function validateVerdict(verdict, evidence) {
     strengths.forEach((s, i) => checkTeachingSampleSize(s, `strengths[${i}]`));
   }
 
+  // Rule 15 — Design Aptitude sample-size honesty.
+  //
+  // When evidence.designAptitude is present (D8 flag is on AND user has
+  // ≥1 completed design session with evaluation), strength claims about
+  // Design Aptitude / System Design / LLD must respect sample-size floors:
+  //   - sessionCount < 2 → design can't be claimed strength at all
+  //   - sessionCount < 3 + confidence='high' → must hedge
+  //   - sessionCount ≥ 3 → no special hedging required
+  // Schoenfeld 1985 + Newell-Simon 1972: design competency is established
+  // through repeated practice across problem types. Mirror of Rules 13/14.
+  if (evidence.designAptitude) {
+    const DESIGN_TERMS = [
+      /\bdesign aptitude\b/i,
+      /\bsystem design\b/i,
+      /\blow.level design\b/i,
+      /\bLLD\b/,
+    ];
+    const HEDGE_VOCAB_D = ["early", "tentative", "small sample", "preliminary", "emerging"];
+    const checkDesignSampleSize = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isDesignSubject = DESIGN_TERMS.some((rx) => rx.test(text));
+      if (!isDesignSubject) return;
+      const n = evidence.designAptitude.sessionCount ?? 0;
+      if (n < 2) {
+        violations.push(`${label}-design-claim-too-few-sessions`);
+        return;
+      }
+      if (n < 3 && item.confidence === "high") {
+        const lowerText = text.toLowerCase();
+        const hasHedge = HEDGE_VOCAB_D.some((v) => lowerText.includes(v));
+        if (!hasHedge) {
+          violations.push(`${label}-design-high-confidence-low-n`);
+        }
+      }
+    };
+    strengths.forEach((s, i) => checkDesignSampleSize(s, `strengths[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 

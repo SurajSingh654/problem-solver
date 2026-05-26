@@ -214,5 +214,36 @@ export const FEATURE_RETENTION_V2 = optional('FEATURE_RETENTION_V2', 'false') ==
 // (also in client/Dockerfile ARG).
 export const FEATURE_TEACHING_CONTRIBUTIONS_V2 = optional('FEATURE_TEACHING_CONTRIBUTIONS_V2', 'false') === 'true'
 
+// Design Aptitude (D8) — NEW dimension covering System Design + Low-Level
+// Design practice via DesignSession data. Schema is fully built and AI
+// evaluates each session across 10 dims (per designType) with PASS/PARTIAL/
+// FAIL scenario validation; today none of that signal feeds the readiness
+// report. Opt-in like D7 — only counts when user has hosted ≥1 completed
+// design session, so coding-only users see byte-identical 7D reports.
+//
+// Source-tier ceilings (mirror D3/D5/D7):
+//   - draft-only (30): completed session, no AI scenarios attempted
+//   - scenario-tested (70): ≥3 evaluated scenarios across all sessions
+//   - interviewer-paired (100): ≥1 INTERVIEW-mode session with a paired
+//     completed InterviewSession debrief
+//
+// Sub-component blend:
+//   0.50 × overallScore (the existing AI-rated 10-dim weighted score)
+//   0.20 × scenarioResilience (PASS=100, PARTIAL=50, FAIL=0; avg)
+//   0.15 × dimensionBreadth (low std-dev = uniform mastery; high = lopsided)
+//   0.10 × phaseCompleteness (fraction of phases with ≥50 chars)
+//   0.05 × interviewerSignal (INTERVIEW-mode debrief, if any)
+//
+// Tier gates: tier2 = 2 sessions + 5 scenarios + score≥60; FAANG = 5
+// sessions + 15 scenarios + score≥75 + ≥1 interviewer-paired session.
+//
+// Verdict Rule 15: design strengths with sessionCount<3 must hedge
+// (Schoenfeld 1985 — design competency needs repeated practice across
+// problem types; small-n design score is not predictive).
+//
+// Independent rollout. Client mirror: VITE_FEATURE_DESIGN_APTITUDE
+// (also in client/Dockerfile ARG).
+export const FEATURE_DESIGN_APTITUDE = optional('FEATURE_DESIGN_APTITUDE', 'false') === 'true'
+
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

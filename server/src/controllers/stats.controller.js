@@ -22,6 +22,7 @@ import { computeOptimizationStats } from "../utils/optimizationStats.js";
 import { computePressurePerformanceStats } from "../utils/pressurePerformanceStats.js";
 import { computeRetentionStats } from "../utils/retentionStats.js";
 import { computeTeachingStats } from "../utils/teachingStats.js";
+import { computeDesignAptitudeStats } from "../utils/designAptitudeStats.js";
 import {
   FEATURE_PATTERN_MASTERY_V2,
   FEATURE_SOLUTION_DEPTH_V2,
@@ -30,6 +31,7 @@ import {
   FEATURE_PRESSURE_PERFORMANCE_V2,
   FEATURE_RETENTION_V2,
   FEATURE_TEACHING_CONTRIBUTIONS_V2,
+  FEATURE_DESIGN_APTITUDE,
 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
@@ -778,10 +780,15 @@ export async function getLeaderboard(req, res) {
 // Weight of each dimension in the overall score. Re-normalized across
 // active dimensions only (inactive dims don't drag the average to zero).
 //
-// teachingContributions (D7) ships with a conservative 0.10 weight and
-// only enters the dimensions array when the user has hosted ≥1 session.
-// Users who never hosted continue to see byte-identical 6D reports —
-// no D7 axis on their radar, no widened CI from a 7th total-dim count.
+// Opt-in dimensions (teachingContributions, designAptitude) only enter
+// the dimensions array when the user has engaged with that modality.
+// Coding-only users see byte-identical 6D reports — no opt-in axis on
+// their radar, no widened CI from extra total-dim counts.
+//
+// designAptitude (D8) ships with a 0.12 weight — slightly higher than
+// teachingContributions (0.10) because system-design + LLD competency is
+// directly tested at every senior-level interview, while teaching is
+// optional even at FAANG.
 const DIM_WEIGHTS = {
   patternRecognition: 0.2,
   solutionDepth: 0.18,
@@ -790,14 +797,16 @@ const DIM_WEIGHTS = {
   pressurePerformance: 0.16,
   retention: 0.12,
   teachingContributions: 0.1,
+  designAptitude: 0.12,
 };
 
 const DIM_KEYS = Object.keys(DIM_WEIGHTS);
 
-// Subset that always applies — the 6 baseline dimensions every user sees.
-// teachingContributions is opt-in (per host hosting a session) and is
-// pushed onto the dimensions array dynamically in get6DReport.
-const BASELINE_DIM_KEYS = DIM_KEYS.filter((k) => k !== "teachingContributions");
+// Set of opt-in dim keys — pushed onto the dimensions array dynamically
+// in get6DReport only when the user has engaged with the modality. The
+// baseline is everything else: 6 dims every user sees regardless.
+const OPT_IN_DIM_KEYS = new Set(["teachingContributions", "designAptitude"]);
+const BASELINE_DIM_KEYS = DIM_KEYS.filter((k) => !OPT_IN_DIM_KEYS.has(k));
 
 function inactiveDim(key, reason, n = 0) {
   return {
@@ -913,6 +922,9 @@ export async function get6DReport(req, res) {
       // to compute OWNED-state denial. Only fetched when flag is on so
       // legacy users don't pay for an extra query. Returns [] when off.
       allReviewAttemptsForDepth,
+      // D8 Design Aptitude — completed DesignSessions with eval. Only
+      // fetched when FEATURE_DESIGN_APTITUDE is on; [] otherwise.
+      designSessionsCompleted,
     ] = await Promise.all([
       prisma.interviewSession.findMany({
         where: { userId, teamId, status: "COMPLETED" },
@@ -1001,6 +1013,27 @@ export async function get6DReport(req, res) {
         ? prisma.reviewAttempt.findMany({
             where: { solution: { userId, teamId } },
             select: { solutionId: true, quality: true, recallText: true },
+          })
+        : Promise.resolve([]),
+      // D8 Design Aptitude — opt-in like D7 Teaching. Only completed
+      // sessions with non-null evaluation count. Joins paired interview
+      // sessions to detect "interviewer-paired" source-tier (INTERVIEW-mode
+      // session + completed InterviewSession with non-null debrief).
+      // Returns [] when the flag is off — backward compatible.
+      FEATURE_DESIGN_APTITUDE
+        ? prisma.designSession.findMany({
+            where: { userId, teamId, status: "COMPLETED" },
+            select: {
+              id: true,
+              designType: true,
+              mode: true,
+              evaluation: true,
+              phases: true,
+              scenarios: true,
+              interviewSessions: {
+                select: { status: true, debrief: true },
+              },
+            },
           })
         : Promise.resolve([]),
     ]);
@@ -2283,15 +2316,54 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
+    // D8 — DESIGN APTITUDE (opt-in, like D7)
+    // ════════════════════════════════════════════════
+    // Activates only when the user has hosted ≥1 completed DesignSession
+    // with non-null evaluation. Coding-only users see byte-identical 7D
+    // (or 6D) reports — no D8 axis, no widened CI denominator.
+    let d8Score = null;
+    let designAptitude = null; // v1 stats object — null when flag off OR no sessions
+    if (FEATURE_DESIGN_APTITUDE && Array.isArray(designSessionsCompleted) && designSessionsCompleted.length > 0) {
+      designAptitude = computeDesignAptitudeStats({ sessions: designSessionsCompleted });
+      if (!designAptitude.active) {
+        // Has DesignSession rows but none with completed evaluation.
+        d8Score = inactiveDim(
+          "designAptitude",
+          "Complete an AI evaluation on a design session to unlock this dimension",
+          designAptitude.sessionCount,
+        );
+      } else {
+        d8Score = activeDim("designAptitude", {
+          score: designAptitude.score,
+          n: designAptitude.sessionCount,
+          ci: designAptitude.ci ?? [
+            Math.max(0, designAptitude.score - 20),
+            Math.min(designAptitude.ceiling, designAptitude.score + 20),
+          ],
+          basis: designAptitude.basis,
+        });
+        // Surface v1 metadata for the client (source-quality chip) and for
+        // the verdict evidence builder (Rule 15).
+        d8Score.sourceQuality = designAptitude.sourceQuality;
+        d8Score.ceiling = designAptitude.ceiling;
+        d8Score.designSessionCount = designAptitude.sessionCount;
+        d8Score.designScenarioCount = designAptitude.evaluatedScenarioCount;
+        d8Score.designInterviewerPairedCount = designAptitude.interviewerPairedCount;
+      }
+    }
+
+    // ════════════════════════════════════════════════
     // OVERALL — re-normalized weights over ACTIVE dims only
     // ════════════════════════════════════════════════
     const dimensions = [d1Score, d2Score, d3Score, d4Score, d5Score, d6Score];
     if (d7Score) dimensions.push(d7Score);
+    if (d8Score) dimensions.push(d8Score);
     const activeDims = dimensions.filter((d) => d.status === "active");
     const activeCount = activeDims.length;
 
-    // totalDims grows to 7 only when the user opted into teaching.
-    // Users who haven't keep the original 6D coverage math.
+    // totalDims grows beyond 6 only for opt-in dims the user has engaged
+    // with. Users with no teaching + no design sessions keep the original
+    // 6D coverage math.
     const totalDimsForUser = dimensions.length;
 
     const reportCoverage = {
@@ -2358,7 +2430,7 @@ export async function get6DReport(req, res) {
     // are skipped for users who haven't hosted (see OPT_IN_KEYS in
     // readinessTiers.js).
     const masteryAndDepthCounts =
-      mastery || depth || communication || optimization || retention || teaching
+      mastery || depth || communication || optimization || retention || teaching || designAptitude
         ? {
             ...(mastery?.counts ?? {}),
             ...(depth?.counts ?? {}),
@@ -2383,6 +2455,14 @@ export async function get6DReport(req, res) {
                   teachingRatings: teaching.ratingCount,
                   teachingScore: teaching.score ?? 0,
                   teachingFlagRate: teaching.flagRate,
+                }
+              : {}),
+            ...(designAptitude
+              ? {
+                  designSessions: designAptitude.sessionCount,
+                  designScenarios: designAptitude.evaluatedScenarioCount,
+                  designScore: designAptitude.score ?? 0,
+                  designInterviewerPaired: designAptitude.interviewerPairedCount,
                 }
               : {}),
           }
@@ -2691,6 +2771,26 @@ export async function get6DReport(req, res) {
                 flagRate: teaching.flagRate,
                 sourceQuality: teaching.sourceQuality,
                 ceiling: teaching.ceiling,
+              }
+            : null,
+          // Design Aptitude (D8) — null when flag off OR user has never
+          // completed a design session with evaluation. The verdict
+          // evidence builder reads this to enforce Rule 15 (sample-size
+          // honesty per Schoenfeld 1985).
+          designAptitude: designAptitude
+            ? {
+                active: designAptitude.active,
+                score: designAptitude.score,
+                ci: designAptitude.ci,
+                sessionCount: designAptitude.sessionCount,
+                sdSessionCount: designAptitude.sdSessionCount,
+                lldSessionCount: designAptitude.lldSessionCount,
+                evaluatedScenarioCount: designAptitude.evaluatedScenarioCount,
+                scenarioPassRate: designAptitude.scenarioPassRate,
+                interviewerPairedCount: designAptitude.interviewerPairedCount,
+                avgOverallScore: designAptitude.avgOverallScore,
+                sourceQuality: designAptitude.sourceQuality,
+                ceiling: designAptitude.ceiling,
               }
             : null,
           aiReview: {
@@ -3081,6 +3181,25 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Design Aptitude (D8) — surface session count + scenario count + source
+  // quality so the verdict prompt can satisfy Rule 15 (sessionCount<3
+  // requires hedge — Schoenfeld 1985 design competency repeated-practice
+  // requirement).
+  const designBlock = report.analytics?.designAptitude;
+  const designAptitude = designBlock
+    ? {
+        score: designBlock.score,
+        sessionCount: designBlock.sessionCount,
+        sdSessionCount: designBlock.sdSessionCount,
+        lldSessionCount: designBlock.lldSessionCount,
+        evaluatedScenarioCount: designBlock.evaluatedScenarioCount,
+        scenarioPassRate: designBlock.scenarioPassRate,
+        interviewerPairedCount: designBlock.interviewerPairedCount,
+        sourceQuality: designBlock.sourceQuality,
+        ceiling: designBlock.ceiling,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -3095,6 +3214,7 @@ function buildVerdictEvidence(report) {
     pressurePerformance,
     retention,
     teaching,
+    designAptitude,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

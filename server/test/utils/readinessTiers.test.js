@@ -709,3 +709,119 @@ describe("classifyReadiness — D7 teaching gates (opt-in dimension)", () => {
     expect(OPT_IN_KEYS.has("coreSolidOrAbove")).toBe(false);
   });
 });
+
+// ── D8 design aptitude gates (opt-in) ────────────────────────────────
+
+describe("classifyReadiness — D8 design aptitude gates (opt-in dimension)", () => {
+  const tierById = (info, id) => info.tiers.find((t) => t.id === id);
+
+  const tier2BaselineDims = {
+    patternRecognition: 60,
+    optimization: 50,
+    pressurePerformance: 55,
+    solutionDepth: 50,
+  };
+  const tier2BaselineMastery = {
+    coreSolidOrAbove: 10, owned: 3,
+    solutionsAtDefendedOrAbove: 4, solutionsAtOwned: 2,
+    commMocksWithScores: 1,
+    optAtTradeOffOrAbove: 4, optAtOwned: 2,
+    retentionAttempts: 12, retentionScore: 65,
+  };
+
+  it("user without design keys is still tier2 ready (opt-in skip)", () => {
+    const out = classifyReadiness(70, tier2BaselineDims, tier2BaselineMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).not.toContain("designSessions");
+    expect(failingKeys).not.toContain("designScenarios");
+    expect(failingKeys).not.toContain("designScore");
+  });
+
+  it("opted-in user with insufficient sessions FAILS tier2 design gate", () => {
+    const masteryWithLowDesign = {
+      ...tier2BaselineMastery,
+      designSessions: 1,    // < 2 needed
+      designScenarios: 2,   // < 5 needed
+      designScore: 40,      // < 60 needed
+      designInterviewerPaired: 0,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryWithLowDesign);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).toContain("designSessions");
+    expect(failingKeys).toContain("designScenarios");
+    expect(failingKeys).toContain("designScore");
+  });
+
+  it("opted-in user at tier2 design floor PASSES", () => {
+    const masteryAtDesignFloor = {
+      ...tier2BaselineMastery,
+      designSessions: 2,
+      designScenarios: 5,
+      designScore: 60,
+      designInterviewerPaired: 0,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryAtDesignFloor);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+  });
+
+  it("FAANG requires interviewer-paired session (designInterviewerPaired ≥ 1)", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryWithoutPairedInterview = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      designSessions: 6,
+      designScenarios: 20,
+      designScore: 80,
+      designInterviewerPaired: 0, // missing — should fail
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryWithoutPairedInterview);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    expect(faang.failingMastery.map((f) => f.key)).toContain("designInterviewerPaired");
+  });
+
+  it("FAANG passes when all design gates met at the boundary", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryAtFaangBoundary = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      teachingSessions: 5, teachingRatings: 10, teachingScore: 75, teachingFlagRate: 0.05,
+      designSessions: 5,
+      designScenarios: 15,
+      designScore: 75,
+      designInterviewerPaired: 1,
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryAtFaangBoundary);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(true);
+  });
+
+  it("OPT_IN_KEYS contains all design* keys", async () => {
+    const { OPT_IN_KEYS } = await import("../../src/utils/readinessTiers.js");
+    expect(OPT_IN_KEYS.has("designSessions")).toBe(true);
+    expect(OPT_IN_KEYS.has("designScenarios")).toBe(true);
+    expect(OPT_IN_KEYS.has("designScore")).toBe(true);
+    expect(OPT_IN_KEYS.has("designInterviewerPaired")).toBe(true);
+  });
+});

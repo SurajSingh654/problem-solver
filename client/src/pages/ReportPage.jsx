@@ -58,6 +58,14 @@ const RETENTION_V2_ENABLED =
 const TEACHING_V2_ENABLED =
     import.meta.env.VITE_FEATURE_TEACHING_CONTRIBUTIONS_V2 === 'true'
 
+// D8 Design Aptitude flag — opt-in dim covering SystemDesign + LLD via
+// DesignSession data. When on AND the user has ≥1 completed design
+// session with evaluation, the D8 axis appears + a source-quality chip
+// (Draft-only / Scenario-tested / Interviewer-paired) renders. Three-place
+// declaration per CLAUDE.md.
+const DESIGN_APTITUDE_ENABLED =
+    import.meta.env.VITE_FEATURE_DESIGN_APTITUDE === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -850,6 +858,42 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                       : isLive
                         ? 'Live + AI'
                         : 'Quiz-proxy'
+                    return (
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <span className={cn(
+                          'text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded-full border',
+                          tone,
+                        )}>
+                          {label}
+                        </span>
+                        <span className="text-[10px] text-text-disabled font-mono">
+                          Ceiling {ceiling}
+                        </span>
+                      </div>
+                    )
+                  })()}
+
+                {/* D8 source-quality chip — renders for the designAptitude
+                    dim when the flag is on AND the server attached
+                    sourceQuality. Mirrors D3/D5/D7 pattern. */}
+                {dim.key === 'designAptitude'
+                  && DESIGN_APTITUDE_ENABLED
+                  && typeof info?.sourceQuality === 'string'
+                  && (() => {
+                    const sq = info.sourceQuality
+                    const ceiling = info.ceiling ?? 100
+                    const isPaired = sq === 'interviewer-paired'
+                    const isScenario = sq === 'scenario-tested'
+                    const tone = isPaired
+                      ? 'bg-success-soft text-success-fg border-success-line'
+                      : isScenario
+                        ? 'bg-info-soft text-info-fg border-info-line'
+                        : 'bg-warning-soft text-warning-fg border-warning-line'
+                    const label = isPaired
+                      ? 'Interviewer-paired'
+                      : isScenario
+                        ? 'Scenario-tested'
+                        : 'Draft-only'
                     return (
                       <div className="mt-2 flex items-center gap-1.5">
                         <span className={cn(

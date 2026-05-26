@@ -64,6 +64,13 @@ export const OPT_IN_KEYS = new Set([
   "teachingRatings",
   "teachingScore",
   "teachingFlagRate",
+  // D8 Design Aptitude — opt-in like D7. Users who never opened the
+  // Design Studio can still be tier-ready on coding alone; the gate is
+  // skipped when these keys are absent from masteryCounts.
+  "designSessions",
+  "designScenarios",
+  "designScore",
+  "designInterviewerPaired",
 ]);
 
 export const READINESS_TIERS = [
@@ -114,6 +121,14 @@ export const READINESS_TIERS = [
       teachingRatings: 10,
       teachingScore: 75,
       teachingFlagRate: 0.10, // MAX: actual must be ≤ this
+      // D8 Design Aptitude gates — opt-in. FAANG requires interviewer-
+      // paired signal: 5 sessions + 15 evaluated scenarios + score ≥75
+      // + ≥1 interviewer-paired session (Schoenfeld 1985 design competency
+      // requires repeated stress-tested practice).
+      designSessions: 5,
+      designScenarios: 15,
+      designScore: 75,
+      designInterviewerPaired: 1,
     },
     icon: "🏆",
   },
@@ -153,6 +168,13 @@ export const READINESS_TIERS = [
       teachingSessions: 3,
       teachingRatings: 5,
       teachingScore: 60,
+      // D8 Design Aptitude gates — opt-in. Tier 2 requires scenario-
+      // tested signal: 2 sessions + 5 scenarios + score ≥60. Below
+      // scenario validation, the score is purely self-report (Schoenfeld
+      // 1985 — design competency requires explicit interrogation).
+      designSessions: 2,
+      designScenarios: 5,
+      designScore: 60,
     },
     icon: "🥈",
   },

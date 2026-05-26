@@ -29,6 +29,7 @@ export function prettyDimName(key) {
       pressurePerformance: "Pressure Performance",
       retention: "Retention",
       teachingContributions: "Teaching Contributions",
+      designAptitude: "Design Aptitude",
     }[key] || key
   );
 }
@@ -85,6 +86,7 @@ export function buildFallbackVerdict(evidence) {
   const pp = evidence.pressurePerformance;   // null when D5 v2 flag is off
   const rt = evidence.retention;             // null when D6 v2 flag is off
   const tc = evidence.teaching;              // null when D7 v2 flag is off OR user never hosted
+  const da = evidence.designAptitude;        // null when D8 flag is off OR user has no completed design sessions
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -164,6 +166,27 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} with ${n} peer rating${n === 1 ? "" : "s"} across ${sessions} session${sessions === 1 ? "" : "s"} (peer-validated, ceiling ${tc.ceiling})`;
   };
 
+  // Helper — build evidence string for a Design Aptitude claim under D8.
+  // Satisfies Rule 15 (sample-size honesty per Schoenfeld 1985 / Newell-
+  // Simon 1972) AND cites source quality + scenario count + interviewer-
+  // paired status so the LLM has the distribution context.
+  const designAptitudeEvidenceWithSource = (dim) => {
+    if (!da) return `score=${dim.score} over n=${dim.n} data points`;
+    const sessions = da.sessionCount;
+    const scenarios = da.evaluatedScenarioCount;
+    if (sessions < 3) {
+      // Hedge required: small-sample design score (Schoenfeld 1985).
+      return `score=${dim.score} over ${sessions} session${sessions === 1 ? "" : "s"} (tentative — small sample; design competency requires ≥3 sessions across problem types)`;
+    }
+    if (da.sourceQuality === "interviewer-paired") {
+      return `score=${dim.score} across ${sessions} sessions, ${scenarios} scenarios validated, ${da.interviewerPairedCount} interviewer-paired (ceiling 100)`;
+    }
+    if (da.sourceQuality === "scenario-tested") {
+      return `score=${dim.score} across ${sessions} sessions with ${scenarios} AI-validated scenarios (scenario-tested, ceiling ${da.ceiling})`;
+    }
+    return `score=${dim.score} across ${sessions} session${sessions === 1 ? "" : "s"} with no AI scenarios attempted (draft-only, ceiling ${da.ceiling})`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
@@ -173,6 +196,7 @@ export function buildFallbackVerdict(evidence) {
     const isPressure = topDim.key === "pressurePerformance";
     const isRetention = topDim.key === "retention";
     const isTeaching = topDim.key === "teachingContributions";
+    const isDesign = topDim.key === "designAptitude";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
@@ -181,21 +205,25 @@ export function buildFallbackVerdict(evidence) {
     else if (isPressure) evidenceStr = pressureEvidenceWithSource(topDim);
     else if (isRetention) evidenceStr = retentionEvidenceWithSampleSize(topDim);
     else if (isTeaching) evidenceStr = teachingEvidenceWithSource(topDim);
+    else if (isDesign) evidenceStr = designAptitudeEvidenceWithSource(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     // Rule 13: retention strengths with attemptCount < 5 must NOT claim
     // retention as a strength at all. Rule 14: same for teaching with
-    // ratingCount < 3. Drop the strength entirely so the fallback
-    // satisfies the validator.
+    // ratingCount < 3. Rule 15: same for design with sessionCount < 2.
+    // Drop the strength entirely so the fallback satisfies the validator.
     const skipRetentionStrength =
       isRetention && rt && rt.attemptCount < 5;
     const skipTeachingStrength =
       isTeaching && tc && tc.ratingCount < 3;
-    if (!skipRetentionStrength && !skipTeachingStrength) {
-      // Rule 13/14: small-sample strengths must use 'tentative' confidence
+    const skipDesignStrength =
+      isDesign && da && da.sessionCount < 2;
+    if (!skipRetentionStrength && !skipTeachingStrength && !skipDesignStrength) {
+      // Rule 13/14/15: small-sample strengths must use 'tentative' confidence
       // (the helpers already inject the hedge vocabulary).
       let confidence;
       if (isRetention && rt && rt.attemptCount < 10) confidence = "tentative";
       else if (isTeaching && tc && tc.ratingCount < 5) confidence = "tentative";
+      else if (isDesign && da && da.sessionCount < 3) confidence = "tentative";
       else confidence = topDim.n >= 5 ? "high" : "tentative";
       strengths.push({
         claim: `${prettyDimName(topDim.key)} is your leading dimension`,
@@ -298,6 +326,20 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When D8 is present AND user has design sessions but no AI scenarios
+  // attempted, surface as priority gap. Schoenfeld 1985: design competency
+  // is established through scenario interrogation, not artifact production.
+  // A user with 5 sessions and 0 scenarios is at the draft-only ceiling
+  // forever — that's the highest-leverage action.
+  if (da && da.sessionCount >= 1 && da.evaluatedScenarioCount === 0 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Design sessions have no scenario validation",
+      evidence: `${da.sessionCount} completed session${da.sessionCount === 1 ? "" : "s"} with 0 AI-validated scenarios (draft-only, ceiling ${da.ceiling})`,
+      action:
+        "Run AI scenarios on your existing design sessions — failure-mode, scale, and consistency challenges are how design competency gets stress-tested. Without them the score caps at 30/100.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
@@ -306,6 +348,7 @@ export function buildFallbackVerdict(evidence) {
     const isPressureWeak = weakDim.key === "pressurePerformance";
     const isRetentionWeak = weakDim.key === "retention";
     const isTeachingWeak = weakDim.key === "teachingContributions";
+    const isDesignWeak = weakDim.key === "designAptitude";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
@@ -314,6 +357,7 @@ export function buildFallbackVerdict(evidence) {
     else if (isPressureWeak) evidenceStr = pressureEvidenceWithSource(weakDim);
     else if (isRetentionWeak) evidenceStr = retentionEvidenceWithSampleSize(weakDim);
     else if (isTeachingWeak) evidenceStr = teachingEvidenceWithSource(weakDim);
+    else if (isDesignWeak) evidenceStr = designAptitudeEvidenceWithSource(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,

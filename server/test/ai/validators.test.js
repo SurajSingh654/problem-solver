@@ -1537,6 +1537,226 @@ describe('validateVerdict — Rule 14 (Teaching peer-rating sample-size honesty)
     })
 })
 
+// ── validateVerdict — Rule 15 (Design Aptitude sample-size honesty) ──
+//
+// Active only when evidence.designAptitude is non-null (D8 flag on AND
+// user has ≥1 completed design session). Schoenfeld (1985) + Newell-
+// Simon (1972): design competency requires repeated practice across
+// problem types. Below sessionCount=3, "high" confidence claims must
+// hedge. Below sessionCount=2, design can't be claimed strength at all.
+describe('validateVerdict — Rule 15 (Design Aptitude sample-size honesty)', () => {
+    const DESIGN_LOW_N = {
+        ...FULL_EVIDENCE,
+        designAptitude: {
+            score: 50,
+            sessionCount: 2,
+            sdSessionCount: 2, lldSessionCount: 0,
+            evaluatedScenarioCount: 4,
+            scenarioPassRate: 0.5,
+            interviewerPairedCount: 0,
+            sourceQuality: 'scenario-tested',
+            ceiling: 70,
+        },
+    }
+    const DESIGN_TOO_FEW = {
+        ...FULL_EVIDENCE,
+        designAptitude: {
+            score: 50,
+            sessionCount: 1,
+            sdSessionCount: 1, lldSessionCount: 0,
+            evaluatedScenarioCount: 0,
+            scenarioPassRate: 0,
+            interviewerPairedCount: 0,
+            sourceQuality: 'draft-only',
+            ceiling: 30,
+        },
+    }
+    const DESIGN_GOOD_N = {
+        ...FULL_EVIDENCE,
+        designAptitude: {
+            score: 80,
+            sessionCount: 6,
+            sdSessionCount: 4, lldSessionCount: 2,
+            evaluatedScenarioCount: 18,
+            scenarioPassRate: 0.7,
+            interviewerPairedCount: 2,
+            sourceQuality: 'interviewer-paired',
+            ceiling: 100,
+        },
+    }
+
+    it('accepts a Design strength claim with hedge vocab when n<3', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'System Design is your leading dimension',
+                    evidence: 'score=50 across 2 sessions (tentative — small sample; design competency requires ≥3 sessions)',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '8 of 8 dimensions active.',
+        }
+        const r = validateVerdict(v, DESIGN_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Design strength claim with confidence=high + n<3 + no hedge', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'System Design is your strongest dimension',
+                    evidence: 'score=50 across recent design sessions',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '8 of 8 dimensions active.',
+        }
+        const r = validateVerdict(v, DESIGN_LOW_N)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-design-high-confidence-low-n')
+    })
+
+    it('rejects a Design strength claim outright when n<2', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'System Design is leading (tentative)',
+                    evidence: 'score=50 over 1 session — early signal',
+                    confidence: 'tentative',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '8 of 8 dimensions active.',
+        }
+        const r = validateVerdict(v, DESIGN_TOO_FEW)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-design-claim-too-few-sessions')
+    })
+
+    it('accepts a Design strength claim with confidence=high + no hedge when n>=3', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'System Design is your leading dimension',
+                    evidence: 'score=80 across 6 sessions, 18 scenarios validated, 2 interviewer-paired',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '8 of 8 dimensions active.',
+        }
+        const r = validateVerdict(v, DESIGN_GOOD_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 15 when evidence.designAptitude is absent', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'System Design is your strongest',
+                    evidence: 'score=50 over n=2 data points',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('LLD claims also trigger Rule 15 (regex matches "Low-Level Design" + "LLD")', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Low-Level Design is leading',
+                    evidence: 'score=55 over 2 sessions',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '8 of 8 dimensions active.',
+        }
+        const r = validateVerdict(v, DESIGN_LOW_N)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-design-high-confidence-low-n')
+    })
+
+    it('fallback drops the design strength entirely when n<2', () => {
+        const FULL_WITH_DESIGN_TOO_FEW = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 50 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 50 },
+                { key: 'communication', status: 'active', n: 8, score: 50 },
+                { key: 'optimization', status: 'active', n: 8, score: 50 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 50 },
+                { key: 'retention', status: 'active', n: 12, score: 60 },
+                { key: 'designAptitude', status: 'active', n: 1, score: 75 },
+            ],
+            overall: { score: 55 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            designAptitude: {
+                score: 75, sessionCount: 1, sdSessionCount: 1, lldSessionCount: 0,
+                evaluatedScenarioCount: 0, scenarioPassRate: 0,
+                interviewerPairedCount: 0, sourceQuality: 'draft-only', ceiling: 30,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_DESIGN_TOO_FEW)
+        const hasDesignStrength = v.strengths.some((s) =>
+            /\b(?:design aptitude|system design|low.level design|LLD)\b/i.test(`${s.claim} ${s.evidence}`),
+        )
+        expect(hasDesignStrength).toBe(false)
+        const r = validateVerdict(v, FULL_WITH_DESIGN_TOO_FEW)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces "Design sessions have no scenario validation" gap when scenarios=0', () => {
+        const FULL_WITH_DESIGN_NO_SCENARIOS = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 12, score: 65 },
+                { key: 'designAptitude', status: 'active', n: 4, score: 28 },
+            ],
+            overall: { score: 58 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            designAptitude: {
+                score: 28, sessionCount: 4, sdSessionCount: 3, lldSessionCount: 1,
+                evaluatedScenarioCount: 0, scenarioPassRate: 0,
+                interviewerPairedCount: 0, sourceQuality: 'draft-only', ceiling: 30,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_DESIGN_NO_SCENARIOS)
+        const hasScenarioGap = v.gaps.some((g) =>
+            /scenario validation|0 AI-validated scenarios/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasScenarioGap).toBe(true)
+        const r = validateVerdict(v, FULL_WITH_DESIGN_NO_SCENARIOS)
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {

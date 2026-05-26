@@ -252,6 +252,17 @@ export const DIMENSIONS = [
     color: "#f97316",
     desc: "Peer ratings and depth of teaching sessions hosted for the team",
   },
+  {
+    // D8 — opt-in dimension. Activates when user has ≥1 completed
+    // DesignSession with AI evaluation. Covers BOTH SYSTEM_DESIGN and
+    // LOW_LEVEL_DESIGN modes — the per-type count is surfaced in the
+    // dim card's basis lines, not as a separate axis.
+    id: "designAptitude",
+    label: "Design Aptitude",
+    short: "Design",
+    color: "#06b6d4",
+    desc: "System design + LLD aptitude — AI-evaluated phases, scenario validation, interviewer-paired sessions",
+  },
 ];
 
 // ── AI features config (ready for later integration) ──
