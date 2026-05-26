@@ -78,10 +78,11 @@ export function buildFallbackVerdict(evidence) {
     .filter((d) => d.score != null && d.score < 65)
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
 
-  const pm = evidence.patternMastery; // null when D1 v2 flag is off
-  const sd = evidence.solutionDepth;   // null when D2 v2 flag is off
-  const cm = evidence.communication;   // null when D3 v2 flag is off
-  const op = evidence.optimization;    // null when D4 v2 flag is off
+  const pm = evidence.patternMastery;       // null when D1 v2 flag is off
+  const sd = evidence.solutionDepth;         // null when D2 v2 flag is off
+  const cm = evidence.communication;         // null when D3 v2 flag is off
+  const op = evidence.optimization;          // null when D4 v2 flag is off
+  const pp = evidence.pressurePerformance;   // null when D5 v2 flag is off
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -117,17 +118,32 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} with ${op.tradeOffOrAbove} of ${op.totalCoding} solutions at Trade-off+ and ${op.owned} Owned`;
   };
 
+  // Helper — build evidence string for a Pressure Performance claim under v2.
+  // Satisfies validator Rule 12: cite source, not just score.
+  const pressureEvidenceWithSource = (dim) => {
+    if (!pp) return `score=${dim.score} over n=${dim.n} data points`;
+    if (pp.sourceQuality === "stable-mocks") {
+      return `score=${dim.score} with ${pp.mockCount} mock interviews (ceiling 100, stable rater signal)`;
+    }
+    if (pp.sourceQuality === "live-and-quiz" || pp.sourceQuality === "live-only") {
+      return `score=${dim.score} with ${pp.mockCount} mock interview${pp.mockCount === 1 ? "" : "s"} (ceiling 80) and ${pp.relevantQuizCount} interview-relevant quiz${pp.relevantQuizCount === 1 ? "" : "es"}`;
+    }
+    return `score=${dim.score} from quiz-proxy alone (ceiling 40, ${pp.relevantQuizCount} interview-relevant quiz${pp.relevantQuizCount === 1 ? "" : "es"} — no mock interviews yet)`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
     const isDepth = topDim.key === "solutionDepth";
     const isComm = topDim.key === "communication";
     const isOpt = topDim.key === "optimization";
+    const isPressure = topDim.key === "pressurePerformance";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
     else if (isComm) evidenceStr = commEvidenceWithSource(topDim);
     else if (isOpt) evidenceStr = optEvidenceWithDistribution(topDim);
+    else if (isPressure) evidenceStr = pressureEvidenceWithSource(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     strengths.push({
       claim: `${prettyDimName(topDim.key)} is your leading dimension`,
@@ -190,16 +206,32 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When v2 pressure performance is present AND the user has no live
+  // signal (mockCount < 1), surface as priority gap. Quiz-proxy alone
+  // is research-capped at 40; the user needs a mock interview to
+  // credibly call pressure performance a strength — Schmidt-Hunter 1998
+  // r=0.54 work-sample vs r ≤ 0.20 proxy. Mirror of D3's "no live signal".
+  if (pp && pp.mockCount < 1 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Pressure Performance has no live signal",
+      evidence: `score from quiz-proxy alone (ceiling ${pp.ceiling}, ${pp.relevantQuizCount} interview-relevant quiz${pp.relevantQuizCount === 1 ? "" : "es"}, 0 mock interviews)`,
+      action:
+        "Complete a mock interview to lift the source ceiling beyond the quiz-proxy 40 and validate pressure performance under live time-pressured conditions.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
     const isCommWeak = weakDim.key === "communication";
     const isOptWeak = weakDim.key === "optimization";
+    const isPressureWeak = weakDim.key === "pressurePerformance";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
     else if (isCommWeak) evidenceStr = commEvidenceWithSource(weakDim);
     else if (isOptWeak) evidenceStr = optEvidenceWithDistribution(weakDim);
+    else if (isPressureWeak) evidenceStr = pressureEvidenceWithSource(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,

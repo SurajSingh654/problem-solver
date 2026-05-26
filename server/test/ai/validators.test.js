@@ -858,6 +858,155 @@ describe('validateVerdict — Rule 11 (Optimization trade-off distribution)', ()
     })
 })
 
+// ── validateVerdict — Rule 12 (Pressure Performance source quality) ──
+//
+// Active only when evidence.pressurePerformance is non-null (D5 v2 flag
+// on). Forces any Pressure Performance subject claim to cite the source.
+// Schmidt-Hunter 1998: work samples r=0.54 vs proxy r ≤ 0.20. Calling
+// quiz-only signal "strong pressure performance" is exactly the kind of
+// overclaim the verdict layer is engineered to block.
+//
+// Phrase-anchored regex (lessons from Rule 10/11): "pressure" must be
+// the subject of the claim, not just incidental "performed well under
+// pressure" prose.
+describe('validateVerdict — Rule 12 (Pressure Performance source quality)', () => {
+    const FULL_EVIDENCE_WITH_PRESSURE = {
+        ...FULL_EVIDENCE,
+        pressurePerformance: {
+            ceiling: 80,
+            sourceQuality: 'live-and-quiz',
+            mockCount: 2,
+            relevantQuizCount: 5,
+            totalQuizzesSeen: 7,
+        },
+    }
+    const QUIZ_ONLY_PRESSURE = {
+        ...FULL_EVIDENCE,
+        pressurePerformance: {
+            ceiling: 40,
+            sourceQuality: 'quiz-proxy',
+            mockCount: 0,
+            relevantQuizCount: 4,
+            totalQuizzesSeen: 4,
+        },
+    }
+
+    it('accepts a Pressure Performance strength claim that cites source', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pressure performance is your strongest dimension',
+                    evidence: 'score=72 with 2 mock interviews (ceiling 80) and 5 interview-relevant quizzes',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_PRESSURE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Pressure Performance strength claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pressure performance is your strongest dimension',
+                    evidence: 'score=72 over n=10 data points',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_PRESSURE)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-pressure-claim-no-source')
+    })
+
+    it('rejects a Pressure Performance gap claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Pressure performance is your weakest dimension',
+                    evidence: 'score=40 over n=4',
+                    action: 'Practice mocks',
+                },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, QUIZ_ONLY_PRESSURE)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('gaps[0]-pressure-claim-no-source')
+    })
+
+    it('FALSE-POSITIVE GUARD: incidental "performed well under pressure" prose does NOT trigger Rule 12', () => {
+        // This is a Pattern Recognition claim that mentions "pressure"
+        // incidentally — not a subject claim. Plan agent's recurring
+        // concern: the SUBJECT must be Pressure Performance.
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is the strongest signal',
+                    evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+ — performed well under pressure on the optimization round',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_PRESSURE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 12 when pressurePerformance evidence is absent', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Pressure performance is your strongest dimension',
+                    evidence: 'score=72 over n=10',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 12 for non-Pressure claims', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                { claim: 'Communication is well-rounded', evidence: 'score=70 with 3 mock interviews (ceiling 80)', confidence: 'high' },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, {
+            ...FULL_EVIDENCE_WITH_PRESSURE,
+            communication: {
+                ceiling: 80, sourceQuality: 'live-and-ai',
+                peerCount: 0, mockCount: 3, writtenCount: 6,
+            },
+        })
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {
@@ -1034,6 +1183,56 @@ describe('buildFallbackVerdict', () => {
         )
         expect(hasTradeOffGap).toBe(true)
         const r = validateVerdict(v, ORIGINAL_REPORT_WITH_OPT)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback output for v2-pressure evidence passes Rule 12 (no self-contradiction)', () => {
+        const FULL_WITH_PRESSURE = {
+            ...FULL_EVIDENCE,
+            pressurePerformance: {
+                ceiling: 80,
+                sourceQuality: 'live-and-quiz',
+                mockCount: 2,
+                relevantQuizCount: 5,
+                totalQuizzesSeen: 7,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_PRESSURE)
+        const r = validateVerdict(v, FULL_WITH_PRESSURE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces a "Pressure Performance has no live signal" gap when mockCount < 1', () => {
+        // Original-report user under D5 v2: 4 quizzes (some Photography),
+        // 0 mocks → quiz-proxy ceiling 40. Fallback should prepend the
+        // priority gap mirroring D3's "no live signal" pattern.
+        const ORIGINAL_REPORT_WITH_PRESSURE = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 4, score: 26 },
+                { key: 'solutionDepth', status: 'active', n: 4, score: 32 },
+                { key: 'communication', status: 'active', n: 4, score: 55 },
+                { key: 'optimization', status: 'active', n: 4, score: 37 },
+                { key: 'pressurePerformance', status: 'active', n: 3, score: 40 },
+                { key: 'retention', status: 'active', n: 4, score: 93 },
+            ],
+            overall: { score: 47 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: { name: 'Tier 2 Tech', threshold: 65, gap: 18 },
+            pressurePerformance: {
+                ceiling: 40,
+                sourceQuality: 'quiz-proxy',
+                mockCount: 0,
+                relevantQuizCount: 3,
+                totalQuizzesSeen: 4,
+            },
+        }
+        const v = buildFallbackVerdict(ORIGINAL_REPORT_WITH_PRESSURE)
+        const hasNoLiveSignalGap = v.gaps.some((g) =>
+            /no live signal|quiz-proxy|mock interview/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasNoLiveSignalGap).toBe(true)
+        const r = validateVerdict(v, ORIGINAL_REPORT_WITH_PRESSURE)
         expect(r.valid).toBe(true)
     })
 

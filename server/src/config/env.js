@@ -167,6 +167,19 @@ export const FEATURE_COMMUNICATION_V2 = optional('FEATURE_COMMUNICATION_V2', 'fa
 // TRADE_OFF + 5 OWNED. Independent rollout from D1/D2/D3 — flip separately.
 // Client mirror: VITE_FEATURE_OPTIMIZATION_V2 (also in client/Dockerfile ARG).
 export const FEATURE_OPTIMIZATION_V2 = optional('FEATURE_OPTIMIZATION_V2', 'false') === 'true'
+// Pressure Performance v2 — replaces the legacy quiz-dominant blend (0.4
+// mock / 0.6 quiz, with quizzes alone capped at 75) with a source-tier
+// ceiling architecture mirroring D3: quiz-proxy caps at 40, ≥1 mock with
+// scores lifts to 80, ≥3 mocks (Anderson-Shackleton 1990 rater stability)
+// unlocks 100. Mock signal weighted 0.7 vs quiz 0.3 (inverse of legacy).
+// Critically, quizzes are subject-filtered via mapQuizSubjectToDimensions
+// (Photography / Hindi / Physics excluded — only interview-relevant
+// subjects count) and difficulty-weighted (HARD/MEDIUM/EASY 1.3/1.0/0.8).
+// Fixes the score-outside-CI bug (legacy CI used raw quiz scores while
+// score was capped/blended). Asymmetric CI clamp preserves variance.
+// Independent rollout from D1/D2/D3/D4 — flip separately. Client mirror:
+// VITE_FEATURE_PRESSURE_PERFORMANCE_V2 (also in client/Dockerfile ARG).
+export const FEATURE_PRESSURE_PERFORMANCE_V2 = optional('FEATURE_PRESSURE_PERFORMANCE_V2', 'false') === 'true'
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

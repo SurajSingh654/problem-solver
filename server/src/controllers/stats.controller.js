@@ -19,11 +19,13 @@ import { computePatternMastery, masteryScore } from "../utils/patternMastery.js"
 import { computeSolutionDepth } from "../utils/solutionDepth.js";
 import { computeCommunicationStats } from "../utils/communicationStats.js";
 import { computeOptimizationStats } from "../utils/optimizationStats.js";
+import { computePressurePerformanceStats } from "../utils/pressurePerformanceStats.js";
 import {
   FEATURE_PATTERN_MASTERY_V2,
   FEATURE_SOLUTION_DEPTH_V2,
   FEATURE_COMMUNICATION_V2,
   FEATURE_OPTIMIZATION_V2,
+  FEATURE_PRESSURE_PERFORMANCE_V2,
 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
@@ -914,7 +916,12 @@ export async function get6DReport(req, res) {
       }),
       prisma.quizAttempt.findMany({
         where: { userId, completedAt: { not: null }, score: { not: null } },
-        select: { score: true, timeSpent: true },
+        // subject + difficulty added for D5 v2 — used by the source-tier
+        // pressure scoring's subject filter (Photography/Hindi/Physics
+        // excluded via mapQuizSubjectToDimensions) and difficulty
+        // weighting (HARD/MEDIUM/EASY). Legacy D5 ignores these fields,
+        // so the addition is backward-compatible under flag-off.
+        select: { score: true, timeSpent: true, subject: true, difficulty: true },
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
@@ -1073,6 +1080,19 @@ export async function get6DReport(req, res) {
     // available. Reuses the same allReviewAttemptsForDepth fetch (extended
     // condition above) for OWNED-state retrieval validation.
     let optimization = null;
+
+    // PRESSURE PERFORMANCE (D5 v2) — source-tier ceiling architecture
+    // (mirror of D3). Pure function of inputs already loaded (interviews,
+    // quizzesForPressure). Subject filter on quizzes via the existing
+    // mapQuizSubjectToDimensions function (Photography / Hindi / Physics
+    // excluded). Compute eagerly when flag is on.
+    const pressure = FEATURE_PRESSURE_PERFORMANCE_V2
+      ? computePressurePerformanceStats({
+          interviews,
+          quizzes: quizzesForPressure,
+          mapQuizSubjectToDimensions,
+        })
+      : null;
 
     // COMMUNICATION (D3 v2) — source-tier ceiling scoring. Pure function
     // of inputs that are all already loaded (clarityRatings, interviews,
@@ -1577,7 +1597,15 @@ export async function get6DReport(req, res) {
     const hasInterviews = interviews.length > 0;
     const hasQuizzes = quizzesForPressure.length > 0;
 
-    if (hasInterviews || hasQuizzes) {
+    // ── D5 v2 (Pressure Performance) — flag-gated ────
+    // When FEATURE_PRESSURE_PERFORMANCE_V2 is on, pressure.score replaces
+    // the entire legacy if-else cascade. Quiz-only signal is capped at
+    // 40 (research-honest: Schmidt-Hunter 1998 r≤0.20); mocks lift to 80;
+    // ≥3 mocks unlock 100. Subject filter excludes Photography/Hindi/Physics
+    // quizzes via mapQuizSubjectToDimensions.
+    if (pressure) {
+      d5 = pressure.score ?? 0;
+    } else if (hasInterviews || hasQuizzes) {
       let interviewScore = 0;
       if (hasInterviews) {
         const interviewsWithScores = interviews.filter(
@@ -2056,36 +2084,61 @@ export async function get6DReport(req, res) {
       }
     }
 
-    // D5 active iff ≥ 1 sim/interview with scores OR ≥ 3 quizzes. Never
-    // zero-by-default — that's category-insensitive and misleading.
     let d5Score;
     {
-      const interviewsWithScoresCount = interviews.filter(
-        (i) => i.scores && typeof i.scores === "object" && Object.keys(i.scores).length > 0,
-      ).length;
-      const pressureDataPoints = interviewsWithScoresCount + quizzesForPressure.length;
-      const hasEnough = interviewsWithScoresCount >= 1 || quizzesForPressure.length >= 3;
-      if (!hasEnough) {
-        d5Score = inactiveDim(
-          "pressurePerformance",
-          "Complete 1 mock interview (or 3 quizzes) to unlock pressure performance",
-          pressureDataPoints,
-        );
+      if (pressure) {
+        // ── D5 v2 activation: source-tier ceiling gate ──
+        // Inactive when no source meets its min-N (≥3 relevant quizzes,
+        // ≥1 mock with scores). Subject filter on quizzes already
+        // applied inside the utility — Photography / Hindi / Physics
+        // quizzes don't activate.
+        if (pressure.ceiling === null) {
+          d5Score = inactiveDim(
+            "pressurePerformance",
+            "Complete a mock interview, or take ≥3 quizzes on interview-relevant topics — Photography/Hindi-style quizzes don't count toward pressure performance.",
+            pressure.mocksWithScores + pressure.relevantQuizCount,
+          );
+        } else {
+          d5Score = activeDim("pressurePerformance", {
+            score: d5,
+            n: pressure.mocksWithScores + pressure.relevantQuizCount,
+            ci: pressure.ci,
+            basis: pressure.basis,
+          });
+          // Surface the ceiling on the dim object for the Phase 5 UI chip.
+          d5Score.pressureCeiling = pressure.ceiling;
+          d5Score.pressureSourceQuality = pressure.sourceQuality;
+        }
       } else {
-        // Wide CI when n is small; narrows with more data.
-        const ci = meanCI(
-          quizzesForPressure.map((q) => q.score ?? 0),
-          1.96,
-        );
-        d5Score = activeDim("pressurePerformance", {
-          score: d5,
-          n: pressureDataPoints,
-          ci: ci?.ci ?? [Math.max(0, d5 - 20), Math.min(100, d5 + 20)],
-          basis: [
-            `interviews_scored: ${interviewsWithScoresCount}`,
-            `quizzes: ${quizzesForPressure.length}`,
-          ],
-        });
+        // ── D5 v1 (legacy) activation ──────────────────
+        // ≥1 sim/interview with scores OR ≥3 quizzes (any subject).
+        const interviewsWithScoresCount = interviews.filter(
+          (i) => i.scores && typeof i.scores === "object" && Object.keys(i.scores).length > 0,
+        ).length;
+        const pressureDataPoints = interviewsWithScoresCount + quizzesForPressure.length;
+        const hasEnough = interviewsWithScoresCount >= 1 || quizzesForPressure.length >= 3;
+        if (!hasEnough) {
+          d5Score = inactiveDim(
+            "pressurePerformance",
+            "Complete 1 mock interview (or 3 quizzes) to unlock pressure performance",
+            pressureDataPoints,
+          );
+        } else {
+          // Wide CI when n is small; narrows with more data.
+          const ci = meanCI(
+            quizzesForPressure.map((q) => q.score ?? 0),
+            1.96,
+          );
+          d5Score = activeDim("pressurePerformance", {
+            score: d5,
+            n: pressureDataPoints,
+            ci: ci?.ci ?? [Math.max(0, d5 - 20), Math.min(100, d5 + 20)],
+            basis: [
+              `interviews_scored: ${interviewsWithScoresCount}`,
+              `quizzes: ${quizzesForPressure.length}`,
+            ],
+          });
+        }
       }
     }
 
@@ -2477,6 +2530,22 @@ export async function get6DReport(req, res) {
                 calibrationModifier: optimization.calibrationModifier,
               }
             : null,
+          // Pressure Performance v2 — null when flag off. When on, the
+          // client reads `pressureCeiling` + `pressureSourceQuality` off
+          // the D5 dim object directly (Phase D5-4 chip); the analytics
+          // block keeps the full breakdown for the verdict evidence builder.
+          pressurePerformance: pressure
+            ? {
+                ceiling: pressure.ceiling,
+                score: pressure.score,
+                ci: pressure.ci,
+                sources: pressure.sources,
+                sourceQuality: pressure.sourceQuality,
+                mocksWithScores: pressure.mocksWithScores,
+                relevantQuizCount: pressure.relevantQuizCount,
+                totalQuizzesSeen: pressure.totalQuizzesSeen,
+              }
+            : null,
           aiReview: {
             avgScore:
               aiAvgOverall !== null ? Math.round(aiAvgOverall * 10) / 10 : null,
@@ -2822,6 +2891,20 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Pressure Performance v2 — surface source-quality breakdown so the
+  // verdict prompt can satisfy Rule 12 (no D5 strength claim without
+  // citing source). Independent of D1/D2/D3/D4 flag state.
+  const ppBlock = report.analytics?.pressurePerformance;
+  const pressurePerformance = ppBlock
+    ? {
+        ceiling: ppBlock.ceiling,
+        sourceQuality: ppBlock.sourceQuality,
+        mockCount: ppBlock.mocksWithScores,
+        relevantQuizCount: ppBlock.relevantQuizCount,
+        totalQuizzesSeen: ppBlock.totalQuizzesSeen,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -2833,6 +2916,7 @@ function buildVerdictEvidence(report) {
     solutionDepth,
     communication,
     optimization,
+    pressurePerformance,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

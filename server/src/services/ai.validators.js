@@ -384,6 +384,52 @@ export function validateVerdict(verdict, evidence) {
     gaps.forEach((g, i) => checkOptDistribution(g, `gaps[${i}]`));
   }
 
+  // Rule 12 — Pressure Performance source-quality awareness.
+  //
+  // When evidence.pressurePerformance is present (D5 v2 flag is on), any
+  // claim *about* Pressure Performance MUST cite the source. A high D5
+  // score from quiz-proxy alone is not "strong pressure performance" —
+  // Schmidt-Hunter 1998 puts proxy validity at r ≤ 0.20 vs work-sample
+  // r=0.54.
+  //
+  // Phrase-anchored subject patterns: "Pressure Performance" or
+  // "Pressure" as the subject of the claim. Incidental "performed well
+  // under pressure" mid-sentence is NOT a subject claim. Same dual-layer
+  // protection as Rule 10 / Rule 11.
+  if (evidence.pressurePerformance) {
+    const PRESSURE_SUBJECT_PATTERNS = [
+      /\bpressure\s+performance\b/i,
+      /^pressure\b/i,
+      /\bpressure\b\s+(is|was|are|shows|remains)/i,
+      /\bweakest.{0,30}\bpressure\b/i,
+      /\bstrongest.{0,30}\bpressure\b/i,
+      /\bstrong.{0,12}\bpressure\b/i,
+      /\bweak.{0,12}\bpressure\b/i,
+    ];
+    const PRESSURE_SOURCE_PATTERNS = [
+      /\bmock interview/i,
+      /\bquiz[- ]proxy\b/i,
+      /\blive\s+signal\b/i,
+      /\bstable\s+mocks?\b/i,
+      /\bceiling\b/i,
+      /\bsource[- ]quality\b/i,
+      /\d+\s+mock interview/i,
+      /\binterview[- ]relevant\b/i,
+    ];
+    const checkPressureSource = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isPressureSubject = PRESSURE_SUBJECT_PATTERNS.some((rx) => rx.test(text));
+      if (!isPressureSubject) return;
+      const citesSource = PRESSURE_SOURCE_PATTERNS.some((rx) => rx.test(text));
+      if (!citesSource) {
+        violations.push(`${label}-pressure-claim-no-source`);
+      }
+    };
+    strengths.forEach((s, i) => checkPressureSource(s, `strengths[${i}]`));
+    gaps.forEach((g, i) => checkPressureSource(g, `gaps[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 
