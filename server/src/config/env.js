@@ -154,6 +154,19 @@ export const FEATURE_SOLUTION_DEPTH_V2 = optional('FEATURE_SOLUTION_DEPTH_V2', '
 // Tier 2, ≥3 for FAANG. Independent rollout from D1/D2 — flip separately.
 // Client mirror: VITE_FEATURE_COMMUNICATION_V2 (also in client/Dockerfile ARG).
 export const FEATURE_COMMUNICATION_V2 = optional('FEATURE_COMMUNICATION_V2', 'false') === 'true'
+// Optimization v2 — replaces the legacy length-threshold scoring (free pts
+// for typing 20+ chars in bruteForce/optimizedApproach) with a per-solution
+// 5-state machine: NONE → DOCUMENTED → OPTIMIZED → TRADE_OFF → OWNED.
+// Reads research-backed signals D4 historically ignores: solveMethod
+// (SAW_APPROACH caps at NONE), AI complexityCheck.{timeCorrect, spaceCorrect,
+// optimizationNote}, bruteForceMeta.timeComplexity (with big-O normalizer
+// for "O(n²)" vs "O(n^2)" equivalence), and ReviewAttempt-based retention
+// for OWNED. Drops the legacy (avgAiCodeCorrectness/10)^0.6 multiplier
+// (correctness now gates OPTIMIZED state transitions instead of multiplying
+// the aggregate). Adds tier gates: tier2=4 TRADE_OFF + 2 OWNED, faang=10
+// TRADE_OFF + 5 OWNED. Independent rollout from D1/D2/D3 — flip separately.
+// Client mirror: VITE_FEATURE_OPTIMIZATION_V2 (also in client/Dockerfile ARG).
+export const FEATURE_OPTIMIZATION_V2 = optional('FEATURE_OPTIMIZATION_V2', 'false') === 'true'
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null
