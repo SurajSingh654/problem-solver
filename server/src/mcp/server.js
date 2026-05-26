@@ -42,6 +42,7 @@
 // ============================================================================
 
 import express from "express";
+import { randomUUID } from "node:crypto";
 
 import { mcpAuth } from "./middleware/mcpAuth.js";
 import { mcpOrigin } from "./middleware/mcpOrigin.js";
@@ -98,7 +99,7 @@ async function initTransport() {
         // the session-management layer (Phase MCP-1.5 follow-up if
         // session hijacking surfaces; for now the JWT is the auth
         // surface, sessionId is just a transport-level identifier).
-        return `mcp-${crypto.randomUUID()}`;
+        return `mcp-${randomUUID()}`;
       },
     });
 
@@ -209,17 +210,56 @@ export function buildMcpRouter() {
 
   const router = express.Router();
 
+  // 0. JSON body parser — runs BEFORE auth so the SDK gets req.body.
+  //    100KB cap is generous for MCP requests; the JSON-RPC envelope is tiny.
+  router.use(express.json({ limit: "100kb" }));
+
+  // 0a. Optional verbose debug logger — gated by DEBUG_MCP=true env var.
+  //     Useful when diagnosing client-handshake issues (header / body /
+  //     session-ID mismatches). Off by default to keep logs clean.
+  if (process.env.DEBUG_MCP === "true") {
+    router.use((req, res, next) => {
+      const origin = req.get("origin") ?? "(none)";
+      const auth = req.headers.authorization
+        ? `Bearer ${req.headers.authorization.slice(7, 23)}…`
+        : "(none)";
+      const ua = req.headers["user-agent"] ?? "(none)";
+      const accept = req.headers.accept ?? "(none)";
+      const ct = req.headers["content-type"] ?? "(none)";
+      const sessionId = req.headers["mcp-session-id"] ?? "(none)";
+      const protoVer = req.headers["mcp-protocol-version"] ?? "(none)";
+      console.log(
+        `[mcp:debug] ${req.method} ${req.originalUrl}\n` +
+        `  origin=${origin}\n` +
+        `  auth=${auth}\n` +
+        `  ua=${ua.slice(0, 80)}\n` +
+        `  accept=${accept}\n` +
+        `  content-type=${ct}\n` +
+        `  mcp-session-id=${sessionId}\n` +
+        `  mcp-protocol-version=${protoVer}\n` +
+        `  body=${JSON.stringify(req.body).slice(0, 400)}`,
+      );
+      // Capture status code for failures.
+      const origStatus = res.status.bind(res);
+      res.status = (code) => {
+        if (code >= 400) {
+          console.log(`[mcp:debug] response status=${code}`);
+        }
+        return origStatus(code);
+      };
+      next();
+    });
+  }
+
   // 1. Origin check (DNS rebinding defense). Cheapest first.
   router.use(mcpOrigin);
 
-  // 2. Body size cap (100KB). MCP requests are JSON-RPC; tool inputs
-  //    are tiny. Anything larger is suspicious.
-  router.use(express.json({ limit: "100kb" }));
-
-  // 3. Authentication (bearer token + scope + revocation).
+  // 2. Authentication (bearer token + scope + revocation). Body is already
+  //    parsed by the debug-logging block above; express.json() short-circuits
+  //    when req.body is already populated.
   router.use(mcpAuth);
 
-  // 4. Rate limit (per-user + per-IP).
+  // 3. Rate limit (per-user + per-IP).
   router.use(mcpRateLimit);
 
   // 5. SDK-driven JSON-RPC handler. Initialized lazily on first request.
@@ -243,12 +283,13 @@ export function buildMcpRouter() {
 
   router.post("/", handleMcp);
   router.get("/", handleMcp);
+  // DELETE supports session termination per the MCP spec (client signals
+  // "end this session"). Without it, well-behaved clients get a 405 on
+  // logout/disconnect, which some clients escalate to "connection failed".
+  router.delete("/", handleMcp);
 
   return router;
 }
-
-// Crypto polyfill for older Node versions. Node 18+ has globalThis.crypto.
-const crypto = globalThis.crypto;
 
 // Exported for tests.
 export const _internals = {
