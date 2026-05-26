@@ -28,6 +28,7 @@
   "dependencies": {
     "@langchain/core": "^1.1.40",
     "@langchain/openai": "^1.4.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@prisma/client": "^5.20.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

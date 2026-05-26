@@ -254,6 +254,22 @@ mountRoutes("/api/v1");
 mountRoutes("/api");
 
 // ============================================================================
+// MCP — Model Context Protocol read-only server
+// ============================================================================
+// Mounted at /mcp (outside the /api prefix tree because MCP is its own
+// JSON-RPC protocol, not a REST surface — the URL is what MCP clients
+// expect by convention).
+//
+// Returns null (no mount) when FEATURE_MCP_ENABLED is false, which is the
+// default. See docs/AGENT_TOOLING_REFERENCE.md for the full design.
+// ============================================================================
+const mcpRouter = (await import("./mcp/server.js")).buildMcpRouter();
+if (mcpRouter) {
+  app.use("/mcp", mcpRouter);
+  console.log("[mcp] MCP server mounted at /mcp (FEATURE_MCP_ENABLED=true)");
+}
+
+// ============================================================================
 // WEBSOCKET
 // ============================================================================
 setupWebSocket(server);

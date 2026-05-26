@@ -319,5 +319,55 @@ export const FEATURE_BEHAVIORAL_PERFORMANCE = optional('FEATURE_BEHAVIORAL_PERFO
 // (also in client/Dockerfile ARG).
 export const FEATURE_VERIFICATION_METACOGNITION = optional('FEATURE_VERIFICATION_METACOGNITION', 'false') === 'true'
 
+// MCP (Model Context Protocol) read-only server. Default OFF.
+//
+// When enabled, mounts a Streamable HTTP MCP endpoint at /mcp that lets
+// MCP-compatible clients (Claude Code, Cursor, ChatGPT, VS Code, Continue)
+// query the user's readiness data. Read-only by design — no submit_*,
+// no mutations. See docs/AGENT_TOOLING_REFERENCE.md for the full design.
+//
+// Threat model: 15-threat audit covered in the same doc + the
+// mcp-server-readonly roadmap entry. Defenses include:
+//   - Bearer-token auth with separate mcp:read scope (not the web JWT)
+//   - jti-based revocation list (RevokedMcpToken table)
+//   - Origin header allowlist (DNS rebinding defense)
+//   - HTTPS-only + HSTS (TLS downgrade defense)
+//   - Per-user 60req/min + per-IP 600req/min rate limits
+//   - 100KB max request body, 500KB max response, 10s per-tool timeout
+//   - XML-tag wrap + HTML escape for all user content (prompt injection)
+//   - req.teamId filter on every Prisma query (multi-tenancy)
+//   - Pinned @modelcontextprotocol/sdk version (supply chain)
+//
+// Rollout: false default → super-admin canary → general availability.
+export const FEATURE_MCP_ENABLED = optional('FEATURE_MCP_ENABLED', 'false') === 'true'
+
+// MCP token expiry (in seconds). Default 24h. Caps the blast radius of a
+// stolen token; users can regenerate from the settings page. Combined with
+// always-on revocation, this is the primary defense against leaked tokens.
+// Range: 3600 (1h) to 2592000 (30d).
+export const MCP_TOKEN_EXPIRY_SECONDS = (() => {
+  const raw = Number(optional('MCP_TOKEN_EXPIRY_SECONDS', '86400'))
+  if (!Number.isFinite(raw) || raw < 3600 || raw > 2592000) {
+    console.warn(`[env] MCP_TOKEN_EXPIRY_SECONDS out of range; using 86400 (24h)`)
+    return 86400
+  }
+  return raw
+})()
+
+// MCP origin allowlist (comma-separated). Browser-launched clients send
+// Origin headers; we reject anything not on this list to defend against
+// DNS rebinding (per modelcontextprotocol.io/transports#security-warning).
+// Desktop clients (Claude Code, Cursor) often send no Origin header at all,
+// in which case bearer-token auth alone gates access.
+//
+// Default list reflects the public MCP-client ecosystem as of 2026-05.
+// Add custom origins (your own integrations) by setting the env var.
+export const MCP_ALLOWED_ORIGINS = (
+  optional(
+    'MCP_ALLOWED_ORIGINS',
+    'https://claude.ai,https://claude.com,https://chatgpt.com,https://cursor.sh',
+  ) || ''
+).split(',').map((o) => o.trim()).filter(Boolean)
+
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

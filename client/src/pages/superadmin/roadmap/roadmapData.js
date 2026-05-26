@@ -1417,6 +1417,20 @@ export const ROADMAP_ITEMS = [
     },
 
     {
+        id: 'mcp-server-readonly',
+        phase: 'NEXT',
+        theme: 'AI & Intelligence',
+        priority: 'HIGH',
+        effort: 'Large',
+        title: 'MCP server (read-only) — Claude Code / IDE integration',
+        impact: 'Target users (devs prepping for interviews) live in Claude Code / Cursor / VS Code. An MCP server lets the platform\'s 10D readiness data flow into their IDE without context-switching to the web UI. Bigger payoff: the LLM can tailor its coding help to the user\'s actual prep state ("Walking through Two Pointers — your D1 mastery shows this is Untouched, so I\'ll explain the chunk-recognition fundamentals first."). No competitor has Claude Code-native interview prep — real positioning angle.',
+        description: 'Streamable HTTP MCP server mounted on /mcp. Read-only by design (no submit_*, no mutations) — dramatically smaller security surface than full read-write. Bearer token auth with mcp:read scope (separate from web JWT), 24h default expiry, instant revocation via RevokedMcpToken table. ~10 read tools: get_readiness_report, get_dim_breakdown, get_pattern_matrix, get_review_queue, get_recommended_problems, get_weekly_plan, get_team_leaderboard, get_calibration_status + admin-scoped reads. 4 prompt templates (weekly-checkin, pre-interview-brief, pattern-deep-dive, calibration-coach) — read-only since prompts pull data, not push. Same 10D engine, same Prisma multi-tenancy filters, no duplication.',
+        why: 'Strong fit because (1) data is already MCP-shaped — Resources for addressable URIs, Tools for queries, Prompts for templates; (2) existing JWT auth + req.teamId multi-tenancy translate directly; (3) read-only constraint eliminates the "should we let an LLM auto-submit code?" trust question; (4) bigger payoff than hosting a separate REST integration — works in Claude Code / ChatGPT / Cursor / VS Code / Continue out of the box per the MCP open spec.',
+        researchBasis: 'Model Context Protocol open spec (modelcontextprotocol.io). Streamable HTTP transport (replaces deprecated HTTP+SSE). Anthropic Claude Code, OpenAI ChatGPT, Cursor, VS Code, Continue all native MCP clients. Spec-recommended OAuth 2.0 for end-user auth; bearer token acceptable for v1.',
+        technicalNotes: 'TRANSPORT: Streamable HTTP (modern, replaces HTTP+SSE). Single endpoint /mcp supporting POST (JSON-RPC requests) + GET (server-to-client SSE). SDK: official @modelcontextprotocol/sdk pinned to exact version. SECURITY threat model (15 threats): stolen JWT, cross-tenant leak, prompt injection, DNS rebinding, TLS downgrade, DoS, supply chain, compromised client, timing attacks, header injection, secrets in logs, session hijacking, PII over-disclosure, cross-user enumeration, error info leak. DEFENSES: bearer token in header (never URL); separate mcp:read scope JWT (not web JWT); 24h default expiry; jti-based revocation list with 60s in-memory cache; constant-time JWT compare; req.teamId filter on every Prisma query (ESLint rule enforces); XML-tag wrap for user content + HTML escape + truncation; Origin header allowlist; HTTPS-only + HSTS preload; per-user 60req/min + per-IP 600req/min rate limit; max body 100KB; max response 500KB; per-tool 10s timeout; pinned SDK version + npm audit on pre-push; pino redaction for authorization/cookie/x-api-key + password/token/secret field names; per-tool Zod output schemas (response field allowlist). DECISIONS LOCKED: Option A bearer token UX for v1 (settings page generates 24h JWT, user copy-pastes into "claude mcp add" command); OAuth 2.0 deferred to follow-up if user demand surfaces. PHASES: MCP-1 foundation+security (1.5w); MCP-2 read tools (1w); MCP-3 prompts (3d); MCP-4 distribution+token UX (1w); MCP-5 hardening review+canary (3d). Total ~4w with security front-loaded. ROLLOUT: FEATURE_MCP_ENABLED=false default; super-admin canary; then GA. Full design + threat model + learning doc: docs/AGENT_TOOLING_REFERENCE.md.',
+    },
+
+    {
         id: 'industry-ready-center-v1',
         phase: 'LATER',
         theme: 'Strategic',
