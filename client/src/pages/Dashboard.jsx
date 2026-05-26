@@ -703,22 +703,18 @@ export default function Dashboard() {
           transition={{ delay: 0.15 }}
           className="bg-surface-1 border border-border-default rounded-2xl p-5 lg:col-span-2"
         >
-          {/* Filter the dim list to keys actually present in the response.
-              D7 (teachingContributions) is opt-in — server omits the dim
-              entirely when the user hasn't hosted ≥1 session, so showing
-              a "Teaching —" chip would be misleading. The label text
-              tracks the rendered count so it never falsely promises 6D
-              when 7D shipped (or vice versa for opt-in users). */}
-          {(() => {
-            const visibleDims = dimensions
-              ? DIMENSIONS.filter((d) => Object.prototype.hasOwnProperty.call(dimensions, d.id))
-              : DIMENSIONS.filter((d) => d.id !== 'teachingContributions')
-            return (
-              <p className="text-xs font-bold text-text-primary mb-4 flex items-center gap-2">
-                <span>📊</span> {visibleDims.length}D Readiness Dimensions
-              </p>
-            )
-          })()}
+          {/* Header text deliberately drops the leading "{N}D" count.
+              The header used to show {visibleDims.length}D, but that
+              count (rendered cards = baseline + opt-in placeholders)
+              diverged from the coverage chip's count (baseline + only
+              ACTIVATED opt-ins) — two different numbers on the same
+              card looked broken. The coverage chip elsewhere in the
+              page is the authoritative count; this header just labels
+              the grid. Inactive opt-in cards carry their own CTAs so
+              the user still understands what each "—" means. */}
+          <p className="text-xs font-bold text-text-primary mb-4 flex items-center gap-2">
+            <span>📊</span> Readiness Dimensions
+          </p>
 
           {dimensions ? (
             <div className="grid grid-cols-2 gap-x-8 gap-y-3">

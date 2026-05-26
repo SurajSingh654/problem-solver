@@ -1918,7 +1918,7 @@ export default function ReportPage() {
         animate={{ opacity: 1 }}
         className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6"
       >
-        <h2 className="text-sm font-bold text-text-primary mb-1">{reportCoverage?.total ?? 6}D Intelligence Breakdown</h2>
+        <h2 className="text-sm font-bold text-text-primary mb-1">Intelligence Breakdown</h2>
         <p className="text-xs text-text-tertiary mb-4">
           Each dimension is computed from your actual behavior — not self-reported. Click dimension cards for specific actions.
         </p>
