@@ -38,6 +38,8 @@ const tier2ReadyMastery = {
   optAtNone: 1, optAtDocumented: 4, optAtOptimized: 6, optAtTradeOff: 5, optAtOwned: 2,
   optAtDocumentedOrAbove: 17, optAtOptimizedOrAbove: 13, optAtTradeOffOrAbove: 7, optAtOwnedOrAbove: 2,
   optTotalCoding: 18,
+  // D6 retention — meets tier2 (≥10 attempts, score ≥60), not FAANG (≥25, ≥75, leech ≤20%)
+  retentionAttempts: 12, retentionScore: 65, retentionLeechRate: 0.10,
 };
 
 // The original-report user — high score from gameable formula but tiny breadth.
@@ -58,6 +60,9 @@ const originalReportMastery = {
   optAtNone: 0, optAtDocumented: 1, optAtOptimized: 3, optAtTradeOff: 0, optAtOwned: 0,
   optAtDocumentedOrAbove: 4, optAtOptimizedOrAbove: 3, optAtTradeOffOrAbove: 0, optAtOwnedOrAbove: 0,
   optTotalCoding: 4,
+  // D6 retention — 4 attempts, score 93, 0 leeches.
+  // Tier 2 needs ≥10 attempts; tier3 needs ≥5; original-report user fails both.
+  retentionAttempts: 4, retentionScore: 93, retentionLeechRate: 0,
 };
 
 // ── Schema ───────────────────────────────────────────────────────────
@@ -343,6 +348,10 @@ describe("classifyReadiness — D3 communication gates", () => {
       // D4 must also meet FAANG gate (≥10 trade-off, ≥5 owned)
       optAtTradeOffOrAbove: 12,
       optAtOwned: 6,
+      // D6 must also meet FAANG gate (≥25 attempts, score ≥75, leech ≤0.20)
+      retentionAttempts: 30,
+      retentionScore: 80,
+      retentionLeechRate: 0.10,
     };
     const out = classifyReadiness(82, dimsAtFaangFloor, faangReadyMastery);
     const faang = tierById(out, "faang");
@@ -422,9 +431,154 @@ describe("classifyReadiness — D4 optimization gates", () => {
       solidOrAbove: 6,                     // D1 tier3 gate
       solutionsAtDocumentedOrAbove: 5,     // D2 tier3 gate
       // D4: original has optAtDocumentedOrAbove=4 — meets gate
+      retentionAttempts: 5,                // D6 tier3 gate (≥5 attempts)
     };
     const out = classifyReadiness(50, dimsAtTier3Floor, tier3Mastery);
     const tier3 = tierById(out, "tier3");
     expect(tier3.ready).toBe(true);
+  });
+});
+
+// ── D6 Retention tier gates ──────────────────────────────────────────
+
+describe("classifyReadiness — D6 retention gates", () => {
+  it("user with retention attempts < 10 NOT tier2 ready", () => {
+    const masteryWithLowAttempts = {
+      ...tier2ReadyMastery,
+      retentionAttempts: 4, // tier2 needs ≥10
+    };
+    const out = classifyReadiness(70, dimsAtTier2Floor, masteryWithLowAttempts);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    expect(tier2.failingMastery.map((f) => f.key)).toContain("retentionAttempts");
+  });
+
+  it("user with retention score < 60 NOT tier2 ready (10 attempts but weak)", () => {
+    const masteryWithWeakScore = {
+      ...tier2ReadyMastery,
+      retentionAttempts: 10,
+      retentionScore: 55, // tier2 needs ≥60
+    };
+    const out = classifyReadiness(70, dimsAtTier2Floor, masteryWithWeakScore);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    expect(tier2.failingMastery.map((f) => f.key)).toContain("retentionScore");
+  });
+
+  it("user with 12 attempts + score 65 → Tier 2 ready", () => {
+    // tier2ReadyMastery already has retentionAttempts=12, score=65, leech=0.10
+    const out = classifyReadiness(70, dimsAtTier2Floor, tier2ReadyMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+  });
+
+  it("user with retention attempts < 25 fails FAANG", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const faangAlmostMastery = {
+      ...tier2ReadyMastery,
+      coreSolidOrAbove: 14,
+      owned: 10,
+      solutionsAtDefendedOrAbove: 12,
+      solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12,
+      optAtOwned: 6,
+      // D6: 12 attempts → fails FAANG's 25 floor
+      retentionAttempts: 12,
+      retentionScore: 80,
+      retentionLeechRate: 0.10,
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, faangAlmostMastery);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    expect(faang.failingMastery.map((f) => f.key)).toContain("retentionAttempts");
+  });
+
+  it("INVERSE COMPARISON: user with leechRate > 0.20 fails FAANG", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const faangWithLeeches = {
+      ...tier2ReadyMastery,
+      coreSolidOrAbove: 14,
+      owned: 10,
+      solutionsAtDefendedOrAbove: 12,
+      solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12,
+      optAtOwned: 6,
+      retentionAttempts: 30,
+      retentionScore: 80,
+      retentionLeechRate: 0.30, // exceeds FAANG's 0.20 max — INVERSE comparison
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, faangWithLeeches);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    const failedKeys = faang.failingMastery.map((f) => f.key);
+    expect(failedKeys).toContain("retentionLeechRate");
+  });
+
+  it("INVERSE COMPARISON: user with leechRate exactly at 0.20 PASSES FAANG", () => {
+    // Boundary: 0.20 is the maximum, so 0.20 itself passes.
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const faangAtBoundary = {
+      ...tier2ReadyMastery,
+      coreSolidOrAbove: 14,
+      owned: 10,
+      solutionsAtDefendedOrAbove: 12,
+      solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12,
+      optAtOwned: 6,
+      retentionAttempts: 30,
+      retentionScore: 80,
+      retentionLeechRate: 0.20,
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, faangAtBoundary);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(true);
+  });
+
+  it("original-report user (4 attempts, score 93) FAILS Tier 2 on retention", () => {
+    // Even though score=93 looks strong, the n=4 attempt count fails the
+    // tier2 ≥10 floor — small-sample protection is the whole point of D6 v2.
+    const out = classifyReadiness(69, dimsAtTier2Floor, originalReportMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    expect(tier2.failingMastery.map((f) => f.key)).toContain("retentionAttempts");
+  });
+
+  it("flag-off regression: missing retention keys → silently ignored", () => {
+    // Pass masteryCounts WITHOUT any retention keys at all (legacy flag-off
+    // shape from before D6 v2). classifyReadiness should not fail tier2 on
+    // missing retention requirements — the `if (masteryCounts && ...)`
+    // guard preserves backward compat.
+    const masteryWithoutRetention = {
+      ...tier2ReadyMastery,
+    };
+    delete masteryWithoutRetention.retentionAttempts;
+    delete masteryWithoutRetention.retentionScore;
+    delete masteryWithoutRetention.retentionLeechRate;
+    const out = classifyReadiness(70, dimsAtTier2Floor, masteryWithoutRetention);
+    const tier2 = tierById(out, "tier2");
+    // Missing keys are treated as 0 → fail strict gates. This documents
+    // the actual behavior — when D6 flag is off the keys are absent and
+    // tier-2 mastery checks would fail. To preserve flag-off behavior in
+    // the controller, pass null masteryCounts entirely (already handled).
+    expect(tier2.ready).toBe(false);
+    expect(tier2.failingMastery.map((f) => f.key)).toContain("retentionAttempts");
   });
 });

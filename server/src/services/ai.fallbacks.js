@@ -83,6 +83,7 @@ export function buildFallbackVerdict(evidence) {
   const cm = evidence.communication;         // null when D3 v2 flag is off
   const op = evidence.optimization;          // null when D4 v2 flag is off
   const pp = evidence.pressurePerformance;   // null when D5 v2 flag is off
+  const rt = evidence.retention;             // null when D6 v2 flag is off
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -131,6 +132,19 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} from quiz-proxy alone (ceiling 40, ${pp.relevantQuizCount} interview-relevant quiz${pp.relevantQuizCount === 1 ? "" : "es"} — no mock interviews yet)`;
   };
 
+  // Helper — build evidence string for a Retention claim under v2.
+  // Satisfies validator Rule 13: hedge when n < 10. Returns 'tentative'
+  // confidence-style language when sample is small.
+  const retentionEvidenceWithSampleSize = (dim) => {
+    if (!rt) return `score=${dim.score} over n=${dim.n} data points`;
+    const n = rt.attemptCount;
+    if (n < 10) {
+      // Hedge required: include "tentative" or "small sample" vocab.
+      return `score=${dim.score} over ${n} successful review${n === 1 ? "" : "s"} (tentative — small sample; reliability requires ≥10 attempts)`;
+    }
+    return `score=${dim.score} over ${n} successful reviews${rt.leechCount > 0 ? `, ${rt.leechCount} leech${rt.leechCount === 1 ? "" : "es"}` : ""}`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
@@ -138,18 +152,35 @@ export function buildFallbackVerdict(evidence) {
     const isComm = topDim.key === "communication";
     const isOpt = topDim.key === "optimization";
     const isPressure = topDim.key === "pressurePerformance";
+    const isRetention = topDim.key === "retention";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
     else if (isComm) evidenceStr = commEvidenceWithSource(topDim);
     else if (isOpt) evidenceStr = optEvidenceWithDistribution(topDim);
     else if (isPressure) evidenceStr = pressureEvidenceWithSource(topDim);
+    else if (isRetention) evidenceStr = retentionEvidenceWithSampleSize(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
-    strengths.push({
-      claim: `${prettyDimName(topDim.key)} is your leading dimension`,
-      evidence: evidenceStr,
-      confidence: topDim.n >= 5 ? "high" : "tentative",
-    });
+    // Rule 13: retention strengths with attemptCount < 5 must NOT claim
+    // retention as a strength at all. Drop the strength entirely so the
+    // fallback satisfies the validator.
+    const skipRetentionStrength =
+      isRetention && rt && rt.attemptCount < 5;
+    if (!skipRetentionStrength) {
+      // Rule 13: retention strengths with n < 10 must use 'tentative'
+      // confidence (the helper already injects the hedge vocabulary).
+      const confidence =
+        isRetention && rt && rt.attemptCount < 10
+          ? "tentative"
+          : topDim.n >= 5
+          ? "high"
+          : "tentative";
+      strengths.push({
+        claim: `${prettyDimName(topDim.key)} is your leading dimension`,
+        evidence: evidenceStr,
+        confidence,
+      });
+    }
   }
   const gapsOut = [];
 
@@ -220,18 +251,33 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When v2 retention is present AND there are persistent leeches
+  // (lapseCount >= 8 — Anki convention), surface as priority gap.
+  // Leeches are items the user keeps failing during spaced review;
+  // they need targeted attention beyond the normal SM-2 queue.
+  if (rt && rt.leechCount > 0 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Persistent leeches detected",
+      evidence: `${rt.leechCount} item${rt.leechCount === 1 ? "" : "s"} with lapseCount ≥ 8 (Anki convention) across ${rt.attemptCount} successful review${rt.attemptCount === 1 ? "" : "s"} — items you keep failing during spaced repetition`,
+      action:
+        "Schedule focused review of your leech items — they keep tripping you up and need attention beyond the normal spaced-repetition queue.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
     const isCommWeak = weakDim.key === "communication";
     const isOptWeak = weakDim.key === "optimization";
     const isPressureWeak = weakDim.key === "pressurePerformance";
+    const isRetentionWeak = weakDim.key === "retention";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
     else if (isCommWeak) evidenceStr = commEvidenceWithSource(weakDim);
     else if (isOptWeak) evidenceStr = optEvidenceWithDistribution(weakDim);
     else if (isPressureWeak) evidenceStr = pressureEvidenceWithSource(weakDim);
+    else if (isRetentionWeak) evidenceStr = retentionEvidenceWithSampleSize(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,

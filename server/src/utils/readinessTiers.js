@@ -68,6 +68,12 @@ export const READINESS_TIERS = [
       // passed (FEATURE_OPTIMIZATION_V2 on). 10/5 mirrors D2's spread.
       optAtTradeOffOrAbove: 10,
       optAtOwned: 5,
+      // D6 v2 (Retention) gates — sample size + score floor + max leech
+      // rate. retentionLeechRate uses INVERSE comparison (≤ rather than ≥)
+      // — see classifyReadiness's isMaxKey branch.
+      retentionAttempts: 25,
+      retentionScore: 75,
+      retentionLeechRate: 0.20, // MAX: actual must be ≤ this
     },
     icon: "🏆",
   },
@@ -97,6 +103,10 @@ export const READINESS_TIERS = [
       // L4/L5 no-hire reason).
       optAtTradeOffOrAbove: 4,
       optAtOwned: 2,
+      // D6 v2: ≥10 successful reviews + score ≥60. Lange-Wang-Dunlosky
+      // 2013 small-sample threshold for credible retention claim.
+      retentionAttempts: 10,
+      retentionScore: 60,
     },
     icon: "🥈",
   },
@@ -117,6 +127,9 @@ export const READINESS_TIERS = [
       // D2's tier3 docs gate. Avoids unmarked asymmetry between the two
       // per-solution mastery dims at the same tier.
       optAtDocumentedOrAbove: 4,
+      // D6 v2: ≥5 successful reviews — minimum to credibly say "retention
+      // is functioning at all" (just past activation gate).
+      retentionAttempts: 5,
     },
     icon: "🥉",
   },
@@ -184,7 +197,14 @@ export function classifyReadiness(
     if (masteryCounts && tier.masteryRequirements) {
       for (const [key, needed] of Object.entries(tier.masteryRequirements)) {
         const actual = masteryCounts[key];
-        if (!Number.isFinite(actual) || actual < needed) {
+        // Inverse-comparison keys: these are MAXIMUMS — `actual <= needed`.
+        // Only `retentionLeechRate` qualifies as of D6 v2 (a max-leech-rate
+        // gate). When a third such key appears, generalize this list.
+        const isMaxKey = key === "retentionLeechRate";
+        const fails = isMaxKey
+          ? !Number.isFinite(actual) || actual > needed
+          : !Number.isFinite(actual) || actual < needed;
+        if (fails) {
           failingMastery.push({ key, needed, actual: actual ?? 0 });
         }
       }

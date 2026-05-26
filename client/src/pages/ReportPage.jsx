@@ -46,6 +46,12 @@ const OPTIMIZATION_V2_ENABLED =
 const PRESSURE_PERFORMANCE_V2_ENABLED =
     import.meta.env.VITE_FEATURE_PRESSURE_PERFORMANCE_V2 === 'true'
 
+// D6 Retention v2 flag — when on AND the D6 dim has retentionLeechCount
+// > 0 attached, the dim card surfaces a leech indicator. Three-place
+// declaration per CLAUDE.md.
+const RETENTION_V2_ENABLED =
+    import.meta.env.VITE_FEATURE_RETENTION_V2 === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -788,6 +794,22 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                   && (
                     <p className="text-[10px] text-text-disabled mt-1 italic">
                       Estimated from written explanations. Peer ratings give a stronger signal.
+                    </p>
+                  )}
+
+                {/* D6 v2 leech indicator — renders only when the flag is
+                    on AND the server attached retentionLeechCount > 0.
+                    Small text inline; not a chip. Mirrors the philosophy
+                    that D6's score is preserved verbatim and v2 is purely
+                    additive surfacing. */}
+                {dim.key === 'retention'
+                  && RETENTION_V2_ENABLED
+                  && typeof info?.retentionLeechCount === 'number'
+                  && info.retentionLeechCount > 0
+                  && (
+                    <p className="text-[10px] text-warning-fg mt-2 leading-tight">
+                      ⚠ {info.retentionLeechCount} leech{info.retentionLeechCount === 1 ? '' : 'es'} —
+                      items you keep failing. Focus review on these.
                     </p>
                   )}
 

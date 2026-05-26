@@ -180,6 +180,19 @@ export const FEATURE_OPTIMIZATION_V2 = optional('FEATURE_OPTIMIZATION_V2', 'fals
 // Independent rollout from D1/D2/D3/D4 — flip separately. Client mirror:
 // VITE_FEATURE_PRESSURE_PERFORMANCE_V2 (also in client/Dockerfile ARG).
 export const FEATURE_PRESSURE_PERFORMANCE_V2 = optional('FEATURE_PRESSURE_PERFORMANCE_V2', 'false') === 'true'
+// Knowledge Retention v2 — STRICTLY ADDITIVE. The legacy D6 score formula
+// (FSRS retrievability, Karpicke-Roediger 2008 cited in schema) is
+// preserved verbatim — it's already research-backed. v2 adds:
+//   - Tier mastery gates (tier3=5 attempts, tier2=10 + score≥60,
+//     faang=25 + score≥75 + leech-rate≤0.20)
+//   - Leech detection via lapseCount ≥ 8 (Anki convention from schema)
+//   - Rule 13: high-confidence retention strengths hard-rejected when n<10
+//     (Lange, Wang, Dunlosky 2013 small-sample reliability)
+//   - retentionLeechRate uses INVERSE comparison (≤ rather than ≥) in
+//     classifyReadiness — special-case for max-thresholds.
+// Independent rollout from D1-D5 — flip separately. Client mirror:
+// VITE_FEATURE_RETENTION_V2 (also in client/Dockerfile ARG).
+export const FEATURE_RETENTION_V2 = optional('FEATURE_RETENTION_V2', 'false') === 'true'
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

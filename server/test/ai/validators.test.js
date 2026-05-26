@@ -1007,6 +1007,254 @@ describe('validateVerdict — Rule 12 (Pressure Performance source quality)', ()
     })
 })
 
+// ── validateVerdict — Rule 13 (Retention sample-size honesty) ─────────
+//
+// Active only when evidence.retention is non-null (D6 v2 flag on).
+// Lange, Wang & Dunlosky (2013): small-sample retention scores are
+// statistically unreliable. Below n=10 attempts, "high" confidence
+// strength claims must hedge with "tentative", "early", "small sample",
+// "preliminary", or "emerging". Below n=5, retention can't be claimed
+// a strength at all (even with hedging). Gap claims are not policed —
+// under-claiming a low retention score is honest.
+describe('validateVerdict — Rule 13 (Retention sample-size honesty)', () => {
+    // n=7: above the n<5 floor (claim allowed) but below n=10 (must hedge
+    // when confidence='high'). Sweet spot for testing the middle band.
+    const RETENTION_LOW_N = {
+        ...FULL_EVIDENCE,
+        retention: { attemptCount: 7, score: 93, leechCount: 0, leechRate: 0 },
+    }
+    const RETENTION_TOO_FEW = {
+        ...FULL_EVIDENCE,
+        retention: { attemptCount: 2, score: 95, leechCount: 0, leechRate: 0 },
+    }
+    const RETENTION_GOOD_N = {
+        ...FULL_EVIDENCE,
+        retention: { attemptCount: 20, score: 88, leechCount: 1, leechRate: 0.05 },
+    }
+
+    it('accepts a Retention strength claim with hedge vocab when n<10', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Knowledge Retention is your leading dimension',
+                    evidence: 'score=93 over 7 successful reviews (tentative — small sample; reliability requires ≥10 attempts)',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, RETENTION_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts a Retention strength claim with confidence=tentative when n<10 (no hedge needed)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Knowledge Retention is leading',
+                    evidence: 'score=93 over 7 successful reviews',
+                    confidence: 'tentative',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, RETENTION_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Retention strength claim with confidence=high + n<10 + no hedge', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Knowledge Retention is your strongest dimension',
+                    evidence: 'score=93 across recent successful reviews',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, RETENTION_LOW_N)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-retention-high-confidence-low-n')
+    })
+
+    it('rejects a Retention strength claim outright when n<5 (even with hedge)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Knowledge Retention is leading (tentative)',
+                    evidence: 'score=95 over 2 reviews — early signal',
+                    confidence: 'tentative',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, RETENTION_TOO_FEW)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-retention-claim-too-few-attempts')
+    })
+
+    it('accepts a Retention strength claim with confidence=high + no hedge when n>=10', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Knowledge Retention is your leading dimension',
+                    evidence: 'score=88 over 20 successful reviews, 1 leech',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, RETENTION_GOOD_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 13 when evidence.retention is absent (legacy flag-off)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Knowledge Retention is your strongest dimension',
+                    evidence: 'score=93 over n=4 data points',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 13 for non-Retention claims', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is your strongest dimension',
+                    evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, RETENTION_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT police gap claims about retention being weak', () => {
+        // Under-claiming a low retention score is honest — Rule 13
+        // applies only to over-claiming retention as a strength.
+        const v = {
+            headline: 'Tier 2 progress.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Knowledge Retention is the weakest active dimension',
+                    evidence: 'score=20 over 4 successful reviews',
+                    action: 'Review more solutions to lift retention',
+                },
+            ],
+            readinessNote: 'Below Tier 2 threshold.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, RETENTION_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback output for v2-retention evidence with n<10 passes Rule 13', () => {
+        // n=7 — above the n<5 floor (so retention can be a strength) but
+        // below n=10 (so the fallback must hedge or use 'tentative').
+        const FULL_WITH_RETENTION_LOW_N = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 7, score: 93 },
+            ],
+            overall: { score: 65 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            retention: { attemptCount: 7, score: 93, leechCount: 0, leechRate: 0 },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_RETENTION_LOW_N)
+        const r = validateVerdict(v, FULL_WITH_RETENTION_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback drops the retention strength entirely when n<5', () => {
+        // Even with a top score, n<5 means retention CANNOT be a strength.
+        const FULL_WITH_RETENTION_TOO_FEW = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 50 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 50 },
+                { key: 'communication', status: 'active', n: 8, score: 50 },
+                { key: 'optimization', status: 'active', n: 8, score: 50 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 50 },
+                { key: 'retention', status: 'active', n: 2, score: 95 },
+            ],
+            overall: { score: 55 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            retention: { attemptCount: 2, score: 95, leechCount: 0, leechRate: 0 },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_RETENTION_TOO_FEW)
+        const hasRetentionStrength = v.strengths.some((s) =>
+            /\bretention\b/i.test(`${s.claim} ${s.evidence}`),
+        )
+        expect(hasRetentionStrength).toBe(false)
+        const r = validateVerdict(v, FULL_WITH_RETENTION_TOO_FEW)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces a "Persistent leeches detected" gap when leechCount > 0', () => {
+        const FULL_WITH_LEECHES = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 15, score: 70 },
+            ],
+            overall: { score: 62 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            retention: { attemptCount: 15, score: 70, leechCount: 3, leechRate: 0.30 },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_LEECHES)
+        const hasLeechGap = v.gaps.some((g) =>
+            /leech|lapseCount/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasLeechGap).toBe(true)
+        const r = validateVerdict(v, FULL_WITH_LEECHES)
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {

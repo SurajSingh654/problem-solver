@@ -20,12 +20,14 @@ import { computeSolutionDepth } from "../utils/solutionDepth.js";
 import { computeCommunicationStats } from "../utils/communicationStats.js";
 import { computeOptimizationStats } from "../utils/optimizationStats.js";
 import { computePressurePerformanceStats } from "../utils/pressurePerformanceStats.js";
+import { computeRetentionStats } from "../utils/retentionStats.js";
 import {
   FEATURE_PATTERN_MASTERY_V2,
   FEATURE_SOLUTION_DEPTH_V2,
   FEATURE_COMMUNICATION_V2,
   FEATURE_OPTIMIZATION_V2,
   FEATURE_PRESSURE_PERFORMANCE_V2,
+  FEATURE_RETENTION_V2,
 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
@@ -974,6 +976,11 @@ export async function get6DReport(req, res) {
             select: {
               sm2EasinessFactor: true,
               sm2Repetitions: true,
+              // D6 v2 (Retention) needs lapseCount for leech detection
+              // (items with lapseCount ≥ 8 per Anki convention). Schema
+              // comment at schema.prisma:817-818 is the source of truth.
+              // Backward-compatible: legacy D6 ignores this field.
+              lapseCount: true,
             },
           },
         },
@@ -1091,6 +1098,16 @@ export async function get6DReport(req, res) {
           interviews,
           quizzes: quizzesForPressure,
           mapQuizSubjectToDimensions,
+        })
+      : null;
+
+    // RETENTION (D6 v2) — strictly additive: same FSRS scoring formula,
+    // adds leech detection (lapseCount ≥ 8) + tier mastery gating data.
+    // Compute eagerly when flag is on.
+    const retention = FEATURE_RETENTION_V2
+      ? computeRetentionStats({
+          successfulReviewAttempts,
+          overdueCount,
         })
       : null;
 
@@ -1720,51 +1737,74 @@ export async function get6DReport(req, res) {
     // solutions (prevents single-card artifact from driving the whole dim).
     // ════════════════════════════════════════════════
 
-    // Dedupe to the most-recent successful attempt per solution.
-    const latestSuccessfulBySolution = new Map();
-    for (const attempt of successfulReviewAttempts) {
-      const existing = latestSuccessfulBySolution.get(attempt.solutionId);
-      if (!existing || new Date(attempt.createdAt) > new Date(existing.createdAt)) {
-        latestSuccessfulBySolution.set(attempt.solutionId, attempt);
-      }
-    }
-    const d6Attempts = Array.from(latestSuccessfulBySolution.values());
-    const d6SolutionCount = latestSuccessfulBySolution.size;
-
-    // Authoritative output is `d6Score`. (Legacy `d6` numeric was
-    // dropped — no downstream reader.)
     let d6Score;
-    if (d6Attempts.length < 3 || d6SolutionCount < 2) {
-      const need = Math.max(0, 3 - d6Attempts.length);
-      const needSol = Math.max(0, 2 - d6SolutionCount);
-      const msg = needSol > 0
-        ? `Review ${need || "a few"} more problems across ${needSol} more solution${needSol === 1 ? "" : "s"} to unlock retention tracking`
-        : `Need ${need} more successful review${need === 1 ? "" : "s"} to unlock retention tracking`;
-      d6Score = inactiveDim("retention", msg, d6Attempts.length);
+    if (retention) {
+      // ── D6 v2: utility-driven (score formula PRESERVED verbatim) ──
+      // The utility uses the same FSRS retrievability mean as legacy.
+      // What's new: leech detection (lapseCount ≥ 8) + tier-gating data
+      // attached to the dim object.
+      if (!retention.active) {
+        d6Score = inactiveDim(
+          "retention",
+          retention.inactiveMessage,
+          retention.attemptCount,
+        );
+      } else {
+        d6Score = activeDim("retention", {
+          score: retention.score,
+          n: retention.attemptCount,
+          ci: retention.ci,
+          basis: retention.basis,
+        });
+        // Surface for the verdict evidence builder + Phase D6-4 UI.
+        d6Score.retentionAttemptCount = retention.attemptCount;
+        d6Score.retentionLeechCount = retention.leechCount;
+        d6Score.retentionLeechRate = retention.leechRate;
+      }
     } else {
-      const now_d6 = Date.now();
-      const retentionValues = d6Attempts.map((a) => {
-        const daysSince =
-          (now_d6 - new Date(a.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-        const reps = a.solution?.sm2Repetitions ?? 1;
-        // Difficulty inferred from EF: lower EF = harder card. Map EF in
-        // [1.3, 2.5+] to difficulty in [8, 3] (rough inverse).
-        const ef = a.solution?.sm2EasinessFactor ?? 2.5;
-        const difficulty = Math.max(1, Math.min(10, 10 - (ef - 1.3) * 3));
-        const stability = stabilityAfterReps(reps, difficulty);
-        return retrievability(daysSince, stability) * 100;
-      });
-      const ci = meanCI(retentionValues);
-      d6Score = activeDim("retention", {
-        score: ci.score,
-        n: d6Attempts.length,
-        ci: ci.ci,
-        basis: [
-          `successful_reviews: ${d6Attempts.length}`,
-          `distinct_solutions: ${d6SolutionCount}`,
-          `overdue: ${overdueCount}`,
-        ],
-      });
+      // ── D6 v1 (legacy) — preserved verbatim for flag-off rollback ──
+      // Dedupe to the most-recent successful attempt per solution.
+      const latestSuccessfulBySolution = new Map();
+      for (const attempt of successfulReviewAttempts) {
+        const existing = latestSuccessfulBySolution.get(attempt.solutionId);
+        if (!existing || new Date(attempt.createdAt) > new Date(existing.createdAt)) {
+          latestSuccessfulBySolution.set(attempt.solutionId, attempt);
+        }
+      }
+      const d6Attempts = Array.from(latestSuccessfulBySolution.values());
+      const d6SolutionCount = latestSuccessfulBySolution.size;
+
+      if (d6Attempts.length < 3 || d6SolutionCount < 2) {
+        const need = Math.max(0, 3 - d6Attempts.length);
+        const needSol = Math.max(0, 2 - d6SolutionCount);
+        const msg = needSol > 0
+          ? `Review ${need || "a few"} more problems across ${needSol} more solution${needSol === 1 ? "" : "s"} to unlock retention tracking`
+          : `Need ${need} more successful review${need === 1 ? "" : "s"} to unlock retention tracking`;
+        d6Score = inactiveDim("retention", msg, d6Attempts.length);
+      } else {
+        const now_d6 = Date.now();
+        const retentionValues = d6Attempts.map((a) => {
+          const daysSince =
+            (now_d6 - new Date(a.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+          const reps = a.solution?.sm2Repetitions ?? 1;
+          // Difficulty inferred from EF: lower EF = harder card.
+          const ef = a.solution?.sm2EasinessFactor ?? 2.5;
+          const difficulty = Math.max(1, Math.min(10, 10 - (ef - 1.3) * 3));
+          const stability = stabilityAfterReps(reps, difficulty);
+          return retrievability(daysSince, stability) * 100;
+        });
+        const ci = meanCI(retentionValues);
+        d6Score = activeDim("retention", {
+          score: ci.score,
+          n: d6Attempts.length,
+          ci: ci.ci,
+          basis: [
+            `successful_reviews: ${d6Attempts.length}`,
+            `distinct_solutions: ${d6SolutionCount}`,
+            `overdue: ${overdueCount}`,
+          ],
+        });
+      }
     }
 
     // ════════════════════════════════════════════════
@@ -2257,16 +2297,21 @@ export async function get6DReport(req, res) {
         .map((d) => [d.key, d.score]),
     );
     // Merge mastery (D1 v2) + depth (D2 v2) + communication (D3 v2)
-    // + optimization (D4 v2) counts into a single object. Keys are
-    // non-overlapping by convention:
+    // + optimization (D4 v2) + retention (D6 v2) counts into a single
+    // object. Keys are non-overlapping by convention:
     //   D1 → core*, owned, solidOrAbove, …  (patterns)
     //   D2 → solutionsAt* prefix              (solutions)
     //   D3 → comm* prefix                     (communication source quality)
     //   D4 → opt* prefix                      (optimization trade-off)
+    //   D6 → retention* prefix                (knowledge retention)
     // When all flags off, pass null and classifyReadiness uses score-only
     // gates (legacy preserved).
+    //
+    // Note: D5 (Pressure Performance) does NOT add mastery keys — its
+    // source-tier ceiling enforces tier gates via the existing score
+    // threshold. Same for D7 (Teaching).
     const masteryAndDepthCounts =
-      mastery || depth || communication || optimization
+      mastery || depth || communication || optimization || retention
         ? {
             ...(mastery?.counts ?? {}),
             ...(depth?.counts ?? {}),
@@ -2278,6 +2323,13 @@ export async function get6DReport(req, res) {
                 }
               : {}),
             ...(optimization?.counts ?? {}),
+            ...(retention
+              ? {
+                  retentionAttempts: retention.attemptCount,
+                  retentionScore: retention.score ?? 0,
+                  retentionLeechRate: retention.leechRate,
+                }
+              : {}),
           }
         : null;
     const tierInfo = classifyReadiness(
@@ -2544,6 +2596,21 @@ export async function get6DReport(req, res) {
                 mocksWithScores: pressure.mocksWithScores,
                 relevantQuizCount: pressure.relevantQuizCount,
                 totalQuizzesSeen: pressure.totalQuizzesSeen,
+              }
+            : null,
+          // Retention v2 — null when flag off. When on, the client reads
+          // `retentionLeechCount` off the D6 dim object directly (Phase
+          // D6-4 leech indicator); the analytics block keeps the full
+          // breakdown for the verdict evidence builder.
+          retention: retention
+            ? {
+                active: retention.active,
+                score: retention.score,
+                ci: retention.ci,
+                attemptCount: retention.attemptCount,
+                distinctSolutionCount: retention.distinctSolutionCount,
+                leechCount: retention.leechCount,
+                leechRate: retention.leechRate,
               }
             : null,
           aiReview: {
@@ -2905,6 +2972,19 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Retention v2 — surface attempt count + leech count so the verdict
+  // prompt can satisfy Rule 13 (high-confidence retention strengths
+  // require n ≥ 10; n < 5 cannot be claimed strength at all).
+  const retBlock = report.analytics?.retention;
+  const retention = retBlock
+    ? {
+        score: retBlock.score,
+        attemptCount: retBlock.attemptCount,
+        leechCount: retBlock.leechCount,
+        leechRate: retBlock.leechRate,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -2917,6 +2997,7 @@ function buildVerdictEvidence(report) {
     communication,
     optimization,
     pressurePerformance,
+    retention,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

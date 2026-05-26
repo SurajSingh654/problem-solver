@@ -430,6 +430,42 @@ export function validateVerdict(verdict, evidence) {
     gaps.forEach((g, i) => checkPressureSource(g, `gaps[${i}]`));
   }
 
+  // Rule 13 — Retention sample-size honesty.
+  //
+  // When evidence.retention is present (D6 v2 flag is on), strength
+  // claims about Knowledge Retention must respect sample-size floors:
+  //   - n < 5  → retention can't be claimed strength at all
+  //   - n < 10 + confidence='high' → must hedge ("tentative", "early")
+  //   - n ≥ 10 → no special hedging required
+  // Lange, Wang & Dunlosky (2013): small-sample retention scores are
+  // statistically unreliable. Same hedging vocab as Rule 2.
+  if (evidence.retention) {
+    const RETENTION_TERMS = [/\bretention\b/i, /\bknowledge retention\b/i];
+    const HEDGE_VOCAB = ["early", "tentative", "small sample", "preliminary", "emerging"];
+    const checkRetentionSampleSize = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isRetentionSubject = RETENTION_TERMS.some((rx) => rx.test(text));
+      if (!isRetentionSubject) return;
+      const n = evidence.retention.attemptCount ?? 0;
+      if (n < 5) {
+        violations.push(`${label}-retention-claim-too-few-attempts`);
+        return;
+      }
+      if (n < 10 && item.confidence === "high") {
+        const lowerText = text.toLowerCase();
+        const hasHedge = HEDGE_VOCAB.some((v) => lowerText.includes(v));
+        if (!hasHedge) {
+          violations.push(`${label}-retention-high-confidence-low-n`);
+        }
+      }
+    };
+    // Apply to strengths only — Rule 13 is about over-claiming retention
+    // as a strength. Gap claims about retention being WEAK don't need
+    // the same protection (under-claiming a low score is honest).
+    strengths.forEach((s, i) => checkRetentionSampleSize(s, `strengths[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 
