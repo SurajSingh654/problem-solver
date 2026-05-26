@@ -588,6 +588,49 @@ export function validateVerdict(verdict, evidence) {
     strengths.forEach((s, i) => checkBehavioralSampleSize(s, `strengths[${i}]`));
   }
 
+  // Rule 17 — Verification & Meta-cognition sample-size honesty.
+  //
+  // When evidence.verification is present (D10 flag is on AND user has
+  // ≥5 AI-reviewed coding solutions), strength claims about Verification
+  // / Meta-cognition / calibration must respect calibration sample-size:
+  //   - calibrationN < 5 → can't be claimed strength at all
+  //   - calibrationN < 10 + confidence='high' → must hedge
+  //   - calibrationN ≥ 10 → no special hedging required
+  // Lange-Wang-Dunlosky 2013. Self-refuting failure mode: an
+  // overconfident claim about being well-calibrated.
+  if (evidence.verification) {
+    // Phrase-anchored — "verification" / "meta-cognition" / "calibration"
+    // / "self-assessment" must be the subject. Avoid false positives on
+    // generic "verify" prose.
+    const VERIFICATION_TERMS = [
+      /\bverification\b/i,
+      /\bmeta[- ]?cognition\b/i,
+      /\bself[- ]assessment\b/i,
+      /\bwell[- ]calibrated\b/i,
+      /\bcalibration accuracy\b/i,
+    ];
+    const HEDGE_VOCAB_V = ["early", "tentative", "small sample", "preliminary", "emerging"];
+    const checkVerificationSampleSize = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isVerificationSubject = VERIFICATION_TERMS.some((rx) => rx.test(text));
+      if (!isVerificationSubject) return;
+      const n = evidence.verification.calibrationN ?? 0;
+      if (n < 5) {
+        violations.push(`${label}-verification-claim-too-few-datapoints`);
+        return;
+      }
+      if (n < 10 && item.confidence === "high") {
+        const lowerText = text.toLowerCase();
+        const hasHedge = HEDGE_VOCAB_V.some((v) => lowerText.includes(v));
+        if (!hasHedge) {
+          violations.push(`${label}-verification-high-confidence-low-n`);
+        }
+      }
+    };
+    strengths.forEach((s, i) => checkVerificationSampleSize(s, `strengths[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 

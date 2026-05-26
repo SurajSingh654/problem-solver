@@ -74,6 +74,13 @@ const DESIGN_APTITUDE_ENABLED =
 const BEHAVIORAL_PERFORMANCE_ENABLED =
     import.meta.env.VITE_FEATURE_BEHAVIORAL_PERFORMANCE === 'true'
 
+// D10 Verification & Meta-cognition flag — BASELINE dim (flag-gated).
+// The durable LLM-era skill: calibrated self-assessment + complexity
+// verification + edge-case discovery. Activates for any user with ≥5
+// AI-reviewed coding solutions. Three-place declaration per CLAUDE.md.
+const VERIFICATION_METACOGNITION_ENABLED =
+    import.meta.env.VITE_FEATURE_VERIFICATION_METACOGNITION === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -914,6 +921,63 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                           Ceiling {ceiling}
                         </span>
                       </div>
+                    )
+                  })()}
+
+                {/* D10 source-quality chip — verificationMetacognition.
+                    Renders Proxy-only / Multi-signal / Strong-signal tier
+                    plus a calibration-delta warning when the user is
+                    systematically miscalibrated (Kruger-Dunning gap). */}
+                {dim.key === 'verificationMetacognition'
+                  && VERIFICATION_METACOGNITION_ENABLED
+                  && typeof info?.sourceQuality === 'string'
+                  && (() => {
+                    const sq = info.sourceQuality
+                    const ceiling = info.ceiling ?? 100
+                    const isStrong = sq === 'strong-signal'
+                    const isMulti = sq === 'multi-signal'
+                    const tone = isStrong
+                      ? 'bg-success-soft text-success-fg border-success-line'
+                      : isMulti
+                        ? 'bg-info-soft text-info-fg border-info-line'
+                        : 'bg-warning-soft text-warning-fg border-warning-line'
+                    const label = isStrong
+                      ? 'Strong signal'
+                      : isMulti
+                        ? 'Multi-signal'
+                        : 'Proxy-only'
+                    const delta = info.verificationCalibrationDelta
+                    const showDeltaWarning = typeof delta === 'number' && delta > 0.30
+                    const showWrongPattern =
+                      typeof info.verificationWrongPatternCount === 'number'
+                      && info.verificationWrongPatternCount > 0
+                    return (
+                      <>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className={cn(
+                            'text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded-full border',
+                            tone,
+                          )}>
+                            {label}
+                          </span>
+                          <span className="text-[10px] text-text-disabled font-mono">
+                            Ceiling {ceiling}
+                          </span>
+                        </div>
+                        {showDeltaWarning && (
+                          <p className="text-[10px] text-warning-fg mt-1 leading-tight">
+                            ⚠ Calibration gap {(delta * 100).toFixed(0)}% (Kruger-Dunning) — your
+                            confidence diverges from AI-graded correctness. Practice predicting your
+                            score before submission.
+                          </p>
+                        )}
+                        {showWrongPattern && (
+                          <p className="text-[10px] text-warning-fg mt-1 leading-tight">
+                            ⚠ {info.verificationWrongPatternCount} wrong-pattern flag{info.verificationWrongPatternCount === 1 ? '' : 's'} —
+                            AI disagreed with your pattern claim. Review what each pattern actually addresses.
+                          </p>
+                        )}
+                      </>
                     )
                   })()}
 

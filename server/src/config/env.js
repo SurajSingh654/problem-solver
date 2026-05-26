@@ -281,5 +281,43 @@ export const FEATURE_DESIGN_APTITUDE = optional('FEATURE_DESIGN_APTITUDE', 'fals
 // (also in client/Dockerfile ARG).
 export const FEATURE_BEHAVIORAL_PERFORMANCE = optional('FEATURE_BEHAVIORAL_PERFORMANCE', 'false') === 'true'
 
+// Verification & Meta-cognition (D10) — NEW BASELINE dimension (not
+// opt-in). The strategic-memo's anchor recommendation: the durable
+// LLM-era skill that AI tools cannot easily replace. Measures edge-case
+// discovery quality, calibrated confidence, AI-output review skill,
+// verification practices.
+//
+// Construct-validity decision: D2 / D4 / D9 already use these signals
+// scattered as multipliers / state-transition gates / process signals.
+// D10 extracts them as a first-class skill score so the user can see
+// "your self-assessment is calibrated" or "you're systematically wrong
+// about complexity" as a coherent meta-skill, not buried in other dims.
+//
+// Sub-component blend:
+//   0.30 × calibration_accuracy  (Kruger-Dunning |conf/5 - codeCorrect/10|)
+//   0.25 × complexity_verification (% solutions with timeCorrect && spaceCorrect)
+//   0.20 × pattern_accuracy      (% AI reviews without wrongPattern flag)
+//   0.15 × probe_defense         (% follow-up evaluations scoring ≥7)
+//   0.10 × edge_case_independence (% mocks with foundEdgeCasesIndependently)
+//
+// Source tiers:
+//   - proxy-only (40): ≥5 AI reviews, no follow-ups, no mocks
+//   - multi-signal (75): ≥10 AI reviews + complexity verification data
+//   - strong-signal (100): ≥10 AI reviews + ≥3 follow-up evaluations
+//
+// Tier gates: tier2 = score≥55 + ≥10 reviews; FAANG = score≥70 + ≥20
+// reviews + ≥3 follow-ups + edge-case data.
+//
+// Verdict Rule 17: verification strengths with calibrationN<5 must hedge
+// (Lange-Wang-Dunlosky 2013 small-sample calibration reliability —
+// mirror of Rule 13's retention small-n logic).
+//
+// BASELINE (not opt-in): activates automatically once user has ≥5 AI-
+// reviewed coding solutions. Same activation profile as D1-D6.
+//
+// Independent rollout. Client mirror: VITE_FEATURE_VERIFICATION_METACOGNITION
+// (also in client/Dockerfile ARG).
+export const FEATURE_VERIFICATION_METACOGNITION = optional('FEATURE_VERIFICATION_METACOGNITION', 'false') === 'true'
+
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

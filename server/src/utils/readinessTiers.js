@@ -48,6 +48,7 @@ export const MAX_THRESHOLD_KEYS = new Set([
   "retentionLeechRate",            // D6 v2 — leech sessions / total sessions
   "teachingFlagRate",              // D7 v2 — flagged sessions / total sessions
   "behavioralCalibrationDelta",    // D9 — Kruger-Dunning |preConfidence - verdict|
+  "verificationCalibrationDelta",  // D10 — solution-level Kruger-Dunning |conf - aiCorrect|
 ]);
 
 /**
@@ -78,6 +79,17 @@ export const OPT_IN_KEYS = new Set([
   "behavioralStyles",
   "behavioralScore",
   "behavioralCalibrationDelta",
+  // D10 Verification & Meta-cognition — BASELINE dim but flag-gated.
+  // The OPT_IN_KEYS list is misnamed for D10's case (the dim isn't a
+  // separate modality — every coding user generates the signal once
+  // they have ≥5 AI reviews) but the BEHAVIOR is the same: when the
+  // flag is off, the keys aren't in masteryCounts, and the gate must
+  // skip rather than fail. Adding the keys here covers both scenarios.
+  "verificationReviews",
+  "verificationCalibrationN",
+  "verificationFollowUps",
+  "verificationScore",
+  "verificationCalibrationDelta",
 ]);
 
 export const READINESS_TIERS = [
@@ -145,6 +157,15 @@ export const READINESS_TIERS = [
       behavioralStyles: 3,
       behavioralScore: 75,
       behavioralCalibrationDelta: 1.5, // MAX: actual must be ≤ this
+      // D10 Verification & Meta-cognition gates — flag-gated baseline.
+      // FAANG requires strong-signal source: ≥20 reviews + ≥3 follow-ups
+      // + score ≥70 + calibrationDelta ≤0.20 (Lange-Wang-Dunlosky 2013 +
+      // Karpicke-Roediger 2008 — calibrated probe-defended understanding
+      // is the senior-level differentiator).
+      verificationReviews: 20,
+      verificationFollowUps: 3,
+      verificationScore: 70,
+      verificationCalibrationDelta: 0.20, // MAX: actual must be ≤ this
     },
     icon: "🏆",
   },
@@ -196,6 +217,11 @@ export const READINESS_TIERS = [
       // signals are too sparse to credibly call a strength.
       behavioralMocks: 3,
       behavioralScore: 60,
+      // D10 gates — flag-gated. Tier 2 requires multi-signal source:
+      // ≥10 reviews + score ≥55. Below this, calibration data is too
+      // sparse to credibly call meta-cognition a strength.
+      verificationReviews: 10,
+      verificationScore: 55,
     },
     icon: "🥈",
   },

@@ -24,6 +24,7 @@ import { computeRetentionStats } from "../utils/retentionStats.js";
 import { computeTeachingStats } from "../utils/teachingStats.js";
 import { computeDesignAptitudeStats } from "../utils/designAptitudeStats.js";
 import { computeBehavioralPerformanceStats } from "../utils/behavioralPerformanceStats.js";
+import { computeVerificationStats } from "../utils/verificationStats.js";
 import {
   FEATURE_PATTERN_MASTERY_V2,
   FEATURE_SOLUTION_DEPTH_V2,
@@ -34,6 +35,7 @@ import {
   FEATURE_TEACHING_CONTRIBUTIONS_V2,
   FEATURE_DESIGN_APTITUDE,
   FEATURE_BEHAVIORAL_PERFORMANCE,
+  FEATURE_VERIFICATION_METACOGNITION,
 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
@@ -801,13 +803,19 @@ const DIM_WEIGHTS = {
   teachingContributions: 0.1,
   designAptitude: 0.12,
   behavioralPerformance: 0.12,
+  // D10 Verification & Meta-cognition — BASELINE (not opt-in). Weight
+  // 0.14 reflects its construct importance (the durable LLM-era skill
+  // per the strategic memo) without crowding D1/D4. Active dims re-
+  // normalize, so this only matters relative to other active dims.
+  verificationMetacognition: 0.14,
 };
 
 const DIM_KEYS = Object.keys(DIM_WEIGHTS);
 
 // Set of opt-in dim keys — pushed onto the dimensions array dynamically
 // in get6DReport only when the user has engaged with the modality. The
-// baseline is everything else: 6 dims every user sees regardless.
+// baseline is everything else (D1-D6 + D10): 7 dims every user sees once
+// they have enough data per dim's activation gate.
 const OPT_IN_DIM_KEYS = new Set([
   "teachingContributions",
   "designAptitude",
@@ -2435,9 +2443,47 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
+    // D10 — VERIFICATION & META-COGNITION (BASELINE, not opt-in)
+    // ════════════════════════════════════════════════
+    // Activates with ≥5 AI-reviewed coding solutions. Same activation
+    // bar as D1-D4 (which all need AI reviews). Different from D7-D9
+    // (opt-in) because verification signal is automatic for any coding
+    // user — it's not a separate modality, it's a meta-skill expressed
+    // through how you write and explain solutions.
+    let d10Score = null;
+    let verification = null;
+    if (FEATURE_VERIFICATION_METACOGNITION) {
+      verification = computeVerificationStats({ solutions, mocks: interviews });
+      if (!verification.active) {
+        const need = Math.max(0, 5 - verification.reviewCount);
+        d10Score = inactiveDim(
+          "verificationMetacognition",
+          `Get AI reviews on ${need} more cold-solved solution${need === 1 ? "" : "s"} to unlock calibration tracking.`,
+          verification.reviewCount,
+        );
+      } else {
+        d10Score = activeDim("verificationMetacognition", {
+          score: verification.score,
+          n: verification.calibrationN,
+          ci: verification.ci ?? [
+            Math.max(0, verification.score - 20),
+            Math.min(verification.ceiling, verification.score + 20),
+          ],
+          basis: verification.basis,
+        });
+        d10Score.sourceQuality = verification.sourceQuality;
+        d10Score.ceiling = verification.ceiling;
+        d10Score.verificationCalibrationDelta = verification.calibrationDelta;
+        d10Score.verificationFollowUpCount = verification.followUpCount;
+        d10Score.verificationWrongPatternCount = verification.wrongPatternCount;
+      }
+    }
+
+    // ════════════════════════════════════════════════
     // OVERALL — re-normalized weights over ACTIVE dims only
     // ════════════════════════════════════════════════
     const dimensions = [d1Score, d2Score, d3Score, d4Score, d5Score, d6Score];
+    if (d10Score) dimensions.push(d10Score); // baseline-but-flag-gated
     if (d7Score) dimensions.push(d7Score);
     if (d8Score) dimensions.push(d8Score);
     if (d9Score) dimensions.push(d9Score);
@@ -2520,7 +2566,7 @@ export async function get6DReport(req, res) {
     // are skipped for users who haven't hosted (see OPT_IN_KEYS in
     // readinessTiers.js).
     const masteryAndDepthCounts =
-      mastery || depth || communication || optimization || retention || teaching || designAptitude || behavioral
+      mastery || depth || communication || optimization || retention || teaching || designAptitude || behavioral || verification
         ? {
             ...(mastery?.counts ?? {}),
             ...(depth?.counts ?? {}),
@@ -2564,6 +2610,18 @@ export async function get6DReport(req, res) {
                   // better → MAX_THRESHOLD_KEYS). Default to 99 (effectively
                   // "no calibration data") so missing-key check works.
                   behavioralCalibrationDelta: behavioral.calibrationDelta ?? 99,
+                }
+              : {}),
+            ...(verification
+              ? {
+                  verificationReviews: verification.reviewCount,
+                  verificationCalibrationN: verification.calibrationN,
+                  verificationFollowUps: verification.followUpCount,
+                  verificationScore: verification.score ?? 0,
+                  // calibrationDelta is on the 0-1 scale; max-threshold key
+                  // (smaller is better — perfect calibration is delta=0).
+                  // Defaults to 1 (worst-case) if not yet computed.
+                  verificationCalibrationDelta: verification.calibrationDelta ?? 1,
                 }
               : {}),
           }
@@ -2912,6 +2970,29 @@ export async function get6DReport(req, res) {
                 calibrationN: behavioral.calibrationN,
                 sourceQuality: behavioral.sourceQuality,
                 ceiling: behavioral.ceiling,
+              }
+            : null,
+          // Verification & Meta-cognition (D10) — null when flag off OR
+          // user has fewer than 5 AI-reviewed coding solutions. Reads
+          // calibration delta + sub-component scores; verdict evidence
+          // builds Rule 17 enforcement off this block.
+          verification: verification
+            ? {
+                active: verification.active,
+                score: verification.score,
+                ci: verification.ci,
+                reviewCount: verification.reviewCount,
+                calibrationN: verification.calibrationN,
+                calibrationDelta: verification.calibrationDelta,
+                calibrationScore: verification.calibrationScore,
+                complexityScore: verification.complexityScore,
+                patternAccuracyScore: verification.patternAccuracyScore,
+                probeDefenseScore: verification.probeDefenseScore,
+                edgeCaseScore: verification.edgeCaseScore,
+                followUpCount: verification.followUpCount,
+                wrongPatternCount: verification.wrongPatternCount,
+                sourceQuality: verification.sourceQuality,
+                ceiling: verification.ceiling,
               }
             : null,
           aiReview: {
@@ -3337,6 +3418,23 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Verification & Meta-cognition (D10) — surface calibration N + delta
+  // + sub-component scores so the verdict prompt can satisfy Rule 17
+  // (calibrationN<5 requires hedge — Lange-Wang-Dunlosky 2013).
+  const verificationBlock = report.analytics?.verification;
+  const verification = verificationBlock
+    ? {
+        score: verificationBlock.score,
+        reviewCount: verificationBlock.reviewCount,
+        calibrationN: verificationBlock.calibrationN,
+        calibrationDelta: verificationBlock.calibrationDelta,
+        followUpCount: verificationBlock.followUpCount,
+        wrongPatternCount: verificationBlock.wrongPatternCount,
+        sourceQuality: verificationBlock.sourceQuality,
+        ceiling: verificationBlock.ceiling,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -3353,6 +3451,7 @@ function buildVerdictEvidence(report) {
     teaching,
     designAptitude,
     behavioral,
+    verification,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

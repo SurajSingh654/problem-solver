@@ -945,3 +945,127 @@ describe("classifyReadiness — D9 behavioral performance gates (opt-in)", () =>
     expect(OPT_IN_KEYS.has("behavioralCalibrationDelta")).toBe(true);
   });
 });
+
+// ── D10 verification & meta-cognition gates (flag-gated baseline) ────
+
+describe("classifyReadiness — D10 verification gates", () => {
+  const tierById = (info, id) => info.tiers.find((t) => t.id === id);
+
+  const tier2BaselineDims = {
+    patternRecognition: 60,
+    optimization: 50,
+    pressurePerformance: 55,
+    solutionDepth: 50,
+  };
+  const tier2BaselineMastery = {
+    coreSolidOrAbove: 10, owned: 3,
+    solutionsAtDefendedOrAbove: 4, solutionsAtOwned: 2,
+    commMocksWithScores: 1,
+    optAtTradeOffOrAbove: 4, optAtOwned: 2,
+    retentionAttempts: 12, retentionScore: 65,
+  };
+
+  it("user without verification keys is still tier2 ready (flag-gated skip)", () => {
+    const out = classifyReadiness(70, tier2BaselineDims, tier2BaselineMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).not.toContain("verificationReviews");
+    expect(failingKeys).not.toContain("verificationScore");
+  });
+
+  it("flag-on user with insufficient reviews FAILS tier2 verification gate", () => {
+    const masteryWithLowVerification = {
+      ...tier2BaselineMastery,
+      verificationReviews: 5,    // < 10 needed
+      verificationCalibrationN: 5,
+      verificationFollowUps: 0,
+      verificationScore: 35,     // < 55 needed
+      verificationCalibrationDelta: 0.30,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryWithLowVerification);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).toContain("verificationReviews");
+    expect(failingKeys).toContain("verificationScore");
+  });
+
+  it("flag-on user at tier2 verification floor PASSES", () => {
+    const masteryAtVerificationFloor = {
+      ...tier2BaselineMastery,
+      verificationReviews: 10,
+      verificationCalibrationN: 10,
+      verificationFollowUps: 0,
+      verificationScore: 55,
+      verificationCalibrationDelta: 0.25,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryAtVerificationFloor);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+  });
+
+  it("FAANG verificationCalibrationDelta uses INVERSE comparison", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryHighDelta = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      verificationReviews: 25,
+      verificationCalibrationN: 25,
+      verificationFollowUps: 5,
+      verificationScore: 75,
+      verificationCalibrationDelta: 0.40, // ABOVE max 0.20 → fails
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryHighDelta);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    expect(faang.failingMastery.map((f) => f.key)).toContain("verificationCalibrationDelta");
+  });
+
+  it("FAANG passes when verification gates met at boundary", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryAtFaangBoundary = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      teachingSessions: 5, teachingRatings: 10, teachingScore: 75, teachingFlagRate: 0.05,
+      designSessions: 5, designScenarios: 15, designScore: 75, designInterviewerPaired: 1,
+      behavioralMocks: 5, behavioralStyles: 3, behavioralScore: 75, behavioralCalibrationDelta: 1.5,
+      verificationReviews: 20,
+      verificationCalibrationN: 20,
+      verificationFollowUps: 3,
+      verificationScore: 70,
+      verificationCalibrationDelta: 0.20,
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryAtFaangBoundary);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(true);
+  });
+
+  it("MAX_THRESHOLD_KEYS contains verificationCalibrationDelta", async () => {
+    const { MAX_THRESHOLD_KEYS } = await import("../../src/utils/readinessTiers.js");
+    expect(MAX_THRESHOLD_KEYS.has("verificationCalibrationDelta")).toBe(true);
+  });
+
+  it("OPT_IN_KEYS contains all verification* keys", async () => {
+    const { OPT_IN_KEYS } = await import("../../src/utils/readinessTiers.js");
+    expect(OPT_IN_KEYS.has("verificationReviews")).toBe(true);
+    expect(OPT_IN_KEYS.has("verificationScore")).toBe(true);
+    expect(OPT_IN_KEYS.has("verificationCalibrationDelta")).toBe(true);
+  });
+});

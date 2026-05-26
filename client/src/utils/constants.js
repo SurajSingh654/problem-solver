@@ -275,6 +275,20 @@ export const DIMENSIONS = [
     color: "#ec4899",
     desc: "Interview process signals — clarifying questions, narration, calibration, culture-style coverage, HR-round content",
   },
+  {
+    // D10 — BASELINE dim (flag-gated). The durable LLM-era skill: how
+    // calibrated is your self-assessment vs ground truth, and how well
+    // do you verify your own work? Activates with ≥5 AI-reviewed coding
+    // solutions. Score sub-components: calibration accuracy + complexity
+    // verification + pattern accuracy + probe defense + edge-case
+    // independence. Visible to users with FEATURE_VERIFICATION_METACOGNITION
+    // on (server) + matching VITE flag (client).
+    id: "verificationMetacognition",
+    label: "Verification & Meta-cognition",
+    short: "Verify",
+    color: "#10b981",
+    desc: "Calibrated self-assessment, complexity verification, edge-case discovery, AI-output review — the durable interview skill",
+  },
 ];
 
 // ── AI features config (ready for later integration) ──

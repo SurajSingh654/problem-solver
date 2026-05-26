@@ -1976,6 +1976,264 @@ describe('validateVerdict — Rule 16 (Behavioral Performance sample-size honest
     })
 })
 
+// ── validateVerdict — Rule 17 (Verification & Meta-cognition sample-size) ──
+//
+// Active only when evidence.verification is non-null (D10 flag on AND
+// user has ≥5 AI-reviewed coding solutions). Lange-Wang-Dunlosky 2013:
+// small-sample self-assessment is statistically unreliable. Below
+// calibrationN=10, "high" confidence claims must hedge. Below
+// calibrationN=5, verification can't be claimed strength at all —
+// the self-refuting failure mode (overconfidently claiming calibration
+// off too few data points).
+describe('validateVerdict — Rule 17 (Verification & Meta-cognition sample-size)', () => {
+    const VERIFICATION_LOW_N = {
+        ...FULL_EVIDENCE,
+        verification: {
+            score: 60,
+            reviewCount: 8,
+            calibrationN: 7,
+            calibrationDelta: 0.20,
+            followUpCount: 0,
+            wrongPatternCount: 0,
+            sourceQuality: 'proxy-only',
+            ceiling: 40,
+        },
+    }
+    const VERIFICATION_TOO_FEW = {
+        ...FULL_EVIDENCE,
+        verification: {
+            score: 50,
+            reviewCount: 5,
+            calibrationN: 4,
+            calibrationDelta: 0.30,
+            followUpCount: 0,
+            wrongPatternCount: 0,
+            sourceQuality: 'proxy-only',
+            ceiling: 40,
+        },
+    }
+    const VERIFICATION_GOOD_N = {
+        ...FULL_EVIDENCE,
+        verification: {
+            score: 78,
+            reviewCount: 25,
+            calibrationN: 25,
+            calibrationDelta: 0.10,
+            followUpCount: 5,
+            wrongPatternCount: 0,
+            sourceQuality: 'strong-signal',
+            ceiling: 100,
+        },
+    }
+
+    it('accepts a Verification strength claim with hedge vocab when n<10', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Verification & Meta-cognition is your leading dimension',
+                    evidence: 'score=60 over 7 calibration data points (tentative — small sample; calibration reliability requires ≥10 data points)',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '10 of 10 dimensions active.',
+        }
+        const r = validateVerdict(v, VERIFICATION_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Verification strength claim with confidence=high + n<10 + no hedge', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Self-assessment is well-calibrated',
+                    evidence: 'score=60 across recent solutions',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '10 of 10 dimensions active.',
+        }
+        const r = validateVerdict(v, VERIFICATION_LOW_N)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-verification-high-confidence-low-n')
+    })
+
+    it('rejects a Verification strength claim outright when n<5', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Calibration accuracy is leading (tentative)',
+                    evidence: 'score=50 over 4 data points — early signal',
+                    confidence: 'tentative',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '10 of 10 dimensions active.',
+        }
+        const r = validateVerdict(v, VERIFICATION_TOO_FEW)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-verification-claim-too-few-datapoints')
+    })
+
+    it('accepts a Verification strength claim with confidence=high + no hedge when n>=10', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Verification & Meta-cognition is your leading dimension',
+                    evidence: 'score=78 from 25 calibration data points + 5 probe-defense follow-ups, calibration gap 10% (strong-signal)',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '10 of 10 dimensions active.',
+        }
+        const r = validateVerdict(v, VERIFICATION_GOOD_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 17 when evidence.verification is absent', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Self-assessment is well-calibrated',
+                    evidence: 'score=60 over n=7',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('FALSE-POSITIVE GUARD: generic "verify" prose does NOT trigger Rule 17', () => {
+        // The validator's regex requires "verification" / "meta-cognition" /
+        // "self-assessment" / "well-calibrated" / "calibration accuracy" —
+        // NOT plain "verify" which appears in coding contexts ("verify the
+        // input is non-null").
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is your strongest dimension',
+                    evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+ — verifies edge cases reliably',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '10 of 10 dimensions active.',
+        }
+        const r = validateVerdict(v, VERIFICATION_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback drops the verification strength entirely when calibrationN<5', () => {
+        const FULL_WITH_VERIFICATION_TOO_FEW = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 50 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 50 },
+                { key: 'communication', status: 'active', n: 8, score: 50 },
+                { key: 'optimization', status: 'active', n: 8, score: 50 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 50 },
+                { key: 'retention', status: 'active', n: 12, score: 60 },
+                { key: 'verificationMetacognition', status: 'active', n: 4, score: 70 },
+            ],
+            overall: { score: 55 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            verification: {
+                score: 70, reviewCount: 5, calibrationN: 4,
+                calibrationDelta: 0.15, followUpCount: 0,
+                wrongPatternCount: 0,
+                sourceQuality: 'proxy-only', ceiling: 40,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_VERIFICATION_TOO_FEW)
+        const hasVerificationStrength = v.strengths.some((s) =>
+            /\b(?:verification|meta[- ]?cognition|self[- ]assessment|well[- ]calibrated|calibration accuracy)\b/i.test(`${s.claim} ${s.evidence}`),
+        )
+        expect(hasVerificationStrength).toBe(false)
+        const r = validateVerdict(v, FULL_WITH_VERIFICATION_TOO_FEW)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces "Confidence diverges from AI-graded correctness" gap when calibrationDelta > 0.30', () => {
+        const FULL_WITH_HIGH_DELTA = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 12, score: 65 },
+                { key: 'verificationMetacognition', status: 'active', n: 15, score: 35 },
+            ],
+            overall: { score: 55 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            verification: {
+                score: 35, reviewCount: 15, calibrationN: 15,
+                calibrationDelta: 0.45, followUpCount: 0,
+                wrongPatternCount: 0,
+                sourceQuality: 'multi-signal', ceiling: 75,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_HIGH_DELTA)
+        const hasCalibrationGap = v.gaps.some((g) =>
+            /diverges|calibration gap|kruger.dunning/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasCalibrationGap).toBe(true)
+        const r = validateVerdict(v, FULL_WITH_HIGH_DELTA)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces "Pattern claims diverge from AI assessment" gap when wrongPatternCount > 0', () => {
+        const FULL_WITH_WRONG_PATTERNS = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 12, score: 65 },
+                { key: 'verificationMetacognition', status: 'active', n: 15, score: 60 },
+            ],
+            overall: { score: 60 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            verification: {
+                score: 60, reviewCount: 15, calibrationN: 15,
+                calibrationDelta: 0.15, followUpCount: 0,
+                wrongPatternCount: 3,
+                sourceQuality: 'multi-signal', ceiling: 75,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_WRONG_PATTERNS)
+        const hasWrongPatternGap = v.gaps.some((g) =>
+            /wrong.pattern|diverge from AI/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasWrongPatternGap).toBe(true)
+        const r = validateVerdict(v, FULL_WITH_WRONG_PATTERNS)
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {

@@ -31,6 +31,7 @@ export function prettyDimName(key) {
       teachingContributions: "Teaching Contributions",
       designAptitude: "Design Aptitude",
       behavioralPerformance: "Behavioral Performance",
+      verificationMetacognition: "Verification & Meta-cognition",
     }[key] || key
   );
 }
@@ -89,6 +90,7 @@ export function buildFallbackVerdict(evidence) {
   const tc = evidence.teaching;              // null when D7 v2 flag is off OR user never hosted
   const da = evidence.designAptitude;        // null when D8 flag is off OR user has no completed design sessions
   const bh = evidence.behavioral;            // null when D9 flag is off OR user has no mocks/HR practice
+  const vf = evidence.verification;          // null when D10 flag is off OR fewer than 5 AI-reviewed coding solutions
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -207,6 +209,28 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} with ${mocks} mock interview${mocks === 1 ? "" : "s"} across ${styles} style${styles === 1 ? "" : "s"} (mock-validated, ceiling ${bh.ceiling})`;
   };
 
+  // Helper — build evidence string for a Verification & Meta-cognition
+  // claim under D10. Satisfies Rule 17 (sample-size honesty per Lange-
+  // Wang-Dunlosky 2013) AND cites calibration N + delta + sub-component
+  // signals so the LLM has the distribution context.
+  const verificationEvidenceWithSource = (dim) => {
+    if (!vf) return `score=${dim.score} over n=${dim.n} data points`;
+    const n = vf.calibrationN;
+    const reviews = vf.reviewCount;
+    if (n < 10) {
+      // Hedge required: small-sample calibration (Lange-Wang-Dunlosky 2013).
+      return `score=${dim.score} over ${n} calibration data point${n === 1 ? "" : "s"} from ${reviews} AI-reviewed solution${reviews === 1 ? "" : "s"} (tentative — small sample; calibration reliability requires ≥10 data points)`;
+    }
+    const deltaPct = (vf.calibrationDelta * 100).toFixed(0);
+    if (vf.sourceQuality === "strong-signal") {
+      return `score=${dim.score} from ${n} calibration data points + ${vf.followUpCount} probe-defense follow-ups, calibration gap ${deltaPct}% (strong-signal, ceiling 100)`;
+    }
+    if (vf.sourceQuality === "multi-signal") {
+      return `score=${dim.score} from ${n} calibration data points + complexity verification, calibration gap ${deltaPct}% (multi-signal, ceiling ${vf.ceiling})`;
+    }
+    return `score=${dim.score} from ${n} calibration data points alone (proxy-only, ceiling ${vf.ceiling})`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
@@ -218,6 +242,7 @@ export function buildFallbackVerdict(evidence) {
     const isTeaching = topDim.key === "teachingContributions";
     const isDesign = topDim.key === "designAptitude";
     const isBehavioral = topDim.key === "behavioralPerformance";
+    const isVerification = topDim.key === "verificationMetacognition";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
@@ -228,11 +253,13 @@ export function buildFallbackVerdict(evidence) {
     else if (isTeaching) evidenceStr = teachingEvidenceWithSource(topDim);
     else if (isDesign) evidenceStr = designAptitudeEvidenceWithSource(topDim);
     else if (isBehavioral) evidenceStr = behavioralEvidenceWithSource(topDim);
+    else if (isVerification) evidenceStr = verificationEvidenceWithSource(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     // Rule 13: retention strengths with attemptCount < 5 must NOT claim
     // retention as a strength at all. Rule 14: same for teaching with
     // ratingCount < 3. Rule 15: same for design with sessionCount < 2.
-    // Rule 16: same for behavioral with mockCount < 2.
+    // Rule 16: same for behavioral with mockCount < 2. Rule 17: same for
+    // verification with calibrationN < 5.
     // Drop the strength entirely so the fallback satisfies the validator.
     const skipRetentionStrength =
       isRetention && rt && rt.attemptCount < 5;
@@ -242,14 +269,23 @@ export function buildFallbackVerdict(evidence) {
       isDesign && da && da.sessionCount < 2;
     const skipBehavioralStrength =
       isBehavioral && bh && bh.mockCount < 2;
-    if (!skipRetentionStrength && !skipTeachingStrength && !skipDesignStrength && !skipBehavioralStrength) {
-      // Rule 13/14/15/16: small-sample strengths must use 'tentative' confidence
-      // (the helpers already inject the hedge vocabulary).
+    const skipVerificationStrength =
+      isVerification && vf && vf.calibrationN < 5;
+    if (
+      !skipRetentionStrength
+      && !skipTeachingStrength
+      && !skipDesignStrength
+      && !skipBehavioralStrength
+      && !skipVerificationStrength
+    ) {
+      // Rule 13/14/15/16/17: small-sample strengths must use 'tentative'
+      // confidence (the helpers already inject the hedge vocabulary).
       let confidence;
       if (isRetention && rt && rt.attemptCount < 10) confidence = "tentative";
       else if (isTeaching && tc && tc.ratingCount < 5) confidence = "tentative";
       else if (isDesign && da && da.sessionCount < 3) confidence = "tentative";
       else if (isBehavioral && bh && bh.mockCount < 3) confidence = "tentative";
+      else if (isVerification && vf && vf.calibrationN < 10) confidence = "tentative";
       else confidence = topDim.n >= 5 ? "high" : "tentative";
       strengths.push({
         claim: `${prettyDimName(topDim.key)} is your leading dimension`,
@@ -380,6 +416,32 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When D10 is present AND the per-solution calibration gap is large,
+  // surface as priority gap. Higher leverage than the D9 mock-calibration
+  // gap because solution-level data has more samples and is the primary
+  // verification signal. 0.30 = 30% gap on the normalized 0-1 scale.
+  if (vf && typeof vf.calibrationDelta === "number" && vf.calibrationDelta > 0.30 && gapsOut.length < 2) {
+    const deltaPct = (vf.calibrationDelta * 100).toFixed(0);
+    gapsOut.push({
+      claim: "Confidence diverges from AI-graded correctness",
+      evidence: `${deltaPct}% calibration gap across ${vf.calibrationN} AI-reviewed solution${vf.calibrationN === 1 ? "" : "s"} — your self-rated confidence systematically diverges from codeCorrectness scores (Kruger-Dunning)`,
+      action:
+        "Before submitting each solution, predict your codeCorrectness score (1-10). Compare to AI's actual score. Re-calibrating reduces this gap and is itself a measurable competence signal.",
+    });
+  }
+
+  // When D10 is present AND user has wrongPattern flags, surface as
+  // priority gap. Pattern self-assessment failures are higher-leverage
+  // than the score-based weak-dim path catches.
+  if (vf && vf.wrongPatternCount > 0 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Pattern claims diverge from AI assessment",
+      evidence: `${vf.wrongPatternCount} solution${vf.wrongPatternCount === 1 ? "" : "s"} flagged with wrong-pattern by AI review — claimed pattern was not the right one for the problem`,
+      action:
+        "Review each flagged solution: read the AI's reasoning for the correct pattern. Pattern self-assessment is the meta-cognitive task — if you can't reliably identify the right pattern, you can't reliably solve under interview pressure.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
@@ -390,6 +452,7 @@ export function buildFallbackVerdict(evidence) {
     const isTeachingWeak = weakDim.key === "teachingContributions";
     const isDesignWeak = weakDim.key === "designAptitude";
     const isBehavioralWeak = weakDim.key === "behavioralPerformance";
+    const isVerificationWeak = weakDim.key === "verificationMetacognition";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
@@ -400,6 +463,7 @@ export function buildFallbackVerdict(evidence) {
     else if (isTeachingWeak) evidenceStr = teachingEvidenceWithSource(weakDim);
     else if (isDesignWeak) evidenceStr = designAptitudeEvidenceWithSource(weakDim);
     else if (isBehavioralWeak) evidenceStr = behavioralEvidenceWithSource(weakDim);
+    else if (isVerificationWeak) evidenceStr = verificationEvidenceWithSource(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,
