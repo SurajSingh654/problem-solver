@@ -206,7 +206,11 @@ function generateVerdict(dimByKey, overall, analytics, readiness, reportCoverage
   const verdictParts = []
 
   if (coveragePct < 50) {
-    verdictParts.push(`Partial profile — ${activeCount} of 6 dimensions measured so far. Treat these as early signals, not confirmed readiness.`)
+    // totalDims tracks the actual dimension surface (6 baseline, 7 when
+    // the user has opted into D7 Teaching Contributions). Hardcoded 6
+    // becomes a lie for opted-in hosts.
+    const totalDims = reportCoverage?.total ?? 6
+    verdictParts.push(`Partial profile — ${activeCount} of ${totalDims} dimensions measured so far. Treat these as early signals, not confirmed readiness.`)
   } else if (highestReady) {
     verdictParts.push(`You're ready to apply to ${highestReady.name} companies (${highestReady.companies}).`)
   } else {
@@ -325,7 +329,7 @@ function VerdictCard({ dimByKey, overallObj, analytics, readiness, reportCoverag
               Interview Readiness Verdict
             </h2>
             <span className={cn('text-[9px] font-bold px-2 py-px rounded-full border', badgeColor)}>
-              {isProfilePartial ? `${reportCoverage?.active ?? 0} of 6 dimensions active` : highestName}
+              {isProfilePartial ? `${reportCoverage?.active ?? 0} of ${reportCoverage?.total ?? 6} dimensions active` : highestName}
             </span>
           </div>
           <p className="text-sm text-text-secondary leading-relaxed">
@@ -1808,13 +1812,13 @@ export default function ReportPage() {
       {/* ── Section 4b: AI Coaching Plan ───────────────── */}
       <CoachingPlanCard />
 
-      {/* ── Section 5: 6D Radar + Dimension Cards ──────── */}
+      {/* ── Section 5: ND Radar + Dimension Cards ──────── */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="bg-surface-1 border border-border-default rounded-2xl p-6 mb-6"
       >
-        <h2 className="text-sm font-bold text-text-primary mb-1">6D Intelligence Breakdown</h2>
+        <h2 className="text-sm font-bold text-text-primary mb-1">{reportCoverage?.total ?? 6}D Intelligence Breakdown</h2>
         <p className="text-xs text-text-tertiary mb-4">
           Each dimension is computed from your actual behavior — not self-reported. Click dimension cards for specific actions.
         </p>

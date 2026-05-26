@@ -29,6 +29,10 @@ import {
 } from "../utils/solutionSignals.js";
 import { resolveGeneratedSourceUrl } from "../utils/platformSearch.js";
 import { findSimilarTitles } from "../utils/titleSimilarity.js";
+import {
+  CANONICAL_PATTERN_LABELS,
+  FAANG_CORE_PATTERNS,
+} from "../utils/patternTaxonomy.js";
 
 // Map AIError codes (rate limit, OpenAI down, parse fail, …) to HTTP
 // responses so every controller in this file returns the same envelope
@@ -805,26 +809,13 @@ export async function getWeeklyPlan(req, res) {
           ) / 10
         : null;
 
-    // Pattern gaps
-    const CANONICAL_PATTERNS = [
-      "Array / Hashing",
-      "Two Pointers",
-      "Sliding Window",
-      "Stack",
-      "Binary Search",
-      "Linked List",
-      "Trees",
-      "Tries",
-      "Heap / Priority Queue",
-      "Backtracking",
-      "Graphs",
-      "Dynamic Programming",
-      "Greedy",
-      "Intervals",
-      "Math & Geometry",
-      "Bit Manipulation",
-    ];
-    const missingPatterns = CANONICAL_PATTERNS.filter(
+    // Pattern gaps — read from the SINGLE SOURCE OF TRUTH in
+    // patternTaxonomy.js. The legacy inline 16-pattern list duplicated here
+    // drifted from the canonical 25 (with 15 FAANG-core) and produced
+    // misleading "/16" denominators in the AI weekly plan prompt.
+    // Surface FAANG-core gaps preferentially — those are the patterns that
+    // most directly affect interview readiness.
+    const missingPatterns = FAANG_CORE_PATTERNS.filter(
       (p) => !uniquePatterns.has(p),
     );
 
@@ -1009,7 +1000,7 @@ AI review average: ${avgAiScore !== null ? `${avgAiScore}/10` : "No reviews yet"
 Optimization rate (brute→optimal): ${optimizationRate}% (target: 80%+)
 
 ── PATTERN COVERAGE ──
-Patterns practiced (${uniquePatterns.size}/16): ${[...uniquePatterns].join(", ") || "None"}
+Patterns practiced (${uniquePatterns.size}/${CANONICAL_PATTERN_LABELS.length}): ${[...uniquePatterns].join(", ") || "None"}
 Missing patterns: ${missingPatterns.length > 0 ? missingPatterns.join(", ") : "None — full coverage!"}
 Pattern identification rate: ${patternCoverageRate}%
 

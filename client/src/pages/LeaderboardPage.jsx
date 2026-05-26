@@ -9,6 +9,13 @@ import { useLeaderboard } from '@hooks/useReport'
 import { Spinner } from '@components/ui/Spinner'
 import { Avatar } from '@components/ui/Avatar'
 import { cn } from '@utils/cn'
+import { PATTERNS } from '@utils/constants'
+
+// Canonical pattern count — single source of truth (matches the
+// server's CANONICAL_PATTERN_LABELS via the client mirror in constants.js).
+// Used in the Pattern Breadth column denominator + tooltip so the page can
+// never drift from the taxonomy (the bug we fixed in stats.controller.js).
+const CANONICAL_PATTERN_COUNT = PATTERNS.length
 
 // ── Score component label config ──────────────────────
 const BREAKDOWN_CONFIG = [
@@ -55,7 +62,7 @@ const BREAKDOWN_CONFIG = [
     color: 'bg-info',
     textColor: 'text-info-fg',
     icon: '🗺️',
-    tooltip: 'Coverage of the 16 canonical interview patterns. Breadth bonus at >8 patterns.',
+    tooltip: `Coverage of the ${CANONICAL_PATTERN_COUNT} canonical interview patterns. Breadth bonus at >8 patterns.`,
   },
 ]
 
@@ -361,7 +368,7 @@ function LeaderboardRow({ entry, isCurrentUser, index }) {
         {/* Patterns */}
         <td className="py-3 px-4 text-xs font-mono text-text-secondary">
           {entry.uniquePatterns}
-          <span className="text-text-disabled text-[10px]">/16</span>
+          <span className="text-text-disabled text-[10px]">/{CANONICAL_PATTERN_COUNT}</span>
         </td>
 
         {/* Top strength */}

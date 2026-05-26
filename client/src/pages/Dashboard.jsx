@@ -435,7 +435,7 @@ export default function Dashboard() {
               <span className={readinessTier.color}>
                 {report?.tier?.highest
                   ? readinessTier.label
-                  : `${reportCoverage.active}/6 dimensions`}
+                  : `${reportCoverage.active}/${reportCoverage.total ?? 6} dimensions`}
               </span>
             </span>
           )}
@@ -703,20 +703,35 @@ export default function Dashboard() {
           transition={{ delay: 0.15 }}
           className="bg-surface-1 border border-border-default rounded-2xl p-5 lg:col-span-2"
         >
-          <p className="text-xs font-bold text-text-primary mb-4 flex items-center gap-2">
-            <span>📊</span> 6D Readiness Dimensions
-          </p>
+          {/* Filter the dim list to keys actually present in the response.
+              D7 (teachingContributions) is opt-in — server omits the dim
+              entirely when the user hasn't hosted ≥1 session, so showing
+              a "Teaching —" chip would be misleading. The label text
+              tracks the rendered count so it never falsely promises 6D
+              when 7D shipped (or vice versa for opt-in users). */}
+          {(() => {
+            const visibleDims = dimensions
+              ? DIMENSIONS.filter((d) => Object.prototype.hasOwnProperty.call(dimensions, d.id))
+              : DIMENSIONS.filter((d) => d.id !== 'teachingContributions')
+            return (
+              <p className="text-xs font-bold text-text-primary mb-4 flex items-center gap-2">
+                <span>📊</span> {visibleDims.length}D Readiness Dimensions
+              </p>
+            )
+          })()}
 
           {dimensions ? (
             <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-              {DIMENSIONS.map((dim, i) => (
-                <DimensionRow
-                  key={dim.id}
-                  dim={dim}
-                  score={dimensions[dim.id]}
-                  index={i}
-                />
-              ))}
+              {DIMENSIONS
+                .filter((d) => Object.prototype.hasOwnProperty.call(dimensions, d.id))
+                .map((dim, i) => (
+                  <DimensionRow
+                    key={dim.id}
+                    dim={dim}
+                    score={dimensions[dim.id]}
+                    index={i}
+                  />
+                ))}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center gap-2.5">

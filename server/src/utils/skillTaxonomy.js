@@ -53,7 +53,11 @@ const WEIGHTS = {
 // ── Full skill taxonomy ───────────────────────────────────────────────────
 export const SKILL_TAXONOMY = [
   // ══ ALGORITHMS & DATA STRUCTURES ════════════════════════════════════
-  // The 16 canonical patterns from competitive programming research.
+  // Canonical interview patterns from competitive programming research.
+  // Authoritative list lives in `patternTaxonomy.js` (CANONICAL_PATTERN_LABELS,
+  // 25 entries; FAANG_CORE_PATTERNS, 15 entries). This taxonomy carries
+  // the per-skill assessment metadata; the canonical labels themselves are
+  // the source of truth there.
   // Expert benchmarks derived from median solve times in LeetCode contests.
 
   {
