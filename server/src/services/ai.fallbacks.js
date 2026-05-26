@@ -81,6 +81,7 @@ export function buildFallbackVerdict(evidence) {
   const pm = evidence.patternMastery; // null when D1 v2 flag is off
   const sd = evidence.solutionDepth;   // null when D2 v2 flag is off
   const cm = evidence.communication;   // null when D3 v2 flag is off
+  const op = evidence.optimization;    // null when D4 v2 flag is off
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -109,15 +110,24 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} from written-only signal (ceiling 55) — no mock interviews yet`;
   };
 
+  // Helper — build evidence string for an Optimization claim under v2.
+  // Satisfies validator Rule 11: cite trade-off distribution, not just score.
+  const optEvidenceWithDistribution = (dim) => {
+    if (!op) return `score=${dim.score} over n=${dim.n} data points`;
+    return `score=${dim.score} with ${op.tradeOffOrAbove} of ${op.totalCoding} solutions at Trade-off+ and ${op.owned} Owned`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
     const isDepth = topDim.key === "solutionDepth";
     const isComm = topDim.key === "communication";
+    const isOpt = topDim.key === "optimization";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
     else if (isComm) evidenceStr = commEvidenceWithSource(topDim);
+    else if (isOpt) evidenceStr = optEvidenceWithDistribution(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     strengths.push({
       claim: `${prettyDimName(topDim.key)} is your leading dimension`,
@@ -166,14 +176,30 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When v2 optimization is present AND trade-off articulation is
+  // critically low, surface as priority gap. Schoenfeld 1985 / Voss 1983
+  // establish explicit comparison as the expert/novice differentiator.
+  // A user can be strong on D4 score from documentation discipline alone
+  // while having 0 solutions where AI verified the trade-off.
+  if (op && op.tradeOffOrAbove < 3 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Limited trade-off articulation",
+      evidence: `${op.tradeOffOrAbove} of ${op.totalCoding} solutions at Trade-off+ (AI-verified complexity comparison or explicit brute→optimized improvement), ${op.owned} Owned`,
+      action:
+        "On your next 3 solutions, declare time + space complexity for both brute and optimized — and let AI review verify the comparison.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
     const isCommWeak = weakDim.key === "communication";
+    const isOptWeak = weakDim.key === "optimization";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
     else if (isCommWeak) evidenceStr = commEvidenceWithSource(weakDim);
+    else if (isOptWeak) evidenceStr = optEvidenceWithDistribution(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,

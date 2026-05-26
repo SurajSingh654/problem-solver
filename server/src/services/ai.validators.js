@@ -330,6 +330,60 @@ export function validateVerdict(verdict, evidence) {
     gaps.forEach((g, i) => checkCommSource(g, `gaps[${i}]`));
   }
 
+  // Rule 11 — Optimization trade-off distribution awareness.
+  //
+  // When evidence.optimization is present (D4 v2 flag is on), any claim
+  // *about* Optimization or Trade-off thinking MUST cite the distribution.
+  // A high D4 score from documented-but-not-articulated trade-offs isn't
+  // optimization mastery — Schoenfeld 1985 / Voss 1983 establish that
+  // explicit comparison is the expert/novice differentiator.
+  //
+  // Phrase anchoring (Plan agent push): `\bowned\b` alone false-matches
+  // D2's "5 solutions Owned" prose. Subject must be "optimization" or
+  // "trade-off"; distribution patterns include "owned" but only after the
+  // subject gate has triggered.
+  if (evidence.optimization) {
+    const OPT_SUBJECT_PATTERNS = [
+      /\boptimization\b\s+(is|was|are|shows|remains|stands|leads)/i,
+      /^optimization\b/i,
+      /\btrade[- ]off\b\s+(reasoning|articulation|thinking|skill|skills)/i,
+      /\bweakest.{0,30}\boptimization\b/i,
+      /\bstrongest.{0,30}\boptimization\b/i,
+      /\bstrong.{0,12}\boptimization\b/i,
+      /\bweak.{0,12}\boptimization\b/i,
+      /\boptimization\b\s+(skill|skills|ability|performance|mastery)\b/i,
+    ];
+    // Distribution patterns must require digits + state words. A bare
+    // \btrade[- ]off\b would self-match the subject term ("Trade-off
+    // reasoning is sparse" mentions trade-off but cites no count) and
+    // pass Rule 11 invalidly. Same for `\boptimized\b` — too permissive.
+    const OPT_DISTRIBUTION_PATTERNS = [
+      // "5 of 12 solutions at Trade-off+" / "8 of 12 trade-off" / "0 of 4 owned"
+      /\d+\s+of\s+\d+\s+(solutions?|trade[- ]off|owned)/i,
+      // "2 Owned" / "3 Trade-off" / "4 Optimized" / "0 Documented" — count + state
+      /\b\d+\s+(owned|trade[- ]off|optimized|documented)\b/i,
+      // "at Trade-off+" / "at Owned+" — explicit at-state phrase
+      /\bat\s+(trade[- ]off|owned)/i,
+      // Internal counter names that AI might cite verbatim
+      /\btradeoffOrAbove\b/i,
+      /\bownedOrAbove\b/i,
+    ];
+    const checkOptDistribution = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isOptSubject = OPT_SUBJECT_PATTERNS.some((rx) => rx.test(text));
+      if (!isOptSubject) return;
+      const citesDistribution = OPT_DISTRIBUTION_PATTERNS.some((rx) =>
+        rx.test(text),
+      );
+      if (!citesDistribution) {
+        violations.push(`${label}-opt-claim-no-distribution`);
+      }
+    };
+    strengths.forEach((s, i) => checkOptDistribution(s, `strengths[${i}]`));
+    gaps.forEach((g, i) => checkOptDistribution(g, `gaps[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 

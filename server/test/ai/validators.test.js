@@ -691,6 +691,173 @@ describe('validateVerdict — Rule 10 (Communication source quality)', () => {
     })
 })
 
+// ── validateVerdict — Rule 11 (Optimization trade-off distribution) ──
+//
+// Active only when evidence.optimization is non-null (D4 v2 flag on).
+// Forces any Optimization subject claim to cite the trade-off
+// distribution. Schoenfeld 1985 / Voss 1983 establish that explicit
+// comparison is what differentiates expert from novice — the dim's
+// distribution must be transparent in the prose.
+//
+// Phrase-anchored regex (Plan agent push): `\bowned\b` alone false-
+// matches D2's "5 solutions Owned" prose. The subject pattern requires
+// "optimization" or "trade-off" to be the subject of the claim, after
+// which distribution patterns can include "owned" without ambiguity.
+describe('validateVerdict — Rule 11 (Optimization trade-off distribution)', () => {
+    const FULL_EVIDENCE_WITH_OPT = {
+        ...FULL_EVIDENCE,
+        optimization: {
+            owned: 3, tradeOff: 5, optimized: 2, documented: 2, none: 0,
+            tradeOffOrAbove: 8, ownedOrAbove: 3, totalCoding: 12,
+        },
+    }
+
+    it('accepts an Optimization strength claim that cites trade-off distribution', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Optimization is your strongest dimension',
+                    evidence: 'score=78 with 8 of 12 solutions at Trade-off+ and 3 Owned',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_OPT)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects an Optimization strength claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Optimization is your strongest dimension',
+                    evidence: 'score=78 over n=12 reviews',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_OPT)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-opt-claim-no-distribution')
+    })
+
+    it('rejects an Optimization gap claim that only cites the score', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Optimization is your weakest dimension',
+                    evidence: 'score=42 over n=4 reviews',
+                    action: 'Practice more',
+                },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_OPT)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('gaps[0]-opt-claim-no-distribution')
+    })
+
+    it('FALSE-POSITIVE GUARD: a D2 Solution-Depth claim mentioning "owned" does NOT trigger Rule 11', () => {
+        // Plan agent's specific concern: D2 prose like "5 solutions Owned"
+        // contains the token `\bowned\b` but is NOT about optimization.
+        // The subject must be "optimization" or "trade-off"; this claim
+        // is about Solution Depth.
+        const FULL_WITH_BOTH = {
+            ...FULL_EVIDENCE_WITH_OPT,
+            solutionDepth: {
+                owned: 3, defended: 5, explained: 2, documented: 2, none: 0,
+                defendedOrAbove: 8, ownedOrAbove: 3, totalCoding: 12,
+            },
+        }
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Solution depth shows real probe-passing strength',
+                    evidence: 'score=72 with 8 of 12 solutions at Defended+ and 3 Owned',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_WITH_BOTH)
+        // Rule 9 (depth) accepts because distribution is cited.
+        // Rule 11 (opt) does NOT trigger because "optimization"/"trade-off"
+        // is not the subject of the claim.
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 11 when optimization evidence is absent (legacy flag-off mode)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                {
+                    claim: 'Optimization is your strongest dimension',
+                    evidence: 'score=78 over n=12 reviews',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 11 for non-Optimization claims', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [
+                { claim: 'Communication is well-rounded', evidence: 'score=70 with 3 mock interviews (ceiling 80)', confidence: 'high' },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, {
+            ...FULL_EVIDENCE_WITH_OPT,
+            communication: {
+                ceiling: 80, sourceQuality: 'live-and-ai',
+                peerCount: 0, mockCount: 3, writtenCount: 6,
+            },
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('matches "trade-off reasoning" subject framing', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations across 6 of 6 dimensions.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Trade-off reasoning is sparse across recent solutions',
+                    evidence: 'score=42 over n=4',
+                    action: 'Document complexity comparisons',
+                },
+            ],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE_WITH_OPT)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('gaps[0]-opt-claim-no-distribution')
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {
@@ -823,6 +990,50 @@ describe('buildFallbackVerdict', () => {
         )
         expect(hasLiveSignalGap).toBe(true)
         const r = validateVerdict(v, ORIGINAL_REPORT_WITH_COMM)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback output for v2-opt evidence passes Rule 11 (no self-contradiction)', () => {
+        const FULL_WITH_OPT = {
+            ...FULL_EVIDENCE,
+            optimization: {
+                owned: 3, tradeOff: 5, optimized: 2, documented: 2, none: 0,
+                tradeOffOrAbove: 8, ownedOrAbove: 3, totalCoding: 12,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_OPT)
+        const r = validateVerdict(v, FULL_WITH_OPT)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces a "Limited trade-off articulation" gap when tradeOffOrAbove < 3', () => {
+        // Original-report user under D4 v2: 4 mostly-OPTIMIZED solutions,
+        // 0 trade-off (no AI complexityCheck data, no bruteForceMeta).
+        // Fallback should prepend the priority gap.
+        const ORIGINAL_REPORT_WITH_OPT = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 4, score: 26 },
+                { key: 'solutionDepth', status: 'active', n: 4, score: 32 },
+                { key: 'communication', status: 'active', n: 4, score: 55 },
+                { key: 'optimization', status: 'active', n: 4, score: 37 },
+                { key: 'pressurePerformance', status: 'active', n: 4, score: 60 },
+                { key: 'retention', status: 'active', n: 4, score: 93 },
+            ],
+            overall: { score: 50 },
+            reportCoverage: { active: 6, total: 6, pct: 100 },
+            nearestTier: null,
+            nextTier: { name: 'Tier 2 Tech', threshold: 65, gap: 15 },
+            optimization: {
+                owned: 0, tradeOff: 0, optimized: 3, documented: 1, none: 0,
+                tradeOffOrAbove: 0, ownedOrAbove: 0, totalCoding: 4,
+            },
+        }
+        const v = buildFallbackVerdict(ORIGINAL_REPORT_WITH_OPT)
+        const hasTradeOffGap = v.gaps.some((g) =>
+            /trade-off|trade off articulation/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasTradeOffGap).toBe(true)
+        const r = validateVerdict(v, ORIGINAL_REPORT_WITH_OPT)
         expect(r.valid).toBe(true)
     })
 
