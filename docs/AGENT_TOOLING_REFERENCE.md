@@ -2,7 +2,7 @@
 
 A working guide to **how LLMs talk to external systems** — MCP, tool calling, LangChain, LangGraph — with concrete examples from this codebase. Written as a learning reference: explain the concept first, then show how it shows up here, then link to canonical sources.
 
-> **Last updated**: 2026-05-26 — when D10 + roadmap entry shipped, before Phase MCP-1 starts.
+> **Last updated**: 2026-05-26 — D10 + MCP-1 + MCP-2 (7 tools) + MCP-3 (4 prompts) all shipped same day. See `docs/ai-engineering/` for build-by-build notes.
 
 ---
 
@@ -25,7 +25,7 @@ A working guide to **how LLMs talk to external systems** — MCP, tool calling, 
 
 ## Why this doc exists
 
-This project is shipping an **MCP server** (Phase MCP-1 starting now). MCP is one of several technologies that let an AI assistant talk to external systems. The others — LangChain, LangGraph, raw OpenAI tool calls — solve overlapping problems with different trade-offs.
+This project shipped an **MCP server** (Phases MCP-1 + MCP-2 + MCP-3, all 2026-05-26). 7 read-only tools + 4 prompt templates live, verified end-to-end through Claude Code with real Binary Thinkers team data. MCP is one of several technologies that let an AI assistant talk to external systems. The others — LangChain, LangGraph, raw OpenAI tool calls — solve overlapping problems with different trade-offs.
 
 If you're new to this space, the names blur together. This doc separates them, tells you which one we use here and why, and gives you enough mental model to read the codebase.
 

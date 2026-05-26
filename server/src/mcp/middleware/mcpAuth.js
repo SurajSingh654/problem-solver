@@ -65,16 +65,25 @@ function setRevocationCache(jti, revoked) {
 
 /**
  * Internal — check if a JTI is revoked. Returns true if blocked.
+ *
+ * MCP-4 evolution: now reads from the renamed `McpToken` table where
+ * `revokedAt IS NOT NULL` means revoked. Tokens issued via the dev mint
+ * script (no DB row) are treated as ACTIVE — the script never inserts
+ * a row, so absence of a row = active. Tokens issued via the new API
+ * insert a row with `revokedAt = null`; revocation sets the field.
+ *
  * Cached for 60s to avoid per-request DB lookup.
  */
 async function isJtiRevoked(jti) {
   const cached = checkRevocationCache(jti);
   if (cached !== null) return cached;
-  const row = await prisma.revokedMcpToken.findUnique({
+  const row = await prisma.mcpToken.findUnique({
     where: { jti },
-    select: { jti: true },
+    select: { jti: true, revokedAt: true },
   });
-  const revoked = row !== null;
+  // No row → token wasn't issued via the API (dev mint script). Treat as
+  // active. Row with revokedAt set → revoked.
+  const revoked = row !== null && row.revokedAt !== null;
   setRevocationCache(jti, revoked);
   return revoked;
 }

@@ -13,7 +13,7 @@ import { JWT_SECRET } from "../../src/config/env.js";
 // Mock prisma BEFORE importing middleware.
 vi.mock("../../src/lib/prisma.js", () => ({
   default: {
-    revokedMcpToken: {
+    mcpToken: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
   },
@@ -60,8 +60,8 @@ function signMcpToken({ id = "user-1", scope = "mcp:read", jti = "jti-abc", curr
 beforeEach(() => {
   authInternals.revocationCache.clear();
   rateInternals.resetForTests();
-  prisma.revokedMcpToken.findUnique.mockReset();
-  prisma.revokedMcpToken.findUnique.mockResolvedValue(null);
+  prisma.mcpToken.findUnique.mockReset();
+  prisma.mcpToken.findUnique.mockResolvedValue(null);
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -137,7 +137,7 @@ describe("mcpAuth — threat 1 (stolen JWT scope/revocation)", () => {
   });
 
   it("rejects revoked token (jti in revocation list) → 401 generic", async () => {
-    prisma.revokedMcpToken.findUnique.mockResolvedValueOnce({ jti: "revoked-jti" });
+    prisma.mcpToken.findUnique.mockResolvedValueOnce({ jti: "revoked-jti", revokedAt: new Date() });
     const tok = signMcpToken({ jti: "revoked-jti" });
     const req = makeReq({ headers: { authorization: `Bearer ${tok}` } });
     const res = makeRes();
@@ -165,7 +165,7 @@ describe("mcpAuth — threat 1 (stolen JWT scope/revocation)", () => {
     await mcpAuth(req1, makeRes(), vi.fn());
     await mcpAuth(req2, makeRes(), vi.fn());
     // Cache hit on second request — DB called only once.
-    expect(prisma.revokedMcpToken.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.mcpToken.findUnique).toHaveBeenCalledTimes(1);
   });
 });
 

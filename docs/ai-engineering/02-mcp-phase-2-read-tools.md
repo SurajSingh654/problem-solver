@@ -1,6 +1,9 @@
 # Phase MCP-2 — Read tools (the actual functionality)
 
-> **Status**: ✅ Batch 1 (3 tools) shipped + verified end-to-end with real data on 2026-05-26. Batch 2 (5 more tools) shipping in the same phase.
+> **Status**: ✅ Batches 1 + 2 shipped + verified end-to-end on 2026-05-26.
+> 7 tools live (`get_readiness_report`, `get_pattern_matrix`, `get_review_queue`, `get_dim_breakdown`, `get_recommended_problems`, `get_team_leaderboard`, `get_calibration_status`).
+> 1 tool deferred: `get_weekly_plan` — current controller calls OpenAI on every invocation, would burn AI quota for every "let me check" thought from the LLM. Right shipping shape needs cache-first read + quota gate + streaming. Tracked as a follow-up.
+> End-to-end verified by invoking `weekly-prep-checkin` (Phase MCP-3 prompt) which transparently called 6 of these tools across one conversation turn — the LLM produced a calibrated coaching response grounded in real Binary Thinkers team data.
 >
 > **Prerequisite**: read [`01-mcp-phase-1-foundation.md`](./01-mcp-phase-1-foundation.md) first. This note assumes the security middleware + auth chain are in place; MCP-2 plugs the actual tools into them.
 

@@ -10,10 +10,22 @@ import {
   deleteUser,
   updateUserRole,
 } from '../controllers/users.controller.js'
+import {
+  createMcpToken,
+  listMcpTokens,
+  revokeMcpToken,
+} from '../controllers/mcpTokens.controller.js'
 
 const router = Router()
 
 router.use(authenticate)
+
+// ── MCP token self-management (Phase MCP-4) ─────────────────
+// Each user manages their own tokens — no admin override. Mounted BEFORE
+// /:id routes so /me/mcp-tokens isn't shadowed by the /:id pattern.
+router.post('/me/mcp-tokens', createMcpToken)
+router.get('/me/mcp-tokens', listMcpTokens)
+router.delete('/me/mcp-tokens/:jti', revokeMcpToken)
 
 router.get('/', getUsers)
 router.get('/:id', getUserProfile)

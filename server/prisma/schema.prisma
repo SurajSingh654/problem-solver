@@ -333,9 +333,9 @@ model User {
   topicEnrollments TopicEnrollment[]
   conceptMasteries ConceptMastery[]
 
-  // MCP — Model Context Protocol read-only server. Tokens this user has
-  // revoked (settings page) or that the cleanup cron flagged for blocklist.
-  revokedMcpTokens RevokedMcpToken[] @relation("MCPTokenUser")
+  // MCP — Model Context Protocol read-only server. All tokens issued to
+  // this user (active + revoked). Settings page reads this list.
+  mcpTokens McpToken[] @relation("MCPTokenUser")
 
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
@@ -2491,42 +2491,50 @@ model ConceptMastery {
   @@map("concept_masteries")
 }
 
-/// MCP token revocation list. Every MCP-scoped JWT carries a `jti` claim;
-/// when the user revokes a token (or one expires + we want explicit
-/// blocklist for short windows), we insert here. Middleware checks this
-/// table on every MCP request (with a 60s in-memory cache to avoid
-/// per-request DB round-trip).
+/// MCP token registry. Tracks every MCP-scoped JWT issued — both ACTIVE
+/// (revokedAt IS NULL) and REVOKED (revokedAt IS NOT NULL). Auth
+/// middleware checks this table on every MCP request (with a 60s
+/// in-memory cache).
 ///
-/// Read-only MCP server only — no other use case as of 2026-05.
-/// Soft-rotated: rows for tokens past their natural expiry are deleted
-/// by a cron job (the JWT lib already rejects expired tokens, but we
-/// keep the row for ~7 days post-expiry for audit purposes).
-model RevokedMcpToken {
-  /// JWT ID claim — unique per token. UUIDv4 generated on token issuance.
+/// EVOLUTION:
+///   - Phase MCP-1 shipped this as `RevokedMcpToken` — only revoked
+///     tokens were inserted; the absence of a row meant "active."
+///   - Phase MCP-4 expands it to ALL issued tokens, with `revokedAt`
+///     becoming nullable. The settings page lists every user's tokens
+///     (active + revoked) for self-management. Renamed to `McpToken`.
+///
+/// Read-only MCP server only. Soft-cleanup: rows for tokens past
+/// `expiresAt + 7 days` are deleted by a cleanup cron (the JWT lib
+/// already rejects expired tokens; we keep the row briefly for audit).
+model McpToken {
+  /// JWT ID claim — unique per token. UUIDv4 generated on issuance.
   jti String @id
 
-  /// User who owned the token. Cascades on user delete so revocation
-  /// rows clean up automatically.
+  /// User who owns the token.
   userId String
   user   User   @relation("MCPTokenUser", fields: [userId], references: [id], onDelete: Cascade)
 
-  /// Reason — informational. "user-revoked" / "rotation" / "compromise"
-  /// / "auto-expiry-cleanup". Surfaced on the settings page.
-  reason String
+  /// User-given label for this token (e.g. "My Mac laptop", "Work cursor").
+  /// Helps the user pick the right one to revoke if multiple are active.
+  /// Optional but encouraged.
+  name String?
 
-  /// When the token was originally issued. For "X days old" display.
+  /// When the token was issued.
   issuedAt DateTime
 
-  /// When the token would naturally expire. After this + 7 days the
-  /// cleanup cron deletes the row.
+  /// When the token expires per its `exp` claim. After this + 7 days
+  /// the cleanup cron deletes the row.
   expiresAt DateTime
 
-  /// When revocation happened.
-  revokedAt DateTime @default(now())
+  /// When the token was revoked (nullable). Null means active.
+  revokedAt DateTime?
 
-  /// Last-seen IP (best-effort). Set when the token was last used
-  /// successfully before revocation. Helps users spot unfamiliar
-  /// activity on the settings page.
+  /// Reason — informational. "user-revoked" / "rotation" / "compromise"
+  /// / "auto-expiry-cleanup" — only set when revokedAt is set.
+  revokedReason String?
+
+  /// Last-seen IP (best-effort). Updated lazily by auth middleware.
+  /// Helps users spot unfamiliar activity on the settings page.
   lastUsedIp String?
 
   /// Last-seen timestamp (best-effort).
@@ -2536,7 +2544,7 @@ model RevokedMcpToken {
   @@index([jti])
   // Cleanup cron: find rows past expiresAt + 7d.
   @@index([expiresAt])
-  // Settings page: "show me my revoked tokens" — userId + revokedAt desc.
-  @@index([userId, revokedAt(sort: Desc)])
-  @@map("revoked_mcp_tokens")
+  // Settings page: "show me my tokens" — newest first.
+  @@index([userId, issuedAt(sort: Desc)])
+  @@map("mcp_tokens")
 }
