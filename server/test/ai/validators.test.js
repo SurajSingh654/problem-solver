@@ -1757,6 +1757,225 @@ describe('validateVerdict — Rule 15 (Design Aptitude sample-size honesty)', ()
     })
 })
 
+// ── validateVerdict — Rule 16 (Behavioral Performance sample-size honesty) ──
+//
+// Active only when evidence.behavioral is non-null (D9 flag on AND user
+// has activated). Lievens & De Soete (2012) + Schmidt-Hunter (1998):
+// behavioral interview reliability requires replication across rater
+// contexts. Below mockCount=3, "high" confidence claims must hedge.
+// Below mockCount=2, behavioral can't be claimed strength at all.
+describe('validateVerdict — Rule 16 (Behavioral Performance sample-size honesty)', () => {
+    const BEHAVIORAL_LOW_N = {
+        ...FULL_EVIDENCE,
+        behavioral: {
+            score: 55,
+            mockCount: 2,
+            hrSolutionCount: 0,
+            distinctStyleCount: 1,
+            calibrationDelta: 1.0,
+            sourceQuality: 'draft-only',
+            ceiling: 30,
+        },
+    }
+    const BEHAVIORAL_TOO_FEW = {
+        ...FULL_EVIDENCE,
+        behavioral: {
+            score: 50,
+            mockCount: 1,
+            hrSolutionCount: 0,
+            distinctStyleCount: 1,
+            calibrationDelta: null,
+            sourceQuality: 'draft-only',
+            ceiling: 30,
+        },
+    }
+    const BEHAVIORAL_GOOD_N = {
+        ...FULL_EVIDENCE,
+        behavioral: {
+            score: 80,
+            mockCount: 6,
+            hrSolutionCount: 5,
+            distinctStyleCount: 4,
+            calibrationDelta: 0.5,
+            sourceQuality: 'diversified',
+            ceiling: 100,
+        },
+    }
+
+    it('accepts a Behavioral strength claim with hedge vocab when n<3', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Behavioral Performance is your leading dimension',
+                    evidence: 'score=55 over 2 mocks (tentative — small sample; behavioral interview reliability requires ≥3 mocks)',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '9 of 9 dimensions active.',
+        }
+        const r = validateVerdict(v, BEHAVIORAL_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Behavioral strength claim with confidence=high + n<3 + no hedge', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Behavioral Performance is your strongest dimension',
+                    evidence: 'score=55 across recent mock interviews',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '9 of 9 dimensions active.',
+        }
+        const r = validateVerdict(v, BEHAVIORAL_LOW_N)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-behavioral-high-confidence-low-n')
+    })
+
+    it('rejects a Behavioral strength claim outright when n<2', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Behavioral interview is leading (tentative)',
+                    evidence: 'score=50 over 1 mock — early signal',
+                    confidence: 'tentative',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '9 of 9 dimensions active.',
+        }
+        const r = validateVerdict(v, BEHAVIORAL_TOO_FEW)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-behavioral-claim-too-few-mocks')
+    })
+
+    it('accepts a Behavioral strength claim with confidence=high + no hedge when n>=3', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Behavioral Performance is your leading dimension',
+                    evidence: 'score=80 with 6 mock interviews across 4 distinct culture styles',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '9 of 9 dimensions active.',
+        }
+        const r = validateVerdict(v, BEHAVIORAL_GOOD_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 16 when evidence.behavioral is absent', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Behavioral Performance is your strongest',
+                    evidence: 'score=55 over n=2 data points',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('FALSE-POSITIVE GUARD: incidental "behavior" prose does NOT trigger Rule 16', () => {
+        // The validator's regex requires "behavioral performance" / "behavioral
+        // interview" / "behavioral round" / "culture-fit" — NOT plain
+        // "behavior" which appears in coding contexts ("the program's behavior").
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is your strongest dimension',
+                    evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+ — predicted system behavior accurately under load',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '9 of 9 dimensions active.',
+        }
+        const r = validateVerdict(v, BEHAVIORAL_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback drops the behavioral strength entirely when n<2', () => {
+        const FULL_WITH_BEHAVIORAL_TOO_FEW = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 50 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 50 },
+                { key: 'communication', status: 'active', n: 8, score: 50 },
+                { key: 'optimization', status: 'active', n: 8, score: 50 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 50 },
+                { key: 'retention', status: 'active', n: 12, score: 60 },
+                { key: 'behavioralPerformance', status: 'active', n: 1, score: 75 },
+            ],
+            overall: { score: 55 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            behavioral: {
+                score: 75, mockCount: 1, hrSolutionCount: 0,
+                distinctStyleCount: 1, calibrationDelta: null,
+                sourceQuality: 'draft-only', ceiling: 30,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_BEHAVIORAL_TOO_FEW)
+        const hasBehavioralStrength = v.strengths.some((s) =>
+            /\bbehavioral (?:performance|interview|round)\b|culture[- ]fit/i.test(`${s.claim} ${s.evidence}`),
+        )
+        expect(hasBehavioralStrength).toBe(false)
+        const r = validateVerdict(v, FULL_WITH_BEHAVIORAL_TOO_FEW)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces calibration-gap priority when delta > 1.5', () => {
+        const FULL_WITH_HIGH_DELTA = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 12, score: 65 },
+                { key: 'behavioralPerformance', status: 'active', n: 4, score: 50 },
+            ],
+            overall: { score: 60 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            behavioral: {
+                score: 50, mockCount: 4, hrSolutionCount: 0,
+                distinctStyleCount: 2, calibrationDelta: 2.5,
+                sourceQuality: 'mock-validated', ceiling: 70,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_HIGH_DELTA)
+        const hasCalibrationGap = v.gaps.some((g) =>
+            /miscalibrated|kruger.dunning|calibration/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasCalibrationGap).toBe(true)
+        const r = validateVerdict(v, FULL_WITH_HIGH_DELTA)
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {

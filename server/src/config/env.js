@@ -245,5 +245,41 @@ export const FEATURE_TEACHING_CONTRIBUTIONS_V2 = optional('FEATURE_TEACHING_CONT
 // (also in client/Dockerfile ARG).
 export const FEATURE_DESIGN_APTITUDE = optional('FEATURE_DESIGN_APTITUDE', 'false') === 'true'
 
+// Behavioral Performance (D9) — NEW dimension covering interview process
+// signals, calibration, and HR/behavioral round content. Distinct from D5
+// Pressure Performance (which measures technical output quality under
+// time pressure) — D9 measures HOW the candidate conducts themselves
+// (clarifying questions, narration, calibration, culture-style coverage,
+// HR-round STAR content). Same source data (mocks) but different signals.
+//
+// Source-tier ceilings (mirror D3/D5/D7/D8):
+//   - draft-only (30): no completed mocks; only HR text answers
+//   - mock-validated (70): ≥3 mocks with debrief
+//   - diversified (100): ≥5 mocks across ≥3 distinct interview styles
+//
+// Sub-component blend:
+//   0.40 × verdict_score (STRONG_HIRE=100 .. NO_HIRE=20 avg)
+//   0.25 × process_signals (clarifying questions + narration + edge cases
+//                          + complexity + hint-management composite)
+//   0.15 × calibration (|preSessionConfidence – verdict_band|;
+//                       Kruger-Dunning 1999 self-assessment accuracy)
+//   0.10 × hr_practice (HR Problem solutions, capped at 5)
+//   0.10 × style_diversity (distinct interview styles, capped at 4)
+//
+// Tier gates: tier2 = 3 mocks + score≥60; FAANG = 5 mocks + ≥3 styles +
+// score≥75 + calibrationDelta ≤ 1.5 (max-threshold key — third in the
+// MAX_THRESHOLD_KEYS Set after retentionLeechRate + teachingFlagRate).
+//
+// Verdict Rule 16: behavioral strengths with mockCount<2 must hedge
+// (Lievens & De Soete 2012 "Simulations" — single mock interview is a
+// poor predictor; replication across rater contexts improves validity).
+//
+// Opt-in like D7/D8 — activates with ≥1 mock OR ≥3 HR solutions. Coding-
+// only users see byte-identical reports without D9.
+//
+// Independent rollout. Client mirror: VITE_FEATURE_BEHAVIORAL_PERFORMANCE
+// (also in client/Dockerfile ARG).
+export const FEATURE_BEHAVIORAL_PERFORMANCE = optional('FEATURE_BEHAVIORAL_PERFORMANCE', 'false') === 'true'
+
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

@@ -263,6 +263,18 @@ export const DIMENSIONS = [
     color: "#06b6d4",
     desc: "System design + LLD aptitude — AI-evaluated phases, scenario validation, interviewer-paired sessions",
   },
+  {
+    // D9 — opt-in dimension. Activates when user has ≥1 completed mock
+    // interview OR ≥3 HR-category solutions. Distinct from D5 Pressure:
+    // D5 measures technical output quality; D9 measures interview
+    // process — clarifying questions, narration, calibration, culture-
+    // style coverage, HR/STAR content.
+    id: "behavioralPerformance",
+    label: "Behavioral Performance",
+    short: "Behavioral",
+    color: "#ec4899",
+    desc: "Interview process signals — clarifying questions, narration, calibration, culture-style coverage, HR-round content",
+  },
 ];
 
 // ── AI features config (ready for later integration) ──

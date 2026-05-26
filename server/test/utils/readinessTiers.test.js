@@ -825,3 +825,123 @@ describe("classifyReadiness — D8 design aptitude gates (opt-in dimension)", ()
     expect(OPT_IN_KEYS.has("designInterviewerPaired")).toBe(true);
   });
 });
+
+// ── D9 behavioral performance gates (opt-in) ─────────────────────────
+
+describe("classifyReadiness — D9 behavioral performance gates (opt-in)", () => {
+  const tierById = (info, id) => info.tiers.find((t) => t.id === id);
+
+  const tier2BaselineDims = {
+    patternRecognition: 60,
+    optimization: 50,
+    pressurePerformance: 55,
+    solutionDepth: 50,
+  };
+  const tier2BaselineMastery = {
+    coreSolidOrAbove: 10, owned: 3,
+    solutionsAtDefendedOrAbove: 4, solutionsAtOwned: 2,
+    commMocksWithScores: 1,
+    optAtTradeOffOrAbove: 4, optAtOwned: 2,
+    retentionAttempts: 12, retentionScore: 65,
+  };
+
+  it("user without behavioral keys is still tier2 ready (opt-in skip)", () => {
+    const out = classifyReadiness(70, tier2BaselineDims, tier2BaselineMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).not.toContain("behavioralMocks");
+    expect(failingKeys).not.toContain("behavioralScore");
+  });
+
+  it("opted-in user with insufficient mocks FAILS tier2 behavioral gate", () => {
+    const masteryWithLowBehavioral = {
+      ...tier2BaselineMastery,
+      behavioralMocks: 1,    // < 3 needed
+      behavioralStyles: 1,
+      behavioralScore: 40,   // < 60 needed
+      behavioralCalibrationDelta: 2.0,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryWithLowBehavioral);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).toContain("behavioralMocks");
+    expect(failingKeys).toContain("behavioralScore");
+  });
+
+  it("opted-in user at tier2 behavioral floor PASSES", () => {
+    const masteryAtBehavioralFloor = {
+      ...tier2BaselineMastery,
+      behavioralMocks: 3,
+      behavioralStyles: 1,
+      behavioralScore: 60,
+      behavioralCalibrationDelta: 2.0,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryAtBehavioralFloor);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+  });
+
+  it("FAANG behavioralCalibrationDelta uses INVERSE comparison (delta above max fails)", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryHighDelta = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      behavioralMocks: 6,
+      behavioralStyles: 4,
+      behavioralScore: 80,
+      behavioralCalibrationDelta: 2.5, // ABOVE max 1.5 → should fail
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryHighDelta);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    expect(faang.failingMastery.map((f) => f.key)).toContain("behavioralCalibrationDelta");
+  });
+
+  it("FAANG passes when all behavioral gates met at the boundary", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryAtFaangBoundary = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      teachingSessions: 5, teachingRatings: 10, teachingScore: 75, teachingFlagRate: 0.05,
+      designSessions: 5, designScenarios: 15, designScore: 75, designInterviewerPaired: 1,
+      behavioralMocks: 5,
+      behavioralStyles: 3,
+      behavioralScore: 75,
+      behavioralCalibrationDelta: 1.5,
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryAtFaangBoundary);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(true);
+  });
+
+  it("MAX_THRESHOLD_KEYS includes behavioralCalibrationDelta", async () => {
+    const { MAX_THRESHOLD_KEYS } = await import("../../src/utils/readinessTiers.js");
+    expect(MAX_THRESHOLD_KEYS.has("behavioralCalibrationDelta")).toBe(true);
+  });
+
+  it("OPT_IN_KEYS contains all behavioral* keys", async () => {
+    const { OPT_IN_KEYS } = await import("../../src/utils/readinessTiers.js");
+    expect(OPT_IN_KEYS.has("behavioralMocks")).toBe(true);
+    expect(OPT_IN_KEYS.has("behavioralStyles")).toBe(true);
+    expect(OPT_IN_KEYS.has("behavioralScore")).toBe(true);
+    expect(OPT_IN_KEYS.has("behavioralCalibrationDelta")).toBe(true);
+  });
+});

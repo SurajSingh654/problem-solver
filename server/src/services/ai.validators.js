@@ -546,6 +546,48 @@ export function validateVerdict(verdict, evidence) {
     strengths.forEach((s, i) => checkDesignSampleSize(s, `strengths[${i}]`));
   }
 
+  // Rule 16 — Behavioral Performance sample-size honesty.
+  //
+  // When evidence.behavioral is present (D9 flag is on AND user has
+  // activated), strength claims about Behavioral Performance / behavioral
+  // interview must respect mock-sample-size floors:
+  //   - mockCount < 2 → behavioral can't be claimed strength at all
+  //   - mockCount < 3 + confidence='high' → must hedge
+  //   - mockCount ≥ 3 → no special hedging required
+  // Lievens & De Soete (2012) + Schmidt-Hunter (1998): single behavioral
+  // interview is a poor predictor; replication is what builds validity.
+  if (evidence.behavioral) {
+    // Phrase-anchored — "behavioral performance" or "behavioral interview"
+    // as the subject. Avoid false positives on words like "behavior" used
+    // in coding-context ("the program's behavior").
+    const BEHAVIORAL_TERMS = [
+      /\bbehavioral performance\b/i,
+      /\bbehavioral interview\b/i,
+      /\bbehavioral round\b/i,
+      /\bculture[- ]fit\b/i,
+    ];
+    const HEDGE_VOCAB_B = ["early", "tentative", "small sample", "preliminary", "emerging"];
+    const checkBehavioralSampleSize = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isBehavioralSubject = BEHAVIORAL_TERMS.some((rx) => rx.test(text));
+      if (!isBehavioralSubject) return;
+      const n = evidence.behavioral.mockCount ?? 0;
+      if (n < 2) {
+        violations.push(`${label}-behavioral-claim-too-few-mocks`);
+        return;
+      }
+      if (n < 3 && item.confidence === "high") {
+        const lowerText = text.toLowerCase();
+        const hasHedge = HEDGE_VOCAB_B.some((v) => lowerText.includes(v));
+        if (!hasHedge) {
+          violations.push(`${label}-behavioral-high-confidence-low-n`);
+        }
+      }
+    };
+    strengths.forEach((s, i) => checkBehavioralSampleSize(s, `strengths[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 

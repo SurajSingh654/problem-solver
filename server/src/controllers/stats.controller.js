@@ -23,6 +23,7 @@ import { computePressurePerformanceStats } from "../utils/pressurePerformanceSta
 import { computeRetentionStats } from "../utils/retentionStats.js";
 import { computeTeachingStats } from "../utils/teachingStats.js";
 import { computeDesignAptitudeStats } from "../utils/designAptitudeStats.js";
+import { computeBehavioralPerformanceStats } from "../utils/behavioralPerformanceStats.js";
 import {
   FEATURE_PATTERN_MASTERY_V2,
   FEATURE_SOLUTION_DEPTH_V2,
@@ -32,6 +33,7 @@ import {
   FEATURE_RETENTION_V2,
   FEATURE_TEACHING_CONTRIBUTIONS_V2,
   FEATURE_DESIGN_APTITUDE,
+  FEATURE_BEHAVIORAL_PERFORMANCE,
 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
@@ -798,6 +800,7 @@ const DIM_WEIGHTS = {
   retention: 0.12,
   teachingContributions: 0.1,
   designAptitude: 0.12,
+  behavioralPerformance: 0.12,
 };
 
 const DIM_KEYS = Object.keys(DIM_WEIGHTS);
@@ -805,7 +808,11 @@ const DIM_KEYS = Object.keys(DIM_WEIGHTS);
 // Set of opt-in dim keys — pushed onto the dimensions array dynamically
 // in get6DReport only when the user has engaged with the modality. The
 // baseline is everything else: 6 dims every user sees regardless.
-const OPT_IN_DIM_KEYS = new Set(["teachingContributions", "designAptitude"]);
+const OPT_IN_DIM_KEYS = new Set([
+  "teachingContributions",
+  "designAptitude",
+  "behavioralPerformance",
+]);
 const BASELINE_DIM_KEYS = DIM_KEYS.filter((k) => !OPT_IN_DIM_KEYS.has(k));
 
 function inactiveDim(key, reason, n = 0) {
@@ -928,7 +935,16 @@ export async function get6DReport(req, res) {
     ] = await Promise.all([
       prisma.interviewSession.findMany({
         where: { userId, teamId, status: "COMPLETED" },
-        select: { scores: true, debrief: true },
+        // D9 Behavioral Performance — needs interviewStyle (style-diversity
+        // signal) + preSessionConfidence (Kruger-Dunning calibration). Both
+        // are nullable; legacy D5 cross-feed code that reads `scores` /
+        // `debrief` is unaffected by the wider select.
+        select: {
+          scores: true,
+          debrief: true,
+          interviewStyle: true,
+          preSessionConfidence: true,
+        },
       }),
       prisma.quizAttempt.findMany({
         where: { userId, completedAt: { not: null }, score: { not: null } },
@@ -2353,11 +2369,53 @@ export async function get6DReport(req, res) {
     }
 
     // ════════════════════════════════════════════════
+    // D9 — BEHAVIORAL PERFORMANCE (opt-in, like D7/D8)
+    // ════════════════════════════════════════════════
+    // Activates when user has ≥1 completed mock interview OR ≥3 HR-category
+    // solutions. Coding-only users with no mock practice see byte-identical
+    // (lower-D-count) reports. Distinct from D5 Pressure Performance —
+    // shares the mocks data but extracts process/calibration signals
+    // rather than technical-output-quality signals.
+    let d9Score = null;
+    let behavioral = null; // stats object — null when flag off OR not activated
+    if (FEATURE_BEHAVIORAL_PERFORMANCE) {
+      // HR-category solutions count — uses the already-fetched solutions array.
+      const hrSolutionCount = solutions.filter(
+        (s) => s?.problem?.category === "HR",
+      ).length;
+      const candidate = computeBehavioralPerformanceStats({
+        mocks: interviews,
+        hrSolutionCount,
+      });
+      // Only attach the dim when active (mirroring D7/D8 — opt-in dims
+      // don't render an inactive axis on users who never engaged).
+      if (candidate.active) {
+        behavioral = candidate;
+        d9Score = activeDim("behavioralPerformance", {
+          score: behavioral.score,
+          n: behavioral.mockCount + behavioral.hrSolutionCount,
+          ci: behavioral.ci ?? [
+            Math.max(0, behavioral.score - 20),
+            Math.min(behavioral.ceiling, behavioral.score + 20),
+          ],
+          basis: behavioral.basis,
+        });
+        d9Score.sourceQuality = behavioral.sourceQuality;
+        d9Score.ceiling = behavioral.ceiling;
+        d9Score.behavioralMockCount = behavioral.mockCount;
+        d9Score.behavioralHrCount = behavioral.hrSolutionCount;
+        d9Score.behavioralStyleCount = behavioral.distinctStyleCount;
+        d9Score.behavioralCalibrationDelta = behavioral.calibrationDelta;
+      }
+    }
+
+    // ════════════════════════════════════════════════
     // OVERALL — re-normalized weights over ACTIVE dims only
     // ════════════════════════════════════════════════
     const dimensions = [d1Score, d2Score, d3Score, d4Score, d5Score, d6Score];
     if (d7Score) dimensions.push(d7Score);
     if (d8Score) dimensions.push(d8Score);
+    if (d9Score) dimensions.push(d9Score);
     const activeDims = dimensions.filter((d) => d.status === "active");
     const activeCount = activeDims.length;
 
@@ -2430,7 +2488,7 @@ export async function get6DReport(req, res) {
     // are skipped for users who haven't hosted (see OPT_IN_KEYS in
     // readinessTiers.js).
     const masteryAndDepthCounts =
-      mastery || depth || communication || optimization || retention || teaching || designAptitude
+      mastery || depth || communication || optimization || retention || teaching || designAptitude || behavioral
         ? {
             ...(mastery?.counts ?? {}),
             ...(depth?.counts ?? {}),
@@ -2463,6 +2521,17 @@ export async function get6DReport(req, res) {
                   designScenarios: designAptitude.evaluatedScenarioCount,
                   designScore: designAptitude.score ?? 0,
                   designInterviewerPaired: designAptitude.interviewerPairedCount,
+                }
+              : {}),
+            ...(behavioral
+              ? {
+                  behavioralMocks: behavioral.mockCount,
+                  behavioralStyles: behavioral.distinctStyleCount,
+                  behavioralScore: behavioral.score ?? 0,
+                  // Calibration delta uses inverse-comparison (smaller is
+                  // better → MAX_THRESHOLD_KEYS). Default to 99 (effectively
+                  // "no calibration data") so missing-key check works.
+                  behavioralCalibrationDelta: behavioral.calibrationDelta ?? 99,
                 }
               : {}),
           }
@@ -2791,6 +2860,26 @@ export async function get6DReport(req, res) {
                 avgOverallScore: designAptitude.avgOverallScore,
                 sourceQuality: designAptitude.sourceQuality,
                 ceiling: designAptitude.ceiling,
+              }
+            : null,
+          // Behavioral Performance (D9) — null when flag off OR user has
+          // not activated (no mocks AND <3 HR solutions). Verdict evidence
+          // reads this to enforce Rule 16 (Lievens & De Soete 2012).
+          behavioral: behavioral
+            ? {
+                active: behavioral.active,
+                score: behavioral.score,
+                ci: behavioral.ci,
+                mockCount: behavioral.mockCount,
+                hrSolutionCount: behavioral.hrSolutionCount,
+                distinctStyleCount: behavioral.distinctStyleCount,
+                verdictScore: behavioral.verdictScore,
+                processScore: behavioral.processScore,
+                calibrationScore: behavioral.calibrationScore,
+                calibrationDelta: behavioral.calibrationDelta,
+                calibrationN: behavioral.calibrationN,
+                sourceQuality: behavioral.sourceQuality,
+                ceiling: behavioral.ceiling,
               }
             : null,
           aiReview: {
@@ -3200,6 +3289,22 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Behavioral Performance (D9) — surface mock count + style diversity +
+  // calibration delta so the verdict prompt can satisfy Rule 16
+  // (mockCount<2 requires hedge — Lievens & De Soete 2012).
+  const behavioralBlock = report.analytics?.behavioral;
+  const behavioral = behavioralBlock
+    ? {
+        score: behavioralBlock.score,
+        mockCount: behavioralBlock.mockCount,
+        hrSolutionCount: behavioralBlock.hrSolutionCount,
+        distinctStyleCount: behavioralBlock.distinctStyleCount,
+        calibrationDelta: behavioralBlock.calibrationDelta,
+        sourceQuality: behavioralBlock.sourceQuality,
+        ceiling: behavioralBlock.ceiling,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -3215,6 +3320,7 @@ function buildVerdictEvidence(report) {
     retention,
     teaching,
     designAptitude,
+    behavioral,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

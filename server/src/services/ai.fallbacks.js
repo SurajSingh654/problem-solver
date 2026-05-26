@@ -30,6 +30,7 @@ export function prettyDimName(key) {
       retention: "Retention",
       teachingContributions: "Teaching Contributions",
       designAptitude: "Design Aptitude",
+      behavioralPerformance: "Behavioral Performance",
     }[key] || key
   );
 }
@@ -87,6 +88,7 @@ export function buildFallbackVerdict(evidence) {
   const rt = evidence.retention;             // null when D6 v2 flag is off
   const tc = evidence.teaching;              // null when D7 v2 flag is off OR user never hosted
   const da = evidence.designAptitude;        // null when D8 flag is off OR user has no completed design sessions
+  const bh = evidence.behavioral;            // null when D9 flag is off OR user has no mocks/HR practice
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -187,6 +189,24 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} across ${sessions} session${sessions === 1 ? "" : "s"} with no AI scenarios attempted (draft-only, ceiling ${da.ceiling})`;
   };
 
+  // Helper — build evidence string for a Behavioral Performance claim
+  // under D9. Satisfies Rule 16 (sample-size honesty per Lievens-De Soete
+  // 2012) AND cites source quality + mock count + style diversity +
+  // calibration delta so the LLM has the distribution context.
+  const behavioralEvidenceWithSource = (dim) => {
+    if (!bh) return `score=${dim.score} over n=${dim.n} data points`;
+    const mocks = bh.mockCount;
+    const styles = bh.distinctStyleCount;
+    if (mocks < 3) {
+      // Hedge required: small-sample behavioral signal (Lievens 2012).
+      return `score=${dim.score} over ${mocks} mock${mocks === 1 ? "" : "s"} (tentative — small sample; behavioral interview reliability requires ≥3 mocks across rater contexts)`;
+    }
+    if (bh.sourceQuality === "diversified") {
+      return `score=${dim.score} with ${mocks} mock interviews across ${styles} distinct culture styles (diversified, ceiling 100)`;
+    }
+    return `score=${dim.score} with ${mocks} mock interview${mocks === 1 ? "" : "s"} across ${styles} style${styles === 1 ? "" : "s"} (mock-validated, ceiling ${bh.ceiling})`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
@@ -197,6 +217,7 @@ export function buildFallbackVerdict(evidence) {
     const isRetention = topDim.key === "retention";
     const isTeaching = topDim.key === "teachingContributions";
     const isDesign = topDim.key === "designAptitude";
+    const isBehavioral = topDim.key === "behavioralPerformance";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
@@ -206,10 +227,12 @@ export function buildFallbackVerdict(evidence) {
     else if (isRetention) evidenceStr = retentionEvidenceWithSampleSize(topDim);
     else if (isTeaching) evidenceStr = teachingEvidenceWithSource(topDim);
     else if (isDesign) evidenceStr = designAptitudeEvidenceWithSource(topDim);
+    else if (isBehavioral) evidenceStr = behavioralEvidenceWithSource(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     // Rule 13: retention strengths with attemptCount < 5 must NOT claim
     // retention as a strength at all. Rule 14: same for teaching with
     // ratingCount < 3. Rule 15: same for design with sessionCount < 2.
+    // Rule 16: same for behavioral with mockCount < 2.
     // Drop the strength entirely so the fallback satisfies the validator.
     const skipRetentionStrength =
       isRetention && rt && rt.attemptCount < 5;
@@ -217,13 +240,16 @@ export function buildFallbackVerdict(evidence) {
       isTeaching && tc && tc.ratingCount < 3;
     const skipDesignStrength =
       isDesign && da && da.sessionCount < 2;
-    if (!skipRetentionStrength && !skipTeachingStrength && !skipDesignStrength) {
-      // Rule 13/14/15: small-sample strengths must use 'tentative' confidence
+    const skipBehavioralStrength =
+      isBehavioral && bh && bh.mockCount < 2;
+    if (!skipRetentionStrength && !skipTeachingStrength && !skipDesignStrength && !skipBehavioralStrength) {
+      // Rule 13/14/15/16: small-sample strengths must use 'tentative' confidence
       // (the helpers already inject the hedge vocabulary).
       let confidence;
       if (isRetention && rt && rt.attemptCount < 10) confidence = "tentative";
       else if (isTeaching && tc && tc.ratingCount < 5) confidence = "tentative";
       else if (isDesign && da && da.sessionCount < 3) confidence = "tentative";
+      else if (isBehavioral && bh && bh.mockCount < 3) confidence = "tentative";
       else confidence = topDim.n >= 5 ? "high" : "tentative";
       strengths.push({
         claim: `${prettyDimName(topDim.key)} is your leading dimension`,
@@ -340,6 +366,20 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When D9 is present AND the user's calibration delta exceeds the
+  // FAANG threshold (1.5 on the 1-5 confidence band scale), surface as
+  // priority gap. Kruger-Dunning 1999: miscalibration is itself a
+  // measurable competence gap — overconfidence flags risk in real
+  // interview contexts.
+  if (bh && typeof bh.calibrationDelta === "number" && bh.calibrationDelta > 1.5 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Self-assessment is miscalibrated against interviewer verdicts",
+      evidence: `pre-session confidence diverges from verdict by ${bh.calibrationDelta.toFixed(2)} points on the 1-5 scale across ${bh.mockCount} mock${bh.mockCount === 1 ? "" : "s"} (Kruger-Dunning gap)`,
+      action:
+        "Before each mock, predict your verdict on the 1-5 scale and compare to actual. Calibrated self-assessment is itself a competence signal — interviewers notice candidates who know what they don't know.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
@@ -349,6 +389,7 @@ export function buildFallbackVerdict(evidence) {
     const isRetentionWeak = weakDim.key === "retention";
     const isTeachingWeak = weakDim.key === "teachingContributions";
     const isDesignWeak = weakDim.key === "designAptitude";
+    const isBehavioralWeak = weakDim.key === "behavioralPerformance";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
@@ -358,6 +399,7 @@ export function buildFallbackVerdict(evidence) {
     else if (isRetentionWeak) evidenceStr = retentionEvidenceWithSampleSize(weakDim);
     else if (isTeachingWeak) evidenceStr = teachingEvidenceWithSource(weakDim);
     else if (isDesignWeak) evidenceStr = designAptitudeEvidenceWithSource(weakDim);
+    else if (isBehavioralWeak) evidenceStr = behavioralEvidenceWithSource(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,

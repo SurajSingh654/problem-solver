@@ -45,8 +45,9 @@
  * requirement can't silently flip the comparison direction.
  */
 export const MAX_THRESHOLD_KEYS = new Set([
-  "retentionLeechRate",         // D6 v2 — leech sessions / total sessions
-  "teachingFlagRate",           // D7 v2 — flagged sessions / total sessions
+  "retentionLeechRate",            // D6 v2 — leech sessions / total sessions
+  "teachingFlagRate",              // D7 v2 — flagged sessions / total sessions
+  "behavioralCalibrationDelta",    // D9 — Kruger-Dunning |preConfidence - verdict|
 ]);
 
 /**
@@ -71,6 +72,12 @@ export const OPT_IN_KEYS = new Set([
   "designScenarios",
   "designScore",
   "designInterviewerPaired",
+  // D9 Behavioral Performance — opt-in. Skipped for users who haven't
+  // run a mock interview AND haven't solved ≥3 HR problems.
+  "behavioralMocks",
+  "behavioralStyles",
+  "behavioralScore",
+  "behavioralCalibrationDelta",
 ]);
 
 export const READINESS_TIERS = [
@@ -129,6 +136,15 @@ export const READINESS_TIERS = [
       designScenarios: 15,
       designScore: 75,
       designInterviewerPaired: 1,
+      // D9 Behavioral Performance gates — opt-in. FAANG requires
+      // diversified signal: 5 mocks + ≥3 distinct culture styles +
+      // score≥75 + calibrationDelta≤1.5 (Lievens & De Soete 2012 +
+      // Kruger-Dunning 1999 — replication across rater contexts and
+      // accurate self-assessment are both signals of senior readiness).
+      behavioralMocks: 5,
+      behavioralStyles: 3,
+      behavioralScore: 75,
+      behavioralCalibrationDelta: 1.5, // MAX: actual must be ≤ this
     },
     icon: "🏆",
   },
@@ -175,6 +191,11 @@ export const READINESS_TIERS = [
       designSessions: 2,
       designScenarios: 5,
       designScore: 60,
+      // D9 Behavioral gates — opt-in. Tier 2 requires mock-validated
+      // signal: 3 mocks + score ≥60. Below that, behavioral process
+      // signals are too sparse to credibly call a strength.
+      behavioralMocks: 3,
+      behavioralScore: 60,
     },
     icon: "🥈",
   },

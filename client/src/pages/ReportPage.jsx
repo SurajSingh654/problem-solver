@@ -66,6 +66,14 @@ const TEACHING_V2_ENABLED =
 const DESIGN_APTITUDE_ENABLED =
     import.meta.env.VITE_FEATURE_DESIGN_APTITUDE === 'true'
 
+// D9 Behavioral Performance flag — opt-in dim covering interview process
+// signals (clarifying questions, narration, calibration, culture-style
+// coverage, HR-round content). Distinct from D5 Pressure Performance —
+// shares mock-interview source data but extracts different signals.
+// Three-place declaration per CLAUDE.md.
+const BEHAVIORAL_PERFORMANCE_ENABLED =
+    import.meta.env.VITE_FEATURE_BEHAVIORAL_PERFORMANCE === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -906,6 +914,54 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                           Ceiling {ceiling}
                         </span>
                       </div>
+                    )
+                  })()}
+
+                {/* D9 source-quality chip — renders for the
+                    behavioralPerformance dim when the flag is on AND the
+                    server attached sourceQuality. Adds a calibration-
+                    delta warning below the chip when delta is high
+                    (Kruger-Dunning self-assessment gap). */}
+                {dim.key === 'behavioralPerformance'
+                  && BEHAVIORAL_PERFORMANCE_ENABLED
+                  && typeof info?.sourceQuality === 'string'
+                  && (() => {
+                    const sq = info.sourceQuality
+                    const ceiling = info.ceiling ?? 100
+                    const isDiversified = sq === 'diversified'
+                    const isMockValidated = sq === 'mock-validated'
+                    const tone = isDiversified
+                      ? 'bg-success-soft text-success-fg border-success-line'
+                      : isMockValidated
+                        ? 'bg-info-soft text-info-fg border-info-line'
+                        : 'bg-warning-soft text-warning-fg border-warning-line'
+                    const label = isDiversified
+                      ? 'Diversified'
+                      : isMockValidated
+                        ? 'Mock-validated'
+                        : 'Draft-only'
+                    const delta = info.behavioralCalibrationDelta
+                    const showDeltaWarning = typeof delta === 'number' && delta > 1.5
+                    return (
+                      <>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className={cn(
+                            'text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded-full border',
+                            tone,
+                          )}>
+                            {label}
+                          </span>
+                          <span className="text-[10px] text-text-disabled font-mono">
+                            Ceiling {ceiling}
+                          </span>
+                        </div>
+                        {showDeltaWarning && (
+                          <p className="text-[10px] text-warning-fg mt-1 leading-tight">
+                            ⚠ Calibration gap {delta.toFixed(1)} (Kruger-Dunning) — pre-session
+                            confidence diverges from interviewer verdict. Practice realistic self-assessment.
+                          </p>
+                        )}
+                      </>
                     )
                   })()}
 
