@@ -118,6 +118,83 @@ async function initTransport() {
 }
 
 /**
+ * @openapi
+ * /mcp:
+ *   post:
+ *     tags: [MCP (separate protocol)]
+ *     summary: MCP JSON-RPC endpoint (NOT testable here — see top-of-page note)
+ *     description: |
+ *       This endpoint speaks **Model Context Protocol** (JSON-RPC), not REST.
+ *       Swagger documents its existence but is the wrong tool for testing it.
+ *
+ *       **Use these tools instead:**
+ *       - `npx @modelcontextprotocol/inspector` then connect to `http://localhost:5000/mcp`
+ *       - `claude mcp add binary-thinkers http://localhost:5000/mcp --header "Authorization: Bearer <token>"`
+ *
+ *       **Security gates** (verifiable via curl — see docs/AGENT_TOOLING_REFERENCE.md):
+ *       - No `Authorization` header → 401 `MCP_AUTH_REQUIRED`
+ *       - Invalid / expired JWT → 401 `MCP_TOKEN_INVALID`
+ *       - JWT without `scope: "mcp:read"` → 403 `MCP_SCOPE_REQUIRED`
+ *       - JWT with revoked `jti` → 401 `MCP_TOKEN_INVALID`
+ *       - Disallowed `Origin` header → 403 `MCP_ORIGIN_REJECTED`
+ *       - Rate limit (60/min/user, 600/min/IP) → 429 `MCP_RATE_LIMITED`
+ *       - Body > 100KB → 413
+ *
+ *       Phase MCP-1 ships the security middleware only. The actual tools/resources/prompts
+ *       (`get_readiness_report`, `get_pattern_matrix`, etc.) ship in Phase MCP-2.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: JSON-RPC 2.0 request envelope.
+ *             properties:
+ *               jsonrpc:
+ *                 type: string
+ *                 example: "2.0"
+ *               id:
+ *                 oneOf:
+ *                   - { type: integer }
+ *                   - { type: string }
+ *                 example: 1
+ *               method:
+ *                 type: string
+ *                 example: "initialize"
+ *                 description: MCP method (tools/list, tools/call, resources/list, resources/read, prompts/list, prompts/get, etc.)
+ *               params:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: JSON-RPC response (or SSE stream if the request triggers streaming)
+ *       401:
+ *         description: Authentication required / invalid token
+ *       403:
+ *         description: Forbidden (origin, scope, or jti claim issue)
+ *       413:
+ *         description: Request body too large (>100KB)
+ *       429:
+ *         description: Rate limit exceeded
+ *
+ * /mcp/:
+ *   get:
+ *     tags: [MCP (separate protocol)]
+ *     summary: MCP server-to-client SSE channel
+ *     description: |
+ *       Optional SSE stream the server uses to push notifications + resumable
+ *       events to the client. See the MCP Streamable HTTP transport spec.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: SSE event stream
+ *         content:
+ *           text/event-stream: {}
+ */
+
+/**
  * Build the MCP Express router. Mount under /mcp.
  *
  * Returns null when FEATURE_MCP_ENABLED is false — caller should NOT mount.

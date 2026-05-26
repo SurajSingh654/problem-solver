@@ -18,19 +18,39 @@ const options = {
         "**Roles:**\n" +
         "- `SUPER_ADMIN` — Platform management\n" +
         "- `TEAM_ADMIN` — Team management + solving\n" +
-        "- `MEMBER` — Solving only\n",
+        "- `MEMBER` — Solving only\n\n" +
+        "---\n\n" +
+        "## MCP — Model Context Protocol read-only server\n\n" +
+        "A separate **JSON-RPC** endpoint lives at `/mcp` (NOT under `/api`). It " +
+        "lets MCP-compatible clients (Claude Code, Cursor, ChatGPT, VS Code) read " +
+        "your readiness data over the standardized MCP protocol.\n\n" +
+        "**Swagger doesn't fit MCP** — MCP uses one endpoint with method-name " +
+        "routing in the JSON body. Use these tools instead:\n\n" +
+        "- **MCP Inspector** — `npx @modelcontextprotocol/inspector` then " +
+        "point at `http://localhost:5000/mcp`. Auto-discovers tools/resources/" +
+        "prompts and provides per-tool forms with schema validation.\n" +
+        "- **Claude Code / Cursor / VS Code** — `claude mcp add binary-thinkers " +
+        "http://localhost:5000/mcp --header \"Authorization: Bearer <mcp-token>\"`\n\n" +
+        "See `docs/AGENT_TOOLING_REFERENCE.md` in the repo for the full MCP design + " +
+        "threat model. Token issuance UI ships in Phase MCP-4.\n",
     },
     servers: [
       {
         url: "http://localhost:5000/api",
         description: "Local development",
       },
-      {
-        url: process.env.CLIENT_URL
-          ? `${process.env.CLIENT_URL.replace(/:\d+$/, "")}:${process.env.PORT || 5000}/api`
-          : "http://localhost:5000/api",
-        description: "Current environment",
-      },
+      // Production / deployed environment. The CLIENT_URL → server-URL
+      // mapping in the original config was fragile (it stripped any port
+      // off CLIENT_URL and appended PORT — wrong for Railway, where the
+      // client + server are on different hosts). This entry hard-codes
+      // the deployed Railway server URL when DEPLOYED_API_URL is set;
+      // otherwise omits to avoid showing an incorrect "Current environment".
+      ...(process.env.DEPLOYED_API_URL
+        ? [{
+            url: process.env.DEPLOYED_API_URL,
+            description: "Deployed (Railway)",
+          }]
+        : []),
     ],
     components: {
       securitySchemes: {
@@ -134,9 +154,19 @@ const options = {
       },
       { name: "Recommendations", description: "Smart problem recommendations" },
       { name: "Platform", description: "SUPER_ADMIN platform management" },
+      {
+        name: "MCP (separate protocol)",
+        description:
+          "Model Context Protocol read-only server at /mcp — JSON-RPC, not REST. " +
+          "Test with `npx @modelcontextprotocol/inspector`, not Swagger UI. " +
+          "See description at top of page.",
+      },
     ],
   },
-  apis: ["./src/routes/*.js"],
+  apis: [
+    "./src/routes/*.js",
+    "./src/mcp/server.js", // documents the /mcp endpoint surface
+  ],
 };
 
 const swaggerSpec = swaggerJsdoc(options);
