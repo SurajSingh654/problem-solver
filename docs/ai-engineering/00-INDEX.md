@@ -23,22 +23,28 @@ Three reading paths depending on why you're here:
 
 ## Notes index
 
-### Phase 1 — MCP server (read-only)
+### Phase 1 — MCP server foundation
 
-| File                                                             | Status                | What it covers                                                                                                                                                                                                                         |
-| ---------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`01-mcp-phase-1-foundation.md`](./01-mcp-phase-1-foundation.md) | ✅ shipped 2026-05-26 | What MCP is. Streamable HTTP transport. Bearer token auth with `mcp:read` scope. JTI revocation. DNS rebinding defense. Prompt injection defense. Rate limiting. The five real bugs we hit + fixes. FAQs from a learner's perspective. |
+| File                                                             | Status                | What it covers                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`01-mcp-phase-1-foundation.md`](./01-mcp-phase-1-foundation.md) | ✅ shipped 2026-05-26 | What MCP is. Streamable HTTP transport. Bearer token auth with `mcp:read` scope. JTI revocation. DNS rebinding defense. Prompt injection defense. Rate limiting. The six real bugs we hit + fixes. FAQs from a learner's perspective. |
+
+### Phase 2 — MCP read tools
+
+| File                                                             | Status                        | What it covers                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`02-mcp-phase-2-read-tools.md`](./02-mcp-phase-2-read-tools.md) | ✅ batch 1 shipped 2026-05-26 | AsyncLocalStorage for auth context. Capture-res shim for controller reuse. Stateless transport + per-request server creation. Zod input + output schemas. The four real bugs (stateful-vs-stateless, test-script auto-mint, cwd scope, no-team handling). Tool registration patterns + FAQ. |
 
 ### Future phases (planned)
 
-| Phase                          | What it'll cover                                                                                                                                                              |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MCP-2 — read tools             | Registering MCP tools. Zod schemas for inputs/outputs. Reusing existing controllers. Per-tool multi-tenancy enforcement. Tool naming + description style for LLM consumption. |
-| MCP-3 — prompts                | Prompt templates as first-class MCP primitives. Combining user data into guided conversation starters.                                                                        |
-| MCP-4 — token UX + diagnostics | Settings page UI for token issuance. Last-used tracking. Revocation flow. Diagnostics dashboard.                                                                              |
-| MCP-5 — hardening review + GA  | Final security audit. `npm audit` in pre-push gate. Canary rollout.                                                                                                           |
-| Outcome capture loop           | Populating `VerdictLog.interviewOutcome`. Survey hook + email + 6-month re-anchor. Why every weight in the system is research-by-analogy until this ships.                    |
-| Cross-modal recalibration      | Per-modality activation floors. Why coding-only users shouldn't claim "tier-ready".                                                                                           |
+| Phase                          | What it'll cover                                                                                                                                           |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP-2 batch 2                  | 5 remaining read tools (`get_dim_breakdown`, `get_recommended_problems`, `get_team_leaderboard`, `get_calibration_status`, `get_weekly_plan`).             |
+| MCP-3 — prompts                | Prompt templates as first-class MCP primitives. Combining user data into guided conversation starters.                                                     |
+| MCP-4 — token UX + diagnostics | Settings page UI for token issuance. Last-used tracking. Revocation flow. Diagnostics dashboard.                                                           |
+| MCP-5 — hardening review + GA  | Final security audit. `npm audit` in pre-push gate. Canary rollout.                                                                                        |
+| Outcome capture loop           | Populating `VerdictLog.interviewOutcome`. Survey hook + email + 6-month re-anchor. Why every weight in the system is research-by-analogy until this ships. |
+| Cross-modal recalibration      | Per-modality activation floors. Why coding-only users shouldn't claim "tier-ready".                                                                        |
 
 ---
 

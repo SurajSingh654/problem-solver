@@ -87,10 +87,13 @@ async function loadSdk() {
     );
     const toolsModule = await import("./tools/index.js");
 
+    const promptsModule = await import("./prompts/index.js");
+
     cachedSdk = {
       McpServer: mcpModule.McpServer,
       StreamableHTTPServerTransport: transportModule.StreamableHTTPServerTransport,
       registerAllTools: toolsModule.registerAllTools,
+      registerAllPrompts: promptsModule.registerAllPrompts,
     };
     return cachedSdk;
   } catch (err) {
@@ -117,8 +120,12 @@ async function loadSdk() {
  * references — no network or DB calls.
  */
 async function createServerAndTransport() {
-  const { McpServer, StreamableHTTPServerTransport, registerAllTools } =
-    await loadSdk();
+  const {
+    McpServer,
+    StreamableHTTPServerTransport,
+    registerAllTools,
+    registerAllPrompts,
+  } = await loadSdk();
 
   const server = new McpServer({
     name: "binary-thinkers",
@@ -126,6 +133,7 @@ async function createServerAndTransport() {
     instructions: SERVER_INSTRUCTIONS,
   });
   registerAllTools(server);
+  registerAllPrompts(server);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless

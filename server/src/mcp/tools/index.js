@@ -17,6 +17,10 @@
 import { register as registerReadinessReport } from "./readinessReport.js";
 import { register as registerPatternMatrix } from "./patternMatrix.js";
 import { register as registerReviewQueue } from "./reviewQueue.js";
+import { register as registerDimBreakdown } from "./dimBreakdown.js";
+import { register as registerRecommendedProblems } from "./recommendedProblems.js";
+import { register as registerTeamLeaderboard } from "./teamLeaderboard.js";
+import { register as registerCalibrationStatus } from "./calibrationStatus.js";
 
 /**
  * Wrap a tool handler so that any thrown error is:
@@ -64,4 +68,8 @@ export function registerAllTools(server) {
   registerReadinessReport(server);
   registerPatternMatrix(server);
   registerReviewQueue(server);
+  registerDimBreakdown(server);
+  registerRecommendedProblems(server);
+  registerTeamLeaderboard(server);
+  registerCalibrationStatus(server);
 }
