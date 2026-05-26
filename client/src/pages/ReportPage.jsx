@@ -208,13 +208,21 @@ function generateVerdict(dimByKey, overall, analytics, readiness, reportCoverage
   }
 
   // Biggest strength — only from active dims AND only when n is meaningful.
+  // Rule 13 (Retention sample-size honesty): retention with n<5 CANNOT be
+  // claimed a strength at all (Lange, Wang & Dunlosky 2013 — small-sample
+  // retention scores are statistically unreliable). With n<10, force the
+  // hedge qualifier. Mirror of the server-side validator + fallback paths
+  // so the deterministic prose card doesn't contradict the AI Readiness
+  // Verdict card on the same page.
   const activeDims = [...DIMENSIONS]
     .map(d => ({ d, info: dimByKey[d.key] }))
     .filter(({ info }) => info?.status === 'active' && info.n >= 3)
+    .filter(({ d, info }) => !(d.key === 'retention' && info.n < 5))
     .sort((a, b) => (b.info.score || 0) - (a.info.score || 0))
   const topEntry = activeDims[0]
   if (topEntry && topEntry.info.score >= 65 && coveragePct >= 50) {
-    const qualifier = topEntry.info.n < 5 ? 'early signal' : 'strong signal'
+    const isRetentionLowN = topEntry.d.key === 'retention' && topEntry.info.n < 10
+    const qualifier = isRetentionLowN || topEntry.info.n < 5 ? 'early signal' : 'strong signal'
     verdictParts.push(`Your ${qualifier} is ${topEntry.d.label} (${topEntry.info.score}/100, n=${topEntry.info.n}).`)
   }
 
