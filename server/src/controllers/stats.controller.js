@@ -1922,7 +1922,11 @@ export async function get6DReport(req, res) {
           const { ci } = wilsonCI(depth.counts.solutionsAtDefendedOrAbove, depth.counts.totalCoding);
           d2Score = activeDim("solutionDepth", {
             score: d2,
-            n: depth.counts.solutionsAtDocumentedOrAbove,
+            // n = totalCoding so the displayed sample matches the inline
+            // distribution bar (which shows ALL coding solutions including
+            // NONE) and the score formula's actual denominator
+            // (codingSolutions.length, not DOCUMENTED+).
+            n: depth.counts.totalCoding,
             ci,
             basis: [
               `solutions_owned: ${depth.counts.solutionsAtOwned}`,
@@ -2069,7 +2073,11 @@ export async function get6DReport(req, res) {
           );
           d4Score = activeDim("optimization", {
             score: d4,
-            n: optimization.counts.optAtDocumentedOrAbove,
+            // n = optTotalCoding so the displayed sample matches the inline
+            // distribution bar (which shows ALL coding solutions including
+            // NONE) and the score formula's actual denominator
+            // (codingSolutions.length, not DOCUMENTED+).
+            n: optimization.counts.optTotalCoding,
             ci,
             basis: [
               `solutions_owned: ${optimization.counts.optAtOwned}`,
