@@ -12,7 +12,10 @@ import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
 import { Avatar } from '@components/ui/Avatar'
 import { Badge } from '@components/ui/Badge'
+import { McpTokensSection } from '@components/features/settings/McpTokensSection'
 import { cn } from '@utils/cn'
+
+const MCP_UI_ENABLED = import.meta.env.VITE_FEATURE_MCP_ENABLED === 'true'
 
 // ── Avatar color picker ────────────────────────────────
 const AVATAR_COLORS = [
@@ -408,6 +411,13 @@ export default function SettingsPage() {
                                 {...register('preferredLanguage')}
                             />
                         </div>
+                    </Section>
+                )}
+
+                {/* ── API Access (MCP tokens) ──────────────── */}
+                {MCP_UI_ENABLED && (
+                    <Section title="API Access" icon="🔑">
+                        <McpTokensSection />
                     </Section>
                 )}
 

@@ -25,10 +25,10 @@ MCP-1 shipped a dev-only minter — the maintainer ran `node scripts/mintMcpToke
 
 The Phase MCP-4 surface area:
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /api/v1/users/me/mcp-tokens` | Create a token. Body: `{ name? }`. Returns `{ token, jti, name, issuedAt, expiresAt, instructions }` — token shown ONCE. |
-| `GET /api/v1/users/me/mcp-tokens` | List the caller's tokens (active + revoked + expired). Each row has a derived `status` field. |
+| Endpoint                                  | Purpose                                                                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/users/me/mcp-tokens`        | Create a token. Body: `{ name? }`. Returns `{ token, jti, name, issuedAt, expiresAt, instructions }` — token shown ONCE.     |
+| `GET /api/v1/users/me/mcp-tokens`         | List the caller's tokens (active + revoked + expired). Each row has a derived `status` field.                                |
 | `DELETE /api/v1/users/me/mcp-tokens/:jti` | Revoke. Idempotent on already-revoked. Cross-user attempts return **404 (not 403)** — don't tell an attacker the JTI exists. |
 
 ### Schema evolution
@@ -96,18 +96,19 @@ This is the kind of thing the pre-push gate catches. The 4 failures showed up in
 
 ## What changed since MCP-1's threat model
 
-| Threat | MCP-1 mitigation | MCP-4 evolution |
-|---|---|---|
-| Stolen token | JTI revocation list (60s cache) | **Same** — revocation now means setting `revokedAt`, but the cache + check are unchanged |
-| User can't self-serve | Maintainer ran mint script | Resolved: any authenticated user can create/list/revoke |
-| Token sprawl | None (assumed ≤1 token per user) | `MAX_ACTIVE_TOKENS_PER_USER=5` cap + revoke-old-first error |
-| Attacker probes JTIs to find valid tokens | Not addressed | Resolved: cross-user revocation returns 404 |
+| Threat                                    | MCP-1 mitigation                 | MCP-4 evolution                                                                          |
+| ----------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
+| Stolen token                              | JTI revocation list (60s cache)  | **Same** — revocation now means setting `revokedAt`, but the cache + check are unchanged |
+| User can't self-serve                     | Maintainer ran mint script       | Resolved: any authenticated user can create/list/revoke                                  |
+| Token sprawl                              | None (assumed ≤1 token per user) | `MAX_ACTIVE_TOKENS_PER_USER=5` cap + revoke-old-first error                              |
+| Attacker probes JTIs to find valid tokens | Not addressed                    | Resolved: cross-user revocation returns 404                                              |
 
 Threats unchanged from MCP-1: scope separation (`mcp:read`), DNS rebinding (Origin allowlist), DoS (rate limiter), prompt injection (XML-tag wrapping), server-side authz (don't trust client args).
 
 ## Tests added
 
 `test/mcp/tokens.test.js` — 12 tests covering:
+
 - `createMcpToken`: valid request → 200 + token + JTI; metadata persisted; cap enforced; `.strict()` rejects unknown fields; empty body accepted (name optional)
 - `listMcpTokens`: status field correctness across active/revoked/expired; multi-tenancy filter
 - `revokeMcpToken`: revokes by JTI; 404 on nonexistent; **404 (not 403) for cross-user** (security regression guard); idempotent on already-revoked; rejects malformed JTI
@@ -136,29 +137,35 @@ The server-side API is feature-complete for now. The CLI is `claude mcp add --he
 ## Try this yourself
 
 1. **Apply the migration**:
+
    ```
    cd server
    npx prisma generate              # regenerate Prisma client (renamed model)
    npx prisma migrate dev           # apply 20260526200000_mcp_token_table_evolve
    ```
+
    When prompted "Enter a name for the new migration", **Ctrl+C** — that's the vector-drift prompt, not a real migration. (See CLAUDE.md "Migration workflow".)
 
 2. **Create a token via the API** (need a web JWT for `Authorization`):
+
    ```
    curl -X POST localhost:5000/api/v1/users/me/mcp-tokens \
      -H "Authorization: Bearer <your-web-jwt>" \
      -H "Content-Type: application/json" \
      -d '{"name":"My Mac"}'
    ```
+
    Copy the `data.token` field.
 
 3. **Register with Claude Code** (replaces the mint-script flow):
+
    ```
    claude mcp add --transport http --scope user binary-thinkers \
      <your-mcp-url> --header "Authorization: Bearer <data.token>"
    ```
 
 4. **Revoke** via the API or via the eventual settings page:
+
    ```
    curl -X DELETE localhost:5000/api/v1/users/me/mcp-tokens/<jti> \
      -H "Authorization: Bearer <your-web-jwt>"
