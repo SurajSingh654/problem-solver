@@ -2,7 +2,7 @@
 
 > **Genre**: AI Engineering build log (practical, project-grounded). For ML-theory notes (architecture, loss functions, etc.) use `docs/ai-topic-notes-template.md` instead.
 >
-> **How to use this template**: copy this file to `0N-<short-name>.md` *before* you start the phase. Fill the **Quick reference** + **What we're building & why** sections first (forces commitment). Update the **Build journal** as you ship each step (not retrospectively). Capture **Issues & fixes** the moment they happen — you'll forget the details by the next day. The **FAQ** and **Glossary** sections get written at the end.
+> **How to use this template**: copy this file to `0N-<short-name>.md` _before_ you start the phase. Fill the **Quick reference** + **What we're building & why** sections first (forces commitment). Update the **Build journal** as you ship each step (not retrospectively). Capture **Issues & fixes** the moment they happen — you'll forget the details by the next day. The **FAQ** and **Glossary** sections get written at the end.
 
 ---
 
@@ -56,6 +56,7 @@ For each concept introduced in this phase:
 Example shape (from MCP-1):
 
 > **JSON-RPC 2.0**
+>
 > - **What it is**: A protocol for calling functions on a remote server over HTTP, using a JSON envelope: `{ "jsonrpc": "2.0", "id": 1, "method": "...", "params": { ... } }`.
 > - **Why it exists**: Predates REST. Lightweight. Lets you have many "operations" on one URL by routing on the `method` field instead of the URL path.
 > - **Confusion**: Looks like REST but isn't — there's only ONE endpoint (e.g. `/mcp`), and the operation lives in the body. Standard REST tools (Swagger, Postman path-based testing) don't work cleanly.
@@ -107,6 +108,7 @@ Every non-obvious choice, with rationale and alternatives that were rejected. **
 **Why**: <the reasoning>
 
 **Rejected alternatives**:
+
 - Option A — <why not>
 - Option B — <why not>
 
@@ -120,10 +122,10 @@ Every non-obvious choice, with rationale and alternatives that were rejected. **
 
 A guided tour of the artifacts. Aim for a contributor who needs to understand the diff. Keep file paths clickable.
 
-| File | Purpose | Key lines |
-|---|---|---|
-| `path/to/new-file.js` | One-line description | Cite specific line numbers for non-obvious bits |
-| `path/to/modified.js` | What changed and why | (Don't paraphrase the diff; explain the *intent*) |
+| File                  | Purpose              | Key lines                                         |
+| --------------------- | -------------------- | ------------------------------------------------- |
+| `path/to/new-file.js` | One-line description | Cite specific line numbers for non-obvious bits   |
+| `path/to/modified.js` | What changed and why | (Don't paraphrase the diff; explain the _intent_) |
 
 For each file with non-obvious code, add a paragraph below the table:
 
@@ -167,7 +169,7 @@ The debugging journey. **One subsection per issue.** Each one is a learning mome
 
 **Fix**: What you changed. Include diff or link to the commit.
 
-**Lesson**: One-sentence takeaway. *"From now on, I will..."*
+**Lesson**: One-sentence takeaway. _"From now on, I will..."_
 
 **Prevention**: How to avoid this class of bug in the future (test fixture, lint rule, etc.).
 
@@ -227,10 +229,10 @@ OAuth is the spec-recommended path but adds 3–5 days of work for the redirect 
 
 Hands-on exercises. The "go and break it" section. Tied to the actual code.
 
-| # | Exercise | What you'll learn |
-|---|---|---|
-| 1 | <action> | <concept reinforced> |
-| 2 | <action> | <concept reinforced> |
+| #   | Exercise | What you'll learn    |
+| --- | -------- | -------------------- |
+| 1   | <action> | <concept reinforced> |
+| 2   | <action> | <concept reinforced> |
 
 Example:
 
@@ -243,8 +245,8 @@ Example:
 
 Terms introduced in this phase. **Define on first use.**
 
-| Term | Definition |
-|---|---|
+| Term   | Definition                                                      |
+| ------ | --------------------------------------------------------------- |
 | Term 1 | One-line definition. Link to Concept primer if you went deeper. |
 
 ---

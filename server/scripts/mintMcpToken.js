@@ -5,7 +5,9 @@
 // USAGE:
 //   node scripts/mintMcpToken.js <userId>
 //   node scripts/mintMcpToken.js <userId> --teamId=<teamId>
-//   node scripts/mintMcpToken.js me   # mints for the first SUPER_ADMIN found
+//   node scripts/mintMcpToken.js me                       # first SUPER_ADMIN
+//   node scripts/mintMcpToken.js --email=user@example.com # look up by email
+//   node scripts/mintMcpToken.js --list                   # show id + email + currentTeamId for all users
 //
 // WARNING: This script reads JWT_SECRET from .env. Do NOT ship it. Do NOT
 // run it in production. The Phase MCP-4 settings page is the production
@@ -36,16 +38,61 @@ const prisma = new PrismaClient({ log: ["error"] });
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.error("Usage: node scripts/mintMcpToken.js <userId|me> [--teamId=<teamId>]");
+    console.error(
+      "Usage:\n" +
+      "  node scripts/mintMcpToken.js me [--teamId=<id>]\n" +
+      "  node scripts/mintMcpToken.js <userId> [--teamId=<id>]\n" +
+      "  node scripts/mintMcpToken.js --email=<email> [--teamId=<id>]\n" +
+      "  node scripts/mintMcpToken.js --list",
+    );
     process.exit(1);
   }
 
-  let userId = args[0];
+  // --list: enumerate users for convenience.
+  if (args.includes("--list")) {
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, currentTeamId: true, globalRole: true },
+      orderBy: { createdAt: "asc" },
+    });
+    console.error(`[mint] ${users.length} users:`);
+    for (const u of users) {
+      const role = u.globalRole === "SUPER_ADMIN" ? " [SUPER_ADMIN]" : "";
+      console.error(`  ${u.id}  ${u.email}${role}  team=${u.currentTeamId || "(none)"}`);
+    }
+    await prisma.$disconnect();
+    process.exit(0);
+  }
+
+  // --email=<email>: look up by email.
+  const emailArg = args.find((a) => a.startsWith("--email="));
   const teamArg = args.find((a) => a.startsWith("--teamId="));
   let teamId = teamArg ? teamArg.split("=")[1] : null;
 
+  let userId;
+  if (emailArg) {
+    const email = emailArg.split("=")[1];
+    const u = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, currentTeamId: true, teamRole: true, globalRole: true },
+    });
+    if (!u) {
+      console.error(`User with email ${email} not found.`);
+      process.exit(1);
+    }
+    userId = u.id;
+    teamId = teamId || u.currentTeamId;
+    console.error(`[mint] Resolved email ${email} → ${userId}`);
+  } else {
+    userId = args.find((a) => !a.startsWith("--"));
+    if (!userId) {
+      console.error("Missing userId. Pass 'me', a CUID, or --email=<email>. Use --list to see users.");
+      process.exit(1);
+    }
+  }
+
   // "me" — mint for the first SUPER_ADMIN. Convenient for dev since
   // you're probably testing as yourself.
+  let resolvedUser;
   if (userId === "me") {
     const admin = await prisma.user.findFirst({
       where: { globalRole: "SUPER_ADMIN" },
@@ -57,6 +104,7 @@ async function main() {
     }
     userId = admin.id;
     teamId = teamId || admin.currentTeamId;
+    resolvedUser = admin;
     console.error(`[mint] Resolved 'me' → ${admin.email} (${userId})`);
   } else {
     const u = await prisma.user.findUnique({
@@ -68,7 +116,45 @@ async function main() {
       process.exit(1);
     }
     teamId = teamId || u.currentTeamId;
+    resolvedUser = u;
     console.error(`[mint] User ${u.email} (${userId})`);
+  }
+
+  // If the user has no currentTeamId, find any team they have access to.
+  // For a SUPER_ADMIN, that's "any active team". For a regular user, it's
+  // teams they're a member of via TeamMembership. Falls back to the
+  // user's personal team if available. Without this, MCP tools that
+  // require a team context (most do) return isError to the LLM.
+  if (!teamId) {
+    if (resolvedUser?.globalRole === "SUPER_ADMIN") {
+      const anyTeam = await prisma.team.findFirst({
+        where: { status: "ACTIVE" },
+        select: { id: true, name: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (anyTeam) {
+        teamId = anyTeam.id;
+        console.error(`[mint] No currentTeamId — SUPER_ADMIN, picked first ACTIVE team: ${anyTeam.name} (${teamId})`);
+      }
+    } else {
+      // Find any team this user is a member of.
+      const membership = await prisma.teamMembership.findFirst({
+        where: { userId },
+        select: { teamId: true, team: { select: { name: true } } },
+      });
+      if (membership?.teamId) {
+        teamId = membership.teamId;
+        console.error(`[mint] No currentTeamId — picked team via membership: ${membership.team?.name} (${teamId})`);
+      }
+    }
+  }
+
+  if (!teamId) {
+    console.error(
+      "[mint] WARN: still no teamId — token will be issued without team context. " +
+      "Most MCP tools will return 'No active team context'. Switch to a team in the " +
+      "web UI to set currentTeamId, then re-mint.",
+    );
   }
 
   const jti = randomUUID();
