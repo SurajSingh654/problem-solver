@@ -15,7 +15,7 @@ import {
 } from "../utils/fsrsRetention.js";
 import { classifyReadiness } from "../utils/readinessTiers.js";
 import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
-import { computePatternMastery, masteryScore } from "../utils/patternMastery.js";
+import { computePatternMastery, masteryScore, masteryCI } from "../utils/patternMastery.js";
 import { computeSolutionDepth } from "../utils/solutionDepth.js";
 import { computeCommunicationStats } from "../utils/communicationStats.js";
 import { computeOptimizationStats } from "../utils/optimizationStats.js";
@@ -1836,14 +1836,13 @@ export async function get6DReport(req, res) {
             mastery.counts.touchedOrAbove,
           );
         } else {
-          // CI from Wilson on (solid+ patterns / canonical total) — measures
-          // the actual claim D1 v2 makes: "what fraction of canonical
-          // patterns the user has Solid mastery of". Naturally widens for
-          // users with few patterns covered.
-          const { ci } = wilsonCI(
-            mastery.counts.solidOrAbove,
-            CANONICAL_PATTERN_LABELS.length,
-          );
+          // CI from per-pattern mastery points via meanCI, recentered at
+          // the composite score. Mirrors the asymmetric clamp pattern in
+          // D3/D5 — score and CI in the same units, score always inside CI,
+          // variance from the actual mastery distribution preserved.
+          // (Legacy Wilson on solidOrAbove/totalCanonical was on a
+          // proportion basis and could leave score outside the CI band.)
+          const ci = masteryCI({ matrix: mastery.matrix, score: d1 });
           d1Score = activeDim("patternRecognition", {
             score: d1,
             n: mastery.counts.touchedOrAbove,
@@ -2430,6 +2429,11 @@ export async function get6DReport(req, res) {
       quizBySubject[q.subject].push(q.score);
     });
 
+    // Filter to interview-relevant subjects only — same gate D5 v2 uses.
+    // Photography/Hindi/Physics map to [] in mapQuizSubjectToDimensions so
+    // a "Retake Photography quiz" priority action would directly contradict
+    // D5's source-tier ceiling (which already excluded those quizzes from
+    // pressure performance scoring).
     const weakQuizSubjects = Object.entries(quizBySubject)
       .map(([subject, scores]) => ({
         subject,
@@ -2437,6 +2441,7 @@ export async function get6DReport(req, res) {
         attempts: scores.length,
       }))
       .filter((s) => s.avg < 60)
+      .filter((s) => mapQuizSubjectToDimensions(s.subject).length > 0)
       .sort((a, b) => a.avg - b.avg)
       .slice(0, 3);
 

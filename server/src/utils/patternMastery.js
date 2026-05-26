@@ -57,6 +57,7 @@ import {
   FAANG_CORE_PATTERNS,
   isFaangCorePattern,
 } from "./patternTaxonomy.js";
+import { meanCI } from "./dimensionStats.js";
 
 export const MASTERY_STATES = Object.freeze({
   UNTOUCHED: { points: 0, label: "Untouched" },
@@ -318,6 +319,36 @@ export function computePatternMastery({ solutions, reviewAttempts }) {
  */
 export function masteryScore({ breadth, depth }) {
   return Math.round(BREADTH_WEIGHT * breadth + DEPTH_WEIGHT * depth);
+}
+
+/**
+ * CI for the D1 v2 score.
+ *
+ * The legacy v2 path used Wilson on (coreSolidOrAbove / totalCanonical) — a
+ * proportion-based CI in the 0..100 range, while the score itself is the
+ * 0.6*breadth + 0.4*depth composite. Score and CI measured genuinely
+ * different things, so a user with score=27 could see CI=[0,13] (score sits
+ * above the upper bound — same bug class we fixed in D3/D5).
+ *
+ * Fix: compute the half-width from per-pattern mastery points via meanCI
+ * (variance preserved on the natural distribution, where each pattern is
+ * 0/25/50/75/100), then recenter the interval at the composite score.
+ * Clamp [0, 100]. This mirrors the asymmetric clamp pattern in D3/D5 — same
+ * units, score always inside CI, variance honest.
+ *
+ * @param {{matrix: Array, score: number}} input
+ * @returns {[number, number] | null}
+ */
+export function masteryCI({ matrix, score }) {
+  if (!Array.isArray(matrix) || matrix.length === 0) return null;
+  const points = matrix.map((r) => MASTERY_STATES[r.state].points);
+  const raw = meanCI(points);
+  if (!raw) return null;
+  const halfWidth = (raw.ci[1] - raw.ci[0]) / 2;
+  return [
+    Math.max(0, Math.round(score - halfWidth)),
+    Math.min(100, Math.round(score + halfWidth)),
+  ];
 }
 
 // Exported for tests + UI mapping; matches the human-readable label scheme.

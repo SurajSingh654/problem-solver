@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 import {
   computePatternMastery,
   masteryScore,
+  masteryCI,
   MASTERY_STATES,
   SOLVE_METHOD_REQUIRED_AFTER,
 } from "../../src/utils/patternMastery.js";
@@ -329,6 +330,51 @@ describe("SOLVE_METHOD_REQUIRED_AFTER constant", () => {
     expect(SOLVE_METHOD_REQUIRED_AFTER instanceof Date).toBe(true);
     expect(SOLVE_METHOD_REQUIRED_AFTER.getUTCFullYear()).toBe(2026);
     expect(SOLVE_METHOD_REQUIRED_AFTER.getUTCMonth()).toBe(4); // 0-indexed → May
+  });
+});
+
+describe("masteryCI — score always inside CI (D3/D5 asymmetric clamp pattern)", () => {
+  it("returns null on empty matrix", () => {
+    expect(masteryCI({ matrix: [], score: 50 })).toBeNull();
+    expect(masteryCI({ matrix: null, score: 50 })).toBeNull();
+  });
+
+  it("score sits within CI for the screenshot user (was the bug: 27 vs CI 0-13)", () => {
+    // 22 UNTOUCHED + 1 TOUCHED + 2 WORKING — composite score ≈ 27
+    const matrix = [
+      ...Array(22).fill({ state: "UNTOUCHED" }),
+      { state: "TOUCHED" },
+      { state: "WORKING" },
+      { state: "WORKING" },
+    ];
+    const ci = masteryCI({ matrix, score: 27 });
+    expect(ci).not.toBeNull();
+    expect(ci[0]).toBeLessThanOrEqual(27);
+    expect(ci[1]).toBeGreaterThanOrEqual(27);
+  });
+
+  it("clamps CI lower bound at 0 and upper at 100", () => {
+    const matrix = Array(25).fill({ state: "UNTOUCHED" });
+    const ci = masteryCI({ matrix, score: 0 });
+    expect(ci[0]).toBeGreaterThanOrEqual(0);
+    expect(ci[1]).toBeLessThanOrEqual(100);
+  });
+
+  it("widens with high variance, tightens when uniform", () => {
+    // Uniform OWNED: zero variance → tight band
+    const uniform = Array(25).fill({ state: "OWNED" });
+    const tightCi = masteryCI({ matrix: uniform, score: 100 });
+    const tightWidth = tightCi[1] - tightCi[0];
+
+    // Mixed: high variance → wider band
+    const mixed = [
+      ...Array(12).fill({ state: "UNTOUCHED" }),
+      ...Array(13).fill({ state: "OWNED" }),
+    ];
+    const wideCi = masteryCI({ matrix: mixed, score: 52 });
+    const wideWidth = wideCi[1] - wideCi[0];
+
+    expect(wideWidth).toBeGreaterThan(tightWidth);
   });
 });
 
