@@ -194,5 +194,25 @@ export const FEATURE_PRESSURE_PERFORMANCE_V2 = optional('FEATURE_PRESSURE_PERFOR
 // VITE_FEATURE_RETENTION_V2 (also in client/Dockerfile ARG).
 export const FEATURE_RETENTION_V2 = optional('FEATURE_RETENTION_V2', 'false') === 'true'
 
+// Teaching Contributions v2 — replaces the gameable v1 formula
+// (30% volume × 50% avg-rating × 20% peer-learned-rate) with a
+// source-tier ceiling architecture mirroring D3/D5:
+//   - draft-only (ceiling 30): hosted, 0 peer ratings
+//   - peer-validated (ceiling 70): ≥3 peer ratings
+//   - stable-peer-cohort (ceiling 100): ≥5 ratings AND ≥3 sessions
+//     (Topping 1996 peer-rating reliability + Anderson-Shackleton 1990)
+// New sub-components:
+//   - 0.55 avg_rating + 0.25 peer_learned_rate + 0.10 topic_coverage
+//     + 0.10 saturating-volume (capped 10% so volume can't dominate)
+// Tier gates:
+//   - junior/tier3: opt-in (no gate beyond activation)
+//   - tier2: 3 sessions + 5 ratings + score≥60
+//   - faang: 5 sessions + 10 ratings + score≥75 + flag-rate≤0.10
+// Verdict Rule 14: teaching strengths with peerRatingCount<3 → reject;
+// <5 → must hedge (small-sample peer rating, Topping 1996).
+// Independent rollout. Client mirror: VITE_FEATURE_TEACHING_CONTRIBUTIONS_V2
+// (also in client/Dockerfile ARG).
+export const FEATURE_TEACHING_CONTRIBUTIONS_V2 = optional('FEATURE_TEACHING_CONTRIBUTIONS_V2', 'false') === 'true'
+
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

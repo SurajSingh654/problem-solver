@@ -582,3 +582,130 @@ describe("classifyReadiness — D6 retention gates", () => {
     expect(tier2.failingMastery.map((f) => f.key)).toContain("retentionAttempts");
   });
 });
+
+// ── D7 v2 teaching contributions gates ───────────────────────────────
+
+describe("classifyReadiness — D7 teaching gates (opt-in dimension)", () => {
+  const tierById = (info, id) => info.tiers.find((t) => t.id === id);
+
+  // Strong baseline user — meets tier2 dim + mastery floors. Used as the
+  // base for "with teaching" / "without teaching" comparisons.
+  const tier2BaselineDims = {
+    patternRecognition: 60,
+    optimization: 50,
+    pressurePerformance: 55,
+    solutionDepth: 50,
+  };
+  const tier2BaselineMastery = {
+    coreSolidOrAbove: 10, owned: 3,
+    solutionsAtDefendedOrAbove: 4, solutionsAtOwned: 2,
+    commMocksWithScores: 1,
+    optAtTradeOffOrAbove: 4, optAtOwned: 2,
+    retentionAttempts: 12, retentionScore: 65,
+  };
+
+  it("user without teaching keys is still tier2 ready (opt-in skip)", () => {
+    // No teachingSessions/teachingRatings/teachingScore in masteryCounts
+    // → opt-in skip: gates ignored. Mirrors a user who never hosted.
+    const out = classifyReadiness(70, tier2BaselineDims, tier2BaselineMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).not.toContain("teachingSessions");
+    expect(failingKeys).not.toContain("teachingRatings");
+    expect(failingKeys).not.toContain("teachingScore");
+  });
+
+  it("opted-in user with insufficient ratings FAILS tier2 teaching gate", () => {
+    const masteryWithLowTeaching = {
+      ...tier2BaselineMastery,
+      teachingSessions: 2,    // < 3 needed
+      teachingRatings: 3,     // < 5 needed
+      teachingScore: 40,      // < 60 needed
+      teachingFlagRate: 0,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryWithLowTeaching);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    const failingKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failingKeys).toContain("teachingSessions");
+    expect(failingKeys).toContain("teachingRatings");
+    expect(failingKeys).toContain("teachingScore");
+  });
+
+  it("opted-in user at tier2 teaching floor PASSES", () => {
+    const masteryAtTeachingFloor = {
+      ...tier2BaselineMastery,
+      teachingSessions: 3,
+      teachingRatings: 5,
+      teachingScore: 60,
+      teachingFlagRate: 0,
+    };
+    const out = classifyReadiness(70, tier2BaselineDims, masteryAtTeachingFloor);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+  });
+
+  it("FAANG teachingFlagRate uses INVERSE comparison (rate above threshold fails)", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryHighFlagRate = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      teachingSessions: 6,
+      teachingRatings: 12,
+      teachingScore: 80,
+      teachingFlagRate: 0.20, // ABOVE the 0.10 max → should fail
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryHighFlagRate);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    expect(faang.failingMastery.map((f) => f.key)).toContain("teachingFlagRate");
+  });
+
+  it("FAANG teachingFlagRate at boundary (=0.10) PASSES inverse comparison", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    const masteryAtFaangBoundary = {
+      coreSolidOrAbove: 14, owned: 10,
+      solutionsAtDefendedOrAbove: 12, solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      optAtTradeOffOrAbove: 12, optAtOwned: 6,
+      retentionAttempts: 30, retentionScore: 80, retentionLeechRate: 0.10,
+      teachingSessions: 5,
+      teachingRatings: 10,
+      teachingScore: 75,
+      teachingFlagRate: 0.10, // EXACTLY at the max
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, masteryAtFaangBoundary);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(true);
+  });
+
+  it("MAX_THRESHOLD_KEYS includes both retentionLeechRate and teachingFlagRate", async () => {
+    const { MAX_THRESHOLD_KEYS } = await import("../../src/utils/readinessTiers.js");
+    expect(MAX_THRESHOLD_KEYS.has("retentionLeechRate")).toBe(true);
+    expect(MAX_THRESHOLD_KEYS.has("teachingFlagRate")).toBe(true);
+  });
+
+  it("OPT_IN_KEYS includes all teaching* keys but NOT retention/pattern keys", async () => {
+    const { OPT_IN_KEYS } = await import("../../src/utils/readinessTiers.js");
+    expect(OPT_IN_KEYS.has("teachingSessions")).toBe(true);
+    expect(OPT_IN_KEYS.has("teachingRatings")).toBe(true);
+    expect(OPT_IN_KEYS.has("teachingScore")).toBe(true);
+    expect(OPT_IN_KEYS.has("teachingFlagRate")).toBe(true);
+    expect(OPT_IN_KEYS.has("retentionAttempts")).toBe(false);
+    expect(OPT_IN_KEYS.has("coreSolidOrAbove")).toBe(false);
+  });
+});

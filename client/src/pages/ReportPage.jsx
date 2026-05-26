@@ -52,6 +52,12 @@ const PRESSURE_PERFORMANCE_V2_ENABLED =
 const RETENTION_V2_ENABLED =
     import.meta.env.VITE_FEATURE_RETENTION_V2 === 'true'
 
+// D7 Teaching Contributions v2 flag — when on, the D7 dim card renders a
+// source-quality chip (Draft-only / Peer-validated / Stable peer cohort)
+// mirroring the D3/D5 pattern. Three-place declaration per CLAUDE.md.
+const TEACHING_V2_ENABLED =
+    import.meta.env.VITE_FEATURE_TEACHING_CONTRIBUTIONS_V2 === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -852,6 +858,51 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                           Ceiling {ceiling}
                         </span>
                       </div>
+                    )
+                  })()}
+
+                {/* D7 v2 source-quality chip — renders only when the flag is
+                    on AND the server attached sourceQuality. Mirrors D3/D5
+                    pattern. Adds a flagged-sessions warning below the chip
+                    when the host has any sessions with ≥2 OPEN flags. */}
+                {dim.key === 'teachingContributions'
+                  && TEACHING_V2_ENABLED
+                  && typeof info?.sourceQuality === 'string'
+                  && (() => {
+                    const sq = info.sourceQuality
+                    const ceiling = info.ceiling ?? 100
+                    const isStable = sq === 'stable-peer-cohort'
+                    const isPeer = sq === 'peer-validated'
+                    const tone = isStable
+                      ? 'bg-success-soft text-success-fg border-success-line'
+                      : isPeer
+                        ? 'bg-info-soft text-info-fg border-info-line'
+                        : 'bg-warning-soft text-warning-fg border-warning-line'
+                    const label = isStable
+                      ? 'Stable peer cohort'
+                      : isPeer
+                        ? 'Peer-validated'
+                        : 'Draft-only'
+                    return (
+                      <>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className={cn(
+                            'text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded-full border',
+                            tone,
+                          )}>
+                            {label}
+                          </span>
+                          <span className="text-[10px] text-text-disabled font-mono">
+                            Ceiling {ceiling}
+                          </span>
+                        </div>
+                        {info.teachingFlaggedCount > 0 && (
+                          <p className="text-[10px] text-warning-fg mt-1 leading-tight">
+                            ⚠ {info.teachingFlaggedCount} session{info.teachingFlaggedCount === 1 ? '' : 's'} flagged —
+                            review attendee feedback.
+                          </p>
+                        )}
+                      </>
                     )
                   })()}
               </>

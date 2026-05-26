@@ -466,6 +466,47 @@ export function validateVerdict(verdict, evidence) {
     strengths.forEach((s, i) => checkRetentionSampleSize(s, `strengths[${i}]`));
   }
 
+  // Rule 14 — Teaching peer-rating sample-size honesty.
+  //
+  // When evidence.teaching is present (D7 v2 flag is on AND user has hosted
+  // at least one session), strength claims about Teaching Contributions
+  // must respect peer-rating sample-size floors:
+  //   - ratingCount < 3 → teaching can't be claimed strength at all
+  //   - ratingCount < 5 + confidence='high' → must hedge
+  //   - ratingCount ≥ 5 → no special hedging required
+  // Topping (1996) / Anderson & Shackleton (1990): peer-rating reliability
+  // stabilizes around 5+ raters. Mirror of Rule 13's structure.
+  if (evidence.teaching) {
+    const TEACHING_TERMS = [
+      /\bteaching\b/i,
+      /\bteaching contributions\b/i,
+      /\bteach-back\b/i,
+      /\bpeer teaching\b/i,
+    ];
+    const HEDGE_VOCAB_T = ["early", "tentative", "small sample", "preliminary", "emerging"];
+    const checkTeachingSampleSize = (item, label) => {
+      if (!item || typeof item !== "object") return;
+      const text = `${item.claim ?? ""} ${item.evidence ?? ""}`;
+      const isTeachingSubject = TEACHING_TERMS.some((rx) => rx.test(text));
+      if (!isTeachingSubject) return;
+      const n = evidence.teaching.ratingCount ?? 0;
+      if (n < 3) {
+        violations.push(`${label}-teaching-claim-too-few-ratings`);
+        return;
+      }
+      if (n < 5 && item.confidence === "high") {
+        const lowerText = text.toLowerCase();
+        const hasHedge = HEDGE_VOCAB_T.some((v) => lowerText.includes(v));
+        if (!hasHedge) {
+          violations.push(`${label}-teaching-high-confidence-low-n`);
+        }
+      }
+    };
+    // Strengths only — gap claims about teaching being WEAK are honest
+    // (under-claiming low signal is fine). Mirror of Rule 13.
+    strengths.forEach((s, i) => checkTeachingSampleSize(s, `strengths[${i}]`));
+  }
+
   return { valid: violations.length === 0, violations };
 }
 

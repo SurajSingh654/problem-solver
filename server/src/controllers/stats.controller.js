@@ -21,6 +21,7 @@ import { computeCommunicationStats } from "../utils/communicationStats.js";
 import { computeOptimizationStats } from "../utils/optimizationStats.js";
 import { computePressurePerformanceStats } from "../utils/pressurePerformanceStats.js";
 import { computeRetentionStats } from "../utils/retentionStats.js";
+import { computeTeachingStats } from "../utils/teachingStats.js";
 import {
   FEATURE_PATTERN_MASTERY_V2,
   FEATURE_SOLUTION_DEPTH_V2,
@@ -28,6 +29,7 @@ import {
   FEATURE_OPTIMIZATION_V2,
   FEATURE_PRESSURE_PERFORMANCE_V2,
   FEATURE_RETENTION_V2,
+  FEATURE_TEACHING_CONTRIBUTIONS_V2,
 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
@@ -940,6 +942,11 @@ export async function get6DReport(req, res) {
         select: {
           id: true,
           ratings: { select: { rating: true, peerLearned: true } },
+          // D7 v2 — topic coverage verdict (FULL/PARTIAL/OFF_TOPIC) and
+          // open flags. v1 ignored both; v2 reads them in computeTeachingStats.
+          // Backward compatible: legacy v1 path doesn't read these fields.
+          topicCoverage: true,
+          flags: { select: { status: true } },
         },
       }),
       prisma.quizAttempt.findMany({
@@ -2205,42 +2212,73 @@ export async function get6DReport(req, res) {
     const sessionsHostedCount = teachingSessionsHosted.length;
     const teachingApplies = sessionsHostedCount >= 1;
     let d7Score = null;
+    let teaching = null; // v2 stats object — null when flag off OR not opted-in
     if (teachingApplies) {
-      const allTeachingRatings = teachingSessionsHosted.flatMap(
-        (s) => s.ratings,
-      );
-      const ratingsCount = allTeachingRatings.length;
-      if (ratingsCount < 3) {
-        const need = 3 - ratingsCount;
-        d7Score = inactiveDim(
-          "teachingContributions",
-          `${need} more peer rating${need === 1 ? "" : "s"} unlock this dimension`,
-          ratingsCount,
-        );
+      if (FEATURE_TEACHING_CONTRIBUTIONS_V2) {
+        // ── D7 v2: source-tier ceiling + sub-component blend ──
+        teaching = computeTeachingStats({ sessions: teachingSessionsHosted });
+        if (!teaching.active) {
+          const need = Math.max(0, 3 - teaching.ratingCount);
+          d7Score = inactiveDim(
+            "teachingContributions",
+            `${need} more peer rating${need === 1 ? "" : "s"} unlock this dimension`,
+            teaching.ratingCount,
+          );
+        } else {
+          d7Score = activeDim("teachingContributions", {
+            score: teaching.score,
+            n: teaching.ratingCount,
+            ci: teaching.ci ?? [
+              Math.max(0, teaching.score - 20),
+              Math.min(teaching.ceiling, teaching.score + 20),
+            ],
+            basis: teaching.basis,
+          });
+          // Surface v2 metadata for the client (source-quality chip) and
+          // for the verdict evidence builder.
+          d7Score.sourceQuality = teaching.sourceQuality;
+          d7Score.ceiling = teaching.ceiling;
+          d7Score.teachingSessionCount = teaching.sessionCount;
+          d7Score.teachingFlaggedCount = teaching.flaggedSessionCount;
+        }
       } else {
-        const avgRating =
-          allTeachingRatings.reduce((a, r) => a + r.rating, 0) / ratingsCount;
-        const peerLearnedRate =
-          allTeachingRatings.filter((r) => r.peerLearned).length / ratingsCount;
-        const score = Math.round(
-          50 * (avgRating / 5) +
-            30 * Math.min(1, sessionsHostedCount / 5) +
-            20 * peerLearnedRate,
+        // ── D7 v1 (legacy): gameable volume × avg-rating × peer-learned ──
+        const allTeachingRatings = teachingSessionsHosted.flatMap(
+          (s) => s.ratings,
         );
-        // CI from rating distribution; meanCI handles small-n widening.
-        const ratingsAs100 = allTeachingRatings.map((r) => (r.rating / 5) * 100);
-        const ci = meanCI(ratingsAs100);
-        d7Score = activeDim("teachingContributions", {
-          score,
-          n: ratingsCount,
-          ci: ci?.ci ?? [Math.max(0, score - 20), Math.min(100, score + 20)],
-          basis: [
-            `sessions: ${sessionsHostedCount}`,
-            `ratings: ${ratingsCount}`,
-            `avg_rating: ${avgRating.toFixed(1)}`,
-            `peer_learned_rate: ${peerLearnedRate.toFixed(2)}`,
-          ],
-        });
+        const ratingsCount = allTeachingRatings.length;
+        if (ratingsCount < 3) {
+          const need = 3 - ratingsCount;
+          d7Score = inactiveDim(
+            "teachingContributions",
+            `${need} more peer rating${need === 1 ? "" : "s"} unlock this dimension`,
+            ratingsCount,
+          );
+        } else {
+          const avgRating =
+            allTeachingRatings.reduce((a, r) => a + r.rating, 0) / ratingsCount;
+          const peerLearnedRate =
+            allTeachingRatings.filter((r) => r.peerLearned).length / ratingsCount;
+          const score = Math.round(
+            50 * (avgRating / 5) +
+              30 * Math.min(1, sessionsHostedCount / 5) +
+              20 * peerLearnedRate,
+          );
+          // CI from rating distribution; meanCI handles small-n widening.
+          const ratingsAs100 = allTeachingRatings.map((r) => (r.rating / 5) * 100);
+          const ci = meanCI(ratingsAs100);
+          d7Score = activeDim("teachingContributions", {
+            score,
+            n: ratingsCount,
+            ci: ci?.ci ?? [Math.max(0, score - 20), Math.min(100, score + 20)],
+            basis: [
+              `sessions: ${sessionsHostedCount}`,
+              `ratings: ${ratingsCount}`,
+              `avg_rating: ${avgRating.toFixed(1)}`,
+              `peer_learned_rate: ${peerLearnedRate.toFixed(2)}`,
+            ],
+          });
+        }
       }
     }
 
@@ -2316,9 +2354,11 @@ export async function get6DReport(req, res) {
     //
     // Note: D5 (Pressure Performance) does NOT add mastery keys — its
     // source-tier ceiling enforces tier gates via the existing score
-    // threshold. Same for D7 (Teaching).
+    // threshold. D7 (Teaching) DOES add keys under v2 — opt-in dim, gates
+    // are skipped for users who haven't hosted (see OPT_IN_KEYS in
+    // readinessTiers.js).
     const masteryAndDepthCounts =
-      mastery || depth || communication || optimization || retention
+      mastery || depth || communication || optimization || retention || teaching
         ? {
             ...(mastery?.counts ?? {}),
             ...(depth?.counts ?? {}),
@@ -2335,6 +2375,14 @@ export async function get6DReport(req, res) {
                   retentionAttempts: retention.attemptCount,
                   retentionScore: retention.score ?? 0,
                   retentionLeechRate: retention.leechRate,
+                }
+              : {}),
+            ...(teaching
+              ? {
+                  teachingSessions: teaching.sessionCount,
+                  teachingRatings: teaching.ratingCount,
+                  teachingScore: teaching.score ?? 0,
+                  teachingFlagRate: teaching.flagRate,
                 }
               : {}),
           }
@@ -2624,6 +2672,25 @@ export async function get6DReport(req, res) {
                 distinctSolutionCount: retention.distinctSolutionCount,
                 leechCount: retention.leechCount,
                 leechRate: retention.leechRate,
+              }
+            : null,
+          // Teaching Contributions v2 — null when flag off OR user has
+          // never hosted a session. The verdict evidence builder reads
+          // this block to enforce Rule 14 (peer-rating sample-size honesty).
+          teaching: teaching
+            ? {
+                active: teaching.active,
+                score: teaching.score,
+                ci: teaching.ci,
+                sessionCount: teaching.sessionCount,
+                ratingCount: teaching.ratingCount,
+                avgRating: teaching.avgRating,
+                peerLearnedRate: teaching.peerLearnedRate,
+                avgTopicCoverage: teaching.avgTopicCoverage,
+                flaggedSessionCount: teaching.flaggedSessionCount,
+                flagRate: teaching.flagRate,
+                sourceQuality: teaching.sourceQuality,
+                ceiling: teaching.ceiling,
               }
             : null,
           aiReview: {
@@ -2998,6 +3065,22 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Teaching Contributions v2 — surface peer-rating sample size + source
+  // quality so the verdict prompt can satisfy Rule 14 (peerRatingCount<5
+  // requires hedge, <3 cannot be claimed strength at all). Topping 1996.
+  const teachBlock = report.analytics?.teaching;
+  const teaching = teachBlock
+    ? {
+        score: teachBlock.score,
+        sessionCount: teachBlock.sessionCount,
+        ratingCount: teachBlock.ratingCount,
+        sourceQuality: teachBlock.sourceQuality,
+        ceiling: teachBlock.ceiling,
+        flaggedSessionCount: teachBlock.flaggedSessionCount,
+        flagRate: teachBlock.flagRate,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -3011,6 +3094,7 @@ function buildVerdictEvidence(report) {
     optimization,
     pressurePerformance,
     retention,
+    teaching,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

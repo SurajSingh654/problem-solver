@@ -84,6 +84,7 @@ export function buildFallbackVerdict(evidence) {
   const op = evidence.optimization;          // null when D4 v2 flag is off
   const pp = evidence.pressurePerformance;   // null when D5 v2 flag is off
   const rt = evidence.retention;             // null when D6 v2 flag is off
+  const tc = evidence.teaching;              // null when D7 v2 flag is off OR user never hosted
 
   // Helper — build evidence string for a Pattern Recognition claim under v2.
   // Satisfies validator Rule 8: cite mastery distribution, not just score.
@@ -145,6 +146,24 @@ export function buildFallbackVerdict(evidence) {
     return `score=${dim.score} over ${n} successful reviews${rt.leechCount > 0 ? `, ${rt.leechCount} leech${rt.leechCount === 1 ? "" : "es"}` : ""}`;
   };
 
+  // Helper — build evidence string for a Teaching Contributions claim
+  // under v2. Satisfies validator Rule 14: hedge when ratingCount < 5,
+  // include source-quality + ceiling so the prompt's "must cite source"
+  // norm is met by the fallback.
+  const teachingEvidenceWithSource = (dim) => {
+    if (!tc) return `score=${dim.score} over n=${dim.n} data points`;
+    const n = tc.ratingCount;
+    const sessions = tc.sessionCount;
+    if (n < 5) {
+      // Hedge required: small-sample peer rating (Topping 1996).
+      return `score=${dim.score} over ${n} peer rating${n === 1 ? "" : "s"} across ${sessions} session${sessions === 1 ? "" : "s"} (tentative — small sample; peer-rating reliability requires ≥5 ratings)`;
+    }
+    if (tc.sourceQuality === "stable-peer-cohort") {
+      return `score=${dim.score} with ${n} peer ratings across ${sessions} sessions (stable-peer-cohort, ceiling 100)`;
+    }
+    return `score=${dim.score} with ${n} peer rating${n === 1 ? "" : "s"} across ${sessions} session${sessions === 1 ? "" : "s"} (peer-validated, ceiling ${tc.ceiling})`;
+  };
+
   const strengths = [];
   if (topDim && topDim.score >= 50) {
     const isPattern = topDim.key === "patternRecognition";
@@ -153,6 +172,7 @@ export function buildFallbackVerdict(evidence) {
     const isOpt = topDim.key === "optimization";
     const isPressure = topDim.key === "pressurePerformance";
     const isRetention = topDim.key === "retention";
+    const isTeaching = topDim.key === "teachingContributions";
     let evidenceStr;
     if (isPattern) evidenceStr = patternEvidenceWithMastery(topDim);
     else if (isDepth) evidenceStr = depthEvidenceWithDistribution(topDim);
@@ -160,21 +180,23 @@ export function buildFallbackVerdict(evidence) {
     else if (isOpt) evidenceStr = optEvidenceWithDistribution(topDim);
     else if (isPressure) evidenceStr = pressureEvidenceWithSource(topDim);
     else if (isRetention) evidenceStr = retentionEvidenceWithSampleSize(topDim);
+    else if (isTeaching) evidenceStr = teachingEvidenceWithSource(topDim);
     else evidenceStr = `score=${topDim.score} over n=${topDim.n} data points`;
     // Rule 13: retention strengths with attemptCount < 5 must NOT claim
-    // retention as a strength at all. Drop the strength entirely so the
-    // fallback satisfies the validator.
+    // retention as a strength at all. Rule 14: same for teaching with
+    // ratingCount < 3. Drop the strength entirely so the fallback
+    // satisfies the validator.
     const skipRetentionStrength =
       isRetention && rt && rt.attemptCount < 5;
-    if (!skipRetentionStrength) {
-      // Rule 13: retention strengths with n < 10 must use 'tentative'
-      // confidence (the helper already injects the hedge vocabulary).
-      const confidence =
-        isRetention && rt && rt.attemptCount < 10
-          ? "tentative"
-          : topDim.n >= 5
-          ? "high"
-          : "tentative";
+    const skipTeachingStrength =
+      isTeaching && tc && tc.ratingCount < 3;
+    if (!skipRetentionStrength && !skipTeachingStrength) {
+      // Rule 13/14: small-sample strengths must use 'tentative' confidence
+      // (the helpers already inject the hedge vocabulary).
+      let confidence;
+      if (isRetention && rt && rt.attemptCount < 10) confidence = "tentative";
+      else if (isTeaching && tc && tc.ratingCount < 5) confidence = "tentative";
+      else confidence = topDim.n >= 5 ? "high" : "tentative";
       strengths.push({
         claim: `${prettyDimName(topDim.key)} is your leading dimension`,
         evidence: evidenceStr,
@@ -264,6 +286,18 @@ export function buildFallbackVerdict(evidence) {
     });
   }
 
+  // When v2 teaching is present AND any session has accrued ≥2 OPEN
+  // flags, surface as priority gap. Mirrors D6's leech surfacing —
+  // attendee-driven quality signal that isn't captured by avg rating.
+  if (tc && tc.flaggedSessionCount > 0 && gapsOut.length < 2) {
+    gapsOut.push({
+      claim: "Teaching sessions have peer flags",
+      evidence: `${tc.flaggedSessionCount} of ${tc.sessionCount} hosted session${tc.sessionCount === 1 ? "" : "s"} accrued ≥2 OPEN flags from attendees (flag-rate ${tc.flagRate.toFixed(2)})`,
+      action:
+        "Review attendee feedback on your flagged sessions before hosting again — teaching credibility erodes fast under unaddressed quality concerns.",
+    });
+  }
+
   if (weakDim && gapsOut.length < 2) {
     const isPatternWeak = weakDim.key === "patternRecognition";
     const isDepthWeak = weakDim.key === "solutionDepth";
@@ -271,6 +305,7 @@ export function buildFallbackVerdict(evidence) {
     const isOptWeak = weakDim.key === "optimization";
     const isPressureWeak = weakDim.key === "pressurePerformance";
     const isRetentionWeak = weakDim.key === "retention";
+    const isTeachingWeak = weakDim.key === "teachingContributions";
     let evidenceStr;
     if (isPatternWeak) evidenceStr = patternEvidenceWithMastery(weakDim);
     else if (isDepthWeak) evidenceStr = depthEvidenceWithDistribution(weakDim);
@@ -278,6 +313,7 @@ export function buildFallbackVerdict(evidence) {
     else if (isOptWeak) evidenceStr = optEvidenceWithDistribution(weakDim);
     else if (isPressureWeak) evidenceStr = pressureEvidenceWithSource(weakDim);
     else if (isRetentionWeak) evidenceStr = retentionEvidenceWithSampleSize(weakDim);
+    else if (isTeachingWeak) evidenceStr = teachingEvidenceWithSource(weakDim);
     else evidenceStr = `score=${weakDim.score} over n=${weakDim.n} data points`;
     gapsOut.push({
       claim: `${prettyDimName(weakDim.key)} is the weakest active dimension`,

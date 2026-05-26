@@ -1255,6 +1255,288 @@ describe('validateVerdict — Rule 13 (Retention sample-size honesty)', () => {
     })
 })
 
+// ── validateVerdict — Rule 14 (Teaching peer-rating sample-size honesty) ──
+//
+// Active only when evidence.teaching is non-null (D7 v2 flag on AND user
+// has hosted ≥1 session). Topping (1996) / Anderson-Shackleton (1990):
+// peer-rating reliability stabilizes around 5+ raters. Below ratingCount=5,
+// "high" confidence strength claims must hedge. Below ratingCount=3,
+// teaching can't be claimed a strength at all. Mirror of Rule 13's structure.
+describe('validateVerdict — Rule 14 (Teaching peer-rating sample-size honesty)', () => {
+    // n=4: above the n<3 floor (claim allowed) but below n=5 (must hedge
+    // when confidence='high'). Sweet spot for testing the middle band.
+    const TEACHING_LOW_N = {
+        ...FULL_EVIDENCE,
+        teaching: {
+            score: 60,
+            sessionCount: 2,
+            ratingCount: 4,
+            sourceQuality: 'peer-validated',
+            ceiling: 70,
+            flaggedSessionCount: 0,
+            flagRate: 0,
+        },
+    }
+    const TEACHING_TOO_FEW = {
+        ...FULL_EVIDENCE,
+        teaching: {
+            score: 50,
+            sessionCount: 1,
+            ratingCount: 2,
+            sourceQuality: 'draft-only',
+            ceiling: 30,
+            flaggedSessionCount: 0,
+            flagRate: 0,
+        },
+    }
+    const TEACHING_GOOD_N = {
+        ...FULL_EVIDENCE,
+        teaching: {
+            score: 80,
+            sessionCount: 5,
+            ratingCount: 12,
+            sourceQuality: 'stable-peer-cohort',
+            ceiling: 100,
+            flaggedSessionCount: 0,
+            flagRate: 0,
+        },
+    }
+
+    it('accepts a Teaching strength claim with hedge vocab when n<5', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Teaching Contributions is your leading dimension',
+                    evidence: 'score=60 over 4 peer ratings (tentative — small sample; reliability requires ≥5 ratings)',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '7 of 7 dimensions active.',
+        }
+        const r = validateVerdict(v, TEACHING_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts a Teaching strength claim with confidence=tentative when n<5 (no hedge needed)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Teaching Contributions is leading',
+                    evidence: 'score=60 over 4 peer ratings',
+                    confidence: 'tentative',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '7 of 7 dimensions active.',
+        }
+        const r = validateVerdict(v, TEACHING_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects a Teaching strength claim with confidence=high + n<5 + no hedge', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Teaching Contributions is your strongest dimension',
+                    evidence: 'score=60 across recent peer ratings',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '7 of 7 dimensions active.',
+        }
+        const r = validateVerdict(v, TEACHING_LOW_N)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-teaching-high-confidence-low-n')
+    })
+
+    it('rejects a Teaching strength claim outright when n<3 (even with hedge)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Teaching Contributions is leading (tentative)',
+                    evidence: 'score=50 over 2 peer ratings — early signal',
+                    confidence: 'tentative',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '7 of 7 dimensions active.',
+        }
+        const r = validateVerdict(v, TEACHING_TOO_FEW)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('strengths[0]-teaching-claim-too-few-ratings')
+    })
+
+    it('accepts a Teaching strength claim with confidence=high + no hedge when n>=5', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Teaching Contributions is your leading dimension',
+                    evidence: 'score=80 with 12 peer ratings across 5 sessions (stable-peer-cohort)',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '7 of 7 dimensions active.',
+        }
+        const r = validateVerdict(v, TEACHING_GOOD_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 14 when evidence.teaching is absent (legacy or non-host)', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Teaching is your strongest dimension',
+                    evidence: 'score=60 over n=4 data points',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '6 of 6 dimensions active.',
+        }
+        const r = validateVerdict(v, FULL_EVIDENCE)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT trigger Rule 14 for non-Teaching claims', () => {
+        const v = {
+            headline: 'Meeting Tier 2 expectations.',
+            strengths: [
+                {
+                    claim: 'Pattern recognition is your strongest dimension',
+                    evidence: 'score=78 with 12 of 15 FAANG-core patterns at Solid+',
+                    confidence: 'high',
+                },
+            ],
+            gaps: [],
+            readinessNote: 'Ready for Tier 2 readiness.',
+            dataQualityNote: '7 of 7 dimensions active.',
+        }
+        const r = validateVerdict(v, TEACHING_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('does NOT police gap claims about teaching being weak', () => {
+        // Under-claiming a low teaching score is honest — Rule 14 applies
+        // only to over-claiming teaching as a strength.
+        const v = {
+            headline: 'Tier 2 progress.',
+            strengths: [],
+            gaps: [
+                {
+                    claim: 'Teaching Contributions is the weakest active dimension',
+                    evidence: 'score=20 over 3 peer ratings',
+                    action: 'Host more sessions and request peer feedback',
+                },
+            ],
+            readinessNote: 'Below Tier 2 threshold.',
+            dataQualityNote: '7 of 7 dimensions active.',
+        }
+        const r = validateVerdict(v, TEACHING_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback drops the teaching strength entirely when n<3', () => {
+        const FULL_WITH_TEACHING_TOO_FEW = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 50 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 50 },
+                { key: 'communication', status: 'active', n: 8, score: 50 },
+                { key: 'optimization', status: 'active', n: 8, score: 50 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 50 },
+                { key: 'retention', status: 'active', n: 10, score: 50 },
+                { key: 'teachingContributions', status: 'active', n: 2, score: 75 },
+            ],
+            overall: { score: 53 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            teaching: {
+                score: 75, sessionCount: 1, ratingCount: 2,
+                sourceQuality: 'draft-only', ceiling: 30,
+                flaggedSessionCount: 0, flagRate: 0,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_TEACHING_TOO_FEW)
+        const hasTeachingStrength = v.strengths.some((s) =>
+            /\bteaching\b/i.test(`${s.claim} ${s.evidence}`),
+        )
+        expect(hasTeachingStrength).toBe(false)
+        const r = validateVerdict(v, FULL_WITH_TEACHING_TOO_FEW)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback surfaces a "Teaching sessions have peer flags" gap when flaggedSessionCount > 0', () => {
+        const FULL_WITH_FLAGS = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 12, score: 65 },
+                { key: 'teachingContributions', status: 'active', n: 8, score: 55 },
+            ],
+            overall: { score: 60 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            teaching: {
+                score: 55, sessionCount: 4, ratingCount: 8,
+                sourceQuality: 'peer-validated', ceiling: 70,
+                flaggedSessionCount: 2, flagRate: 0.50,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_FLAGS)
+        const hasFlagGap = v.gaps.some((g) =>
+            /flag|peer flags/i.test(`${g.claim} ${g.evidence}`),
+        )
+        expect(hasFlagGap).toBe(true)
+        const r = validateVerdict(v, FULL_WITH_FLAGS)
+        expect(r.valid).toBe(true)
+    })
+
+    it('fallback output for v2-teaching evidence with n<5 passes Rule 14', () => {
+        const FULL_WITH_TEACHING_LOW_N = {
+            dimensions: [
+                { key: 'patternRecognition', status: 'active', n: 8, score: 60 },
+                { key: 'solutionDepth', status: 'active', n: 8, score: 60 },
+                { key: 'communication', status: 'active', n: 8, score: 60 },
+                { key: 'optimization', status: 'active', n: 8, score: 60 },
+                { key: 'pressurePerformance', status: 'active', n: 8, score: 60 },
+                { key: 'retention', status: 'active', n: 12, score: 70 },
+                { key: 'teachingContributions', status: 'active', n: 4, score: 65 },
+            ],
+            overall: { score: 64 },
+            reportCoverage: { active: 7, total: 7, pct: 100 },
+            nearestTier: null,
+            nextTier: null,
+            teaching: {
+                score: 65, sessionCount: 2, ratingCount: 4,
+                sourceQuality: 'peer-validated', ceiling: 70,
+                flaggedSessionCount: 0, flagRate: 0,
+            },
+        }
+        const v = buildFallbackVerdict(FULL_WITH_TEACHING_LOW_N)
+        const r = validateVerdict(v, FULL_WITH_TEACHING_LOW_N)
+        expect(r.valid).toBe(true)
+    })
+})
+
 // ── buildFallbackVerdict — must always be valid in shape ─────────────
 describe('buildFallbackVerdict', () => {
     it('produces a verdict for sparse evidence', () => {

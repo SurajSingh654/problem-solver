@@ -35,6 +35,37 @@
  * we don't have outcome data yet. The VerdictLog table is how we'll
  * calibrate once we do.
  */
+/**
+ * Mastery-requirement keys that are MAXIMUMS rather than minimums — the
+ * actual value must be ≤ the threshold (rate-style metrics where smaller
+ * is better). All other masteryRequirement keys use ≥ (minimum) semantics.
+ *
+ * Add to this set when introducing a new rate / failure-frequency gate.
+ * Explicit list rather than name-based heuristic so a typo in a tier
+ * requirement can't silently flip the comparison direction.
+ */
+export const MAX_THRESHOLD_KEYS = new Set([
+  "retentionLeechRate",         // D6 v2 — leech sessions / total sessions
+  "teachingFlagRate",           // D7 v2 — flagged sessions / total sessions
+]);
+
+/**
+ * Mastery-requirement keys that belong to OPT-IN dimensions. When the
+ * user hasn't opted in (no count present in masteryCounts), the gate is
+ * SKIPPED rather than failed — opt-in dims can't punish the silent
+ * majority that hasn't engaged with them.
+ *
+ * Currently teaching is the only opt-in dim. Compare with the baseline
+ * dims (D1-D6) where every user has an implicit "n=0" — those gates
+ * legitimately fail when activation never happens.
+ */
+export const OPT_IN_KEYS = new Set([
+  "teachingSessions",
+  "teachingRatings",
+  "teachingScore",
+  "teachingFlagRate",
+]);
+
 export const READINESS_TIERS = [
   {
     id: "faang",
@@ -74,6 +105,15 @@ export const READINESS_TIERS = [
       retentionAttempts: 25,
       retentionScore: 75,
       retentionLeechRate: 0.20, // MAX: actual must be ≤ this
+      // D7 v2 (Teaching Contributions) gates — only checked when teaching
+      // counts are passed (FEATURE_TEACHING_CONTRIBUTIONS_V2 on AND user has
+      // hosted ≥1 session). FAANG requires stable-peer-cohort signal:
+      // 5 sessions × 10 ratings × score≥75 (Topping 1996 / Anderson-
+      // Shackleton 1990 — peer-rating stability).
+      teachingSessions: 5,
+      teachingRatings: 10,
+      teachingScore: 75,
+      teachingFlagRate: 0.10, // MAX: actual must be ≤ this
     },
     icon: "🏆",
   },
@@ -107,6 +147,12 @@ export const READINESS_TIERS = [
       // 2013 small-sample threshold for credible retention claim.
       retentionAttempts: 10,
       retentionScore: 60,
+      // D7 v2: Tier 2 requires peer-validated signal — 3 sessions, 5
+      // ratings, score ≥60. Below this, peer-rating reliability is too
+      // low to credibly call teaching a strength (Topping 1996).
+      teachingSessions: 3,
+      teachingRatings: 5,
+      teachingScore: 60,
     },
     icon: "🥈",
   },
@@ -197,11 +243,15 @@ export function classifyReadiness(
     if (masteryCounts && tier.masteryRequirements) {
       for (const [key, needed] of Object.entries(tier.masteryRequirements)) {
         const actual = masteryCounts[key];
+        // Opt-in dimensions: when the user hasn't engaged with the dim at
+        // all (count missing entirely), skip the gate. The user can still
+        // be tier-ready without ever hosting a teaching session.
+        if (OPT_IN_KEYS.has(key) && actual === undefined) continue;
         // Inverse-comparison keys: these are MAXIMUMS — `actual <= needed`.
-        // Only `retentionLeechRate` qualifies as of D6 v2 (a max-leech-rate
-        // gate). When a third such key appears, generalize this list.
-        const isMaxKey = key === "retentionLeechRate";
-        const fails = isMaxKey
+        // Add new max-threshold keys here (rate-style metrics where a
+        // smaller number is better). The set is intentionally explicit so
+        // a typo in a tier requirement doesn't silently flip the direction.
+        const fails = MAX_THRESHOLD_KEYS.has(key)
           ? !Number.isFinite(actual) || actual > needed
           : !Number.isFinite(actual) || actual < needed;
         if (fails) {
