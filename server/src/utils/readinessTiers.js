@@ -64,6 +64,10 @@ export const READINESS_TIERS = [
       // result: ratings stabilize after 3-4 sessions). Peer ratings are
       // a future tightening once the peer-rating UI ships.
       commMocksWithScores: 3,
+      // D4 v2 (Optimization) gates — only checked when opt counts are
+      // passed (FEATURE_OPTIMIZATION_V2 on). 10/5 mirrors D2's spread.
+      optAtTradeOffOrAbove: 10,
+      optAtOwned: 5,
     },
     icon: "🏆",
   },
@@ -87,6 +91,12 @@ export const READINESS_TIERS = [
       // AI-rated written explanations cannot honestly be Tier 2 ready on
       // communication (Levashina 2014: written-only signal r ≈ 0.20).
       commMocksWithScores: 1,
+      // D4 v2: ≥4 solutions at TRADE_OFF+, ≥2 OWNED. Trade-off
+      // articulation is the senior-level differentiator (Schoenfeld 1985;
+      // interviewing.io 2023 — "did not consider alternatives" is the #1
+      // L4/L5 no-hire reason).
+      optAtTradeOffOrAbove: 4,
+      optAtOwned: 2,
     },
     icon: "🥈",
   },
@@ -103,6 +113,10 @@ export const READINESS_TIERS = [
     masteryRequirements: {
       solidOrAbove: 6,
       solutionsAtDocumentedOrAbove: 5,
+      // D4 v2 tier3: Documented-or-Above (not Optimized) — symmetric with
+      // D2's tier3 docs gate. Avoids unmarked asymmetry between the two
+      // per-solution mastery dims at the same tier.
+      optAtDocumentedOrAbove: 4,
     },
     icon: "🥉",
   },
@@ -118,6 +132,8 @@ export const READINESS_TIERS = [
     masteryRequirements: {
       workingOrAbove: 4,
       solutionsAtDocumentedOrAbove: 3,
+      // D4 v2 junior: ≥3 documented coding solutions.
+      optAtDocumentedOrAbove: 3,
     },
     icon: "🌱",
   },

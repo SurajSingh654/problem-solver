@@ -18,10 +18,12 @@ import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 import { computePatternMastery, masteryScore } from "../utils/patternMastery.js";
 import { computeSolutionDepth } from "../utils/solutionDepth.js";
 import { computeCommunicationStats } from "../utils/communicationStats.js";
+import { computeOptimizationStats } from "../utils/optimizationStats.js";
 import {
   FEATURE_PATTERN_MASTERY_V2,
   FEATURE_SOLUTION_DEPTH_V2,
   FEATURE_COMMUNICATION_V2,
+  FEATURE_OPTIMIZATION_V2,
 } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
@@ -970,10 +972,11 @@ export async function get6DReport(req, res) {
         },
         orderBy: { createdAt: "desc" },
       }),
-      // D2 v2: ALL review attempts (no quality filter) — distinguishes
-      // "tried and failed" from "never tried" for OWNED state evaluation.
-      // Skipped entirely when the flag is off (resolves to []).
-      FEATURE_SOLUTION_DEPTH_V2
+      // D2 v2 + D4 v2: ALL review attempts (no quality filter). Both
+      // dims need this to distinguish "tried and failed" from "never
+      // tried" for their OWNED state. Fetch fires when EITHER flag is
+      // on; resolves to [] when both are off.
+      FEATURE_SOLUTION_DEPTH_V2 || FEATURE_OPTIMIZATION_V2
         ? prisma.reviewAttempt.findMany({
             where: { solution: { userId, teamId } },
             select: { solutionId: true, quality: true, recallText: true },
@@ -1064,6 +1067,12 @@ export async function get6DReport(req, res) {
     // block once metacognitiveAccuracy is available (keeps the existing
     // calibration calc as the single source of truth).
     let depth = null;
+
+    // OPTIMIZATION (D4 v2) — same calibration dependency as D2, declared
+    // here and computed inside the D4 block once metacognitiveAccuracy is
+    // available. Reuses the same allReviewAttemptsForDepth fetch (extended
+    // condition above) for OWNED-state retrieval validation.
+    let optimization = null;
 
     // COMMUNICATION (D3 v2) — source-tier ceiling scoring. Pure function
     // of inputs that are all already loaded (clarityRatings, interviews,
@@ -1507,32 +1516,55 @@ export async function get6DReport(req, res) {
       (s) => s.timeComplexity && s.spaceComplexity,
     ).length;
 
-    const d4Base = codingTotal === 0 ? 0 : Math.round(
-      (withBrute / codingTotal) * 15 +
-        (withOptimized / codingTotal) * 20 +
-        (withBothApproachesCount / codingTotal) * 30 +
-        (withBothComplexity / codingTotal) * 15,
-    );
-
-    let d4;
-    if (avgAiCodeCorrectness !== null) {
-      const correctnessGate = Math.pow(avgAiCodeCorrectness / 10, 0.6);
-      d4 = Math.round(d4Base * correctnessGate);
-    } else {
-      d4 = Math.min(d4Base, 70);
+    // ── D4 v2 (Optimization) — flag-gated ─────────────
+    // When FEATURE_OPTIMIZATION_V2 is on, optimization.score replaces the
+    // entire legacy formula. The (avgAiCodeCorrectness/10)^0.6 multiplier
+    // is dropped — codeCorrectness now gates the OPTIMIZED state
+    // transition inside computeOptimizationStats; multiplying again at
+    // the aggregate level would double-count.
+    if (FEATURE_OPTIMIZATION_V2) {
+      optimization = computeOptimizationStats({
+        solutions,
+        reviewAttempts: allReviewAttemptsForDepth,
+        metacognitiveAccuracy,
+      });
     }
 
-    // Quiz cross-feed
+    let d4;
+    if (optimization) {
+      d4 = optimization.score ?? 0;
+    } else {
+      // Legacy formula preserved for flag-off rollback.
+      const d4Base = codingTotal === 0 ? 0 : Math.round(
+        (withBrute / codingTotal) * 15 +
+          (withOptimized / codingTotal) * 20 +
+          (withBothApproachesCount / codingTotal) * 30 +
+          (withBothComplexity / codingTotal) * 15,
+      );
+      if (avgAiCodeCorrectness !== null) {
+        const correctnessGate = Math.pow(avgAiCodeCorrectness / 10, 0.6);
+        d4 = Math.round(d4Base * correctnessGate);
+      } else {
+        d4 = Math.min(d4Base, 70);
+      }
+    }
+
+    // Quiz cross-feed. Under v2 the headroom cap is 100 (optimization can
+    // legitimately reach 100 via OWNED state); under legacy it stays at 80.
     if (quizSignalD4 !== null) {
       const quizBonus = Math.round(
         (quizSignalD4 / 100) *
           QUIZ_DIMENSION_MAP.d4_optimization.maxContribution,
       );
-      const headroom = Math.max(0, 80 - d4);
+      const quizHeadroomCap = optimization ? 100 : 80;
+      const headroom = Math.max(0, quizHeadroomCap - d4);
       d4 = Math.min(d4 + Math.min(quizBonus, headroom), 100);
     }
 
-    // Interview cross-feed
+    // Interview cross-feed. Preserved on BOTH paths — interview
+    // tradeOffReasoning / optimizationAbility scores come from a separate
+    // signal source (mock interview, not solution review), so blending
+    // doesn't double-count even with optimization.score already in d4.
     if (ivD4 !== null) {
       d4 = Math.round(d4 * (1 - ivBlendWeight) + ivD4 * ivBlendWeight);
       d4 = Math.min(d4, 100);
@@ -1937,38 +1969,90 @@ export async function get6DReport(req, res) {
       }
     }
 
-    // D4 active iff ≥ 3 CODING solutions with both-approach OR AI correctness.
     let d4Score;
     {
-      const hasEnoughCoding = codingTotal >= 3;
-      const hasEnoughApproachOrAI =
-        withBothApproachesCount >= 1 || aiCodeCorrectnessScores.length >= 1;
-      if (!hasEnoughCoding) {
-        d4Score = inactiveDim(
-          "optimization",
-          `Submit ${3 - codingTotal} more CODING solution${3 - codingTotal === 1 ? "" : "s"} to measure optimization`,
-          codingTotal,
-        );
-      } else if (!hasEnoughApproachOrAI) {
-        d4Score = inactiveDim(
-          "optimization",
-          "Add brute-force AND optimized approaches on at least 1 CODING solution, or get an AI review",
-          codingTotal,
-        );
+      if (optimization) {
+        // ── D4 v2 activation: trade-off-aware gate ──────
+        // ≥3 solutions at DOCUMENTED+ AND ≥2 AI reviews. Mirrors D2's
+        // gate exactly. SAW_APPROACH-only and proxy users stay inactive.
+        const hasMin = optimization.counts.optAtDocumentedOrAbove >= 3;
+        const hasReviews = reviewedSolutions >= 2;
+        if (!hasMin || !hasReviews) {
+          const parts = [];
+          if (!hasMin) {
+            const need = 3 - optimization.counts.optAtDocumentedOrAbove;
+            parts.push(`add brute force + optimized approach to ${need} more cold-solved solution${need === 1 ? "" : "s"}`);
+          }
+          if (!hasReviews) {
+            const need = 2 - reviewedSolutions;
+            parts.push(`get ${need} more AI review${need === 1 ? "" : "s"} to validate`);
+          }
+          d4Score = inactiveDim(
+            "optimization",
+            parts.join(" and "),
+            optimization.counts.optAtDocumentedOrAbove,
+          );
+        } else {
+          // CI on (tradeOffOrAbove / totalCoding) — what fraction of
+          // coding solutions demonstrated trade-off thinking. Same
+          // quantity as the score; no score-outside-CI bug.
+          const { ci } = wilsonCI(
+            optimization.counts.optAtTradeOffOrAbove,
+            optimization.counts.optTotalCoding,
+          );
+          d4Score = activeDim("optimization", {
+            score: d4,
+            n: optimization.counts.optAtDocumentedOrAbove,
+            ci,
+            basis: [
+              `solutions_owned: ${optimization.counts.optAtOwned}`,
+              `solutions_tradeoff: ${optimization.counts.optAtTradeOff}`,
+              `solutions_optimized: ${optimization.counts.optAtOptimized}`,
+              `solutions_documented: ${optimization.counts.optAtDocumented}`,
+              `solutions_none: ${optimization.counts.optAtNone}`,
+              `calibration: ${optimization.calibrationModifier}×`,
+              `ai_reviews: ${reviewedSolutions}`,
+              ...(avgAiCodeCorrectness !== null
+                ? [`ai_correctness: ${avgAiCodeCorrectness.toFixed(1)}/10`]
+                : []),
+            ],
+          });
+          // Per-solution matrix for Phase 5 UI (the inline stacked bar).
+          d4Score.optMatrix = optimization.matrix;
+        }
       } else {
-        const { ci } = wilsonCI(withBothApproachesCount, codingTotal);
-        d4Score = activeDim("optimization", {
-          score: d4,
-          n: codingTotal,
-          ci,
-          basis: [
-            `coding_solutions: ${codingTotal}`,
-            `both_approaches: ${withBothApproachesCount}`,
-            ...(avgAiCodeCorrectness !== null
-              ? [`ai_correctness: ${avgAiCodeCorrectness.toFixed(1)}/10`]
-              : []),
-          ],
-        });
+        // ── D4 v1 (legacy) activation ───────────────────
+        // ≥3 CODING solutions with both-approach OR AI correctness.
+        const hasEnoughCoding = codingTotal >= 3;
+        const hasEnoughApproachOrAI =
+          withBothApproachesCount >= 1 || aiCodeCorrectnessScores.length >= 1;
+        if (!hasEnoughCoding) {
+          d4Score = inactiveDim(
+            "optimization",
+            `Submit ${3 - codingTotal} more CODING solution${3 - codingTotal === 1 ? "" : "s"} to measure optimization`,
+            codingTotal,
+          );
+        } else if (!hasEnoughApproachOrAI) {
+          d4Score = inactiveDim(
+            "optimization",
+            "Add brute-force AND optimized approaches on at least 1 CODING solution, or get an AI review",
+            codingTotal,
+          );
+        } else {
+          const { ci } = wilsonCI(withBothApproachesCount, codingTotal);
+          d4Score = activeDim("optimization", {
+            score: d4,
+            n: codingTotal,
+            ci,
+            basis: [
+              `coding_solutions: ${codingTotal}`,
+              `both_approaches: ${withBothApproachesCount}`,
+              ...(avgAiCodeCorrectness !== null
+                ? [`ai_correctness: ${avgAiCodeCorrectness.toFixed(1)}/10`]
+                : []),
+            ],
+          });
+        }
       }
     }
 
@@ -2119,15 +2203,17 @@ export async function get6DReport(req, res) {
         .filter((d) => d.status === "active")
         .map((d) => [d.key, d.score]),
     );
-    // Merge mastery (D1 v2) + depth (D2 v2) + communication (D3 v2) counts
-    // into a single object. Keys are non-overlapping by convention:
+    // Merge mastery (D1 v2) + depth (D2 v2) + communication (D3 v2)
+    // + optimization (D4 v2) counts into a single object. Keys are
+    // non-overlapping by convention:
     //   D1 → core*, owned, solidOrAbove, …  (patterns)
     //   D2 → solutionsAt* prefix              (solutions)
     //   D3 → comm* prefix                     (communication source quality)
+    //   D4 → opt* prefix                      (optimization trade-off)
     // When all flags off, pass null and classifyReadiness uses score-only
     // gates (legacy preserved).
     const masteryAndDepthCounts =
-      mastery || depth || communication
+      mastery || depth || communication || optimization
         ? {
             ...(mastery?.counts ?? {}),
             ...(depth?.counts ?? {}),
@@ -2138,6 +2224,7 @@ export async function get6DReport(req, res) {
                   commHasPeerRatings: communication.sources.peer ? 1 : 0,
                 }
               : {}),
+            ...(optimization?.counts ?? {}),
           }
         : null;
     const tierInfo = classifyReadiness(
@@ -2376,6 +2463,18 @@ export async function get6DReport(req, res) {
                 peerRatingsCount: communication.peerRatingsCount,
                 mocksWithCommScores: communication.mocksWithCommScores,
                 aiExplanationCount: communication.aiExplanationCount,
+              }
+            : null,
+          // Optimization v2 — null when flag off. When on, the client
+          // renders the inline 5-state stacked bar inside the D4 dim card
+          // (Phase 5) using the matrix; the verdict evidence builder
+          // reads the counts from this block.
+          optimization: optimization
+            ? {
+                matrix: optimization.matrix,
+                counts: optimization.counts,
+                baseScore: optimization.baseScore,
+                calibrationModifier: optimization.calibrationModifier,
               }
             : null,
           aiReview: {
@@ -2705,6 +2804,24 @@ function buildVerdictEvidence(report) {
       }
     : null;
 
+  // Optimization v2 — surface trade-off-state distribution so the verdict
+  // prompt can satisfy Rule 11 (no D4 strength claim without citing
+  // distribution). Keys are `opt*` prefixed in counts; rename to flat
+  // labels for the verdict prompt clarity.
+  const optCounts = report.analytics?.optimization?.counts;
+  const optimization = optCounts
+    ? {
+        owned: optCounts.optAtOwned,
+        tradeOff: optCounts.optAtTradeOff,
+        optimized: optCounts.optAtOptimized,
+        documented: optCounts.optAtDocumented,
+        none: optCounts.optAtNone,
+        tradeOffOrAbove: optCounts.optAtTradeOffOrAbove,
+        ownedOrAbove: optCounts.optAtOwnedOrAbove,
+        totalCoding: optCounts.optTotalCoding,
+      }
+    : null;
+
   return {
     user: { totalSolutions, totalReviews, totalSuccessfulReviews },
     dimensions: report.dimensions || [],
@@ -2715,6 +2832,7 @@ function buildVerdictEvidence(report) {
     patternMastery,
     solutionDepth,
     communication,
+    optimization,
     recentFlags: {
       wrongPattern: report.scoringSignals?.wrongPatternFlags ?? 0,
       overconfidence: report.scoringSignals?.overconfidenceFlags ?? 0,

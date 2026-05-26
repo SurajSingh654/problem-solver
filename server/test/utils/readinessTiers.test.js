@@ -34,6 +34,10 @@ const tier2ReadyMastery = {
   totalCoding: 18,
   // D3 communication — meets tier2 (≥1 mock), not FAANG (≥3 mocks)
   commCeiling: 80, commMocksWithScores: 2, commHasPeerRatings: 0,
+  // D4 optimization — meets tier2 (≥4 trade-off, ≥2 owned), not FAANG (≥10/≥5)
+  optAtNone: 1, optAtDocumented: 4, optAtOptimized: 6, optAtTradeOff: 5, optAtOwned: 2,
+  optAtDocumentedOrAbove: 17, optAtOptimizedOrAbove: 13, optAtTradeOffOrAbove: 7, optAtOwnedOrAbove: 2,
+  optTotalCoding: 18,
 };
 
 // The original-report user — high score from gameable formula but tiny breadth.
@@ -50,6 +54,10 @@ const originalReportMastery = {
   totalCoding: 4,
   // D3 communication — 0 mocks, 0 peer, written-only ceiling
   commCeiling: 55, commMocksWithScores: 0, commHasPeerRatings: 0,
+  // D4 optimization — 4 mostly-OPTIMIZED solutions, no TRADE_OFF (no AI complexityCheck data, no bruteForceMeta)
+  optAtNone: 0, optAtDocumented: 1, optAtOptimized: 3, optAtTradeOff: 0, optAtOwned: 0,
+  optAtDocumentedOrAbove: 4, optAtOptimizedOrAbove: 3, optAtTradeOffOrAbove: 0, optAtOwnedOrAbove: 0,
+  optTotalCoding: 4,
 };
 
 // ── Schema ───────────────────────────────────────────────────────────
@@ -332,9 +340,91 @@ describe("classifyReadiness — D3 communication gates", () => {
       solutionsAtDefendedOrAbove: 12,
       solutionsAtOwned: 6,
       commMocksWithScores: 3,
+      // D4 must also meet FAANG gate (≥10 trade-off, ≥5 owned)
+      optAtTradeOffOrAbove: 12,
+      optAtOwned: 6,
     };
     const out = classifyReadiness(82, dimsAtFaangFloor, faangReadyMastery);
     const faang = tierById(out, "faang");
     expect(faang.ready).toBe(true);
+  });
+});
+
+// ── D4 Optimization tier gates ───────────────────────────────────────
+
+describe("classifyReadiness — D4 optimization gates", () => {
+  it("user passing all dim/depth/comm gates but with 0 trade-off solutions is NOT tier2 ready", () => {
+    const masteryWithoutTradeOff = {
+      ...tier2ReadyMastery,
+      optAtTradeOffOrAbove: 1, // tier2 needs ≥4
+      optAtOwned: 0,           // tier2 needs ≥2
+    };
+    const out = classifyReadiness(70, dimsAtTier2Floor, masteryWithoutTradeOff);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    const failedKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failedKeys).toContain("optAtTradeOffOrAbove");
+    expect(failedKeys).toContain("optAtOwned");
+  });
+
+  it("user with exactly 4 trade-off + 2 owned + everything else passes Tier 2", () => {
+    // tier2ReadyMastery already has optAtTradeOffOrAbove=7, optAtOwned=2.
+    const out = classifyReadiness(70, dimsAtTier2Floor, tier2ReadyMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(true);
+  });
+
+  it("FAANG mastery requires the 10/5 trade-off spread (tier2's 7/2 not enough)", () => {
+    const dimsAtFaangFloor = {
+      patternRecognition: 75,
+      optimization: 70,
+      pressurePerformance: 70,
+      solutionDepth: 65,
+    };
+    // Strong everything else, but D4 only at tier2 levels.
+    const tier2OptStrongRest = {
+      ...tier2ReadyMastery,
+      coreSolidOrAbove: 14,
+      owned: 10,
+      solutionsAtDefendedOrAbove: 12,
+      solutionsAtOwned: 6,
+      commMocksWithScores: 3,
+      // D4 stays at tier2 numbers — should fail FAANG
+    };
+    const out = classifyReadiness(82, dimsAtFaangFloor, tier2OptStrongRest);
+    const faang = tierById(out, "faang");
+    expect(faang.ready).toBe(false);
+    const failedKeys = faang.failingMastery.map((f) => f.key);
+    expect(failedKeys).toContain("optAtTradeOffOrAbove");
+  });
+
+  it("original-report user (no AI complexityCheck data) NOT Tier 2 ready", () => {
+    // 0 trade-off, 0 owned → fails tier2 D4 gate alongside other gates.
+    const out = classifyReadiness(69, dimsAtTier2Floor, originalReportMastery);
+    const tier2 = tierById(out, "tier2");
+    expect(tier2.ready).toBe(false);
+    const failedKeys = tier2.failingMastery.map((f) => f.key);
+    expect(failedKeys).toContain("optAtTradeOffOrAbove");
+    expect(failedKeys).toContain("optAtOwned");
+  });
+
+  it("tier3 D4 gate is Documented (consistent with D2 tier3 — no asymmetry)", () => {
+    // 4 documented coding solutions → meets tier3's optAtDocumentedOrAbove ≥4.
+    // Use original-report user fixture (4 documented) but bump dim scores
+    // to tier3 floors and fix D2 to 5 docs. Should pass tier3.
+    const dimsAtTier3Floor = {
+      patternRecognition: 45,
+      optimization: 35,
+      pressurePerformance: 40,
+    };
+    const tier3Mastery = {
+      ...originalReportMastery,
+      solidOrAbove: 6,                     // D1 tier3 gate
+      solutionsAtDocumentedOrAbove: 5,     // D2 tier3 gate
+      // D4: original has optAtDocumentedOrAbove=4 — meets gate
+    };
+    const out = classifyReadiness(50, dimsAtTier3Floor, tier3Mastery);
+    const tier3 = tierById(out, "tier3");
+    expect(tier3.ready).toBe(true);
   });
 });
