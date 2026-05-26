@@ -2262,7 +2262,17 @@ export async function get6DReport(req, res) {
     const teachingApplies = sessionsHostedCount >= 1;
     let d7Score = null;
     let teaching = null; // v2 stats object — null when flag off OR not opted-in
-    if (teachingApplies) {
+    // Discoverability: when the v2 flag is on but user hasn't hosted any
+    // session, render an inactive placeholder with a CTA. Without this,
+    // the dim is invisible until the user happens to host — making the
+    // feature undiscoverable. Flag-off path stays hidden (legacy behavior).
+    if (FEATURE_TEACHING_CONTRIBUTIONS_V2 && !teachingApplies) {
+      d7Score = inactiveDim(
+        "teachingContributions",
+        "Host a peer-teaching session to unlock this dimension — share knowledge with your team for measurable impact.",
+        0,
+      );
+    } else if (teachingApplies) {
       if (FEATURE_TEACHING_CONTRIBUTIONS_V2) {
         // ── D7 v2: source-tier ceiling + sub-component blend ──
         teaching = computeTeachingStats({ sessions: teachingSessionsHosted });
@@ -2339,7 +2349,15 @@ export async function get6DReport(req, res) {
     // (or 6D) reports — no D8 axis, no widened CI denominator.
     let d8Score = null;
     let designAptitude = null; // v1 stats object — null when flag off OR no sessions
-    if (FEATURE_DESIGN_APTITUDE && Array.isArray(designSessionsCompleted) && designSessionsCompleted.length > 0) {
+    // Discoverability: when flag is on but user has zero design sessions,
+    // render an inactive placeholder with a CTA. Same reasoning as D7.
+    if (FEATURE_DESIGN_APTITUDE && (!Array.isArray(designSessionsCompleted) || designSessionsCompleted.length === 0)) {
+      d8Score = inactiveDim(
+        "designAptitude",
+        "Complete a Design Studio session (System Design or LLD) to unlock this dimension — AI evaluates phases + scenarios.",
+        0,
+      );
+    } else if (FEATURE_DESIGN_APTITUDE && Array.isArray(designSessionsCompleted) && designSessionsCompleted.length > 0) {
       designAptitude = computeDesignAptitudeStats({ sessions: designSessionsCompleted });
       if (!designAptitude.active) {
         // Has DesignSession rows but none with completed evaluation.
@@ -2387,8 +2405,6 @@ export async function get6DReport(req, res) {
         mocks: interviews,
         hrSolutionCount,
       });
-      // Only attach the dim when active (mirroring D7/D8 — opt-in dims
-      // don't render an inactive axis on users who never engaged).
       if (candidate.active) {
         behavioral = candidate;
         d9Score = activeDim("behavioralPerformance", {
@@ -2406,6 +2422,15 @@ export async function get6DReport(req, res) {
         d9Score.behavioralHrCount = behavioral.hrSolutionCount;
         d9Score.behavioralStyleCount = behavioral.distinctStyleCount;
         d9Score.behavioralCalibrationDelta = behavioral.calibrationDelta;
+      } else {
+        // Discoverability: render inactive placeholder with CTA so users
+        // who haven't run any mocks can still see the dim and know how
+        // to activate it. Mirrors the D7/D8 pattern.
+        const need = Math.max(0, 1 - candidate.mockCount);
+        const cta = candidate.mockCount === 0 && candidate.hrSolutionCount === 0
+          ? "Complete a mock interview OR solve 3 HR-category problems to unlock this dimension."
+          : `${need} more mock interview${need === 1 ? "" : "s"} unlock the full source-tier ceiling.`;
+        d9Score = inactiveDim("behavioralPerformance", cta, candidate.mockCount + candidate.hrSolutionCount);
       }
     }
 
@@ -2419,10 +2444,17 @@ export async function get6DReport(req, res) {
     const activeDims = dimensions.filter((d) => d.status === "active");
     const activeCount = activeDims.length;
 
-    // totalDims grows beyond 6 only for opt-in dims the user has engaged
-    // with. Users with no teaching + no design sessions keep the original
-    // 6D coverage math.
-    const totalDimsForUser = dimensions.length;
+    // totalDimsForUser is the *coverage denominator* — what counts against
+    // the user's coverage %. It deliberately differs from `dimensions.length`:
+    //   - Baseline dims (D1-D6) ALWAYS count, even when inactive (the user
+    //     is missing data on them — that's the gap the % is meant to surface).
+    //   - Opt-in dims (D7/D8/D9) count ONLY when activated. Otherwise the
+    //     act of enabling the flag would silently drop the coverage % for
+    //     coding-only users. Inactive opt-in placeholders still render on
+    //     the report (discoverability) but don't penalize coverage.
+    const totalDimsForUser = dimensions.filter((d) =>
+      BASELINE_DIM_KEYS.includes(d.key) || d.status === "active",
+    ).length;
 
     const reportCoverage = {
       active: activeCount,
