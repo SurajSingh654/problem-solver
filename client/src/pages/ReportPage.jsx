@@ -33,6 +33,12 @@ const SOLUTION_DEPTH_V2_ENABLED =
 const COMMUNICATION_V2_ENABLED =
     import.meta.env.VITE_FEATURE_COMMUNICATION_V2 === 'true'
 
+// D4 Optimization v2 flag — when on AND a dim has optMatrix attached,
+// the D4 dim card renders a 5-state stacked bar (None / Documented /
+// Optimized / Trade-off / Owned). Three-place declaration per CLAUDE.md.
+const OPTIMIZATION_V2_ENABLED =
+    import.meta.env.VITE_FEATURE_OPTIMIZATION_V2 === 'true'
+
 // ── Dimension config — single source of truth for this page ──
 const DIMENSIONS = [
   {
@@ -574,6 +580,51 @@ function DepthDistributionBar({ depthMatrix }) {
   )
 }
 
+// D4 v2 inline component — 5-state stacked bar showing per-solution
+// optimization distribution. Reads `optMatrix` attached by stats.controller.js
+// on the D4 dim when FEATURE_OPTIMIZATION_V2 is on. Color tokens match
+// DepthDistributionBar above for visual consistency. Sibling not shared —
+// rule of three (D2 + D4 = 2 callers); extract when a third dim needs one.
+function OptimizationDistributionBar({ optMatrix }) {
+  if (!Array.isArray(optMatrix) || optMatrix.length === 0) return null
+  const total = optMatrix.length
+  // Buckets ordered left → right by mastery: gaps first, owned last.
+  // Same color discipline as DepthDistributionBar — only state labels
+  // differ.
+  const buckets = [
+    { state: 'NONE',       cls: 'bg-surface-3', fg: 'text-text-disabled', label: 'None' },
+    { state: 'DOCUMENTED', cls: 'bg-warning',   fg: 'text-warning-fg',    label: 'Documented' },
+    { state: 'OPTIMIZED',  cls: 'bg-info',      fg: 'text-info-fg',       label: 'Optimized' },
+    { state: 'TRADE_OFF',  cls: 'bg-brand-400', fg: 'text-brand-fg-soft', label: 'Trade-off' },
+    { state: 'OWNED',      cls: 'bg-success',   fg: 'text-success-fg',    label: 'Owned' },
+  ].map(b => ({ ...b, count: optMatrix.filter(m => m.state === b.state).length }))
+
+  return (
+    <div className="mt-2 mb-2">
+      {/* Stacked horizontal bar */}
+      <div className="flex w-full h-1.5 rounded-full overflow-hidden bg-surface-3">
+        {buckets.map(b => b.count > 0 && (
+          <div
+            key={b.state}
+            className={cn('h-full', b.cls)}
+            style={{ width: `${(b.count / total) * 100}%` }}
+            title={`${b.count} ${b.label}`}
+          />
+        ))}
+      </div>
+      {/* Compact label line — gaps first→last so the user reads
+          mastery progression right-to-left. */}
+      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] font-mono mt-1">
+        {buckets.filter(b => b.count > 0).reverse().map(b => (
+          <span key={b.state} className={b.fg}>
+            {b.count} {b.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function DimensionCards({ dimByKey, communicationFromProxy }) {
   // teachingContributions (D7) is opt-in — the server only includes it
   // in dimensions[] once the user has hosted ≥1 session. Hide its card
@@ -665,6 +716,14 @@ function DimensionCards({ dimByKey, communicationFromProxy }) {
                   && Array.isArray(info?.depthMatrix)
                   && info.depthMatrix.length > 0
                   && <DepthDistributionBar depthMatrix={info.depthMatrix} />}
+
+                {/* D4 v2 — 5-state optimization distribution bar. Same
+                    render-when-data-present condition as D2's bar. */}
+                {OPTIMIZATION_V2_ENABLED
+                  && dim.key === 'optimization'
+                  && Array.isArray(info?.optMatrix)
+                  && info.optMatrix.length > 0
+                  && <OptimizationDistributionBar optMatrix={info.optMatrix} />}
 
                 {/* Contextual insight */}
                 <p className="text-[11px] text-text-tertiary leading-relaxed mb-2">
