@@ -15,6 +15,7 @@ vi.mock("../../src/lib/prisma.js", () => ({
   default: {
     mcpToken: {
       findUnique: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
     },
   },
 }));
@@ -59,9 +60,12 @@ function signMcpToken({ id = "user-1", scope = "mcp:read", jti = "jti-abc", curr
 
 beforeEach(() => {
   authInternals.revocationCache.clear();
+  authInternals.lastUsedDebounceCache.clear();
   rateInternals.resetForTests();
   prisma.mcpToken.findUnique.mockReset();
   prisma.mcpToken.findUnique.mockResolvedValue(null);
+  prisma.mcpToken.update.mockReset();
+  prisma.mcpToken.update.mockResolvedValue({});
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -283,5 +287,83 @@ describe("mcpAuth — threat 8 (server-side authz)", () => {
     const res = makeRes();
     await mcpAuth(req, res, vi.fn());
     expect(req.user.id).toBe("real-user");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// MCP-5 — lastUsedAt / lastUsedIp activity tracking (debounced)
+// ════════════════════════════════════════════════════════════════════
+describe("mcpAuth — last-used activity tracking", () => {
+  // Wait for the fire-and-forget update to settle so we can assert on it.
+  async function flushMicrotasks() {
+    await new Promise((r) => setImmediate(r));
+  }
+
+  it("writes lastUsedAt + lastUsedIp on the first authenticated request", async () => {
+    const tok = signMcpToken({ jti: "fresh-jti" });
+    const req = makeReq({
+      headers: { authorization: `Bearer ${tok}` },
+      ip: "203.0.113.42",
+    });
+    const next = vi.fn();
+    await mcpAuth(req, makeRes(), next);
+    await flushMicrotasks();
+    expect(next).toHaveBeenCalled();
+    expect(prisma.mcpToken.update).toHaveBeenCalledTimes(1);
+    const call = prisma.mcpToken.update.mock.calls[0][0];
+    expect(call.where.jti).toBe("fresh-jti");
+    expect(call.data.lastUsedIp).toBe("203.0.113.42");
+    expect(call.data.lastUsedAt).toBeInstanceOf(Date);
+  });
+
+  it("debounces follow-up requests within 5 min (no extra writes)", async () => {
+    const tok = signMcpToken({ jti: "chatty-jti" });
+    const next = vi.fn();
+    // 5 requests back-to-back — only the first should hit the DB.
+    for (let i = 0; i < 5; i++) {
+      const req = makeReq({ headers: { authorization: `Bearer ${tok}` } });
+      await mcpAuth(req, makeRes(), next);
+    }
+    await flushMicrotasks();
+    expect(prisma.mcpToken.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes again after the 5-minute debounce window elapses", async () => {
+    const tok = signMcpToken({ jti: "long-session-jti" });
+    const next = vi.fn();
+    await mcpAuth(makeReq({ headers: { authorization: `Bearer ${tok}` } }), makeRes(), next);
+    await flushMicrotasks();
+    // Manually expire the debounce by rolling the cache timestamp back.
+    const old = Date.now() - (authInternals.LAST_USED_DEBOUNCE_MS + 1);
+    authInternals.lastUsedDebounceCache.set("long-session-jti", old);
+    await mcpAuth(makeReq({ headers: { authorization: `Bearer ${tok}` } }), makeRes(), next);
+    await flushMicrotasks();
+    expect(prisma.mcpToken.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("auth still succeeds if the lastUsedAt write rejects (best-effort)", async () => {
+    prisma.mcpToken.update.mockRejectedValue(new Error("row deleted"));
+    const tok = signMcpToken({ jti: "race-condition-jti" });
+    const req = makeReq({ headers: { authorization: `Bearer ${tok}` } });
+    const next = vi.fn();
+    await mcpAuth(req, makeRes(), next);
+    await flushMicrotasks();
+    // next() called BEFORE the failing write resolves; auth path stays clean.
+    expect(next).toHaveBeenCalled();
+    expect(req.user.id).toBe("user-1");
+  });
+
+  it("does NOT write when auth fails (revoked token never updates lastUsed)", async () => {
+    prisma.mcpToken.findUnique.mockResolvedValueOnce({
+      jti: "revoked-jti",
+      revokedAt: new Date(),
+    });
+    const tok = signMcpToken({ jti: "revoked-jti" });
+    const req = makeReq({ headers: { authorization: `Bearer ${tok}` } });
+    const res = makeRes();
+    await mcpAuth(req, res, vi.fn());
+    await flushMicrotasks();
+    expect(res.statusCode).toBe(401);
+    expect(prisma.mcpToken.update).not.toHaveBeenCalled();
   });
 });

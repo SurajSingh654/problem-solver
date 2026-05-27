@@ -19,12 +19,17 @@
 //    constant-time comparison internally. We don't compare token strings
 //    ourselves anywhere; the lib handles that.
 //
-// 4. NO ACTIVITY TRACKING — unlike the web `authenticate` middleware, we
-//    don't fire-and-forget update lastActiveAt on every MCP request. MCP
-//    requests are bot-frequency (every few seconds during a coding
-//    session), so the activity-tracking debounce would just churn writes.
-//    "Last MCP activity" is tracked separately on the RevokedMcpToken
-//    table's `lastUsedAt` column when set during cleanup.
+// 4. ACTIVITY TRACKING (debounced) — MCP-5 evolution. We fire-and-forget
+//    update `McpToken.lastUsedAt` + `lastUsedIp` on every successful auth,
+//    but with a 5-minute per-jti debounce held in memory. Without the
+//    debounce, a chatty MCP session (a coding-assistant making one tool
+//    call every few seconds) would hammer the DB. With it, write rate
+//    matches the web layer's `authenticate` activity tracker. The Settings
+//    page's "Last used" column is therefore truthful within a 5-minute
+//    window — accurate enough for "did anyone use this token today?"
+//    questions, cheap enough to never matter under load. Updates are
+//    fire-and-forget — auth succeeds even if the activity write rejects
+//    (e.g. token row deleted concurrently).
 //
 // 5. NO TEAM-CONTEXT MIDDLEWARE EQUIVALENT — req.teamId is read directly
 //    from the JWT (currentTeamId claim). MCP tokens are bound to the
@@ -74,6 +79,38 @@ function setRevocationCache(jti, revoked) {
  *
  * Cached for 60s to avoid per-request DB lookup.
  */
+// ── Last-used activity tracking (MCP-5) ────────────────────────────
+// Map<jti, lastWrittenAtEpochMs>. Per-jti debounce — at most one write
+// every 5 minutes, regardless of how many requests the token makes.
+const lastUsedDebounceCache = new Map();
+const LAST_USED_DEBOUNCE_MS = 5 * 60 * 1000;
+
+/**
+ * Fire-and-forget update of `McpToken.lastUsedAt` + `lastUsedIp`.
+ * Caller should `.catch()` to swallow errors — auth must succeed even
+ * if this write fails (token row could have been deleted concurrently).
+ *
+ * Debounce semantics: the cache is updated EAGERLY (before the DB write
+ * starts) so concurrent requests in the debounce window all skip. The
+ * tradeoff: if the DB write fails, we won't retry until the window
+ * elapses. Acceptable — `lastUsedAt` is best-effort, not load-bearing.
+ */
+async function updateLastUsed(jti, ip) {
+  const now = Date.now();
+  const lastWrittenAt = lastUsedDebounceCache.get(jti);
+  if (lastWrittenAt && now - lastWrittenAt < LAST_USED_DEBOUNCE_MS) {
+    return; // debounced
+  }
+  lastUsedDebounceCache.set(jti, now);
+  await prisma.mcpToken.update({
+    where: { jti },
+    data: {
+      lastUsedAt: new Date(now),
+      lastUsedIp: ip ?? null,
+    },
+  });
+}
+
 async function isJtiRevoked(jti) {
   const cached = checkRevocationCache(jti);
   if (cached !== null) return cached;
@@ -177,6 +214,11 @@ export async function mcpAuth(req, res, next) {
     };
     req.teamId = decoded.currentTeamId ?? null;
 
+    // Fire-and-forget activity tracking — debounced to one write per
+    // jti per 5 min. Errors swallowed: auth must not fail if the
+    // token row was deleted between the revocation check and now.
+    updateLastUsed(decoded.jti, req.ip).catch(() => {});
+
     return next();
   } catch (err) {
     // Server-side log includes detail; client gets generic.
@@ -193,4 +235,7 @@ export const _internals = {
   revocationCache,
   REVOCATION_CACHE_TTL_MS,
   isJtiRevoked,
+  lastUsedDebounceCache,
+  LAST_USED_DEBOUNCE_MS,
+  updateLastUsed,
 };

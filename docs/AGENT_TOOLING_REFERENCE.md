@@ -442,6 +442,11 @@ Full table from the design discussion. **Every defense must have a corresponding
 | 13 | PII over-disclosure | Medium | Per-tool Zod output schema (response field allowlist) | Output schema validation test |
 | 14 | Cross-user enumeration | Medium | All lookups by current user; reject opaque-ID args | ID-injection test |
 | 15 | Info leakage via error messages | Low | Generic 503 to client; full stack to logs only | Error response test |
+| 16 | User pastes their MCP token into chat / screen-share / notes / public repo | High | (a) Self-serve revoke via Settings → API Access (cache TTL 60s). (b) 24h default expiry caps blast radius. (c) Per-token rate limiter caps damage during the leaked window. | Real incident 2026-05-27 (resolved by user revoke) |
+| 17 | Token sits on system clipboard after copy | Low | 24h expiry; no client-side autoclear (UX cost > benefit). User can clear clipboard manually if shown to others. | (passive — accepted) |
+| 18 | Token visible in browser DevTools → Network tab on the create-response | Low | Inherent to API-key UX (every API-key product has this trait). Mitigation: revoke if a session was screen-shared. | (passive — accepted) |
+| 19 | Maintainer pastes prod env-vars (incl. `JWT_SECRET`) into LLM chat | Critical | Documented in CLAUDE.md "Secret rotation" runbook. Operational discipline + the `***` masking convention is the only fix; no code-side defense possible. | Runbook scannable in <30s |
+| 20 | Vulnerable transitive dep ships unnoticed | High | Pre-push gate runs `npm audit --audit-level=high` on both workspaces (MCP-5). | Push with known HIGH dep → blocked |
 
 ---
 

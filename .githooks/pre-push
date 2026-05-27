@@ -33,6 +33,11 @@ if [ -d "${ROOT}/server" ] && [ -f "${ROOT}/server/package.json" ]; then
     run_in server "server: lint (strict)" npm run lint
     run_in server "server: tests"          npm run test
 
+    # Vulnerability gate — fails on HIGH or CRITICAL CVEs in deps.
+    # Moderates print as warnings but do not block. (MCP-5.)
+    # Bypass via --no-verify only if the upstream fix is in flight + tracked.
+    run_in server "server: npm audit (high+)" npm audit --audit-level=high
+
     # Prisma migration drift — fails if there are pending migrations
     # the local clone hasn't run, OR if schema.prisma is ahead of the
     # migration history. Either case would break a deploy.
@@ -49,6 +54,9 @@ fi
 # ── CLIENT ────────────────────────────────────────────────────
 if [ -d "${ROOT}/client" ] && [ -f "${ROOT}/client/package.json" ]; then
     run_in client "client: lint (strict)" npm run lint
+
+    # Vulnerability gate — fails on HIGH or CRITICAL CVEs in deps. (MCP-5.)
+    run_in client "client: npm audit (high+)" npm audit --audit-level=high
 
     # Build verification — catches:
     #   • broken imports / circular dependencies
