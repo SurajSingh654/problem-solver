@@ -58,12 +58,12 @@ The threats existed before; they were just undocumented. Now reviewers can scan 
 
 ## Threat-model evolution since MCP-4
 
-| Threat | Pre-MCP-5 | Post-MCP-5 |
-|---|---|---|
-| Vulnerable transitive dep ships | Implicit ("we'll see it in CI eventually") | Explicit pre-push gate, fail-closed at HIGH+ |
-| User leaks own token | Acknowledged in MCP-4 docs | Explicit threat-model row + Settings → Revoke flow validated by real incident |
-| Maintainer pastes secrets to LLM | Not addressed | Documented runbook + `***` masking convention |
-| "Last used" UI lies to users | Shipped + lying | Truthful within 5-min window |
+| Threat                           | Pre-MCP-5                                  | Post-MCP-5                                                                    |
+| -------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- |
+| Vulnerable transitive dep ships  | Implicit ("we'll see it in CI eventually") | Explicit pre-push gate, fail-closed at HIGH+                                  |
+| User leaks own token             | Acknowledged in MCP-4 docs                 | Explicit threat-model row + Settings → Revoke flow validated by real incident |
+| Maintainer pastes secrets to LLM | Not addressed                              | Documented runbook + `***` masking convention                                 |
+| "Last used" UI lies to users     | Shipped + lying                            | Truthful within 5-min window                                                  |
 
 ## What's still on the deferred list (MCP-6 candidates)
 

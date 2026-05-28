@@ -10,14 +10,15 @@
 
 ## How to use this folder
 
-Three reading paths depending on why you're here:
+Four reading paths depending on why you're here:
 
-| Why you're here                                     | Read                                                                                |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| You want the big picture of what's been built       | This INDEX, then any phase note                                                     |
-| You want to learn one concept (e.g. "what is MCP?") | The relevant phase note's **Concept primer** + **Glossary** sections                |
-| You're debugging a similar problem                  | The relevant phase note's **Issues & fixes** section                                |
-| You want to ship a similar phase yourself           | Read the Phase MCP-1 note end-to-end, then use `template-build-log.md` for your own |
+| Why you're here                                              | Read                                                                                |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| You want the big picture of what's been built                | This INDEX, then any phase note                                                     |
+| You're new to AI engineering and have "wait, how?" questions | [`learner-faq.md`](./learner-faq.md) — flat Q&A, jargon-friendly                    |
+| You want to learn one concept (e.g. "what is MCP?")          | The relevant phase note's **Concept primer** + **Glossary** sections                |
+| You're debugging a similar problem                           | The relevant phase note's **Issues & fixes** section                                |
+| You want to ship a similar phase yourself                    | Read the Phase MCP-1 note end-to-end, then use `template-build-log.md` for your own |
 
 ---
 
@@ -43,25 +44,33 @@ Three reading paths depending on why you're here:
 
 ### Phase 4 — MCP token API
 
-| File                                                           | Status                                          | What it covers                                                                                                                                                                                                       |
-| -------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File                                                           | Status                               | What it covers                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`04-mcp-phase-4-token-api.md`](./04-mcp-phase-4-token-api.md) | ✅ server + UI shipped 2026-05-26/27 | Per-user token API + Settings page UI. `RevokedMcpToken → McpToken` schema evolution. POST/GET/DELETE `/me/mcp-tokens`. Token-shown-once UX. Cross-user revoke returns 404 (not 403). 5-token cap. Idempotent revocation. Production-validated by real multi-user traffic. |
 
 ### Phase 5 — MCP hardening
 
-| File                                                          | Status                | What it covers                                                                                                                                                                                                                                                                |
-| ------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`05-mcp-phase-5-hardening.md`](./05-mcp-phase-5-hardening.md) | ✅ shipped 2026-05-27 | Pre-push `npm audit --audit-level=high` gate. Truthful `lastUsedAt` + `lastUsedIp` (5-min debounced fire-and-forget). Dead `@langchain/*` deps removed. Secret-rotation runbook in CLAUDE.md. Threat-model rows 16–20 covering MCP-4-UI exposures. 5 new mcpAuth tests.        |
+| File                                                           | Status                | What it covers                                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`05-mcp-phase-5-hardening.md`](./05-mcp-phase-5-hardening.md) | ✅ shipped 2026-05-27 | Pre-push `npm audit --audit-level=high` gate. Truthful `lastUsedAt` + `lastUsedIp` (5-min debounced fire-and-forget). Dead `@langchain/*` deps removed. Secret-rotation runbook in CLAUDE.md. Threat-model rows 16–20 covering MCP-4-UI exposures. 5 new mcpAuth tests. |
 
 ### Future phases (planned)
 
-| Phase                                | What it'll cover                                                                                                                                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| MCP-OAuth — Linear/Notion-tier UX    | OAuth 2.1 + PKCE + RFC 7591 Dynamic Client Registration. Replaces the PAT flow with browser-consent + auto-refresh. ~2 weeks. The next strategic bet.                                                  |
-| MCP-2 follow-up                      | `get_weekly_plan` tool — needs cache-first read + AI quota gate before MCP-safe.                                                                                                                       |
-| MCP-6 — compliance + ops             | `TokenAuditLog` table for full lifecycle audit (SOC2). Soft-delete cleanup cron for revoked rows >90d. IP geolocation in the Settings list. New-device email notifications.                            |
-| Outcome capture loop          | Populating `VerdictLog.interviewOutcome`. Survey hook + email + 6-month re-anchor. Why every weight in the system is research-by-analogy until this ships. |
-| Cross-modal recalibration     | Per-modality activation floors. Why coding-only users shouldn't claim "tier-ready".                                                                        |
+| Phase                             | What it'll cover                                                                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP-OAuth — Linear/Notion-tier UX | OAuth 2.1 + PKCE + RFC 7591 Dynamic Client Registration. Replaces the PAT flow with browser-consent + auto-refresh. ~2 weeks. The next strategic bet.                       |
+| MCP-2 follow-up                   | `get_weekly_plan` tool — needs cache-first read + AI quota gate before MCP-safe.                                                                                            |
+| MCP-6 — compliance + ops          | `TokenAuditLog` table for full lifecycle audit (SOC2). Soft-delete cleanup cron for revoked rows >90d. IP geolocation in the Settings list. New-device email notifications. |
+| Outcome capture loop              | Populating `VerdictLog.interviewOutcome`. Survey hook + email + 6-month re-anchor. Why every weight in the system is research-by-analogy until this ships.                  |
+| Cross-modal recalibration         | Per-modality activation floors. Why coding-only users shouldn't claim "tier-ready".                                                                                         |
+
+---
+
+## Learner reference
+
+| File                                 | Purpose                                                                                                                                                                                                                                                   |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`learner-faq.md`](./learner-faq.md) | Flat Q&A reference for "wait, how does X actually work?" questions that come up while reading the phase notes. Generalized for any AI engineering learner, grounded in this codebase. Add to it when you notice yourself explaining the same thing twice. |
 
 ---
 
