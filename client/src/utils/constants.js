@@ -138,6 +138,20 @@ export const PATTERNS = [
   { id: "bit-manipulation", label: "Bit Manipulation", icon: "Binary" },
 ];
 
+// ── Curriculum source lists ────────────────────────
+// Suggestions for the "Source curriculum" picker on the Add/Edit Problem
+// form. Custom labels typed by admins are accepted; the server logs
+// non-canonical entries via [sourceLists:custom] for future promotion.
+//
+// MUST stay in lock-step with
+// server/src/utils/sourceListTaxonomy.js::CANONICAL_SOURCE_LISTS.
+export const SOURCE_LISTS = [
+  "Striver A2Z",
+  "Neetcode 150",
+  "Blind 75",
+  "LeetCode Top 100",
+];
+
 // ── Companies ──────────────────────────────────────
 export const COMPANIES = [
   "Google",

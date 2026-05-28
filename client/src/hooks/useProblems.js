@@ -7,15 +7,16 @@ import { useTeamContext } from './useTeamContext'
 
 export function useProblems(filters = {}) {
   const { teamQueryKey } = useTeamContext()
-  const { category, difficulty, search, page = 1, limit = 20 } = filters
+  const { category, difficulty, search, sourceList, page = 1, limit = 20 } = filters
 
   return useQuery({
-    queryKey: [...teamQueryKey, 'problems', { category, difficulty, search, page, limit }],
+    queryKey: [...teamQueryKey, 'problems', { category, difficulty, search, sourceList, page, limit }],
     queryFn: async () => {
       const params = { page, limit }
       if (category) params.category = category
       if (difficulty) params.difficulty = difficulty
       if (search) params.search = search
+      if (sourceList) params.sourceList = sourceList
       const res = await api.get('/problems', { params })
       return res.data.data
     },

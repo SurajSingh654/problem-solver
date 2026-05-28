@@ -13,7 +13,7 @@ import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
 import { EmptyState } from '@components/ui/EmptyState'
 import { cn } from '@utils/cn'
-import { PROBLEM_CATEGORIES, HR_STAKES } from '@utils/constants'
+import { PROBLEM_CATEGORIES, HR_STAKES, SOURCE_LISTS } from '@utils/constants'
 
 // ── Helpers ────────────────────────────────────────────
 
@@ -187,6 +187,7 @@ export default function ProblemsPage() {
     const [difficulty, setDifficulty] = useState('')
     const [category, setCategory] = useState('')
     const [tag, setTag] = useState('')
+    const [sourceList, setSourceList] = useState('')
     const [showPinned, setShowPinned] = useState(false)
     const [mixedMode, setMixedMode] = useState(false)
     const [viewMode, setViewMode] = useState('grid')
@@ -205,6 +206,9 @@ export default function ProblemsPage() {
         if (category) list = list.filter(p => p.category === category)
         if (tag) list = list.filter(p =>
             p.tags?.some(t => t.toLowerCase().includes(tag.toLowerCase()))
+        )
+        if (sourceList) list = list.filter(p =>
+            p.sourceLists?.includes(sourceList)
         )
         if (search) {
             const q = search.toLowerCase()
@@ -229,7 +233,20 @@ export default function ProblemsPage() {
             })
         }
         return list
-    }, [allProblems, search, difficulty, category, tag, showPinned, mixedMode])
+    }, [allProblems, search, difficulty, category, tag, sourceList, showPinned, mixedMode])
+
+    // Available source lists from the loaded problems (canonical first, then
+    // any custom labels admins typed). Empty until at least one problem has
+    // sourceLists populated, so the row stays hidden for fresh teams.
+    const availableSourceLists = useMemo(() => {
+        const seen = new Set()
+        for (const p of allProblems) {
+            for (const sl of p.sourceLists || []) seen.add(sl)
+        }
+        const ordered = SOURCE_LISTS.filter(sl => seen.has(sl))
+        const custom = [...seen].filter(sl => !SOURCE_LISTS.includes(sl))
+        return [...ordered, ...custom]
+    }, [allProblems])
 
     // Available tags from non-HR problems (HR problems don't use algorithmic tags)
     const availableTags = useMemo(() => {
@@ -244,13 +261,14 @@ export default function ProblemsPage() {
     // Whether the current category filter is HR
     const isHRFilter = category === 'HR'
 
-    const hasFilters = difficulty || tag || search || showPinned || category || mixedMode
+    const hasFilters = difficulty || tag || search || showPinned || category || mixedMode || sourceList
 
     function clearFilters() {
         setSearch('')
         setDifficulty('')
         setCategory('')
         setTag('')
+        setSourceList('')
         setShowPinned(false)
         setMixedMode(false)
     }
@@ -498,6 +516,34 @@ export default function ProblemsPage() {
                                     )}
                                 >
                                     {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Row 4: Source curriculum — only shown when at least one
+                    problem in the list is tagged with a source. Stays hidden
+                    for teams that haven't started using sourceLists yet. */}
+                {availableSourceLists.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-text-disabled uppercase tracking-widest w-16 flex-shrink-0">
+                            Source
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {availableSourceLists.map(sl => (
+                                <button
+                                    key={sl}
+                                    onClick={() => setSourceList(v => v === sl ? '' : sl)}
+                                    className={cn(
+                                        'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg',
+                                        'text-[11px] font-semibold border transition-all duration-150',
+                                        sourceList === sl
+                                            ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                            : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                                    )}
+                                >
+                                    📚 {sl}
                                 </button>
                             ))}
                         </div>

@@ -14,7 +14,7 @@ import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { useGenerateContent, useAIStatus } from '@hooks/useAI'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
-import { COMPANIES, PATTERNS, SOURCE_LABELS, PROBLEM_CATEGORIES } from '@utils/constants'
+import { COMPANIES, PATTERNS, SOURCE_LABELS, PROBLEM_CATEGORIES, SOURCE_LISTS } from '@utils/constants'
 import { useConfirm } from '@hooks/useConfirm'
 
 const schema = z.object({
@@ -214,6 +214,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
 
     // Uncontrolled state
     const [tags, setTags] = useState(initialData?.tags || [])
+    const [sourceLists, setSourceLists] = useState(initialData?.sourceLists || [])
     const [companyTags, setCompanyTags] = useState(
         initialData?.categoryData?.companyTags ||
         initialData?.companyTags ||
@@ -263,6 +264,7 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
             },
             tags,
             companyTags: fieldConfig.showCompanyTags ? companyTags : [],
+            sourceLists,
             useCases: fieldConfig.showUseCases ? useCases : [],
             followUps: followUps.map((fq, i) => ({ ...fq, order: i })),
             isPinned,
@@ -475,6 +477,15 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                         placeholder="Type a company or pick from suggestions…"
                     />
                 )}
+                <ChipInput
+                    label="Source Curriculum (optional)"
+                    hint="Which sheet did this problem come from? Pick from suggestions or type a custom label."
+                    value={sourceLists}
+                    onChange={setSourceLists}
+                    suggestions={SOURCE_LISTS}
+                    placeholder="e.g. Striver A2Z, Neetcode 150…"
+                    max={30}
+                />
             </FormSection>
 
             {/* ── Learning Content ───────────────────────── */}

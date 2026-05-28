@@ -552,6 +552,13 @@ model Problem {
   useCases         String?
   adminNotes       String?
 
+  // ── Curriculum source lists (e.g. "Striver A2Z", "Neetcode 150") ─
+  // Pure metadata — does NOT bump `version` on change. A problem can
+  // belong to multiple curricula at once. Soft-validated against
+  // server/src/utils/sourceListTaxonomy.js (canonical entries pass
+  // silently, custom entries pass with a console warning).
+  sourceLists String[] @default([])
+
   // ── Source tracking ────────────────────────────────
   source ProblemSource @default(MANUAL)
 

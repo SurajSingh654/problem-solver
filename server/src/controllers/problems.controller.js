@@ -7,6 +7,7 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import { normalizeSourceLists } from "../utils/sourceListTaxonomy.js";
 
 // ============================================================================
 // LIST PROBLEMS
@@ -24,6 +25,7 @@ export async function listProblems(req, res) {
       difficulty,
       search,
       source,
+      sourceList,
       isPinned,
       isPublished,
       page = 1,
@@ -44,6 +46,7 @@ export async function listProblems(req, res) {
     if (category) where.category = category;
     if (difficulty) where.difficulty = difficulty;
     if (source) where.source = source;
+    if (sourceList) where.sourceLists = { has: sourceList };
     if (isPinned === "true") where.isPinned = true;
     if (search && search.trim()) {
       where.OR = [
@@ -73,6 +76,7 @@ export async function listProblems(req, res) {
           category: true,
           categoryData: true,
           tags: true,
+          sourceLists: true,
           realWorldContext: true,
           source: true,
           isPublished: true,
@@ -209,12 +213,14 @@ export async function createProblem(req, res) {
       followUps,
       companyTags,
       isPinned,
+      sourceLists,
     } = req.body;
 
     const normalizedUseCases = Array.isArray(useCases)
       ? useCases.join("\n")
       : useCases ?? null;
     const normalizedTags = [...tags, ...companyTags];
+    const normalizedSourceLists = normalizeSourceLists(sourceLists ?? [], { userId });
 
     const problem = await prisma.problem.create({
       data: {
@@ -224,6 +230,7 @@ export async function createProblem(req, res) {
         category,
         categoryData: categoryData ?? null,
         tags: normalizedTags,
+        sourceLists: normalizedSourceLists,
         realWorldContext: realWorldContext ?? null,
         useCases: normalizedUseCases,
         adminNotes: adminNotes ?? null,
@@ -285,6 +292,7 @@ export async function batchCreateProblems(req, res) {
       category: p.category,
       categoryData: p.categoryData ?? null,
       tags: [...p.tags, ...p.companyTags],
+      sourceLists: normalizeSourceLists(p.sourceLists ?? [], { userId }),
       realWorldContext: p.realWorldContext ?? null,
       useCases: Array.isArray(p.useCases)
         ? p.useCases.join("\n")
@@ -377,6 +385,7 @@ export async function updateProblem(req, res) {
       isPublished,
       isPinned,
       isHidden,
+      sourceLists,
     } = req.body;
 
     // Split content fields (bump version) from admin flags (don't).
@@ -401,6 +410,14 @@ export async function updateProblem(req, res) {
     if (isPublished !== undefined) flagFields.isPublished = isPublished;
     if (isPinned !== undefined) flagFields.isPinned = isPinned;
     if (isHidden !== undefined) flagFields.isHidden = isHidden;
+    // sourceLists is metadata (curriculum tags) — does NOT bump version,
+    // since the problem statement itself doesn't change when retagging.
+    if (sourceLists !== undefined) {
+      flagFields.sourceLists = normalizeSourceLists(sourceLists, {
+        userId: req.user.id,
+        problemId,
+      });
+    }
 
     const data = { ...contentFields, ...flagFields };
     // Only bump when a content field is actually being set.

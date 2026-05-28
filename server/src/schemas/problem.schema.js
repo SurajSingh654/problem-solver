@@ -49,6 +49,10 @@ export const createProblemSchema = z.object({
   // Separate from `tags` on input for clarity; controller merges both
   // into the `tags[]` column so title/tag search covers companies.
   companyTags: z.array(z.string().min(1).max(50)).max(30).default([]),
+  // Curriculum-source labels (e.g. "Striver A2Z", "Neetcode 150"). Soft
+  // allowlist via sourceListTaxonomy.js — non-canonical entries pass
+  // with a warning.
+  sourceLists: z.array(z.string().min(1).max(50)).max(30).default([]),
   realWorldContext: z.string().nullable().optional(),
   // Controller joins array → "\n"; schema accepts either shape.
   useCases: z.union([z.string(), z.array(z.string())]).nullable().optional(),
@@ -69,6 +73,7 @@ export const updateProblemSchema = z
     category: CATEGORY.optional(),
     categoryData: z.record(z.any()).nullable().optional(),
     tags: z.array(z.string().min(1).max(50)).max(30).optional(),
+    sourceLists: z.array(z.string().min(1).max(50)).max(30).optional(),
     realWorldContext: z.string().nullable().optional(),
     useCases: z.union([z.string(), z.array(z.string())]).nullable().optional(),
     adminNotes: z.string().nullable().optional(),

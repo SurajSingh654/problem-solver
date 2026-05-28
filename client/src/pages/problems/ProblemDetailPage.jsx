@@ -865,6 +865,20 @@ export default function ProblemDetailPage() {
                     </div>
                 )}
 
+                {/* Curriculum source lists */}
+                {problem.sourceLists?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {problem.sourceLists.map(sl => (
+                            <span key={sl}
+                                className="text-[11px] font-semibold text-brand-fg-soft
+                                           bg-brand-soft border border-brand-line
+                                           rounded-full px-2.5 py-0.5">
+                                📚 {sl}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
                 {/* Action buttons */}
                 <div className="flex items-center gap-3 mt-5 flex-wrap">
                     {/* FIX 1: All navigate calls corrected from tagged template to function call */}
