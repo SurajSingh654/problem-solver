@@ -45,7 +45,10 @@ export function useSimilarProblems() {
 
 export function useGenerateProblemsAI() {
   return useMutation({
-    mutationFn: (data) => api.post("/ai/generate-problems", data),
+    // 90s — generation runs Stage 2 (selection) + Stage 3 (parallel content
+    // gen, max 5). Wall-clock can hit 45–60s on a full batch; the global
+    // 30s default cuts off legit work mid-flight.
+    mutationFn: (data) => api.post("/ai/generate-problems", data, { timeout: 90000 }),
   });
 }
 

@@ -314,6 +314,20 @@ function AIGenerateScreen() {
     // URL recall both target LeetCode-style problems.
     const urlMode = category === 'CODING' && urls.length > 0
 
+    // Non-LeetCode URLs are flagged for the admin: the current generator
+    // prompt is LeetCode-only by design, so anything else (GFG, HackerRank,
+    // CodeForces, takeuforward.org, etc.) will land in unrecognizedUrls.
+    // Multi-platform URL support is planned as a follow-up. Not blocking —
+    // admin can still submit; this is just a heads-up.
+    const nonLeetcodeUrls = urls.filter(u => {
+        try {
+            const host = new URL(u).host.replace(/^www\./, '').toLowerCase()
+            return host !== 'leetcode.com'
+        } catch {
+            return true
+        }
+    })
+
     async function handleGenerate() {
         let finalCount = effectiveCount
         let finalDifficulty = difficulty
@@ -750,6 +764,11 @@ function AIGenerateScreen() {
                             {urlMode && (
                                 <p className="mt-2 text-[11px] font-semibold text-brand-fg-soft">
                                     🔗 URL mode active — generating {urls.length} problem{urls.length > 1 ? 's' : ''} from the URLs above. Count and Difficulty controls are ignored.
+                                </p>
+                            )}
+                            {nonLeetcodeUrls.length > 0 && (
+                                <p className="mt-1.5 text-[11px] font-semibold text-warning-fg">
+                                    ⚠️ {nonLeetcodeUrls.length} non-LeetCode URL{nonLeetcodeUrls.length > 1 ? 's' : ''}. Only LeetCode is supported today; others will land in &ldquo;couldn&rsquo;t recall&rdquo; — paste those problems manually. Multi-platform support is planned.
                                 </p>
                             )}
                         </motion.div>
