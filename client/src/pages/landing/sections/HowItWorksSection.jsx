@@ -36,7 +36,7 @@ export default function HowItWorksSection() {
         }
 
     return (
-        <motion.section className="py-20 lg:py-28 border-t border-border-subtle" {...sectionMotion}>
+        <motion.section id="how-it-works" className="py-20 lg:py-28 border-t border-border-subtle scroll-mt-20" {...sectionMotion}>
             <div className="max-w-6xl mx-auto px-4 sm:px-6">
                 <div className="text-center mb-14">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-brand-fg-soft mb-3">

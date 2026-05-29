@@ -16,8 +16,8 @@ export default function PainHookSection() {
         <motion.section className="py-20 lg:py-28 border-t border-border-subtle" {...sectionMotion}>
             <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-text-primary mb-6 leading-tight">
-                    Grinding LeetCode tells you{' '}
-                    <span className="text-text-disabled line-through decoration-2">how many problems you've solved</span>.
+                    Grinding problems tells you{' '}
+                    <span className="text-text-disabled line-through decoration-2">how many you've solved</span>.
                     {' '}
                     It doesn't tell you if you're <span className="text-brand-fg">ready</span>.
                 </h2>
@@ -26,7 +26,7 @@ export default function PainHookSection() {
                     <PainBullet
                         stat="87%"
                         statColor="text-warning-fg"
-                        text='of candidates rate themselves "ready" before a FAANG loop. About'
+                        text='of candidates rate themselves "ready" before a top-tier interview loop. About'
                         statSuffix="4%"
                         suffixColor="text-danger-fg"
                         textSuffix="actually pass."
@@ -37,9 +37,9 @@ export default function PainHookSection() {
                         text="Self-assessment without external calibration is the Kruger-Dunning trap — the less you know, the more confident you are."
                     />
                     <PainBullet
-                        stat="1500"
+                        stat="∼"
                         statColor="text-text-disabled"
-                        text='LeetCode rating tells you nothing about how you handle "explain your trade-off" probing — the part that decides hire/no-hire.'
+                        text='A high practice-platform rating tells you nothing about how you handle "explain your trade-off" probing — the part that decides hire / no-hire.'
                     />
                 </div>
             </div>

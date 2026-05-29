@@ -104,6 +104,10 @@ export function useLogin() {
 }
 
 // ── Logout ─────────────────────────────────────────────
+// Explicit user-initiated sign out → land on the public landing page.
+// (The 401 interceptor in services/api.js handles "your session expired"
+// separately and routes to /auth/login, which is correct for that case —
+// the user was actively working and likely wants to log back in.)
 export function useLogout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -111,7 +115,7 @@ export function useLogout() {
   return () => {
     useAuthStore.getState().logout();
     queryClient.clear();
-    navigate("/auth/login");
+    navigate("/");
     toast.info("Logged out successfully");
   };
 }

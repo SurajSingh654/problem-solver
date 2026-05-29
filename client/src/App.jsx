@@ -42,8 +42,10 @@ import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
 import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
 // ── Onboarding (eager — first thing new users see) ───────────
 import OnboardingPage from '@pages/OnboardingPage'
-// ── Landing page (eager — first thing cold visitors see) ─────
+// ── Landing pages (eager — first things cold visitors see) ───
 import LandingPage from '@pages/landing/LandingPage'
+import AboutPage from '@pages/landing/AboutPage'
+import ContactPage from '@pages/landing/ContactPage'
 // ── Core pages (eager — frequently accessed) ─────────────────
 import Dashboard from '@pages/Dashboard'
 import LeaderboardPage from '@pages/LeaderboardPage'
@@ -164,10 +166,12 @@ export default function App() {
           {/* ============================================================ */}
           {/* PUBLIC ROUTES — No authentication required                   */}
           {/* ============================================================ */}
-          {/* Landing page at root — public + always viewable.
-              Authed users see the same page with a "Go to Dashboard" CTA
+          {/* Landing + marketing pages — public + always viewable.
+              Authed users see the same chrome with a "Go to Dashboard" CTA
               instead of "Sign In + Start Free" (LandingNav reads auth state). */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="/auth/login" element={<Login />} />
           <Route path="/auth/register" element={<Register />} />
           <Route path="/auth/verify-email" element={<VerifyEmailPage />} />

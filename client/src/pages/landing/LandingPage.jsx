@@ -27,12 +27,8 @@ import { useEffect } from 'react'
 import { useUIStore } from '@store/useUIStore'
 import LandingNav from './sections/LandingNav'
 import LandingHero from './sections/LandingHero'
-import PainHookSection from './sections/PainHookSection'
 import TenDimensionsSection from './sections/TenDimensionsSection'
 import PillarsSection from './sections/PillarsSection'
-import HowItWorksSection from './sections/HowItWorksSection'
-import ResearchSection from './sections/ResearchSection'
-import ComparisonSection from './sections/ComparisonSection'
 import FinalCTASection from './sections/FinalCTASection'
 import LandingFooter from './sections/LandingFooter'
 
@@ -84,12 +80,8 @@ export default function LandingPage() {
 
             <main id="main-content">
                 <LandingHero />
-                <PainHookSection />
                 <TenDimensionsSection />
                 <PillarsSection />
-                <HowItWorksSection />
-                <ResearchSection />
-                <ComparisonSection />
                 <FinalCTASection />
             </main>
 

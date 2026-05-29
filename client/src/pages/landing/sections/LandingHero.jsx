@@ -127,7 +127,13 @@ export default function LandingHero() {
                             aria-hidden="true"
                         />
                         <div
-                            className="border border-white/10 rounded-3xl p-8 shadow-2xl"
+                            // px-14 (56px) gives the radar's axis labels enough
+                            // horizontal room — label text uses text-anchor="end"
+                            // / "start" which extends ~50px outside the SVG
+                            // bounds for the leftmost / rightmost dimensions
+                            // (Behavioral, Communication). py-10 keeps top/bottom
+                            // labels from hugging the card edge.
+                            className="border border-white/10 rounded-3xl px-14 py-10 shadow-2xl"
                             style={{
                                 backgroundColor: '#111118',
                                 boxShadow: '0 20px 60px -10px rgba(124,111,247,0.25), 0 0 0 1px rgba(255,255,255,0.05)',
@@ -136,9 +142,9 @@ export default function LandingHero() {
                             <RadarChart
                                 dimensions={MOCK_DIMENSIONS}
                                 overall={MOCK_OVERALL}
-                                size={340}
+                                size={300}
                             />
-                            <div className="mt-2 text-center">
+                            <div className="mt-3 text-center">
                                 <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'rgba(238,238,245,0.4)' }}>
                                     Sample 10D readiness profile
                                 </p>

@@ -29,10 +29,10 @@ const PILLARS = [
     {
         emoji: '📚',
         title: 'Curriculum-aware Library',
-        tagline: 'Track progress across Striver A2Z, Neetcode 150, Blind 75, and LC Top 100 simultaneously.',
+        tagline: 'Track progress across multiple industry-standard prep curricula simultaneously.',
         bullets: [
             'Cross-curriculum tagging — one problem can belong to multiple sheets',
-            'AI-generated problems matching your team\'s gaps, with optional URL recall',
+            'AI-generated problems matching your gaps, with optional URL recall',
             'SM-2 spaced repetition queue — you forget less, you re-learn faster',
         ],
         accent: '#22c55e',
