@@ -1252,6 +1252,7 @@ export async function generateProblemsAI(req, res) {
       targetCompany,
       focusAreas,
       sourceList,
+      urls,
     } = req.body;
 
     if (!category) {
@@ -1280,8 +1281,46 @@ export async function generateProblemsAI(req, res) {
       curriculum = match;
     }
 
-    const problemCount = Math.min(Math.max(parseInt(count) || 1, 1), 5);
-    const difficultyPref = difficulty || "auto";
+    // urls (optional) flips the generator into URL recall mode. Each URL must
+    // parse via the URL constructor and use http(s). Cap at 5 to match the
+    // existing per-batch ceiling.
+    let problemUrls = null;
+    if (urls !== undefined && urls !== null && urls !== "") {
+      if (!Array.isArray(urls)) {
+        return error(res, "urls must be an array of strings.", 400);
+      }
+      if (urls.length === 0) {
+        // Empty array — treat as not-set
+      } else if (urls.length > 5) {
+        return error(res, "urls accepts at most 5 entries.", 400);
+      } else {
+        const parsed = [];
+        for (const raw of urls) {
+          if (typeof raw !== "string" || raw.trim() === "") {
+            return error(res, "urls must be non-empty strings.", 400);
+          }
+          try {
+            const u = new URL(raw.trim());
+            if (u.protocol !== "http:" && u.protocol !== "https:") {
+              return error(res, `Invalid URL protocol: ${raw}`, 400);
+            }
+            parsed.push(raw.trim());
+          } catch {
+            return error(res, `Malformed URL: ${raw}`, 400);
+          }
+        }
+        problemUrls = parsed;
+      }
+    }
+    const urlMode = problemUrls !== null;
+
+    // URL mode forces count = urls.length and difficulty = "auto" (AI infers
+    // per URL from recall). Form controls are visually locked client-side;
+    // server enforces it regardless to keep the prompt coherent.
+    const problemCount = urlMode
+      ? problemUrls.length
+      : Math.min(Math.max(parseInt(count) || 1, 1), 5);
+    const difficultyPref = urlMode ? "auto" : difficulty || "auto";
 
     // ── STAGE 1: Intelligence Gathering ────────────────
     // All DB queries run in parallel for speed.
@@ -1436,6 +1475,7 @@ export async function generateProblemsAI(req, res) {
       targetCompany,
       focusAreas,
       sourceList: curriculum,
+      urls: problemUrls,
       platformAssignments,
     };
 
@@ -1444,6 +1484,7 @@ export async function generateProblemsAI(req, res) {
 
     let selections = [];
     let learningPath = "";
+    let unrecognizedUrls = [];
 
     try {
       const selectionResult = await aiComplete({
@@ -1460,12 +1501,14 @@ export async function generateProblemsAI(req, res) {
 
       // Validate the AI's selection against hard rules: array length,
       // urlConfidence enum, well-formed URLs, HR category required for HR.
-      // Any violation → throw to trigger the existing legacy single-call
-      // fallback below. The fallback path already exists and handles
-      // both AI errors and validation failures with one branch.
+      // In URL mode, the count check is relaxed: selections (high-conf) +
+      // unrecognizedUrls must equal the requested count, and learningPath
+      // is optional. Any violation → throw to trigger the legacy single-call
+      // fallback (non-URL mode only).
       const selectionCheck = validateProblemSelection(selectionResult, {
         count: problemCount,
         category,
+        urlMode,
       });
       if (!selectionCheck.valid) {
         console.warn(
@@ -1478,14 +1521,32 @@ export async function generateProblemsAI(req, res) {
 
       selections = selectionResult.selections || [];
       learningPath = selectionResult.learningPath || "";
+      if (urlMode && Array.isArray(selectionResult.unrecognizedUrls)) {
+        unrecognizedUrls = selectionResult.unrecognizedUrls;
+      }
 
-      // Enforce platform assignments — AI sometimes substitutes platforms
+      // Enforce platform assignments — AI sometimes substitutes platforms.
+      // platformAssignments was sized for `problemCount` (URL count), but in
+      // URL mode the AI may have returned fewer selections — index by
+      // selection position, not slot, since the legacy slot semantics
+      // (E/M/H ordering) don't apply when URLs drive selection.
       selections = selections.map((sel, i) => ({
         ...sel,
         platform: platformAssignments[i]?.platform || sel.platform,
       }));
     } catch (err) {
       console.error("Stage 2 selection failed:", err.message);
+
+      // In URL mode, the legacy single-call generator can't recall specific
+      // URLs — falling back would silently substitute generic problems and
+      // confuse the admin. Surface the failure instead.
+      if (urlMode) {
+        return aiErrorResponse(
+          res,
+          err,
+          "AI failed to recall the requested URLs. Try fewer URLs or paste the problem statement manually.",
+        );
+      }
 
       // Fallback to legacy single-call approach
       const { problemGenerationPrompt } =
@@ -1750,6 +1811,7 @@ export async function generateProblemsAI(req, res) {
       category,
       difficulty: difficultyPref,
       sourceList: curriculum,
+      unrecognizedUrls,
       pipeline: "multi-stage",
       stages: {
         intelligenceGathered: !!teamContext,

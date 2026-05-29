@@ -1307,6 +1307,7 @@ SELECTION RULES:
 6. If <target_company> is set, prioritize problems that company is known for
 7. If <admin_focus_request> is set, prioritize those areas
 8. If <source_curriculum> is set, this is a HARD CONSTRAINT — select problems EXCLUSIVELY from that canonical sheet. Do not invent problems "in the style of" the sheet. If you cannot recall N distinct problems from that sheet matching the difficulty and focus areas, return fewer selections — never pad with off-list problems. <admin_focus_request> and <difficulty_requirement> narrow further WITHIN the curriculum.
+9. If <problem_urls> is set, this is URL RECALL MODE. For each URL, recall the exact problem behind it: title, difficulty, pattern. Set urlConfidence: "high" only if you confidently know the problem. If you do NOT know a URL, OMIT it from "selections" and add the URL to the top-level "unrecognizedUrls" array. Do not invent titles for URLs you don't recognize — partial recall is acceptable, hallucination is not. In URL mode, <admin_focus_request> and <difficulty_requirement> are advisory only; the URL list is the source of truth for which problems to return.
 
 ${UNTRUSTED_INPUT_RULE}
 
@@ -1324,7 +1325,8 @@ Return JSON:
       "hrQuestionCategory": "CAREER_NARRATIVE | MOTIVATION_AND_FIT | SELF_ASSESSMENT | WORK_STYLE | LOGISTICS | QUESTIONS_FOR_THEM | null — set only for HR problems"
     }
   ],
-  "learningPath": "one sentence describing how these problems build on each other"
+  "learningPath": "one sentence describing how these problems build on each other (omit or empty string in URL mode)",
+  "unrecognizedUrls": ["set ONLY in URL mode — array of admin-supplied URLs you cannot confidently recall"]
 }`;
 
   const userParts = [
@@ -1361,6 +1363,14 @@ Return JSON:
     userParts.push(
       `<source_curriculum>${xmlEscape(String(data.sourceList))}</source_curriculum>`,
     );
+  }
+  if (Array.isArray(data.urls) && data.urls.length > 0) {
+    userParts.push("");
+    userParts.push(`<problem_urls count="${data.urls.length}">`);
+    data.urls.forEach((u) => {
+      userParts.push(`  <url>${xmlEscape(String(u))}</url>`);
+    });
+    userParts.push("</problem_urls>");
   }
 
   return { system, user: userParts.join("\n") };

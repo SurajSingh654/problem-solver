@@ -1227,7 +1227,10 @@ function isWellFormedUrlOrEmpty(url) {
   }
 }
 
-export function validateProblemSelection(result, { count, category } = {}) {
+export function validateProblemSelection(
+  result,
+  { count, category, urlMode = false } = {},
+) {
   const violations = [];
   if (!result || typeof result !== "object") {
     return { valid: false, violations: ["not-an-object"] };
@@ -1236,13 +1239,44 @@ export function validateProblemSelection(result, { count, category } = {}) {
   if (!Array.isArray(result.selections)) {
     return { valid: false, violations: ["selections-not-array"] };
   }
-  if (typeof count === "number" && result.selections.length !== count) {
-    violations.push(
-      `selections-count-mismatch:expected=${count}-got=${result.selections.length}`,
-    );
-  }
-  if (typeof result.learningPath !== "string" || result.learningPath.length === 0) {
-    violations.push("learningPath-empty");
+
+  // URL mode: admin pasted N URLs. AI may not recognize all of them, so
+  // `selections` (high-confidence) + `unrecognizedUrls` (low/unknown) must
+  // together cover the requested count. learningPath is optional in URL
+  // mode — admin picked the order, no AI-curated progression to describe.
+  if (urlMode) {
+    const unrecognized = result.unrecognizedUrls;
+    if (unrecognized != null && !Array.isArray(unrecognized)) {
+      violations.push("unrecognizedUrls-not-array");
+    } else if (Array.isArray(unrecognized)) {
+      unrecognized.forEach((u, i) => {
+        if (typeof u !== "string" || u.trim() === "") {
+          violations.push(`unrecognizedUrls[${i}]-not-string`);
+        }
+      });
+    }
+    if (typeof count === "number") {
+      const total =
+        result.selections.length +
+        (Array.isArray(unrecognized) ? unrecognized.length : 0);
+      if (total !== count) {
+        violations.push(
+          `urls-count-mismatch:expected=${count}-got=${total}`,
+        );
+      }
+    }
+  } else {
+    if (typeof count === "number" && result.selections.length !== count) {
+      violations.push(
+        `selections-count-mismatch:expected=${count}-got=${result.selections.length}`,
+      );
+    }
+    if (
+      typeof result.learningPath !== "string" ||
+      result.learningPath.length === 0
+    ) {
+      violations.push("learningPath-empty");
+    }
   }
 
   result.selections.forEach((sel, i) => {

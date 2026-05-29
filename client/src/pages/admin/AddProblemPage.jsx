@@ -8,6 +8,7 @@ import { useCreateProblem } from '@hooks/useProblems'
 import { useGenerateProblemsAI } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
+import { ChipInput } from '@components/ui/ChipInput'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import api from '@services/api'
@@ -252,6 +253,7 @@ function AIGenerateScreen() {
     const [targetCompany, setTargetCompany] = useState('')
     const [focusAreas, setFocusAreas] = useState('')
     const [sourceList, setSourceList] = useState('')
+    const [urls, setUrls] = useState([])
     const [generated, setGenerated] = useState(null)
     const [reasoning, setReasoning] = useState('')
     const [approvingIdx, setApprovingIdx] = useState(null)
@@ -308,11 +310,31 @@ function AIGenerateScreen() {
         }
     }
 
+    // URL mode = admin pasted at least one URL chip. Coding-only — sheets and
+    // URL recall both target LeetCode-style problems.
+    const urlMode = category === 'CODING' && urls.length > 0
+
     async function handleGenerate() {
         let finalCount = effectiveCount
         let finalDifficulty = difficulty
 
-        if (difficulty === 'custom') {
+        if (urlMode) {
+            // Validate every chip parses as an http(s) URL before hitting the
+            // server. Server validates again, but failing fast here gives a
+            // better error toast.
+            for (const u of urls) {
+                try {
+                    const parsed = new URL(u)
+                    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                        toast.error(`Invalid URL protocol: ${u}`)
+                        return
+                    }
+                } catch {
+                    toast.error(`Malformed URL: ${u}`)
+                    return
+                }
+            }
+        } else if (difficulty === 'custom') {
             finalCount = effectiveTotalCustom
             if (finalCount === 0) {
                 toast.error('Select at least 1 problem')
@@ -324,16 +346,28 @@ function AIGenerateScreen() {
         try {
             const res = await generateAI.mutateAsync({
                 category,
-                count: finalCount,
-                difficulty: finalDifficulty,
+                // URL mode: count + difficulty come from the URLs themselves
+                count: urlMode ? undefined : finalCount,
+                difficulty: urlMode ? undefined : finalDifficulty,
                 targetCompany: targetCompany.trim() || undefined,
                 focusAreas: focusAreas.trim() || undefined,
                 // Curriculum sheets are coding-only — don't leak into SD/LLD/HR
                 sourceList: category === 'CODING' && sourceList ? sourceList : undefined,
+                urls: urlMode ? urls : undefined,
             })
             setGenerated(res.data.data.problems || [])
             setReasoning(res.data.data.reasoning || '')
             setHasRetryState(false)
+
+            // Surface URLs the AI couldn't recall — admin should paste those
+            // problem statements manually instead of approving a stub.
+            const unrec = res.data.data.unrecognizedUrls || []
+            if (unrec.length > 0) {
+                toast.error(
+                    `Couldn't recall: ${unrec.join(', ')}. Paste those problem statements manually.`,
+                    `AI didn't recognize ${unrec.length} of ${urls.length} URL${urls.length > 1 ? 's' : ''}`,
+                )
+            }
         } catch (err) {
             // Distinguish timeout from other errors for clear user messaging
             if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
@@ -409,7 +443,9 @@ function AIGenerateScreen() {
         }
     }
 
-    const displayCount = difficulty === 'custom' ? effectiveTotalCustom : effectiveCount
+    const displayCount = urlMode
+        ? urls.length
+        : difficulty === 'custom' ? effectiveTotalCustom : effectiveCount
 
     return (
         <div className="space-y-6">
@@ -690,6 +726,32 @@ function AIGenerateScreen() {
                                     </button>
                                 ))}
                             </div>
+                        </motion.div>
+                    )}
+
+                    {/* Specific Problem URLs — coding only. When present, AI is
+                        told to recall those exact problems instead of selecting
+                        new ones. count + difficulty are inferred from the URL
+                        list, so the controls above render disabled. */}
+                    {category === 'CODING' && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                        >
+                            <ChipInput
+                                label="Specific Problem URLs (optional)"
+                                hint="Paste up to 5 LeetCode URLs. AI recalls each problem's title, difficulty, and pattern. Count + difficulty above are ignored when URLs are set."
+                                value={urls}
+                                onChange={setUrls}
+                                placeholder="https://leetcode.com/problems/two-sum/"
+                                max={5}
+                            />
+                            {urlMode && (
+                                <p className="mt-2 text-[11px] font-semibold text-brand-fg-soft">
+                                    🔗 URL mode active — generating {urls.length} problem{urls.length > 1 ? 's' : ''} from the URLs above. Count and Difficulty controls are ignored.
+                                </p>
+                            )}
                         </motion.div>
                     )}
 
