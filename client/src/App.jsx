@@ -30,7 +30,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // ── Layout ───────────────────────────────────────────────────
 import { AppShell } from '@components/layout/AppShell'
 import ProtectedRoute from '@components/layout/ProtectedRoute'
-import PublicOrAuthRedirect from '@components/layout/PublicOrAuthRedirect'
 import { Spinner } from '@components/ui/Spinner'
 import { ToastContainer } from '@components/ui/Toast'
 import useAuthStore from '@store/useAuthStore'
@@ -165,8 +164,10 @@ export default function App() {
           {/* ============================================================ */}
           {/* PUBLIC ROUTES — No authentication required                   */}
           {/* ============================================================ */}
-          {/* Landing page at root — authed users skip straight to /dashboard. */}
-          <Route path="/" element={<PublicOrAuthRedirect publicElement={<LandingPage />} />} />
+          {/* Landing page at root — public + always viewable.
+              Authed users see the same page with a "Go to Dashboard" CTA
+              instead of "Sign In + Start Free" (LandingNav reads auth state). */}
+          <Route path="/" element={<LandingPage />} />
           <Route path="/auth/login" element={<Login />} />
           <Route path="/auth/register" element={<Register />} />
           <Route path="/auth/verify-email" element={<VerifyEmailPage />} />

@@ -40,10 +40,19 @@
             href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
     </noscript>
 
-    <!-- Prevent flash of wrong theme — runs before any rendering -->
+    <!-- Prevent flash of wrong theme — runs before any rendering.
+         Default theme rules:
+           1. If user has explicitly chosen via the toggle → use their choice.
+           2. Else, if landing page (path === '/') → light (warmer first impression).
+           3. Else → dark (the authed app's working theme).
+         Existing users with `ps_theme` already in localStorage see no change. -->
     <script>
         (function () {
-            var theme = localStorage.getItem('ps_theme') || 'dark'
+            var stored = localStorage.getItem('ps_theme')
+            var theme = stored
+            if (!theme) {
+                theme = window.location.pathname === '/' ? 'light' : 'dark'
+            }
             var html = document.documentElement
             if (theme === 'light') {
                 html.classList.remove('dark')

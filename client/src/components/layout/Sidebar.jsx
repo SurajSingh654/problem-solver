@@ -16,11 +16,12 @@
 // itself on mobile.
 // ============================================================================
 import { useState, useMemo } from 'react'
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import useAuthStore from '@store/useAuthStore'
 import { useUIStore } from '@store/useUIStore'
 import { cn } from '@utils/cn'
+import { BrandMark } from '@components/ui/BrandMark'
 
 // ── Section definitions per role ─────────────────────────────
 function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl }) {
@@ -434,40 +435,28 @@ export default function Sidebar() {
 }
 
 function Logo({ collapsed }) {
+    // Logo links to the public landing (/). Authed users CAN view the landing
+    // page — useful for showing the marketing story to a colleague mid-call,
+    // or just clicking back to "home." Use the Dashboard sidebar item to
+    // return to the working area.
     return (
-        <div
+        <Link
+            to="/"
             className={cn(
                 'flex items-center gap-3 border-b border-border-default',
+                'hover:bg-surface-2 transition-colors duration-150',
                 collapsed ? 'px-3 py-4 justify-center' : 'px-5 py-4',
             )}
+            aria-label="ProbSolver — back to home"
+            title={collapsed ? 'Home' : undefined}
         >
-            <div
-                className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-blue-500
-                           flex items-center justify-center shrink-0"
-            >
-                <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="white"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                    <polyline points="16 18 22 12 16 6" />
-                    <polyline points="8 6 2 12 8 18" />
-                </svg>
-            </div>
+            <BrandMark size={32} />
             {!collapsed && (
-                <span
-                    className="text-sm font-extrabold bg-gradient-to-r from-brand-300
-                               to-blue-400 bg-clip-text text-transparent"
-                >
+                <span className="text-sm font-extrabold tracking-tight text-text-primary">
                     ProbSolver
                 </span>
             )}
-        </div>
+        </Link>
     )
 }
 

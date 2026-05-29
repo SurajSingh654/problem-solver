@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Button } from '@components/ui/Button'
+import useAuthStore from '@store/useAuthStore'
 
 export default function FinalCTASection() {
     const reduce = useReducedMotion()
+    const { isAuthenticated, user } = useAuthStore()
+    const dashboardHref = user?.globalRole === 'SUPER_ADMIN' ? '/super-admin' : '/dashboard'
 
     const motionProps = reduce
         ? {}
@@ -39,14 +42,24 @@ export default function FinalCTASection() {
                     <p className="text-lg text-text-secondary mb-8 max-w-xl mx-auto">
                         Get your first 10D readiness score in under five minutes. Personal mode is free forever.
                     </p>
-                    <Link to="/auth/register">
-                        <Button variant="primary" size="xl">
-                            Start Free →
-                        </Button>
-                    </Link>
-                    <p className="text-xs text-text-disabled mt-4">
-                        No credit card. Personal mode forever free.
-                    </p>
+                    {isAuthenticated && user ? (
+                        <Link to={dashboardHref}>
+                            <Button variant="primary" size="xl">
+                                Go to Dashboard →
+                            </Button>
+                        </Link>
+                    ) : (
+                        <>
+                            <Link to="/auth/register">
+                                <Button variant="primary" size="xl">
+                                    Start Free →
+                                </Button>
+                            </Link>
+                            <p className="text-xs text-text-disabled mt-4">
+                                No credit card. Personal mode forever free.
+                            </p>
+                        </>
+                    )}
                 </motion.div>
             </div>
         </section>

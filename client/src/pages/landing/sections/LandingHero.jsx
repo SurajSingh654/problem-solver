@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { RadarChart } from '@components/charts/RadarChart'
+import useAuthStore from '@store/useAuthStore'
 
 // Mock 10D dimension scores for the hero radar. Numbers chosen to look
 // realistic — strong on technical (D1, D2, D4) with mid-tier soft skills
@@ -25,6 +26,7 @@ const MOCK_OVERALL = 68
 
 export default function LandingHero() {
     const reduce = useReducedMotion()
+    const { isAuthenticated, user } = useAuthStore()
 
     const fadeIn = reduce
         ? {}
@@ -34,9 +36,13 @@ export default function LandingHero() {
             transition: { duration: 0.5, ease: 'easeOut' },
         }
 
+    const dashboardHref = user?.globalRole === 'SUPER_ADMIN' ? '/super-admin' : '/dashboard'
+
     return (
         <section className="relative overflow-hidden">
-            {/* Hero gradient backdrop — already brand-tuned in styles/index.css */}
+            {/* Hero gradient backdrop — works in both themes via low-opacity
+                purple haze. Light surfaces still get the subtle brand glow,
+                dark surfaces get a richer wash. */}
             <div
                 className="absolute inset-0 -z-10 opacity-80"
                 style={{
@@ -69,11 +75,19 @@ export default function LandingHero() {
                         </p>
 
                         <div className="flex flex-wrap gap-3 mb-8">
-                            <Link to="/auth/register">
-                                <Button variant="primary" size="lg">
-                                    Start Free
-                                </Button>
-                            </Link>
+                            {isAuthenticated && user ? (
+                                <Link to={dashboardHref}>
+                                    <Button variant="primary" size="lg">
+                                        Go to Dashboard →
+                                    </Button>
+                                </Link>
+                            ) : (
+                                <Link to="/auth/register">
+                                    <Button variant="primary" size="lg">
+                                        Start Free
+                                    </Button>
+                                </Link>
+                            )}
                             <a href="#ten-dimensions">
                                 <Button variant="secondary" size="lg">
                                     See how it scores you →
@@ -88,7 +102,10 @@ export default function LandingHero() {
                         </div>
                     </motion.div>
 
-                    {/* Right — animated radar */}
+                    {/* Right — animated radar in a fixed-dark island so the
+                        chart's hardcoded white text stays readable in light
+                        mode. Functions as a "data viz card" — same idea as
+                        a screenshot held in a frame. */}
                     <motion.div
                         className="relative flex items-center justify-center"
                         {...(reduce
@@ -99,7 +116,7 @@ export default function LandingHero() {
                                 transition: { duration: 0.7, delay: 0.15, ease: 'easeOut' },
                             })}
                     >
-                        {/* Soft brand glow behind the radar */}
+                        {/* Soft brand glow underlay */}
                         <div
                             className="absolute inset-0 -z-10"
                             style={{
@@ -109,14 +126,20 @@ export default function LandingHero() {
                             }}
                             aria-hidden="true"
                         />
-                        <div className="bg-surface-1/40 backdrop-blur-sm border border-border-subtle rounded-3xl p-8 shadow-lg">
+                        <div
+                            className="border border-white/10 rounded-3xl p-8 shadow-2xl"
+                            style={{
+                                backgroundColor: '#111118',
+                                boxShadow: '0 20px 60px -10px rgba(124,111,247,0.25), 0 0 0 1px rgba(255,255,255,0.05)',
+                            }}
+                        >
                             <RadarChart
                                 dimensions={MOCK_DIMENSIONS}
                                 overall={MOCK_OVERALL}
                                 size={340}
                             />
                             <div className="mt-2 text-center">
-                                <p className="text-[10px] uppercase tracking-widest text-text-disabled font-bold">
+                                <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'rgba(238,238,245,0.4)' }}>
                                     Sample 10D readiness profile
                                 </p>
                             </div>
