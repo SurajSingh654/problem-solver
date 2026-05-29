@@ -1429,7 +1429,7 @@ function DebriefScreen({ debrief, sessionData: _sessionData, onNewInterview }) {
             <div className="flex gap-3 flex-wrap">
                 <Button variant="primary" size="md" onClick={onNewInterview}>New Interview</Button>
                 <Button variant="secondary" size="md" onClick={() => navigate('/interview-history')}>View History</Button>
-                <Button variant="ghost" size="md" onClick={() => navigate('/')}>Back to Dashboard</Button>
+                <Button variant="ghost" size="md" onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
             </div>
         </div>
     )

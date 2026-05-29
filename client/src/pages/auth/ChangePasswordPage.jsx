@@ -35,7 +35,7 @@ export default function ChangePasswordPage() {
                 currentPassword: data.currentPassword,
                 newPassword: data.newPassword,
             })
-            navigate('/')
+            navigate('/dashboard')
         } catch {
             // error handled by hook
         }

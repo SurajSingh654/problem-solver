@@ -30,6 +30,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // ── Layout ───────────────────────────────────────────────────
 import { AppShell } from '@components/layout/AppShell'
 import ProtectedRoute from '@components/layout/ProtectedRoute'
+import PublicOrAuthRedirect from '@components/layout/PublicOrAuthRedirect'
 import { Spinner } from '@components/ui/Spinner'
 import { ToastContainer } from '@components/ui/Toast'
 import useAuthStore from '@store/useAuthStore'
@@ -42,6 +43,8 @@ import ResetPasswordPage from '@pages/auth/ResetPasswordPage'
 import ChangePasswordPage from '@pages/auth/ChangePasswordPage'
 // ── Onboarding (eager — first thing new users see) ───────────
 import OnboardingPage from '@pages/OnboardingPage'
+// ── Landing page (eager — first thing cold visitors see) ─────
+import LandingPage from '@pages/landing/LandingPage'
 // ── Core pages (eager — frequently accessed) ─────────────────
 import Dashboard from '@pages/Dashboard'
 import LeaderboardPage from '@pages/LeaderboardPage'
@@ -139,9 +142,9 @@ function Lazy({ children }) {
 // ── Catch-all: redirect based on role ────────────────────────
 function CatchAllRedirect() {
   const { user, isAuthenticated } = useAuthStore()
-  if (!isAuthenticated) return <Navigate to="/auth/login" replace />
+  if (!isAuthenticated) return <Navigate to="/" replace />
   if (user?.globalRole === 'SUPER_ADMIN') return <Navigate to="/super-admin" replace />
-  return <Navigate to="/" replace />
+  return <Navigate to="/dashboard" replace />
 }
 // ============================================================================
 // APP
@@ -162,6 +165,8 @@ export default function App() {
           {/* ============================================================ */}
           {/* PUBLIC ROUTES — No authentication required                   */}
           {/* ============================================================ */}
+          {/* Landing page at root — authed users skip straight to /dashboard. */}
+          <Route path="/" element={<PublicOrAuthRedirect publicElement={<LandingPage />} />} />
           <Route path="/auth/login" element={<Login />} />
           <Route path="/auth/register" element={<Register />} />
           <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
@@ -233,7 +238,7 @@ export default function App() {
             }
           >
             {/* ── Dashboard ─────────────────────────────────────────── */}
-            <Route index element={<Dashboard />} />
+            <Route path="dashboard" element={<Dashboard />} />
             {/* ── Problems ──────────────────────────────────────────── */}
             <Route path="problems" element={<Lazy><ProblemsPage /></Lazy>} />
             <Route path="problems/:problemId" element={<Lazy><ProblemDetailPage /></Lazy>} />

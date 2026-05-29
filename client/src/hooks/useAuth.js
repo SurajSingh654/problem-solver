@@ -80,7 +80,7 @@ export function useLogin() {
         navigate("/onboarding");
       } else {
         toast.success(`Welcome back, ${user.name}!`);
-        navigate("/");
+        navigate("/dashboard");
       }
     },
     onError: (err) => {

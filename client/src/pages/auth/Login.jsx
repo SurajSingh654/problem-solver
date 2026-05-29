@@ -77,7 +77,7 @@ export default function Login() {
             if (user?.globalRole === 'SUPER_ADMIN') {
                 navigate('/super-admin', { replace: true })
             } else {
-                navigate('/', { replace: true })
+                navigate('/dashboard', { replace: true })
             }
         }
     }, [isAuthenticated, navigate])

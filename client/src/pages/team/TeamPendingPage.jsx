@@ -186,7 +186,7 @@ export default function TeamPendingPage() {
 
         <Button
           variant="primary"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="mx-auto"
         >
           Go to Dashboard

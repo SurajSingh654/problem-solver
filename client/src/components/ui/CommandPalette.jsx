@@ -21,7 +21,7 @@ function getTeamCommands(isTeamAdmin, navigate, close) {
     {
       group: 'Navigate',
       items: [
-        { label: 'Dashboard', shortcut: 'G D', icon: '🏠', action: () => { navigate('/'); close() } },
+        { label: 'Dashboard', shortcut: 'G D', icon: '🏠', action: () => { navigate('/dashboard'); close() } },
         { label: 'Problems', shortcut: 'G P', icon: '📋', action: () => { navigate('/problems'); close() } },
         { label: 'Design Studio', shortcut: 'G G', icon: '🏗️', action: () => { navigate('/design-studio'); close() } },
         { label: 'Mock Interview', shortcut: 'G I', icon: '💬', action: () => { navigate('/mock-interview'); close() } },

@@ -279,7 +279,7 @@ export default function HowToPage() {
                             <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />
                             README →
                         </Link>
-                        <Link to="/" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
+                        <Link to="/dashboard" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                                                 text-xs font-medium text-text-tertiary
                                                 hover:bg-surface-3 hover:text-text-primary transition-all">
                             <span className="w-1.5 h-1.5 rounded-full bg-brand-soft" />

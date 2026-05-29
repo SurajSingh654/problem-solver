@@ -58,14 +58,14 @@ export default function ProtectedRoute({
 
     // ── SuperAdmin guard ─────────────────────────────────
     if (requireSuperAdmin && user.globalRole !== 'SUPER_ADMIN') {
-        return <Navigate to="/" replace />
+        return <Navigate to="/dashboard" replace />
     }
 
     // ── Team admin guard ─────────────────────────────────
     if (requireTeamAdmin) {
         const isAdmin = user.globalRole === 'SUPER_ADMIN' || user.teamRole === 'TEAM_ADMIN'
         if (!isAdmin) {
-            return <Navigate to="/" replace />
+            return <Navigate to="/dashboard" replace />
         }
     }
 

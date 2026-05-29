@@ -163,7 +163,7 @@ export default function SetupPage() {
                             <span className="w-1.5 h-1.5 rounded-full bg-success-soft" />
                             README →
                         </Link>
-                        <Link to="/"
+                        <Link to="/dashboard"
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg
                              text-xs font-medium text-text-tertiary
                              hover:bg-surface-3 hover:text-text-primary transition-all">
@@ -766,7 +766,7 @@ AI_RATE_LIMIT_PER_DAY=20`}
                         className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         README →
                     </Link>
-                    <Link to="/"
+                    <Link to="/dashboard"
                         className="text-xs text-text-tertiary hover:text-brand-fg-soft transition-colors">
                         ← Back to App
                     </Link>

@@ -1439,7 +1439,7 @@ export function ResultsScreen({ quizData, gradedAnswers, timeUsed, quizId, onNew
                     </svg>
                     New Questions
                 </Button>
-                <Button variant="ghost" size="md" onClick={() => navigate('/')}>
+                <Button variant="ghost" size="md" onClick={() => navigate('/dashboard')}>
                     Dashboard
                 </Button>
             </div>

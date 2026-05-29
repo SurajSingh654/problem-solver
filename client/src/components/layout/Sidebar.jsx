@@ -84,7 +84,7 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
         id: 'practice',
         label: 'Practice',
         items: [
-            { to: '/', icon: '📊', label: 'Dashboard', end: true },
+            { to: '/dashboard', icon: '📊', label: 'Dashboard', end: true },
             { to: '/problems', icon: '📋', label: 'Problems' },
             { to: '/review', icon: '🧠', label: 'Review Queue' },
             { to: '/quizzes', icon: '🧩', label: 'Quizzes' },
