@@ -1306,6 +1306,7 @@ SELECTION RULES:
 5. Set urlConfidence honestly — we would rather show no link than a broken one
 6. If <target_company> is set, prioritize problems that company is known for
 7. If <admin_focus_request> is set, prioritize those areas
+8. If <source_curriculum> is set, this is a HARD CONSTRAINT — select problems EXCLUSIVELY from that canonical sheet. Do not invent problems "in the style of" the sheet. If you cannot recall N distinct problems from that sheet matching the difficulty and focus areas, return fewer selections — never pad with off-list problems. <admin_focus_request> and <difficulty_requirement> narrow further WITHIN the curriculum.
 
 ${UNTRUSTED_INPUT_RULE}
 
@@ -1353,6 +1354,12 @@ Return JSON:
     userParts.push("");
     userParts.push(
       `<admin_focus_request>${xmlEscape(String(data.focusAreas))}</admin_focus_request>`,
+    );
+  }
+  if (data.sourceList) {
+    userParts.push("");
+    userParts.push(
+      `<source_curriculum>${xmlEscape(String(data.sourceList))}</source_curriculum>`,
     );
   }
 
@@ -1592,6 +1599,15 @@ RESPOND WITH EXACT JSON:
     userParts.push("");
     userParts.push(
       `<admin_focus_request>${xmlEscape(String(data.focusAreas))}</admin_focus_request>`,
+    );
+  }
+  if (data.sourceList) {
+    userParts.push("");
+    userParts.push(
+      `<source_curriculum>${xmlEscape(String(data.sourceList))}</source_curriculum>`,
+    );
+    userParts.push(
+      `If <source_curriculum> is set, select problems EXCLUSIVELY from that canonical sheet — do not invent problems "in the style of" the sheet. If you cannot recall ${Number(data.count) || 0} distinct problems matching difficulty + focus areas, return fewer.`,
     );
   }
 

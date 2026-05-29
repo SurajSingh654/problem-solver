@@ -12,7 +12,7 @@ import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import api from '@services/api'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
-import { PROBLEM_CATEGORIES, CATEGORY_GENERATION_CONFIG, HR_STAKES } from '@utils/constants'
+import { PROBLEM_CATEGORIES, CATEGORY_GENERATION_CONFIG, HR_STAKES, SOURCE_LISTS } from '@utils/constants'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const PLATFORM_SOURCES = ['LEETCODE', 'GFG', 'HACKERRANK', 'CODECHEF', 'INTERVIEWBIT', 'CODEFORCES']
@@ -251,6 +251,7 @@ function AIGenerateScreen() {
     const [customMix, setCustomMix] = useState({ easy: 2, medium: 2, hard: 1 })
     const [targetCompany, setTargetCompany] = useState('')
     const [focusAreas, setFocusAreas] = useState('')
+    const [sourceList, setSourceList] = useState('')
     const [generated, setGenerated] = useState(null)
     const [reasoning, setReasoning] = useState('')
     const [approvingIdx, setApprovingIdx] = useState(null)
@@ -288,6 +289,10 @@ function AIGenerateScreen() {
                     : 'OTHER',
             },
             tags: problem.tags || [],
+            // Curriculum tag — set once at the form level for the whole batch.
+            // Server normalizes via normalizeSourceLists; canonical labels pass
+            // silently. Empty array means "untagged" (default).
+            sourceLists: category === 'CODING' && sourceList ? [sourceList] : [],
             realWorldContext: problem.realWorldContext || '',
             useCases: problem.useCases || '',
             // AI output schema (ai.schemas.js) forces adminNotes to string,
@@ -323,6 +328,8 @@ function AIGenerateScreen() {
                 difficulty: finalDifficulty,
                 targetCompany: targetCompany.trim() || undefined,
                 focusAreas: focusAreas.trim() || undefined,
+                // Curriculum sheets are coding-only — don't leak into SD/LLD/HR
+                sourceList: category === 'CODING' && sourceList ? sourceList : undefined,
             })
             setGenerated(res.data.data.problems || [])
             setReasoning(res.data.data.reasoning || '')
@@ -631,6 +638,58 @@ function AIGenerateScreen() {
                                            px-3.5 py-2.5 outline-none
                                            focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                             />
+                        </motion.div>
+                    )}
+
+                    {/* Source Curriculum — coding only. The four canonical sheets
+                        (Striver A2Z, Neetcode 150, Blind 75, LC Top 100) are
+                        DSA-specific; pickers for SD/LLD/HR/etc would mislead. */}
+                    {category === 'CODING' && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                        >
+                            <label className="block text-sm font-semibold text-text-primary mb-1">
+                                Source Curriculum
+                                <span className="ml-1.5 text-xs font-normal text-text-disabled">
+                                    optional
+                                </span>
+                            </label>
+                            <p className="text-[11px] text-text-tertiary mb-2">
+                                AI picks problems exclusively from this sheet. Difficulty + Focus narrow within.
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setSourceList('')}
+                                    className={cn(
+                                        'inline-flex items-center px-3 py-1.5 rounded-lg',
+                                        'text-[11px] font-semibold border transition-all duration-150',
+                                        sourceList === ''
+                                            ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                            : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                                    )}
+                                >
+                                    None
+                                </button>
+                                {SOURCE_LISTS.map(sl => (
+                                    <button
+                                        key={sl}
+                                        type="button"
+                                        onClick={() => setSourceList(v => v === sl ? '' : sl)}
+                                        className={cn(
+                                            'inline-flex items-center gap-1 px-3 py-1.5 rounded-lg',
+                                            'text-[11px] font-semibold border transition-all duration-150',
+                                            sourceList === sl
+                                                ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                                : 'bg-surface-2 border-border-default text-text-tertiary hover:border-border-strong'
+                                        )}
+                                    >
+                                        📚 {sl}
+                                    </button>
+                                ))}
+                            </div>
                         </motion.div>
                     )}
 

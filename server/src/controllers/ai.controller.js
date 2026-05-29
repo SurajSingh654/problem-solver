@@ -33,6 +33,7 @@ import {
   CANONICAL_PATTERN_LABELS,
   FAANG_CORE_PATTERNS,
 } from "../utils/patternTaxonomy.js";
+import { CANONICAL_SOURCE_LISTS } from "../utils/sourceListTaxonomy.js";
 
 // Map AIError codes (rate limit, OpenAI down, parse fail, …) to HTTP
 // responses so every controller in this file returns the same envelope
@@ -1244,10 +1245,39 @@ export async function generateProblemsAI(req, res) {
 
     const teamId = req.teamId;
     const userId = req.user.id;
-    const { category, count, difficulty, targetCompany, focusAreas } = req.body;
+    const {
+      category,
+      count,
+      difficulty,
+      targetCompany,
+      focusAreas,
+      sourceList,
+    } = req.body;
 
     if (!category) {
       return error(res, "Category is required.", 400);
+    }
+
+    // sourceList (optional) constrains the AI to a canonical curriculum sheet.
+    // Stricter than the manual create form: AI can only reliably recall the
+    // four canonical sheets, so custom labels are rejected here even though
+    // the underlying column accepts them.
+    let curriculum = null;
+    if (sourceList !== undefined && sourceList !== null && sourceList !== "") {
+      if (typeof sourceList !== "string") {
+        return error(res, "sourceList must be a string.", 400);
+      }
+      const match = CANONICAL_SOURCE_LISTS.find(
+        (s) => s.toLowerCase() === sourceList.trim().toLowerCase(),
+      );
+      if (!match) {
+        return error(
+          res,
+          `Custom curriculum labels aren't supported in the generator yet — leave blank or pick from: ${CANONICAL_SOURCE_LISTS.join(", ")}.`,
+          400,
+        );
+      }
+      curriculum = match;
     }
 
     const problemCount = Math.min(Math.max(parseInt(count) || 1, 1), 5);
@@ -1405,6 +1435,7 @@ export async function generateProblemsAI(req, res) {
       existingProblems,
       targetCompany,
       focusAreas,
+      sourceList: curriculum,
       platformAssignments,
     };
 
@@ -1465,6 +1496,7 @@ export async function generateProblemsAI(req, res) {
         difficulty: difficultyPref,
         targetCompany,
         focusAreas,
+        sourceList: curriculum,
         teamContext,
         existingProblems,
       });
@@ -1502,6 +1534,7 @@ export async function generateProblemsAI(req, res) {
         count: fallbackResult.problems.length,
         category,
         difficulty: difficultyPref,
+        sourceList: curriculum,
         pipeline: "legacy",
       });
     }
@@ -1716,6 +1749,7 @@ export async function generateProblemsAI(req, res) {
       count: problems.length,
       category,
       difficulty: difficultyPref,
+      sourceList: curriculum,
       pipeline: "multi-stage",
       stages: {
         intelligenceGathered: !!teamContext,
