@@ -140,7 +140,7 @@ export function useRateSolution() {
 // Previously used useMySolutions and filtered client-side.
 // Now uses dedicated endpoint that only returns due/upcoming items
 // with SM-2 state, overdueDays, and retentionEstimate precomputed.
-export function useReviewQueue() {
+export function useReviewQueue({ enabled = true } = {}) {
   const { teamQueryKey } = useTeamContext();
   return useQuery({
     queryKey: [...teamQueryKey, "review-queue"],
@@ -150,6 +150,7 @@ export function useReviewQueue() {
     },
     // Refetch every 5 minutes — due items change as time passes
     staleTime: 1000 * 60 * 5,
+    enabled,
   });
 }
 

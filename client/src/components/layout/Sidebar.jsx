@@ -20,6 +20,7 @@ import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import useAuthStore from '@store/useAuthStore'
 import { useUIStore } from '@store/useUIStore'
+import { useReviewQueue } from '@hooks/useSolutions'
 import { cn } from '@utils/cn'
 import { BrandMark } from '@components/ui/BrandMark'
 
@@ -156,6 +157,42 @@ function NavTooltip({ children }) {
     )
 }
 
+// Pill rendered next to the label when expanded. `item.badge` is an integer
+// or null/undefined; rendered only when > 0 so a "0" badge never adds noise.
+function NavBadge({ value }) {
+    if (!value || value <= 0) return null
+    const display = value > 99 ? '99+' : String(value)
+    return (
+        <span
+            className="ml-auto shrink-0 inline-flex items-center justify-center
+                       min-w-[18px] h-[18px] px-1.5 rounded-full
+                       bg-brand-soft border border-brand-line
+                       text-[10px] font-bold text-brand-fg-soft tabular-nums"
+            aria-label={`${value} pending`}
+        >
+            {display}
+        </span>
+    )
+}
+
+// Tiny corner dot rendered on the icon when sidebar is collapsed — the label
+// is hidden, so the count only fits as a 2-char pill on the icon's edge.
+function NavBadgeCollapsed({ value }) {
+    if (!value || value <= 0) return null
+    const display = value > 9 ? '9+' : String(value)
+    return (
+        <span
+            className="absolute top-0.5 right-0.5 inline-flex items-center justify-center
+                       min-w-[14px] h-[14px] px-1 rounded-full
+                       bg-brand-fg-soft text-[9px] font-bold text-surface-1 tabular-nums
+                       ring-1 ring-surface-1"
+            aria-label={`${value} pending`}
+        >
+            {display}
+        </span>
+    )
+}
+
 function NavItem({ item, collapsed, accent }) {
     const baseClasses = cn(
         'group/navitem relative flex items-center rounded-xl text-xs font-medium transition-colors',
@@ -219,6 +256,8 @@ function NavItem({ item, collapsed, accent }) {
         >
             <span className="text-sm">{item.icon}</span>
             {!collapsed && <span className="truncate">{item.label}</span>}
+            {!collapsed && <NavBadge value={item.badge} />}
+            {collapsed && <NavBadgeCollapsed value={item.badge} />}
             {collapsed && <NavTooltip>{item.label}</NavTooltip>}
         </NavLink>
     )
@@ -278,14 +317,32 @@ export default function Sidebar() {
         '/api-docs',
     )
 
+    // Pending-review count for the "Review Queue" badge. Disabled for
+    // super admins (they don't have a Review Queue nav item) and for users
+    // not yet in a team — the endpoint requires team context. The hook is
+    // always called to keep hook order stable across renders.
+    const reviewQueueEnabled = !!user && !isSuperAdmin && !!user?.currentTeamId
+    const { data: reviewQueueData } = useReviewQueue({ enabled: reviewQueueEnabled })
+    const reviewDueCount = reviewQueueData?.due?.length ?? 0
+
     // Computed even when user is missing (returns empty array) so this
     // hook always runs in the same order — required by react-hooks rules.
     const sections = useMemo(
-        () =>
-            user
-                ? buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl })
-                : [],
-        [user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl],
+        () => {
+            if (!user) return []
+            const built = buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl })
+            // Inject computed badge values onto matching items. Generic
+            // `badge` slot — only Review Queue uses it today; future items
+            // (notes, scheduled mocks, etc.) can opt in by setting their own.
+            const badges = { '/review': reviewDueCount }
+            return built.map((section) => ({
+                ...section,
+                items: section.items.map((it) =>
+                    badges[it.to] ? { ...it, badge: badges[it.to] } : it,
+                ),
+            }))
+        },
+        [user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl, reviewDueCount],
     )
 
     // ── Recents — top 3 recently-visited routes that map to a nav item.
