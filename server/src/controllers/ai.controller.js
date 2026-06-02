@@ -28,7 +28,10 @@ import {
   isCodingSolution,
 } from "../utils/solutionSignals.js";
 import { resolveGeneratedSourceUrl } from "../utils/platformSearch.js";
-import { findSimilarTitles } from "../utils/titleSimilarity.js";
+import {
+  findSimilarTitles,
+  normalizeProblemTitle,
+} from "../utils/titleSimilarity.js";
 import {
   CANONICAL_PATTERN_LABELS,
   FAANG_CORE_PATTERNS,
@@ -1530,8 +1533,12 @@ export async function generateProblemsAI(req, res) {
       // URL mode the AI may have returned fewer selections — index by
       // selection position, not slot, since the legacy slot semantics
       // (E/M/H ordering) don't apply when URLs drive selection.
+      // Also normalize title casing here — single point of repair so every
+      // downstream consumer (Stage 3 content generation, similarTo lookup,
+      // response payload, fallback paths) sees the corrected title.
       selections = selections.map((sel, i) => ({
         ...sel,
+        title: normalizeProblemTitle(sel.title),
         platform: platformAssignments[i]?.platform || sel.platform,
       }));
     } catch (err) {

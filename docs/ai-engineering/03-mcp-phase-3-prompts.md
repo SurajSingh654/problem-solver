@@ -27,29 +27,29 @@
 
 Both run on the server, both reuse the same auth chain, but they serve different UX:
 
-|  | Tool | Prompt |
-|---|---|---|
-| **How invoked** | LLM calls it autonomously when reasoning | User invokes explicitly (slash command) |
-| **Returns** | Structured tool result (`content[]`) | List of `messages` to seed a conversation |
-| **Is the data the answer?** | Yes — LLM presents tool result | No — server PRIMES the conversation, LLM composes |
-| **Use case** | "What's my pattern matrix?" — just need the data | "Run my weekly check-in" — need a guided workflow |
+|                             | Tool                                             | Prompt                                            |
+| --------------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| **How invoked**             | LLM calls it autonomously when reasoning         | User invokes explicitly (slash command)           |
+| **Returns**                 | Structured tool result (`content[]`)             | List of `messages` to seed a conversation         |
+| **Is the data the answer?** | Yes — LLM presents tool result                   | No — server PRIMES the conversation, LLM composes |
+| **Use case**                | "What's my pattern matrix?" — just need the data | "Run my weekly check-in" — need a guided workflow |
 
 A prompt is best understood as **a server-composed conversation starter that pulls the user's data into the system and primes the LLM** to take a structured next step.
 
 ### The 4 templates we shipped
 
-| Slash command | What it does |
-|---|---|
-| `/weekly-prep-checkin` | 5-minute weekly readiness review. Pulls 10D summary + tier readiness + active/inactive dims; primes the LLM to surface biggest signal-to-noise improvement, suggest 2-3 specific actions, flag regression risks. |
-| `/pre-interview-brief` (target_tier?) | Pre-interview readiness brief. Optional `target_tier=junior\|tier3\|tier2\|faang` argument. LLM produces what-you-can-demonstrate + likely-trip-up areas + 5-min warmup routine. |
-| `/pattern-deep-dive(pattern)` | Focused coaching on ONE pattern. Pulls user's mastery state for that pattern; primes LLM to coach at the appropriate level (fundamentals if untouched, harder variants if owned). |
-| `/calibration-coach` | Pre-submission prediction game. Reads D10 calibration data + wrong-pattern flags; primes LLM to walk the user through Kruger-Dunning prediction practice. |
+| Slash command                         | What it does                                                                                                                                                                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/weekly-prep-checkin`                | 5-minute weekly readiness review. Pulls 10D summary + tier readiness + active/inactive dims; primes the LLM to surface biggest signal-to-noise improvement, suggest 2-3 specific actions, flag regression risks. |
+| `/pre-interview-brief` (target_tier?) | Pre-interview readiness brief. Optional `target_tier=junior\|tier3\|tier2\|faang` argument. LLM produces what-you-can-demonstrate + likely-trip-up areas + 5-min warmup routine.                                 |
+| `/pattern-deep-dive(pattern)`         | Focused coaching on ONE pattern. Pulls user's mastery state for that pattern; primes LLM to coach at the appropriate level (fundamentals if untouched, harder variants if owned).                                |
+| `/calibration-coach`                  | Pre-submission prediction game. Reads D10 calibration data + wrong-pattern flags; primes LLM to walk the user through Kruger-Dunning prediction practice.                                                        |
 
 ### Why now
 
 After MCP-2 shipped the data tools, we had everything the LLM needs to access user readiness — but the user still had to know which questions to ask. Prompts are slash-command shortcuts for the most common high-leverage workflows.
 
-The Calibration Coach prompt is particularly notable: it ships *training* for the durable LLM-era skill (D10 Verification & Meta-cognition) directly through the prompt UX. The user invokes `/calibration-coach`, predicts their score, gets the AI's compare, repeats — the prediction muscle gets exercised by the prompt structure itself.
+The Calibration Coach prompt is particularly notable: it ships _training_ for the durable LLM-era skill (D10 Verification & Meta-cognition) directly through the prompt UX. The user invokes `/calibration-coach`, predicts their score, gets the AI's compare, repeats — the prediction muscle gets exercised by the prompt structure itself.
 
 ### Non-goals
 
@@ -141,14 +141,14 @@ The flow that makes this powerful: when the LLM responds to the primer, it can A
 
 ## What we built — file by file
 
-| File | Purpose |
-|---|---|
-| `server/src/mcp/prompts/index.js` | Registry — `registerAllPrompts(server)`. Includes `withErrorBoundary` wrapper (same pattern as tools — turns thrown errors into graceful primer messages). |
-| `server/src/mcp/prompts/weeklyPrepCheckin.js` | `/weekly-prep-checkin`. Pulls 10D summary + active/inactive dims + tier readiness. |
-| `server/src/mcp/prompts/preInterviewBrief.js` | `/pre-interview-brief`. Optional `target_tier` arg. Top-3 strongest + bottom-3 weakest active dims. |
-| `server/src/mcp/prompts/patternDeepDive.js` | `/pattern-deep-dive(pattern)`. Looks up pattern in matrix, falls back gracefully on unknown patterns. |
-| `server/src/mcp/prompts/calibrationCoach.js` | `/calibration-coach`. Reads D10 calibration data, primes Kruger-Dunning prediction game. |
-| `server/src/mcp/server.js` (modified) | Loads `registerAllPrompts` alongside `registerAllTools` in `loadSdk()`. Calls both during per-request server construction. |
+| File                                          | Purpose                                                                                                                                                    |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/src/mcp/prompts/index.js`             | Registry — `registerAllPrompts(server)`. Includes `withErrorBoundary` wrapper (same pattern as tools — turns thrown errors into graceful primer messages). |
+| `server/src/mcp/prompts/weeklyPrepCheckin.js` | `/weekly-prep-checkin`. Pulls 10D summary + active/inactive dims + tier readiness.                                                                         |
+| `server/src/mcp/prompts/preInterviewBrief.js` | `/pre-interview-brief`. Optional `target_tier` arg. Top-3 strongest + bottom-3 weakest active dims.                                                        |
+| `server/src/mcp/prompts/patternDeepDive.js`   | `/pattern-deep-dive(pattern)`. Looks up pattern in matrix, falls back gracefully on unknown patterns.                                                      |
+| `server/src/mcp/prompts/calibrationCoach.js`  | `/calibration-coach`. Reads D10 calibration data, primes Kruger-Dunning prediction game.                                                                   |
+| `server/src/mcp/server.js` (modified)         | Loads `registerAllPrompts` alongside `registerAllTools` in `loadSdk()`. Calls both during per-request server construction.                                 |
 
 ### File-by-file commentary
 
@@ -202,7 +202,7 @@ In Claude Code, an MCP prompt registered as `weekly-prep-checkin` becomes a slas
 
 ### 🎓 Why doesn't the prompt just respond directly? Why does it need the LLM?
 
-The prompt handler returns *messages* (a primer), not a final answer. The LLM continues from there. Two reasons:
+The prompt handler returns _messages_ (a primer), not a final answer. The LLM continues from there. Two reasons:
 
 1. **The LLM adds reasoning** — the primer says "here's my data, run a check-in"; the LLM produces the actual analysis ("focus on Communication; one mock interview lifts the ceiling"). The data is the input; the analysis is the output.
 2. **The LLM can call follow-up tools** — during the response, the LLM can call `get_pattern_matrix`, `get_review_queue`, etc., to get more depth. The prompt seeds; the tools deepen.
@@ -220,7 +220,7 @@ For a prompt that needs data the controller doesn't expose cleanly, the right an
 
 ### 🎓 Can the LLM call a prompt itself, like it calls tools?
 
-In the MCP spec, prompts are user-invoked. The LLM doesn't autonomously call them. If you want autonomous behavior, that's a tool. The dividing line: a prompt is a *workflow* the user picks; a tool is *data* the LLM fetches.
+In the MCP spec, prompts are user-invoked. The LLM doesn't autonomously call them. If you want autonomous behavior, that's a tool. The dividing line: a prompt is a _workflow_ the user picks; a tool is _data_ the LLM fetches.
 
 A future MCP version might add "prompt suggestions" — the LLM hinting "you could run /weekly-prep-checkin now" — but that's not in the current spec.
 
@@ -234,9 +234,9 @@ Defense in depth. The primer text contains data that ORIGINALLY came from the us
 
 ### 🎓 Why does the `weekly-prep-checkin` prompt's response feel so much smarter than a regular Claude Code conversation?
 
-Because the LLM has *grounded data* to reason about. Without MCP, you'd ask "how am I doing on interview prep?" and Claude Code makes up plausible-sounding answers. With MCP, the prompt feeds in your actual D1-D10 scores, sample sizes, tier gates, and CIs — and the LLM does math + research-backed analysis on real numbers.
+Because the LLM has _grounded data_ to reason about. Without MCP, you'd ask "how am I doing on interview prep?" and Claude Code makes up plausible-sounding answers. With MCP, the prompt feeds in your actual D1-D10 scores, sample sizes, tier gates, and CIs — and the LLM does math + research-backed analysis on real numbers.
 
-The win isn't the LLM's intelligence — that's the same. The win is *the LLM stops hallucinating because it has data.*
+The win isn't the LLM's intelligence — that's the same. The win is _the LLM stops hallucinating because it has data._
 
 ### 🎓 What if I want to add a 5th prompt?
 
@@ -248,26 +248,26 @@ The win isn't the LLM's intelligence — that's the same. The win is *the LLM st
 
 ## Try this yourself
 
-| # | Exercise | Concept reinforced |
-|---|---|---|
-| 1 | Run `/mcp__binary-thinkers__weekly-prep-checkin` in Claude Code. Note how many tool calls the LLM makes during its response. | Prompt + tool composition |
-| 2 | Run `/mcp__binary-thinkers__pre-interview-brief target_tier=faang`. Compare the brief to running it without the arg. | Args shaping the primer |
-| 3 | Run `/mcp__binary-thinkers__pattern-deep-dive pattern="Two Pointers"`. Then again with `pattern="ImaginaryPattern"`. Verify graceful fallback. | Defensive prompt design |
-| 4 | Run `/mcp__binary-thinkers__calibration-coach`. Try the prediction game on an actual unsubmitted solution. | Training the calibration muscle |
-| 5 | Modify the primer text in `weeklyPrepCheckin.js` to add "and please be especially honest about my weakest dim." Restart, re-run. Note how the LLM's response shifts. | Primer text shapes the response |
-| 6 | Add a new prompt that just returns `{ messages: [] }` (empty). Note that Claude Code handles this gracefully — the slash command exists but does nothing. | Edge case handling |
+| #   | Exercise                                                                                                                                                             | Concept reinforced              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1   | Run `/mcp__binary-thinkers__weekly-prep-checkin` in Claude Code. Note how many tool calls the LLM makes during its response.                                         | Prompt + tool composition       |
+| 2   | Run `/mcp__binary-thinkers__pre-interview-brief target_tier=faang`. Compare the brief to running it without the arg.                                                 | Args shaping the primer         |
+| 3   | Run `/mcp__binary-thinkers__pattern-deep-dive pattern="Two Pointers"`. Then again with `pattern="ImaginaryPattern"`. Verify graceful fallback.                       | Defensive prompt design         |
+| 4   | Run `/mcp__binary-thinkers__calibration-coach`. Try the prediction game on an actual unsubmitted solution.                                                           | Training the calibration muscle |
+| 5   | Modify the primer text in `weeklyPrepCheckin.js` to add "and please be especially honest about my weakest dim." Restart, re-run. Note how the LLM's response shifts. | Primer text shapes the response |
+| 6   | Add a new prompt that just returns `{ messages: [] }` (empty). Note that Claude Code handles this gracefully — the slash command exists but does nothing.            | Edge case handling              |
 
 ---
 
 ## Glossary
 
-| Term | Definition |
-|---|---|
-| **MCP prompt** | A templated conversation starter. User invokes via slash command; server returns a primer message; LLM continues. One of three MCP primitives (alongside tools and resources). |
-| **Slash command (Claude Code)** | UI for invoking an MCP prompt. Format: `/<server-name>__<prompt-name>` (or `/server:prompt`). Autocomplete surfaces them. |
-| **Primer message** | The `messages` array a prompt handler returns. Becomes the seed of a new conversation. |
-| **`registerPrompt`** | The SDK API for registering a prompt. Same shape as `registerTool` but the handler returns `{ messages: [...] }` instead of `{ content: [...] }`. |
-| **Prompt args** | Optional Zod schema on a prompt — same shape as tool input args. Lets the user pass parameters like `target_tier=faang`. |
+| Term                            | Definition                                                                                                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **MCP prompt**                  | A templated conversation starter. User invokes via slash command; server returns a primer message; LLM continues. One of three MCP primitives (alongside tools and resources). |
+| **Slash command (Claude Code)** | UI for invoking an MCP prompt. Format: `/<server-name>__<prompt-name>` (or `/server:prompt`). Autocomplete surfaces them.                                                      |
+| **Primer message**              | The `messages` array a prompt handler returns. Becomes the seed of a new conversation.                                                                                         |
+| **`registerPrompt`**            | The SDK API for registering a prompt. Same shape as `registerTool` but the handler returns `{ messages: [...] }` instead of `{ content: [...] }`.                              |
+| **Prompt args**                 | Optional Zod schema on a prompt — same shape as tool input args. Lets the user pass parameters like `target_tier=faang`.                                                       |
 
 ---
 

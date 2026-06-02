@@ -111,31 +111,33 @@ For each sentence, ask all four. Don't skip. If a lens has no answer, write **"n
 
 ### Generic phrase patterns
 
-| Phrase                                               | Hidden questions                                                                   |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| "You are given an array…"                            | Random access? Mutable? Sorted? Indexed from 0 or 1?                               |
-| "You are given an integer `n`…" (no array)           | Often combinatorial / DP / math; brute force is recursion not loops                |
-| "Choose any element…"                                | One? At most one? Exactly one? Multiple allowed?                                   |
-| "…in the future" / "…before X"                       | Order matters; index relations matter                                              |
-| "maximum / minimum"                                  | Optimization; one numeric answer                                                   |
-| "in how many distinct ways" / "count the number of"  | Counting genre; **almost always DP**; "distinct" usually means ordered sequences   |
-| "If you cannot…, return X"                           | The answer is bounded; you're not forced to act                                    |
-| "subarray" vs "subsequence"                          | Contiguous vs non-contiguous (people get this wrong)                               |
-| "in-place"                                           | Cannot allocate auxiliary array of size n                                          |
-| "may contain duplicates"                             | Hashing / counting becomes more nuanced                                            |
-| "valid / invalid / well-formed"                      | Boolean predicate; can short-circuit on first violation                            |
-| "matching / balanced / nested"                       | Pairing structure; almost always **stack**                                         |
-| "open and close" / "begin and end"                   | Nesting; LIFO; stack                                                               |
-| "in the correct order" / "in the same order"         | Sequence-dependent; can't shuffle                                                  |
-| "consisting of [character set]"                      | Bounded alphabet; constant-size lookup viable                                      |
-| "must be / cannot be"                                | Strict requirement; not optional, not "should"                                     |
-| "determine if / return whether"                      | Boolean answer; one bit out                                                        |
-| "every / each [X] has a corresponding [Y]"           | Bijection; pair-counting; stack or hash map                                        |
-| "string of length n"                                 | Char-by-char iteration; charset matters                                            |
-| "rotate / reverse / shift"                           | Geometric/structural transformation                                                |
-| "reach state X" / "arrive at n" / "climb to the top" | State-based DP; ask "what was the LAST move into this state?"                      |
-| "k operations / at most k transactions"              | Adds a state dimension; usually 2D DP                                              |
-| "each time you can either X or Y"                    | Discrete choice per step → DP recurrence with branching factor = number of choices |
+| Phrase                                                                                | Hidden questions                                                                                |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| "You are given an array…"                                                             | Random access? Mutable? Sorted? Indexed from 0 or 1?                                            |
+| "You are given an integer `n`…" (no array)                                            | Often combinatorial / DP / math; brute force is recursion not loops                             |
+| "Choose any element…"                                                                 | One? At most one? Exactly one? Multiple allowed?                                                |
+| "…in the future" / "…before X"                                                        | Order matters; index relations matter                                                           |
+| "maximum / minimum"                                                                   | Optimization; one numeric answer                                                                |
+| "in how many distinct ways" / "count the number of"                                   | Counting genre; **almost always DP**; "distinct" usually means ordered sequences                |
+| "If you cannot…, return X"                                                            | The answer is bounded; you're not forced to act                                                 |
+| "subarray" vs "subsequence"                                                           | Contiguous vs non-contiguous (people get this wrong)                                            |
+| "in-place"                                                                            | Cannot allocate auxiliary array of size n                                                       |
+| "may contain duplicates"                                                              | Hashing / counting becomes more nuanced                                                         |
+| "valid / invalid / well-formed"                                                       | Boolean predicate; can short-circuit on first violation                                         |
+| "matching / balanced / nested"                                                        | Pairing structure; almost always **stack**                                                      |
+| "open and close" / "begin and end"                                                    | Nesting; LIFO; stack                                                                            |
+| "in the correct order" / "in the same order"                                          | Sequence-dependent; can't shuffle                                                               |
+| "consisting of [character set]"                                                       | Bounded alphabet; constant-size lookup viable                                                   |
+| "must be / cannot be"                                                                 | Strict requirement; not optional, not "should"                                                  |
+| "determine if / return whether"                                                       | Boolean answer; one bit out                                                                     |
+| "every / each [X] has a corresponding [Y]"                                            | Bijection; pair-counting; stack or hash map                                                     |
+| "string of length n"                                                                  | Char-by-char iteration; charset matters                                                         |
+| "rotate / reverse / shift"                                                            | Geometric/structural transformation                                                             |
+| "rotated" / "circular" / "wraps around"                                               | Indices live modulo n; the comparison pair is `arr[i]` vs `arr[(i+1) % n]`, not the linear pair |
+| "almost / nearly sorted" / "at most one violation" / "originally sorted then rotated" | Single-pass invariant-violation counter; valid iff count ≤ k                                    |
+| "reach state X" / "arrive at n" / "climb to the top"                                  | State-based DP; ask "what was the LAST move into this state?"                                   |
+| "k operations / at most k transactions"                                               | Adds a state dimension; usually 2D DP                                                           |
+| "each time you can either X or Y"                                                     | Discrete choice per step → DP recurrence with branching factor = number of choices              |
 
 ### Output shape
 
@@ -351,32 +353,33 @@ Pattern matching to known algorithm classes. Categorization shortcuts you to a _
 
 **Sub-step 1 — Match against the signal table.** From the problem's structure (verbs, constraints, output type), pick categories from the standard taxonomy:
 
-| Signal                                                           | Likely category                                                                  |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| "Find a pair with property"                                      | Two pointers / hash map                                                          |
-| "Subarray with property X"                                       | Sliding window / prefix sum                                                      |
-| "Subsequence with property X"                                    | DP                                                                               |
-| "Find min/max while iterating"                                   | Greedy / single pass                                                             |
-| **"Count ways" / "in how many distinct ways"**                   | **DP (counting variant)**                                                        |
-| **"Reach state n from prior states"**                            | **DP — identify recurrence by asking "what was the LAST move into this state?"** |
-| **"Answer at n decomposes into answers at smaller subproblems"** | **DP — top-down (memoization) or bottom-up (tabulation)**                        |
-| **"Each step you can either X or Y" (constant branching)**       | **1D DP with `f(n) = f(n-X) + f(n-Y)` recurrence**                               |
-| "Shortest / longest path"                                        | BFS / DFS / Dijkstra                                                             |
-| "Sorted array"                                                   | Binary search / two pointers                                                     |
-| "Hierarchical"                                                   | Tree / recursion                                                                 |
-| "Maximize / minimize"                                            | Greedy _or_ DP (constraints decide)                                              |
-| "Kth largest/smallest"                                           | Heap / quickselect                                                               |
-| "Intervals"                                                      | Sort + sweep                                                                     |
-| "Cycles in choices"                                              | Graph / Union-Find                                                               |
-| "Match brackets / balanced / nested / well-formed"               | **Stack**                                                                        |
-| "Validate / parse structured input"                              | **Stack or state machine**                                                       |
-| "Track depth / nesting level"                                    | **Stack or running counter**                                                     |
-| "Palindrome / mirror / read same forward/backward"               | **Two pointers (or stack)**                                                      |
-| "Reverse-order / undo last operation / LIFO"                     | **Stack**                                                                        |
-| "Most-recent X"                                                  | **Stack** (most recent open / most recent unmatched)                             |
-| "Boolean predicate (true/false)"                                 | Whatever the structure suggests, but **short-circuit on first violation**        |
-| "Sliding average / running statistic"                            | Sliding window                                                                   |
-| "Anything with a fixed small alphabet (e.g. 6 chars)"            | Constant-size lookup table; charset-specific shortcuts                           |
+| Signal                                                                                                                        | Likely category                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| "Find a pair with property"                                                                                                   | Two pointers / hash map                                                                                                       |
+| "Subarray with property X"                                                                                                    | Sliding window / prefix sum                                                                                                   |
+| "Subsequence with property X"                                                                                                 | DP                                                                                                                            |
+| "Find min/max while iterating"                                                                                                | Greedy / single pass                                                                                                          |
+| **"Count ways" / "in how many distinct ways"**                                                                                | **DP (counting variant)**                                                                                                     |
+| **"Reach state n from prior states"**                                                                                         | **DP — identify recurrence by asking "what was the LAST move into this state?"**                                              |
+| **"Answer at n decomposes into answers at smaller subproblems"**                                                              | **DP — top-down (memoization) or bottom-up (tabulation)**                                                                     |
+| **"Each step you can either X or Y" (constant branching)**                                                                    | **1D DP with `f(n) = f(n-X) + f(n-Y)` recurrence**                                                                            |
+| "Shortest / longest path"                                                                                                     | BFS / DFS / Dijkstra                                                                                                          |
+| "Sorted array"                                                                                                                | Binary search / two pointers                                                                                                  |
+| "Hierarchical"                                                                                                                | Tree / recursion                                                                                                              |
+| "Maximize / minimize"                                                                                                         | Greedy _or_ DP (constraints decide)                                                                                           |
+| "Kth largest/smallest"                                                                                                        | Heap / quickselect                                                                                                            |
+| "Intervals"                                                                                                                   | Sort + sweep                                                                                                                  |
+| "Cycles in choices"                                                                                                           | Graph / Union-Find                                                                                                            |
+| "Match brackets / balanced / nested / well-formed"                                                                            | **Stack**                                                                                                                     |
+| "Validate / parse structured input"                                                                                           | **Stack or state machine**                                                                                                    |
+| "Count anomalies against an invariant" / "at most k violations" / "almost sorted" / "exactly one peak" / "sorted and rotated" | **Single-pass counter** — count violations of the invariant in one sweep (use `(i+1) % n` if circular); answer is `count ≤ k` |
+| "Track depth / nesting level"                                                                                                 | **Stack or running counter**                                                                                                  |
+| "Palindrome / mirror / read same forward/backward"                                                                            | **Two pointers (or stack)**                                                                                                   |
+| "Reverse-order / undo last operation / LIFO"                                                                                  | **Stack**                                                                                                                     |
+| "Most-recent X"                                                                                                               | **Stack** (most recent open / most recent unmatched)                                                                          |
+| "Boolean predicate (true/false)"                                                                                              | Whatever the structure suggests, but **short-circuit on first violation**                                                     |
+| "Sliding average / running statistic"                                                                                         | Sliding window                                                                                                                |
+| "Anything with a fixed small alphabet (e.g. 6 chars)"                                                                         | Constant-size lookup table; charset-specific shortcuts                                                                        |
 
 **Sub-step 2 — Identify primary + secondary candidates.** It's fine to list multiple. The primary is the one you'll try first; secondary is your fallback.
 

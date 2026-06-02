@@ -1308,6 +1308,7 @@ SELECTION RULES:
 7. If <admin_focus_request> is set, prioritize those areas
 8. If <source_curriculum> is set, this is a HARD CONSTRAINT — select problems EXCLUSIVELY from that canonical sheet. Do not invent problems "in the style of" the sheet. If you cannot recall N distinct problems from that sheet matching the difficulty and focus areas, return fewer selections — never pad with off-list problems. <admin_focus_request> and <difficulty_requirement> narrow further WITHIN the curriculum.
 9. If <problem_urls> is set, this is URL RECALL MODE. For each URL, recall the exact problem behind it: title, difficulty, pattern. Set urlConfidence: "high" only if you confidently know the problem. If you do NOT know a URL, OMIT it from "selections" and add the URL to the top-level "unrecognizedUrls" array. Do not invent titles for URLs you don't recognize — partial recall is acceptable, hallucination is not. In URL mode, <admin_focus_request> and <difficulty_requirement> are advisory only; the URL list is the source of truth for which problems to return.
+10. TITLE CASING — return the canonical human-readable title exactly as it appears on the source platform (e.g. LeetCode), with proper Title Case capitalization. Examples: "Two Sum", "Check if Array Is Sorted and Rotated", "Best Time to Buy and Sell Stock". Do NOT return the URL slug (e.g. "check-if-array-is-sorted-and-rotated") and do NOT return all-lowercase or all-uppercase. In URL mode, the slug in the URL is for lookup only — convert it to the canonical title in your response.
 
 ${UNTRUSTED_INPUT_RULE}
 
