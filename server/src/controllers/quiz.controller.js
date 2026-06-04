@@ -255,6 +255,12 @@ Return JSON:
 
     let parsed;
     try {
+      // Per-question budget: HARD questions with full "why correct + why each
+      // wrong is wrong" explanations land at ~500-700 tokens each. The default
+      // aiComplete cap of 2000 truncates the JSON mid-stream once count > 5,
+      // which surfaces as PARSE_ERROR. Scale with count and let the global
+      // AI_MAX_TOKENS_HARD_CAP clamp the upper end.
+      const quizMaxTokens = 500 + count * 600;
       parsed = await aiComplete({
         systemPrompt,
         userPrompt: quizUserPrompt,
@@ -262,6 +268,7 @@ Return JSON:
         teamId,
         model: AI_MODEL_FAST,
         temperature: 0.8,
+        maxTokens: quizMaxTokens,
         jsonMode: true,
         surface: "quiz-generation",
       });
