@@ -1367,14 +1367,14 @@ export default function EditSolutionPage() {
                             </div>
                             <div className="bg-surface-2 border border-border-default rounded-2xl p-5">
                                 <div className="flex items-start gap-3 mb-3">
-                                    <div className="w-8 h-8 rounded-lg bg-warning-soft flex items-center justify-center text-base flex-shrink-0 mt-0.5">🌍</div>
+                                    <div className="w-8 h-8 rounded-lg bg-warning-soft flex items-center justify-center text-base flex-shrink-0 mt-0.5">🤔</div>
                                     <div>
-                                        <h4 className="text-sm font-bold text-text-primary mb-0.5">Real World Connection</h4>
-                                        <p className="text-xs text-text-tertiary">Where does this pattern appear in real systems?</p>
+                                        <h4 className="text-sm font-bold text-text-primary mb-0.5">What Was Challenging?</h4>
+                                        <p className="text-xs text-text-tertiary">Where did you get stuck? What made this harder than expected?</p>
                                     </div>
                                 </div>
                                 <RichTextEditor
-                                    placeholder="e.g. Hash maps are used in database indexing..."
+                                    placeholder="e.g. Recognizing XOR as the right tool — I kept reaching for a hash map first..."
                                     content={formData.realWorldConnection || ''}
                                     onChange={val => updateFormData({ realWorldConnection: val })}
                                     minHeight="60px"

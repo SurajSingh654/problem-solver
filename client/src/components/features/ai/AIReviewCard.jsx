@@ -1,7 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — AI Review Card (Production Grade)
 // ============================================================================
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAIReview } from '@hooks/useAI'
 import { FRESH_REVIEW_WAIT_MS } from '@hooks/useSolutions'
@@ -447,6 +447,19 @@ export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, pr
         if (Array.isArray(existingReview)) return existingReview
         return [existingReview]
     })
+
+    // Resync when polling lands a review the lazy initializer never saw.
+    // Without this, a freshly-submitted solution stays stuck on "Analyzing"
+    // until a manual refresh remounts the component.
+    useEffect(() => {
+        if (!existingReview) return
+        const incoming = Array.isArray(existingReview) ? existingReview : [existingReview]
+        setLocalHistory(prev => {
+            const incomingIds = new Set(incoming.map(r => r?.id).filter(Boolean))
+            const localExtras = prev.filter(r => r?.id && !incomingIds.has(r.id))
+            return [...incoming, ...localExtras]
+        })
+    }, [existingReview])
 
     const latestReview = localHistory[localHistory.length - 1] || null
     const previousReview = localHistory.length > 1

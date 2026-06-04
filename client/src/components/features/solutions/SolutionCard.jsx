@@ -881,7 +881,9 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps: _probl
                                         {tab === 'approach' && (
                                             <>
                                                 <SectionRow label="Pattern" value={patternLabel || null} mode="mono" />
-                                                <SectionRow label="Approach" value={approach} mode="markdown" />
+                                                {!(bruteForce || optimizedApproach) && (
+                                                    <SectionRow label="Approach" value={approach} mode="markdown" />
+                                                )}
                                                 {bruteForce && (
                                                     <div className="border border-border-subtle rounded-xl p-3 space-y-2">
                                                         <p className="text-[11px] font-bold text-text-disabled uppercase tracking-widest">
@@ -915,7 +917,7 @@ export function SolutionCard({ solution, isOwn = false, problemFollowUps: _probl
                                             <>
                                                 <SectionRow label="Key Insight" value={keyInsight} mode="markdown" />
                                                 <SectionRow label="Feynman Explanation" value={feynmanExplanation} mode="html" />
-                                                <SectionRow label="Real World Connection" value={realWorldConnection} mode="html" />
+                                                <SectionRow label="What was Challenging" value={realWorldConnection} mode="html" />
                                             </>
                                         )}
                                     </>

@@ -1249,9 +1249,9 @@ export default function SubmitSolutionPage() {
                         )}
 
                         {fields.challenges?.show && (
-                            <FormSection icon="🌍" title={fields.challenges.label || 'Challenges & Real-World Connection'}>
+                            <FormSection icon="🤔" title={fields.challenges.label || 'What Was Challenging?'}>
                                 <RichTextEditor content={realWorldConnection} onChange={setRealWorldConnection}
-                                    placeholder={fields.challenges.placeholder || 'What was challenging? How does this connect to real-world software?'} minHeight="80px" />
+                                    placeholder={fields.challenges.placeholder || 'Where did you get stuck? What made this harder than expected?'} minHeight="80px" />
                             </FormSection>
                         )}
                     </>

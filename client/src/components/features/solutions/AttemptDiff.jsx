@@ -18,7 +18,7 @@ const PROSE_FIELDS = [
     { key: 'approach', label: 'Approach' },
     { key: 'keyInsight', label: 'Key Insight' },
     { key: 'feynmanExplanation', label: 'Feynman Explanation' },
-    { key: 'realWorldConnection', label: 'Real-World Connection' },
+    { key: 'realWorldConnection', label: 'What was Challenging' },
     { key: 'bruteForce', label: 'Brute Force' },
     { key: 'optimizedApproach', label: 'Optimized Approach' },
     { key: 'timeComplexity', label: 'Time Complexity' },
