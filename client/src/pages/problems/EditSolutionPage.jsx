@@ -1343,11 +1343,11 @@ export default function EditSolutionPage() {
                                     </div>
                                 </div>
                                 <textarea
-                                    rows={2}
+                                    rows={4}
                                     value={formData.keyInsight || ''}
                                     onChange={e => updateFormData({ keyInsight: e.target.value })}
                                     placeholder="e.g. The trick is realizing you only need to track the running max..."
-                                    className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-tertiary px-3.5 py-2.5 outline-none resize-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                                    className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-tertiary px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
                                 />
                             </div>
                             <div className="bg-surface-2 border border-border-default rounded-2xl p-5">

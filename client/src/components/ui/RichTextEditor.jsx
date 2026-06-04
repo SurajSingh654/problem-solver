@@ -40,6 +40,10 @@ export function RichTextEditor({
     optional = false,
     hint,
     minHeight = '120px',
+    // Opt-in: when true, Tab inserts 2 spaces (paragraph) or sinks the
+    // current list item (lists). Used for code-like surfaces (Approach /
+    // pseudocode). Off everywhere else so keyboard users can tab out.
+    tabInserts = false,
     className,
 }) {
     // Keep `onChange` reachable from inside Tiptap's onUpdate without
@@ -54,13 +58,35 @@ export function RichTextEditor({
 
     const editor = useEditor({
         extensions: [
+            // HTMLAttributes apply real Tailwind utilities directly to each
+            // node. We can't rely on the `prose-*` variants — they only fire
+            // under a `.prose` parent, which the editor doesn't have. Without
+            // these, Tailwind preflight (ul/ol { list-style: none; padding: 0 })
+            // makes lists invisible.
             StarterKit.configure({
                 heading: false,
                 codeBlock: false,
                 horizontalRule: false,
+                paragraph: {
+                    HTMLAttributes: { class: 'mb-2 last:mb-0' },
+                },
+                bulletList: {
+                    HTMLAttributes: { class: 'list-disc pl-6 my-2 marker:text-text-tertiary' },
+                },
+                orderedList: {
+                    HTMLAttributes: { class: 'list-decimal pl-6 my-2 marker:text-text-tertiary' },
+                },
+                listItem: {
+                    HTMLAttributes: { class: 'mb-1' },
+                },
                 blockquote: {
                     HTMLAttributes: {
-                        class: 'border-l-3 border-brand-400/40 pl-3 italic text-text-tertiary',
+                        class: 'border-l-4 border-brand-400/40 pl-3 italic text-text-tertiary my-2',
+                    },
+                },
+                code: {
+                    HTMLAttributes: {
+                        class: 'bg-surface-4 px-1 py-0.5 rounded text-[0.85em] font-mono text-brand-fg-soft',
                     },
                 },
             }),
@@ -76,12 +102,31 @@ export function RichTextEditor({
             attributes: {
                 class: cn(
                     'outline-none text-sm text-text-primary leading-relaxed',
-                    'prose-p:mb-2 prose-ul:pl-5 prose-ol:pl-5',
-                    'prose-li:mb-0.5 prose-strong:text-text-primary',
-                    'prose-em:text-text-secondary',
+                    'prose-strong:text-text-primary prose-em:text-text-secondary',
                     'prose-u:underline prose-u:decoration-brand-400/50',
                 ),
                 style: `min-height: ${minHeight}`,
+            },
+            handleKeyDown(view, event) {
+                if (!tabInserts) return false
+                if (event.key !== 'Tab') return false
+                // Defer to Tiptap's native list nesting inside lists so users
+                // get the expected sink/lift behavior. Only override Tab in
+                // plain paragraph context.
+                const inList =
+                    view.state.selection.$from.node(-1)?.type.name === 'listItem' ||
+                    view.state.selection.$from.parent.type.name === 'listItem'
+                if (inList) {
+                    return false
+                }
+                if (event.shiftKey) {
+                    // Shift+Tab in paragraph — let focus escape backwards.
+                    return false
+                }
+                event.preventDefault()
+                const { state, dispatch } = view
+                dispatch(state.tr.insertText('  ')) // 2 spaces
+                return true
             },
         },
         onUpdate: ({ editor }) => {

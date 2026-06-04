@@ -1209,11 +1209,12 @@ export default function SubmitSolutionPage() {
                                 <FormSection
                                     icon={category === 'BEHAVIORAL' ? '🎯' : category === 'LOW_LEVEL_DESIGN' ? '📐' : '📝'}
                                     title={category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response') : category === 'CS_FUNDAMENTALS' ? 'Your Explanation' : category === 'LOW_LEVEL_DESIGN' ? 'Your Design Approach' : 'Your Approach'}
-                                    hint={hasExternalLink ? 'Explain your thought process. What pattern did you use and why?' : category === 'BEHAVIORAL' ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.') : category === 'LOW_LEVEL_DESIGN' ? 'Walk through your entity identification and class hierarchy.' : 'Describe your approach step by step.'}
+                                    hint={hasExternalLink ? 'Explain your thought process. What pattern did you use and why?' : category === 'BEHAVIORAL' ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.') : category === 'LOW_LEVEL_DESIGN' ? 'Walk through your entity identification and class hierarchy.' : 'Describe your approach step by step. Tab to indent pseudocode.'}
                                 >
                                     <RichTextEditor content={approach} onChange={setApproach}
                                         placeholder={hasExternalLink ? 'Walk through your approach: pattern identification, why this approach, alternatives considered...' : fields.patternReasoning?.placeholder || 'Write your approach here...'}
-                                        minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'} />
+                                        minHeight={category === 'CODING' && hasExternalLink ? '120px' : '180px'}
+                                        tabInserts={category === 'CODING' || category === 'LOW_LEVEL_DESIGN' || hasExternalLink} />
                                 </FormSection>
                             </>
                         )}
@@ -1235,9 +1236,9 @@ export default function SubmitSolutionPage() {
 
                         {fields.keyInsight?.show && (
                             <FormSection icon="💡" title={fields.keyInsight.label || 'Key Insight'} hint={fields.keyInsight.hint} className="bg-brand-soft border-brand-line">
-                                <textarea rows={2} value={keyInsight} onChange={e => setKeyInsight(e.target.value)}
+                                <textarea rows={4} value={keyInsight} onChange={e => setKeyInsight(e.target.value)}
                                     placeholder={fields.keyInsight.placeholder || 'The one thing that makes this click...'}
-                                    className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-tertiary px-3.5 py-2.5 outline-none resize-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20" />
+                                    className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-tertiary px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20" />
                             </FormSection>
                         )}
 

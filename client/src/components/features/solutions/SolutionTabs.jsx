@@ -87,14 +87,16 @@ function SolutionPanel({ solution, index, onChange, onRemove, canRemove, solutio
                 </div>
             </div>
 
-            {/* Approach — uses config label */}
+            {/* Approach — uses config label. tabInserts: code-like surface
+                so Tab indents (2 spaces) instead of moving form focus. */}
             <RichTextEditor
                 label={labels.approach}
-                hint={labels.approachHint || 'Describe your approach...'}
+                hint={labels.approachHint || 'Describe your approach... · Tab to indent'}
                 placeholder={labels.approachPlaceholder}
                 content={solution.approach || ''}
                 onChange={val => update('approach', val)}
                 minHeight="100px"
+                tabInserts
             />
 
             {/* Complexity — uses config labels */}
