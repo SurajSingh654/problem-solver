@@ -27,6 +27,10 @@ const CATEGORY = z.enum([
 const SOURCE = z.enum(["MANUAL", "AI_GENERATED"]);
 
 const followUpSchema = z.object({
+  // Present when the client is round-tripping an existing follow-up (edit
+  // flow); absent for newly-added items. The update controller diffs on
+  // this id to preserve user answers attached to existing rows.
+  id: z.string().min(1).optional(),
   question: z.string().min(5).max(500),
   difficulty: DIFFICULTY.default("MEDIUM"),
   hint: z.string().max(500).nullable().optional(),
@@ -80,6 +84,11 @@ export const updateProblemSchema = z
     isPublished: z.boolean().optional(),
     isPinned: z.boolean().optional(),
     isHidden: z.boolean().optional(),
+    // Edit flow round-trips the full follow-up set. Controller diffs by
+    // `id` so unchanged rows preserve their attached SolutionFollowUpAnswer
+    // records. Removed rows are deleted (cascade is intentional — orphaned
+    // answers have no question to answer).
+    followUps: z.array(followUpSchema).max(10).optional(),
   })
   .strict();
 

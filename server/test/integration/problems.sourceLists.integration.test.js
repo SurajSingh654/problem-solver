@@ -32,24 +32,12 @@ let mockUpdates = [];
 let mockListResults = [];
 let mockListWhereClauses = [];
 
-vi.mock("../../src/lib/prisma.js", () => ({
-  default: {
+vi.mock("../../src/lib/prisma.js", () => {
+  // updateProblem now wraps its writes in $transaction. The transaction
+  // callback receives a `tx` client; we pass through the same operations
+  // so test assertions on mockUpdates still fire.
+  const tx = {
     problem: {
-      findFirst: vi.fn(async () => mockExisting),
-      findMany: vi.fn(async (args) => {
-        mockListWhereClauses.push(args.where);
-        return mockListResults;
-      }),
-      count: vi.fn(async () => mockListResults.length),
-      create: vi.fn(async (args) => {
-        mockCreates.push(args);
-        return {
-          id: "prob_test",
-          ...args.data,
-          followUpQuestions: [],
-          createdBy: { id: args.data.createdById, name: "Test User" },
-        };
-      }),
       update: vi.fn(async (args) => {
         mockUpdates.push(args);
         return {
@@ -59,13 +47,51 @@ vi.mock("../../src/lib/prisma.js", () => ({
           createdBy: { id: "user_test", name: "Test User" },
         };
       }),
+      findUnique: vi.fn(async (args) => ({
+        id: args.where.id,
+        ...(mockUpdates[mockUpdates.length - 1]?.data || {}),
+        followUpQuestions: [],
+        createdBy: { id: "user_test", name: "Test User" },
+      })),
     },
-    solution: {
-      findFirst: vi.fn(async () => null),
-      count: vi.fn(async () => 0),
+    followUpQuestion: {
+      findMany: vi.fn(async () => []),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+      update: vi.fn(async () => ({})),
+      create: vi.fn(async () => ({})),
     },
-  },
-}));
+  };
+
+  return {
+    default: {
+      problem: {
+        findFirst: vi.fn(async () => mockExisting),
+        findMany: vi.fn(async (args) => {
+          mockListWhereClauses.push(args.where);
+          return mockListResults;
+        }),
+        count: vi.fn(async () => mockListResults.length),
+        create: vi.fn(async (args) => {
+          mockCreates.push(args);
+          return {
+            id: "prob_test",
+            ...args.data,
+            followUpQuestions: [],
+            createdBy: { id: args.data.createdById, name: "Test User" },
+          };
+        }),
+        // Kept for any non-transactional callers; updateProblem now uses
+        // $transaction below, but this is harmless to leave in.
+        update: tx.problem.update,
+      },
+      solution: {
+        findFirst: vi.fn(async () => null),
+        count: vi.fn(async () => 0),
+      },
+      $transaction: vi.fn(async (fn) => fn(tx)),
+    },
+  };
+});
 
 // Stub embedding service to avoid network/import side-effects.
 vi.mock("../../src/services/embedding.service.js", () => ({
@@ -261,5 +287,74 @@ describe("GET /api/problems?sourceList= — filter", () => {
     const { status } = await call(server.url, "GET", "/api/problems", undefined, principal);
     expect(status).toBe(200);
     expect(mockListWhereClauses[0].sourceLists).toBeUndefined();
+  });
+});
+
+// ── followUps update path — regression guard ────────────────────────
+// Prior to the fix, updateProblemSchema was .strict() and didn't declare
+// `followUps`, so the EditProblemPage round-trip failed with a 400
+// "Unrecognized key(s) in object: 'followUps'" — even though the client
+// comment claimed the server handled upsert/delete.
+describe("PUT /api/problems/:problemId — followUps update", () => {
+  it("accepts followUps in the update payload (drift regression)", async () => {
+    const payload = {
+      title: "Updated",
+      followUps: [
+        {
+          id: "fq_existing_1",
+          question: "What if input is empty?",
+          difficulty: "EASY",
+          hint: "Edge case.",
+          order: 0,
+        },
+        {
+          question: "What's the optimal complexity?",
+          difficulty: "HARD",
+          order: 1,
+        },
+      ],
+    };
+
+    const { status, body } = await call(
+      server.url,
+      "PUT",
+      "/api/problems/prob_test",
+      payload,
+      principal,
+    );
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+  });
+
+  it("rejects followUps without a question field (validation guard)", async () => {
+    const payload = {
+      followUps: [{ difficulty: "EASY" }], // missing required `question`
+    };
+    const { status } = await call(
+      server.url,
+      "PUT",
+      "/api/problems/prob_test",
+      payload,
+      principal,
+    );
+    expect(status).toBe(400);
+  });
+
+  it("caps followUps at 10 entries", async () => {
+    const payload = {
+      followUps: Array.from({ length: 11 }, (_, i) => ({
+        question: `Question ${i + 1} body padding`,
+        difficulty: "MEDIUM",
+        order: i,
+      })),
+    };
+    const { status } = await call(
+      server.url,
+      "PUT",
+      "/api/problems/prob_test",
+      payload,
+      principal,
+    );
+    expect(status).toBe(400);
   });
 });

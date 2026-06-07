@@ -386,6 +386,7 @@ export async function updateProblem(req, res) {
       isPinned,
       isHidden,
       sourceLists,
+      followUps,
     } = req.body;
 
     // Split content fields (bump version) from admin flags (don't).
@@ -425,13 +426,66 @@ export async function updateProblem(req, res) {
       data.version = { increment: 1 };
     }
 
-    const problem = await prisma.problem.update({
-      where: { id: problemId },
-      data,
-      include: {
-        followUpQuestions: { orderBy: { order: "asc" } },
-        createdBy: { select: { id: true, name: true } },
-      },
+    // Update problem fields + reconcile follow-ups atomically. Diff-by-id
+    // preserves SolutionFollowUpAnswer rows attached to unchanged follow-ups
+    // (the FK cascades on delete, so naive replace would wipe member answers).
+    const problem = await prisma.$transaction(async (tx) => {
+      await tx.problem.update({ where: { id: problemId }, data });
+
+      if (followUps !== undefined) {
+        const incomingIds = new Set(
+          followUps.map((fq) => fq.id).filter(Boolean),
+        );
+        const existing = await tx.followUpQuestion.findMany({
+          where: { problemId },
+          select: { id: true },
+        });
+        const existingIds = new Set(existing.map((fq) => fq.id));
+
+        // Delete follow-ups the admin removed. Cascade clears any attached
+        // SolutionFollowUpAnswer — intentional: an answer has no meaning
+        // without its question.
+        const toDelete = existing
+          .map((fq) => fq.id)
+          .filter((id) => !incomingIds.has(id));
+        if (toDelete.length > 0) {
+          await tx.followUpQuestion.deleteMany({
+            where: { id: { in: toDelete } },
+          });
+        }
+
+        // Update existing + create new. Single pass; index drives the
+        // canonical `order` value (client may send order out of sync).
+        for (let i = 0; i < followUps.length; i++) {
+          const fq = followUps[i];
+          const payload = {
+            question: fq.question,
+            difficulty: fq.difficulty,
+            hint: fq.hint || null,
+            order: i,
+          };
+          if (fq.id && existingIds.has(fq.id)) {
+            await tx.followUpQuestion.update({
+              where: { id: fq.id },
+              data: payload,
+            });
+          } else {
+            // Either no id (new row) or id from a different problem —
+            // create fresh under this problem.
+            await tx.followUpQuestion.create({
+              data: { ...payload, problemId },
+            });
+          }
+        }
+      }
+
+      return tx.problem.findUnique({
+        where: { id: problemId },
+        include: {
+          followUpQuestions: { orderBy: { order: "asc" } },
+          createdBy: { select: { id: true, name: true } },
+        },
+      });
     });
 
     if (title || description) {
