@@ -467,6 +467,11 @@ CROSS-VALIDATION RULES:
 - If code is incomplete/pseudocode: set incompleteSubmission=true
 - If pattern is wrong: set wrongPattern=true, set correctPattern to the right one
 
+BUG-CLAIM DISCIPLINE — read carefully, this prevents hallucinated bugs:
+- Before listing any code defect in "gaps" (off-by-one, wrong index, missing case, etc.), mentally trace the code on ONE concrete sample input from the problem and confirm the defect actually changes the output.
+- If the trace produces the correct output, the code does NOT have that defect — do not list it. Suspicion based on textual patterns alone (e.g. "reads a variable right after assigning it") is not sufficient evidence.
+- It is better to miss a subtle bug than to fabricate one. A hallucinated bug destroys trust in every other part of this review.
+
 PEER COMPARISON: When <rag_reference> is present, you MUST explicitly compare the submission to the teammate solutions inside it. If an overall score below 7 is warranted, call out the specific approach gap with teammate names and details.
 
 BASELINE COMPARISON: When <pattern_baseline> is present, compare this submission's dimension scores to the baseline averages inside it. If above baseline, call out improvement in strengths. If below, call out regression in gaps — reference specific dimensions.
@@ -705,7 +710,7 @@ ${data.code ? data.code.substring(0, 2000) : "No code provided"}
 \`\`\`
 Key Insight: ${data.keyInsight || "Not provided"}
 Feynman Explanation: ${data.feynmanExplanation || "Not provided"}
-Real-World Connection: ${data.realWorldConnection || "Not provided"}`;
+What was Challenging: ${data.realWorldConnection || "Not provided"}`;
   }
 
   // ── USER PROMPT: all dynamic data, wrapped ──────────────────────────
@@ -1930,7 +1935,7 @@ public int[] twoSum(int[] nums, int target) {
 \`\`\`
 Key Insight: Not provided
 Feynman Explanation: Not provided
-Real-World Connection: Not provided
+What was Challenging: Not provided
 </candidate_input>
 
 <followup_answers status="all_skipped"/>`,
@@ -2009,7 +2014,7 @@ def isValid(s: str) -> bool:
 \`\`\`
 Key Insight: A stack mirrors the LIFO structure of nested brackets; matching depends only on the most-recently-opened pair.
 Feynman Explanation: Imagine you're reading a math expression aloud. Every time you open a parenthesis, you remember it on a sticky-note pile. When you close one, you grab the top sticky-note and check it matches. If at the end your sticky-notes are gone, the expression was balanced.
-Real-World Connection: This is exactly how compilers validate code blocks — and how text editors do bracket-matching as you type.
+What was Challenging: Spotting that the close-bracket case has to peek-and-pop atomically — popping first and then comparing felt natural but loses the empty-stack guard, so I rewrote it as a single short-circuit check.
 </candidate_input>
 
 <followup_answers status="all_skipped"/>`,
