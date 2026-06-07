@@ -1,0 +1,19 @@
+# LeetCode Solutions Log
+
+Personal study log of LeetCode problems with explanations. Each entry follows the same structure:
+
+1. **Code** — the original / submitted solution.
+2. **Optimized Code** — the improved version, or a note that the original is already optimal.
+3. **Key Insight** — the one observation that unlocks the problem.
+4. **Explain It Simply** — Feynman-style plain-English explanation.
+
+## Index
+
+| #   | Title            | Difficulty | Pattern             | File                                               |
+| --- | ---------------- | ---------- | ------------------- | -------------------------------------------------- |
+| 75  | Sort Colors      | Medium     | Dutch National Flag | [75-sort-colors.md](75-sort-colors.md)             |
+| 169 | Majority Element | Easy       | Boyer-Moore Voting  | [169-majority-element.md](169-majority-element.md) |
+
+---
+
+_Add new entries by creating `<number>-<kebab-title>.md` and registering the row above._
