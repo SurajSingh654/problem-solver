@@ -2055,7 +2055,7 @@ function clampConfidence(n) {
   return Math.max(1, Math.min(5, v));
 }
 
-function validateRecallGrade(parsed) {
+function validateRecallGrade(parsed, { peeked = false } = {}) {
   if (!parsed || typeof parsed !== "object") return null;
   const fields = ["pattern", "keyInsight", "complexity"];
   const out = {};
@@ -2070,13 +2070,19 @@ function validateRecallGrade(parsed) {
   const overall = String(parsed.overall ?? "").toLowerCase();
   if (!VALID_OVERALL.has(overall)) return null;
   out.overall = overall;
-  out.suggestedConfidence = clampConfidence(parsed.suggestedConfidence);
+  let suggestedConfidence = clampConfidence(parsed.suggestedConfidence);
+  if (peeked && suggestedConfidence > 3) {
+    console.warn("[recall-grade:peek-clamp] model suggested", suggestedConfidence, "→ 3");
+    suggestedConfidence = 3;
+  }
+  out.suggestedConfidence = suggestedConfidence;
   return out;
 }
 
-function buildFallbackRecallGrade(recall) {
+function buildFallbackRecallGrade({ pattern, keyInsight, complexity, peeked = false } = {}) {
   // Conservative: when the LLM is unavailable, mark every field PARTIAL with
   // an honest "AI offline" message and suggest the middle confidence rating.
+  // When the user peeked, lower the suggested confidence to 2 (re-learning).
   const partial = {
     match: "PARTIAL",
     feedback: "AI grading is unavailable right now — review your notes manually and rate honestly.",
@@ -2086,11 +2092,11 @@ function buildFallbackRecallGrade(recall) {
     feedback: "Nothing recalled in this field.",
   };
   return {
-    pattern: recall?.pattern?.trim() ? partial : empty,
-    keyInsight: recall?.keyInsight?.trim() ? partial : empty,
-    complexity: recall?.complexity?.trim() ? partial : empty,
+    pattern: pattern?.trim() ? partial : empty,
+    keyInsight: keyInsight?.trim() ? partial : empty,
+    complexity: complexity?.trim() ? partial : empty,
     overall: "partial",
-    suggestedConfidence: 3,
+    suggestedConfidence: peeked ? 2 : 3,
   };
 }
 
@@ -2108,6 +2114,7 @@ export async function gradeReviewRecall(req, res) {
     const pattern = typeof recall.pattern === "string" ? recall.pattern.trim().slice(0, 500) : "";
     const keyInsight = typeof recall.keyInsight === "string" ? recall.keyInsight.trim().slice(0, 1500) : "";
     const complexity = typeof recall.complexity === "string" ? recall.complexity.trim().slice(0, 200) : "";
+    const peeked = req.body?.peeked === true;
 
     // Reject completely empty submissions — there's nothing to grade.
     if (!pattern && !keyInsight && !complexity) {
@@ -2118,6 +2125,7 @@ export async function gradeReviewRecall(req, res) {
       where: { id: solutionId, userId, teamId },
       select: {
         id: true,
+        problemId: true,
         patterns: true,
         keyInsight: true,
         optimizedApproach: true,
@@ -2125,23 +2133,102 @@ export async function gradeReviewRecall(req, res) {
         timeComplexity: true,
         spaceComplexity: true,
         problem: {
-          select: { title: true, difficulty: true, category: true },
+          select: {
+            id: true,
+            title: true,
+            difficulty: true,
+            category: true,
+            description: true,
+            canonicalGeneratedAt: true,
+            canonicalPattern: true,
+            canonicalKeyInsight: true,
+            canonicalTimeComplexity: true,
+            canonicalSpaceComplexity: true,
+          },
         },
       },
     });
     if (!solution) return error(res, "Solution not found.", 404);
 
-    const referencePattern = (solution.patterns ?? []).join(", ") || "(not recorded)";
-    const referenceInsight =
-      stripHtmlServer(solution.keyInsight) ||
-      stripHtmlServer(solution.feynmanExplanation) ||
-      stripHtmlServer(solution.optimizedApproach) ||
-      "(not recorded)";
-    const referenceComplexity = [solution.timeComplexity, solution.spaceComplexity]
-      .filter(Boolean)
-      .join(" / ") || "(not recorded)";
+    // Decide anchor: canonical (preferred) vs legacy user-notes fallback.
+    const prob = solution.problem;
+    const hasCanonical =
+      prob?.canonicalGeneratedAt != null &&
+      (prob.canonicalPattern || prob.canonicalKeyInsight || prob.canonicalTimeComplexity);
 
-    const systemPrompt = `You are a strict but fair spaced-repetition grader for coding problems. The user has just attempted to recall a problem they previously solved. You are comparing their recall (in three fields: pattern, keyInsight, complexity) against their own stored notes from when they originally solved it.
+    let systemPrompt;
+    let userPrompt;
+
+    if (hasCanonical) {
+      // ── Canonical-anchor path ─────────────────────────────────────────────
+      const canonicalComplexity = [prob.canonicalTimeComplexity, prob.canonicalSpaceComplexity]
+        .filter(Boolean)
+        .join(" / ") || "(not recorded)";
+      const notesPattern = (solution.patterns ?? []).join(", ") || "(none)";
+      const notesInsight =
+        stripHtmlServer(solution.keyInsight) ||
+        stripHtmlServer(solution.feynmanExplanation) ||
+        stripHtmlServer(solution.optimizedApproach) ||
+        "(none)";
+      const notesComplexity = [solution.timeComplexity, solution.spaceComplexity]
+        .filter(Boolean)
+        .join(" / ") || "(none)";
+
+      systemPrompt = `You are a strict but fair spaced-repetition grader. The user is recalling a coding problem they previously solved. Judge whether their recall is correct FOR THE PROBLEM, not whether it matches their old notes.
+
+The CANONICAL block is the ground truth. The USER_NOTES block is what the user wrote when they originally solved it — useful as context (they may have discovered a different valid angle), but never override CANONICAL with USER_NOTES if they conflict. If the user's recall matches a valid alternative not captured in CANONICAL, grade YES and note the alternative in feedback.
+
+Grading rules:
+- Match SEMANTICALLY. "HashMap" matches "Hashing"; "two-pointer" matches "Two Pointers"; "linear time" matches "O(n)".
+- A field is YES if the recall captures the same concept (or a valid alternative for the problem).
+- A field is PARTIAL if right idea but missed important detail.
+- A field is NO if empty, wrong, or unrelated to the problem.
+- For complexity: O(n) ≠ O(n log n). If user gives one but reference has both, PARTIAL on the missing one.
+- suggestedConfidence (1-5): 5 = all YES, 4 = one PARTIAL, 3 = one NO or two PARTIAL, 2 = multiple gaps, 1 = mostly wrong/empty. Be honest.
+- If \`peeked: true\` is set, suggestedConfidence MUST be ≤ 3 (the user saw the answer; this is a re-learning moment, not a successful recall).
+
+Feedback strings are shown to the user — be specific and constructive.
+On PARTIAL/NO, name the gap and the next step ("You said hashmap; the canonical is two-pointers — they're different time/space tradeoffs").
+
+Output STRICT JSON, no prose:
+{
+  "pattern":            { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
+  "keyInsight":         { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
+  "complexity":         { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
+  "overall":            "pass"|"partial"|"miss",
+  "suggestedConfidence": <1-5>
+}`;
+
+      userPrompt = `Problem: <problem_title>${prob.title}</problem_title> (${prob.difficulty} ${prob.category})
+
+<canonical_pattern>${prob.canonicalPattern || "(none)"}</canonical_pattern>
+<canonical_key_insight>${prob.canonicalKeyInsight || "(none)"}</canonical_key_insight>
+<canonical_complexity>${canonicalComplexity}</canonical_complexity>
+
+<user_notes_pattern>${notesPattern}</user_notes_pattern>
+<user_notes_key_insight>${notesInsight.slice(0, 1500)}</user_notes_key_insight>
+<user_notes_complexity>${notesComplexity}</user_notes_complexity>
+
+<user_recall_pattern>${pattern || "(empty)"}</user_recall_pattern>
+<user_recall_key_insight>${keyInsight || "(empty)"}</user_recall_key_insight>
+<user_recall_complexity>${complexity || "(empty)"}</user_recall_complexity>
+
+peeked: ${peeked}
+
+Grade each field. Return JSON only.`;
+    } else {
+      // ── Legacy notes-anchor path (canonical not yet generated) ────────────
+      const referencePattern = (solution.patterns ?? []).join(", ") || "(not recorded)";
+      const referenceInsight =
+        stripHtmlServer(solution.keyInsight) ||
+        stripHtmlServer(solution.feynmanExplanation) ||
+        stripHtmlServer(solution.optimizedApproach) ||
+        "(not recorded)";
+      const referenceComplexity = [solution.timeComplexity, solution.spaceComplexity]
+        .filter(Boolean)
+        .join(" / ") || "(not recorded)";
+
+      systemPrompt = `You are a strict but fair spaced-repetition grader for coding problems. The user has just attempted to recall a problem they previously solved. You are comparing their recall (in three fields: pattern, keyInsight, complexity) against their own stored notes from when they originally solved it.
 
 Grading rules:
 - Match SEMANTICALLY, not by surface words. "HashMap" matches "Hashing" or "Hash Table"; "Two Pointers" matches "two-pointer technique"; "O(n)" matches "linear time".
@@ -2162,17 +2249,18 @@ Return JSON ONLY, no prose:
 
 The "feedback" strings are shown directly to the user — be specific and constructive. If a recall is exactly right, say so plainly; don't pad with praise.`;
 
-    const userPrompt = `Problem: ${solution.problem.title} (${solution.problem.difficulty} ${solution.problem.category})
+      userPrompt = `Problem: <problem_title>${prob?.title || solution.problemId}</problem_title> (${prob?.difficulty || ""} ${prob?.category || ""})
 
-<reference_pattern>${referencePattern}</reference_pattern>
-<reference_key_insight>${referenceInsight.slice(0, 1500)}</reference_key_insight>
-<reference_complexity>${referenceComplexity}</reference_complexity>
+<user_notes_pattern>${referencePattern}</user_notes_pattern>
+<user_notes_key_insight>${referenceInsight.slice(0, 1500)}</user_notes_key_insight>
+<user_notes_complexity>${referenceComplexity}</user_notes_complexity>
 
 <user_recall_pattern>${pattern || "(empty)"}</user_recall_pattern>
 <user_recall_key_insight>${keyInsight || "(empty)"}</user_recall_key_insight>
 <user_recall_complexity>${complexity || "(empty)"}</user_recall_complexity>
 
 Grade each field semantically. Return JSON only.`;
+    }
 
     let parsed;
     try {
@@ -2191,14 +2279,14 @@ Grade each field semantically. Return JSON only.`;
       // Fall through to deterministic fallback rather than 500 — this surface
       // is interactive; user is staring at the modal waiting for a response.
       console.error("review-grade aiComplete failed:", aiErr);
-      const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity });
+      const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity, peeked });
       return success(res, { ...fallback, fallback: true });
     }
 
-    const validated = validateRecallGrade(parsed);
+    const validated = validateRecallGrade(parsed, { peeked });
     if (!validated) {
       console.warn("review-grade: validator rejected LLM output, using fallback");
-      const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity });
+      const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity, peeked });
       return success(res, { ...fallback, fallback: true });
     }
 
