@@ -608,6 +608,16 @@ model Problem {
   // Registered below with explicit map name to prevent migration drift.
   embedding Unsupported("vector(1536)")?
 
+  // ── Canonical answers (team-admin curated / AI-generated) ─────────────
+  canonicalPattern         String?
+  canonicalKeyInsight      String?
+  canonicalTimeComplexity  String?
+  canonicalSpaceComplexity String?
+  canonicalGeneratedAt     DateTime?
+  // Soft audit reference — intentionally not a @relation. Survives user soft-delete.
+  canonicalEditedByUserId  String?
+  canonicalEditedAt        DateTime?
+
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -853,6 +863,9 @@ model Solution {
   // Registered below with explicit map name to prevent migration drift.
   embedding Unsupported("vector(1536)")?
 
+  // ── Canonical answer tracking ──────────────────────
+  lastCanonicalFetchAt DateTime?
+
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -980,9 +993,10 @@ model ReviewAttempt {
   recallText String?
 
   // ── Outcome ────────────────────────────────────────
-  confidence Int // 1-5, user-reported
-  quality    Int // 0-5, SM-2 quality derived from confidence
+  confidence Int     // 1-5, user-reported
+  quality    Int     // 0-5, SM-2 quality derived from confidence
   recalled   Boolean // quality >= 3
+  peeked     Boolean @default(false) // true if user revealed answer before rating
 
   // ── Timing ─────────────────────────────────────────
   createdAt DateTime @default(now())
