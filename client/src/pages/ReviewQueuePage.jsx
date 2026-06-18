@@ -571,21 +571,26 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     <div>
                                         <label className="flex items-center gap-1.5 text-sm font-semibold text-text-primary mb-2">
                                             <span>⏱</span> Complexity
-                                            <span className="text-[11px] font-normal text-text-disabled">— Tap a chip or type the inside-of-O</span>
+                                            <span className="text-[11px] font-normal text-text-disabled">— Type the inside of O()</span>
                                         </label>
                                         {FEATURE_CANONICAL ? (
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <OComplexityInput
-                                                    label="Time"
-                                                    value={recall.timeComplexity}
-                                                    onChange={(t) => setRecall(r => ({ ...r, timeComplexity: t }))}
-                                                />
-                                                <OComplexityInput
-                                                    label="Space"
-                                                    value={recall.spaceComplexity}
-                                                    onChange={(s) => setRecall(r => ({ ...r, spaceComplexity: s }))}
-                                                />
-                                            </div>
+                                            <>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <OComplexityInput
+                                                        label="Time"
+                                                        value={recall.timeComplexity}
+                                                        onChange={(t) => setRecall(r => ({ ...r, timeComplexity: t }))}
+                                                    />
+                                                    <OComplexityInput
+                                                        label="Space"
+                                                        value={recall.spaceComplexity}
+                                                        onChange={(s) => setRecall(r => ({ ...r, spaceComplexity: s }))}
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] text-text-disabled font-mono mt-1.5">
+                                                    Common: 1 · log n · n · n log n · n²
+                                                </p>
+                                            </>
                                         ) : (
                                             <input
                                                 type="text"
