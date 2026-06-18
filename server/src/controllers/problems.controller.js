@@ -10,6 +10,7 @@ import { success, error } from "../utils/response.js";
 import { normalizeSourceLists } from "../utils/sourceListTaxonomy.js";
 import { generateCanonicalAnswer } from "./ai.controller.js";
 import { isAIEnabled } from "../services/ai.service.js";
+import { canonicalPatchSchema } from "../schemas/problem.schema.js";
 
 // ============================================================================
 // LIST PROBLEMS
@@ -669,6 +670,56 @@ export async function getCanonical(req, res) {
   } catch (err) {
     console.error("getCanonical error:", err);
     return error(res, "Failed to fetch canonical answer.", 500);
+  }
+}
+
+// ============================================================================
+// PATCH CANONICAL ANSWER (SUPER_ADMIN override)
+// ============================================================================
+// Allows a SUPER_ADMIN to manually set or correct canonical fields without
+// triggering an AI re-generation. The handler enforces the auth gate itself
+// (not via middleware) so it can be mounted on the same routes file alongside
+// team-context routes with minimal ceremony.
+// ============================================================================
+export async function patchCanonical(req, res) {
+  try {
+    if (req.user?.globalRole !== "SUPER_ADMIN") {
+      return error(res, "Forbidden.", 403);
+    }
+    const { id } = req.params;
+    const parsed = canonicalPatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return error(res, "Invalid canonical patch.", 400, {
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const existing = await prisma.problem.findFirst({ where: { id }, select: { id: true } });
+    if (!existing) return error(res, "Problem not found.", 404);
+
+    const data = {
+      ...parsed.data,
+      canonicalEditedByUserId: req.user.id,
+      canonicalEditedAt: new Date(),
+    };
+
+    const updated = await prisma.problem.update({
+      where: { id },
+      data,
+      select: {
+        canonicalPattern: true,
+        canonicalKeyInsight: true,
+        canonicalTimeComplexity: true,
+        canonicalSpaceComplexity: true,
+        canonicalEditedAt: true,
+        canonicalEditedByUserId: true,
+      },
+    });
+
+    return success(res, updated);
+  } catch (err) {
+    console.error("patchCanonical error:", err);
+    return error(res, "Failed to update canonical answer.", 500);
   }
 }
 

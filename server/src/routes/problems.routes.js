@@ -7,11 +7,13 @@ import {
   updateProblemSchema,
   batchCreateProblemsSchema,
   toggleProblemFlagSchema,
+  canonicalPatchSchema,
 } from '../schemas/problem.schema.js'
 import {
   listProblems,
   getProblem,
   getCanonical,
+  patchCanonical,
   createProblem,
   batchCreateProblems,
   updateProblem,
@@ -27,6 +29,9 @@ router.get('/', requireTeamContext, listProblems)
 // Registered before /:problemId to prevent Express matching "canonical"
 // as a problemId param.
 router.get('/:id/canonical', requireTeamContext, getCanonical)
+// Admin override — auth gate enforced inside handler (SUPER_ADMIN check).
+// Registered before /:problemId for the same reason as GET above.
+router.patch('/:id/canonical', requireTeamContext, validate(canonicalPatchSchema), patchCanonical)
 router.get('/:problemId', requireTeamContext, getProblem)
 
 // ── Admin operations ─────────────────────────────────────────

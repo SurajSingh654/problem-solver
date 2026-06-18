@@ -11,6 +11,7 @@
 // ============================================================================
 
 import { z } from "zod";
+import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 
 const DIFFICULTY = z.enum(["EASY", "MEDIUM", "HARD"]);
 
@@ -105,3 +106,28 @@ export const toggleProblemFlagSchema = z
     flag: z.enum(["pin", "hide"]),
   })
   .strict();
+
+// ── Canonical admin patch ────────────────────────────────────
+const O_NOTATION_RE = /^O\(.+\)$/;
+
+export const canonicalPatchSchema = z
+  .object({
+    canonicalPattern: z
+      .string()
+      .refine((v) => CANONICAL_PATTERN_LABELS.includes(v), {
+        message: "canonicalPattern must be a canonical pattern label",
+      })
+      .optional(),
+    canonicalKeyInsight: z
+      .string()
+      .refine((v) => v.trim().length > 0, {
+        message: "canonicalKeyInsight must be non-empty after trimming",
+      })
+      .optional(),
+    canonicalTimeComplexity: z.string().regex(O_NOTATION_RE).optional(),
+    canonicalSpaceComplexity: z.string().regex(O_NOTATION_RE).optional(),
+  })
+  .strict()
+  .refine((obj) => Object.keys(obj).length > 0, {
+    message: "At least one canonical field must be provided.",
+  });
