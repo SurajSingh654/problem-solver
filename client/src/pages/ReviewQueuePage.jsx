@@ -228,19 +228,21 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const navigate = useNavigate()
     const reviewHints = useReviewHints()
     const reviewGrade = useReviewGrade()
-    // Prefetch canonical answer for Brief → Recall → Reveal progression.
-    // Enabled on 'brief' so the data is ready before the user can click
-    // Show Answer in Recall, or before Reveal renders the panel (Task 14).
-    const canonicalQ = useCanonicalAnswer(solution?.problemId, {
-        enabled: FEATURE_CANONICAL && !!solution?.problemId &&
-            (phase === 'brief' || phase === 'reveal' || peeked),
-    })
 
     // Phase: 'brief' (flag-gated) | 'recall' | 'reveal' | 'rate'
     const initialPhase = FEATURE_CANONICAL ? 'brief' : 'recall'
     const [phase, setPhase] = useState(initialPhase)
     const [peeked, setPeeked] = useState(false)
     const [showInlineCanonical, setShowInlineCanonical] = useState(false)
+
+    // Prefetch canonical answer for Brief → Recall → Reveal progression.
+    // Enabled on 'brief' so the data is ready before the user can click
+    // Show Answer in Recall, or before Reveal renders the panel (Task 14).
+    // Must be declared AFTER `phase` and `peeked` — the enabled flag reads them.
+    const canonicalQ = useCanonicalAnswer(solution?.problemId, {
+        enabled: FEATURE_CANONICAL && !!solution?.problemId &&
+            (phase === 'brief' || phase === 'reveal' || peeked),
+    })
     // Structured recall — Sooraj reported (2026-05-25) that a single textarea
     // gave no format guidance and the word-diff produced harshly false negatives
     // when the user used synonyms (e.g. "HashMap" vs "Hashing"). Three labeled
