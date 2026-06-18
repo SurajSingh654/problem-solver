@@ -18,6 +18,7 @@ import {
   validateReview,
   validateProblemSelection,
   validateProblemContent,
+  validateCanonicalAnswer,
 } from "../services/ai.validators.js";
 import {
   buildFallbackReview,
@@ -37,6 +38,60 @@ import {
   FAANG_CORE_PATTERNS,
 } from "../utils/patternTaxonomy.js";
 import { CANONICAL_SOURCE_LISTS } from "../utils/sourceListTaxonomy.js";
+
+// ============================================================================
+// CANONICAL ANSWER GENERATOR
+// ============================================================================
+
+const CANONICAL_TAXONOMY_LIST = CANONICAL_PATTERN_LABELS.join(", ");
+
+const CANONICAL_SYSTEM_PROMPT = `You produce the canonical interview answer for a coding problem. Your output is the ground truth that future spaced-repetition reviews will be graded against. Be precise, terse, and pick the most teachable approach when several are valid.
+
+Rules:
+- pattern: pick ONE label from the canonical taxonomy when possible. If the problem is a clear hybrid, pick the more dominant pattern.
+- keyInsight: 2-3 sentences. State the core idea, not the implementation. A candidate who reads this should be able to derive the algorithm.
+- timeComplexity / spaceComplexity: optimal complexity. Use "O(?)" form.
+- Do not include code.
+- Do not hedge. This is the canonical answer; admins can override later.
+
+Canonical taxonomy: ${CANONICAL_TAXONOMY_LIST}
+
+Output STRICT JSON:
+{
+  "pattern":         "<single label>",
+  "keyInsight":      "<2-3 sentences>",
+  "timeComplexity":  "O(?)",
+  "spaceComplexity": "O(?)"
+}`;
+
+/**
+ * Generate the canonical answer for a problem. Returns null if the AI call
+ * succeeds but the output fails validation — caller should NOT persist
+ * canonicalGeneratedAt in that case so the next request retries.
+ *
+ * Throws on AI errors (timeout / 5xx / not-enabled). Caller handles those
+ * with a retry-able 503 envelope.
+ */
+export async function generateCanonicalAnswer(problem, { userId, teamId }) {
+  const userPrompt = `<problem_title>${problem.title}</problem_title>
+<problem_description>${problem.description ?? ""}</problem_description>
+Difficulty: ${problem.difficulty}
+Category: ${problem.category}`;
+
+  const parsed = await aiComplete({
+    systemPrompt: CANONICAL_SYSTEM_PROMPT,
+    userPrompt,
+    userId,
+    teamId,
+    model: AI_MODEL_FAST,
+    temperature: 0.1,
+    maxTokens: 400,
+    jsonMode: true,
+    surface: "canonical-generate",
+  });
+
+  return validateCanonicalAnswer(parsed);
+}
 
 // Map AIError codes (rate limit, OpenAI down, parse fail, …) to HTTP
 // responses so every controller in this file returns the same envelope
