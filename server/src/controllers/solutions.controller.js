@@ -277,12 +277,16 @@ export async function submitReview(req, res) {
     const { solutionId } = req.params;
     const userId = req.user.id;
     const teamId = req.teamId;
-    const { confidence, recallText } = req.body;
+    const { confidence, recallText, peeked = false } = req.body;
     // Bounds enforced by submitReviewSchema in solutions.routes.js.
     const trimmedRecall = typeof recallText === "string" ? recallText.trim() : null;
 
     // Convert 1-5 confidence to SM-2 quality score
-    const quality = confidenceToQuality(confidence);
+    let quality = confidenceToQuality(confidence);
+    if (peeked && quality > 3) {
+      console.info("[submitReview:peek-clamp]", { solutionId, from: quality, to: 3 });
+      quality = 3;
+    }
     const isFailure = quality < 3;
 
     // Read + compute + write inside an interactive transaction with a
@@ -345,6 +349,7 @@ export async function submitReview(req, res) {
             confidence,
             quality,
             recalled: !isFailure,
+            peeked,
           },
         });
 

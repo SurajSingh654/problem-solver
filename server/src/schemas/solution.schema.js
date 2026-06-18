@@ -86,6 +86,7 @@ export const submitReviewSchema = z
   .object({
     confidence: z.number().int().min(1).max(5),
     recallText: z.string().max(10000).nullable().optional(),
+    peeked: z.boolean().optional(),
   })
   .strict();
 
