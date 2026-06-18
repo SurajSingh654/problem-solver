@@ -10,6 +10,7 @@ import { RichTextEditor } from '@components/ui/RichTextEditor'
 import { CodeEditor, SUBMIT_LANGUAGES } from '@components/ui/CodeEditor'
 import { WorkspaceEditor } from '@components/features/solutions/WorkspaceEditor'
 import { SolutionTabs } from '@components/features/solutions/SolutionTabs'
+import { PatternSelector } from '@components/features/solutions/PatternSelector'
 
 // Feature flag — when on, the CODING path renders the same SolutionTabs
 // editor that EditSolutionPage uses (BRUTE_FORCE / OPTIMIZED tabs). When
@@ -22,7 +23,7 @@ import { PageSpinner } from '@components/ui/Spinner'
 import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import {
-    PATTERNS, CONFIDENCE_LEVELS, PROBLEM_CATEGORIES,
+    CONFIDENCE_LEVELS, PROBLEM_CATEGORIES,
     HR_STAKES, HR_QUESTION_CATEGORIES,
 } from '@utils/constants'
 import { getCategoryForm } from '@utils/categoryForms'
@@ -96,105 +97,6 @@ function SolveMethodPicker({ value, onChange }) {
                     <p className="text-[10px] text-text-tertiary mt-1 leading-tight">{m.hint}</p>
                 </button>
             ))}
-        </div>
-    )
-}
-
-// ── Multi-select Pattern Selector ──────────────────────
-// Bug 2 fix: upgraded from single-select string to multi-select array.
-// value is string[], onChange receives string[].
-// Custom patterns added via Enter key (additive, not replacement).
-// Selected patterns shown as dismissible chips.
-function PatternSelector({ config, value, onChange }) {
-    const [customInput, setCustomInput] = useState('')
-
-    const suggestions = config.suggestions?.length > 0
-        ? config.suggestions
-        : PATTERNS.map(p => p.label)
-
-    function toggle(s) {
-        onChange(value.includes(s)
-            ? value.filter(v => v !== s)
-            : [...value, s]
-        )
-    }
-
-    return (
-        <div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-                {suggestions.map(s => (
-                    <button
-                        key={s}
-                        type="button"
-                        onClick={() => toggle(s)}
-                        className={cn(
-                            'text-left px-3 py-2.5 rounded-xl border text-xs font-semibold',
-                            'transition-all duration-150 flex items-center justify-between gap-2',
-                            value.includes(s)
-                                ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
-                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-line'
-                        )}
-                    >
-                        <span>{s}</span>
-                        {value.includes(s) && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" strokeWidth="3"
-                                strokeLinecap="round" strokeLinejoin="round"
-                                className="flex-shrink-0">
-                                <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                        )}
-                    </button>
-                ))}
-            </div>
-
-            {/* Selected chips */}
-            {value.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                    {value.map(v => (
-                        <span key={v}
-                            className="flex items-center gap-1 text-[10px] font-bold
-                                       bg-brand-soft text-brand-fg-soft border border-brand-line
-                                       px-2 py-px rounded-full">
-                            {v}
-                            <button
-                                type="button"
-                                onClick={() => toggle(v)}
-                                className="hover:text-brand-200 transition-colors leading-none"
-                            >
-                                ×
-                            </button>
-                        </span>
-                    ))}
-                </div>
-            )}
-
-            {/* Custom input — Enter to add */}
-            <input
-                type="text"
-                value={customInput}
-                onChange={e => setCustomInput(e.target.value)}
-                onKeyDown={e => {
-                    if (e.key === 'Enter' && customInput.trim()) {
-                        e.preventDefault()
-                        const custom = customInput.trim()
-                        if (!value.includes(custom)) {
-                            onChange([...value, custom])
-                        }
-                        setCustomInput('')
-                    }
-                }}
-                placeholder="Or type custom and press Enter..."
-                className="w-full bg-surface-3 border border-border-strong rounded-xl
-                           text-sm text-text-primary placeholder:text-text-tertiary
-                           px-3.5 py-2.5 outline-none
-                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
-            />
-            {value.length > 1 && (
-                <p className="text-[10px] text-text-disabled mt-1">
-                    {value.length} patterns selected
-                </p>
-            )}
         </div>
     )
 }
@@ -1223,7 +1125,11 @@ export default function SubmitSolutionPage() {
                         {fields.patternIdentified?.show && (
                             <FormSection icon="🧩" title={fields.patternIdentified.label || 'Pattern Identified'}
                                 hint="AI will verify if your identified pattern matches your solution">
-                                <PatternSelector config={fields.patternIdentified} value={patterns} onChange={setPatterns} />
+                                <PatternSelector
+                                    value={patterns}
+                                    onChange={setPatterns}
+                                    suggestions={fields.patternIdentified?.suggestions}
+                                />
                             </FormSection>
                         )}
 
