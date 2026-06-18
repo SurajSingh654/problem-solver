@@ -44,30 +44,37 @@ function stripHtml(html) {
 }
 
 // ── Confidence picker ──────────────────────────────────
-function ConfidencePicker({ value, onChange }) {
+function ConfidencePicker({ value, onChange, disabledAbove }) {
     return (
         <div className="flex gap-2 flex-wrap">
-            {CONFIDENCE_LEVELS.map(c => (
-                <button
-                    key={c.value}
-                    onClick={() => onChange(c.value)}
-                    className={cn(
-                        'flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl border',
-                        'transition-all duration-150 min-w-[68px]',
-                        value === c.value
-                            ? 'bg-brand-soft border-brand-line scale-105'
-                            : 'bg-surface-3 border-border-default hover:border-border-strong'
-                    )}
-                >
-                    <span className="text-xl">{c.emoji}</span>
-                    <span className={cn(
-                        'text-[10px] font-bold text-center leading-tight',
-                        value === c.value ? c.color : 'text-text-disabled'
-                    )}>
-                        {c.label}
-                    </span>
-                </button>
-            ))}
+            {CONFIDENCE_LEVELS.map(c => {
+                const disabled = disabledAbove != null && c.value > disabledAbove;
+                return (
+                    <button
+                        key={c.value}
+                        type="button"
+                        disabled={disabled}
+                        title={disabled ? "Peeked attempts cap at quality 3" : undefined}
+                        onClick={() => !disabled && onChange(c.value)}
+                        className={cn(
+                            'flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl border',
+                            'transition-all duration-150 min-w-[68px]',
+                            value === c.value
+                                ? 'bg-brand-soft border-brand-line scale-105'
+                                : 'bg-surface-3 border-border-default hover:border-border-strong',
+                            disabled && 'opacity-40 cursor-not-allowed hover:border-border-default',
+                        )}
+                    >
+                        <span className="text-xl">{c.emoji}</span>
+                        <span className={cn(
+                            'text-[10px] font-bold text-center leading-tight',
+                            value === c.value ? c.color : 'text-text-disabled'
+                        )}>
+                            {c.label}
+                        </span>
+                    </button>
+                );
+            })}
         </div>
     )
 }
@@ -561,11 +568,15 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                             ════════════════════════════════════════ */}
                         {phase === 'reveal' && (
                             <div className="p-5 space-y-4">
+                                {/* Peeked badge — flag ON only */}
+                                {FEATURE_CANONICAL && peeked && (
+                                    <Badge variant="warning" size="sm">👁 Peeked — quality capped at 3</Badge>
+                                )}
+
                                 {/* View toggle: AI Grade (default) vs Side-by-side vs Diff.
-                                    AI Grade is the semantic comparison and is the default
-                                    when a grade was successfully fetched. Side-by-side and
-                                    Diff stay as fallbacks for when AI is unavailable or for
-                                    users who want the raw word-level view. */}
+                                    Hidden when FEATURE_CANONICAL is ON — the canonical panel
+                                    replaces the three-tab comparison surface. */}
+                                {!FEATURE_CANONICAL && (
                                 <div className="flex items-center gap-1 bg-surface-2 border border-border-default rounded-lg p-1 w-fit">
                                     <button
                                         type="button"
@@ -625,38 +636,106 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         Diff
                                     </button>
                                 </div>
+                                )}
 
-                                {revealView === 'ai-grade' ? (
+                                {FEATURE_CANONICAL ? (
                                     <AiGradeView grade={aiGrade} loading={reviewGrade.isPending} recall={recall} />
-                                ) : revealView === 'diff' ? (
-                                    <RecallDiff recallText={recallText} solution={solution} />
                                 ) : (
-                                <>
-                                {/* Comparison grid */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {/* What you recalled */}
-                                    <div className="rounded-xl border border-border-default bg-surface-2 p-4">
-                                        <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
-                                            What you recalled
-                                        </p>
-                                        {recallText.trim() ? (
-                                            <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
-                                                {recallText}
+                                    revealView === 'ai-grade' ? (
+                                        <AiGradeView grade={aiGrade} loading={reviewGrade.isPending} recall={recall} />
+                                    ) : revealView === 'diff' ? (
+                                        <RecallDiff recallText={recallText} solution={solution} />
+                                    ) : (
+                                    <>
+                                    {/* Comparison grid */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {/* What you recalled */}
+                                        <div className="rounded-xl border border-border-default bg-surface-2 p-4">
+                                            <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-2">
+                                                What you recalled
                                             </p>
-                                        ) : (
-                                            <p className="text-xs text-text-disabled italic">
-                                                Nothing written — that's okay. Did you think it through?
-                                            </p>
-                                        )}
-                                    </div>
+                                            {recallText.trim() ? (
+                                                <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
+                                                    {recallText}
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-text-disabled italic">
+                                                    Nothing written — that's okay. Did you think it through?
+                                                </p>
+                                            )}
+                                        </div>
 
-                                    {/* Original notes */}
-                                    <div className="rounded-xl border border-brand-line bg-brand-soft p-4">
-                                        <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-2">
-                                            Your original notes
-                                        </p>
-                                        {hasNotes ? (
-                                            <div className="space-y-2">
+                                        {/* Original notes */}
+                                        <div className="rounded-xl border border-brand-line bg-brand-soft p-4">
+                                            <p className="text-[10px] font-bold text-brand-fg-soft uppercase tracking-widest mb-2">
+                                                Your original notes
+                                            </p>
+                                            {hasNotes ? (
+                                                <div className="space-y-2">
+                                                    {solution.patterns?.length > 0 && (
+                                                        <div>
+                                                            <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Pattern</p>
+                                                            <p className="text-xs font-semibold text-brand-fg-soft">{solution.patterns.join(', ')}</p>
+                                                        </div>
+                                                    )}
+                                                    {solution.keyInsight && (
+                                                        <div>
+                                                            <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Key Insight</p>
+                                                            <p className="text-xs text-text-secondary leading-relaxed">{solution.keyInsight}</p>
+                                                        </div>
+                                                    )}
+                                                    {(solution.timeComplexity || solution.spaceComplexity) && (
+                                                        <div>
+                                                            <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Complexity</p>
+                                                            <p className="text-xs font-mono text-text-secondary">
+                                                                {solution.timeComplexity && `T: ${solution.timeComplexity}`}
+                                                                {solution.timeComplexity && solution.spaceComplexity && ' · '}
+                                                                {solution.spaceComplexity && `S: ${solution.spaceComplexity}`}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {solution.optimizedApproach && (
+                                                        <div>
+                                                            <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Optimized Approach</p>
+                                                            <p className="text-xs text-text-secondary leading-relaxed line-clamp-3">
+                                                                {solution.optimizedApproach}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {stripHtml(solution.feynmanExplanation).length > 10 && (
+                                                        <div>
+                                                            <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Feynman</p>
+                                                            <p className="text-xs text-text-secondary leading-relaxed line-clamp-3">
+                                                                {stripHtml(solution.feynmanExplanation)}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-text-disabled italic">
+                                                    No notes recorded. Consider adding key insight and complexity next time.
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    </>
+                                    )
+                                )}
+
+                                {/* Canonical answer panel + collapsible original notes — flag ON only */}
+                                {FEATURE_CANONICAL && (
+                                    <>
+                                        <CanonicalAnswerPanel
+                                            data={canonicalQ.data}
+                                            isLoading={canonicalQ.isLoading}
+                                            error={canonicalQ.error}
+                                        />
+
+                                        <details className="rounded-xl border border-border-default bg-surface-2">
+                                            <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-text-secondary">
+                                                Your original notes
+                                            </summary>
+                                            <div className="px-4 pb-4 space-y-2">
                                                 {solution.patterns?.length > 0 && (
                                                     <div>
                                                         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Pattern</p>
@@ -687,23 +766,9 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                         </p>
                                                     </div>
                                                 )}
-                                                {stripHtml(solution.feynmanExplanation).length > 10 && (
-                                                    <div>
-                                                        <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Feynman</p>
-                                                        <p className="text-xs text-text-secondary leading-relaxed line-clamp-3">
-                                                            {stripHtml(solution.feynmanExplanation)}
-                                                        </p>
-                                                    </div>
-                                                )}
                                             </div>
-                                        ) : (
-                                            <p className="text-xs text-text-disabled italic">
-                                                No notes recorded. Consider adding key insight and complexity next time.
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                                </>
+                                        </details>
+                                    </>
                                 )}
 
                                 {/* AI Recall Questions — shown in both views */}
@@ -809,7 +874,11 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                             </>
                                         )}
                                     </p>
-                                    <ConfidencePicker value={confidence} onChange={setConfidence} />
+                                    <ConfidencePicker
+                                        value={confidence}
+                                        onChange={setConfidence}
+                                        disabledAbove={FEATURE_CANONICAL && peeked ? 3 : undefined}
+                                    />
                                 </div>
 
                                 {/* Calibration nudge — when the user's self-rating diverges
