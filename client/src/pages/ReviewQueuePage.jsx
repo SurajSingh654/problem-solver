@@ -208,16 +208,12 @@ function AiGradeView({ grade, loading, recall }) {
     )
 }
 
-// ── Complexity split/combine helpers ──────────────────
-// Used by the two-field OComplexityInput pair in the Recall phase.
-// The stored recall.complexity string stays as "Time: O(n), Space: O(n)"
-// so the server/grader contract is unchanged.
-function splitComplexity(combined) {
-    if (!combined) return { time: '', space: '' }
-    const m = /Time:\s*(O\([^)]+\))[^O]*Space:\s*(O\([^)]+\))/i.exec(combined)
-    return m ? { time: m[1], space: m[2] } : { time: combined, space: '' }
-}
-function combineComplexity(time, space) {
+// ── Combine separated time/space complexity for the grader payload ─
+// Local state stores `timeComplexity` and `spaceComplexity` separately
+// (avoids the parse/format round-trip bug where a partial entry like
+// "?" couldn't be re-parsed back into the inputs). The grader still
+// expects a single string, so we combine only at the call boundary.
+function combineForGrader(time, space) {
     const t = (time || '').trim()
     const s = (space || '').trim()
     if (!t && !s) return ''
@@ -228,7 +224,6 @@ function combineComplexity(time, space) {
 // REVIEW MODAL — Three-phase active recall
 // ══════════════════════════════════════════════════════
 function ReviewModal({ solution, onClose, onSave, isSaving }) {
-    const navigate = useNavigate()
     const reviewHints = useReviewHints()
     const reviewGrade = useReviewGrade()
 
@@ -250,7 +245,11 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     // gave no format guidance and the word-diff produced harshly false negatives
     // when the user used synonyms (e.g. "HashMap" vs "Hashing"). Three labeled
     // fields + AI semantic grading address both.
-    const [recall, setRecall] = useState({ pattern: '', keyInsight: '', complexity: '' })
+    const [recall, setRecall] = useState({ pattern: '', keyInsight: '', timeComplexity: '', spaceComplexity: '' })
+    // Toggle for the "Show problem description" expander in the Recall phase
+    // (Issue 1/5: we removed View Problem buttons that navigated away; the
+    // user can re-expand the description here without losing their work).
+    const [showProblemInline, setShowProblemInline] = useState(false)
     // null = unset. Server's submitReview endpoint rejects anything outside 1-5.
     const [confidence, setConfidence] = useState(solution?.confidence || null)
     const [timerExpired, setTimerExpired] = useState(false)
@@ -263,12 +262,18 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     // For backward compat with the existing onSave signature, we join the
     // three fields into a single recallText blob. The shape stays parseable
     // if we ever want to migrate the column to JSON.
+    const complexityForGrader = combineForGrader(recall.timeComplexity, recall.spaceComplexity)
     const recallText = [
         recall.pattern && `Pattern: ${recall.pattern}`,
         recall.keyInsight && `Key Insight: ${recall.keyInsight}`,
-        recall.complexity && `Complexity: ${recall.complexity}`,
+        complexityForGrader && `Complexity: ${complexityForGrader}`,
     ].filter(Boolean).join('\n')
-    const hasAnyRecall = Boolean(recall.pattern.trim() || recall.keyInsight.trim() || recall.complexity.trim())
+    const hasAnyRecall = Boolean(
+        recall.pattern.trim() ||
+        recall.keyInsight.trim() ||
+        recall.timeComplexity.trim() ||
+        recall.spaceComplexity.trim()
+    )
 
     // Focus first input on recall phase mount
     useEffect(() => {
@@ -294,7 +299,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                 recall: {
                     pattern: recall.pattern.trim(),
                     keyInsight: recall.keyInsight.trim(),
-                    complexity: recall.complexity.trim(),
+                    complexity: complexityForGrader.trim(),
                 },
                 peeked,
             }).then((res) => {
@@ -338,7 +343,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 z-overlay bg-black/70 backdrop-blur-sm"
-                onClick={(phase === 'recall' || phase === 'brief') ? undefined : onClose}
+                onClick={hasAnyRecall || phase === 'recall' ? undefined : onClose}
             />
             <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
                 <motion.div
@@ -393,18 +398,24 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 {' · '}Solved {formatRelativeDate(solution.createdAt)}
                             </p>
                         </div>
-                        {phase !== 'recall' && phase !== 'brief' && (
-                            <button
-                                onClick={onClose}
-                                className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0"
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18" />
-                                    <line x1="6" y1="6" x2="18" y2="18" />
-                                </svg>
-                            </button>
-                        )}
+                        {/* Issue 4: always-available close. If user has typed
+                            anything in the recall phase, confirm before discarding. */}
+                        <button
+                            onClick={() => {
+                                if ((phase === 'recall' || phase === 'reveal') && hasAnyRecall) {
+                                    if (!window.confirm('Close the review? Your typed recall will be discarded.')) return
+                                }
+                                onClose()
+                            }}
+                            aria-label="Close review"
+                            className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0 p-1 rounded hover:bg-surface-2"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                        </button>
                     </div>
 
                     {/* ── Scrollable body ──────────────────────── */}
@@ -444,9 +455,9 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                             PHASE 1 — ACTIVE RECALL
                             ════════════════════════════════════════ */}
                         {phase === 'recall' && (
-                            <div className="p-5 space-y-4">
+                            <div className="p-6 space-y-5">
                                 <div className="bg-brand-soft border border-brand-line rounded-xl p-4">
-                                    <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center justify-between gap-3 mb-2">
                                         <p className="text-sm font-bold text-text-primary">
                                             🧠 Before looking at your notes...
                                         </p>
@@ -460,19 +471,44 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     </div>
                                     <p className="text-xs text-text-tertiary leading-relaxed">
                                         Try to recall from memory. What pattern does this use? What's the key insight?
-                                        What's the time complexity? You can type notes or just think it through.
+                                        What's the time complexity?
                                     </p>
                                 </div>
+
+                                {/* Issue 1/5: replaces the "View Problem" buttons that
+                                    navigated away. User can re-show the description here
+                                    without losing recall progress. */}
+                                {FEATURE_CANONICAL && solution.problem?.description && (
+                                    <div className="rounded-xl border border-border-default bg-surface-2 overflow-hidden">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowProblemInline(v => !v)}
+                                            className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-surface-3 transition-colors"
+                                        >
+                                            <span>{showProblemInline ? '▼' : '▶'} Problem description</span>
+                                            <span className="text-[10px] text-text-disabled font-normal">
+                                                {showProblemInline ? 'hide' : 'show if you forgot'}
+                                            </span>
+                                        </button>
+                                        {showProblemInline && (
+                                            <div className="px-4 pb-4 pt-1 border-t border-border-subtle">
+                                                <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
+                                                    {solution.problem.description}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Structured recall inputs — three labeled fields with format hints.
                                     All optional individually; submitting the recall as long as ANY
                                     field has content. Grader gets per-field signals so it can call
                                     out which area is weak instead of returning one blended verdict. */}
-                                <div className="space-y-3">
+                                <div className="space-y-5">
                                     <div>
-                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary mb-1.5">
+                                        <label className="flex items-center gap-1.5 text-sm font-semibold text-text-primary mb-2">
                                             <span>🧩</span> Pattern
-                                            <span className="text-[10px] font-normal text-text-disabled">— What algorithm or data structure?</span>
+                                            <span className="text-[11px] font-normal text-text-disabled">— What algorithm or data structure?</span>
                                         </label>
                                         {FEATURE_CANONICAL ? (
                                             <PatternSelector
@@ -500,48 +536,45 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         )}
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary mb-1.5">
+                                        <label className="flex items-center gap-1.5 text-sm font-semibold text-text-primary mb-2">
                                             <span>💡</span> Key Insight
-                                            <span className="text-[10px] font-normal text-text-disabled">— The "aha" in one sentence</span>
+                                            <span className="text-[11px] font-normal text-text-disabled">— The "aha" in one sentence</span>
                                         </label>
                                         <textarea
                                             value={recall.keyInsight}
                                             onChange={e => setRecall(r => ({ ...r, keyInsight: e.target.value }))}
                                             placeholder="e.g. Store value→index in a map, then for each element check if its complement is already stored."
-                                            rows={3}
+                                            rows={4}
                                             className="w-full bg-surface-3 border border-border-strong rounded-xl
                                                        text-sm text-text-primary placeholder:text-text-disabled
-                                                       px-3.5 py-2.5 outline-none resize-none
+                                                       px-4 py-3 outline-none resize-none leading-relaxed
                                                        focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
                                                        transition-all"
                                         />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary mb-1.5">
+                                        <label className="flex items-center gap-1.5 text-sm font-semibold text-text-primary mb-2">
                                             <span>⏱</span> Complexity
-                                            <span className="text-[10px] font-normal text-text-disabled">— Format: Time: O(?), Space: O(?)</span>
+                                            <span className="text-[11px] font-normal text-text-disabled">— Tap a chip or type the inside-of-O</span>
                                         </label>
-                                        {FEATURE_CANONICAL ? (() => {
-                                            const { time, space } = splitComplexity(recall.complexity)
-                                            return (
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <OComplexityInput
-                                                        label="Time"
-                                                        value={time}
-                                                        onChange={(t) => setRecall(r => ({ ...r, complexity: combineComplexity(t, splitComplexity(r.complexity).space) }))}
-                                                    />
-                                                    <OComplexityInput
-                                                        label="Space"
-                                                        value={space}
-                                                        onChange={(s) => setRecall(r => ({ ...r, complexity: combineComplexity(splitComplexity(r.complexity).time, s) }))}
-                                                    />
-                                                </div>
-                                            )
-                                        })() : (
+                                        {FEATURE_CANONICAL ? (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <OComplexityInput
+                                                    label="Time"
+                                                    value={recall.timeComplexity}
+                                                    onChange={(t) => setRecall(r => ({ ...r, timeComplexity: t }))}
+                                                />
+                                                <OComplexityInput
+                                                    label="Space"
+                                                    value={recall.spaceComplexity}
+                                                    onChange={(s) => setRecall(r => ({ ...r, spaceComplexity: s }))}
+                                                />
+                                            </div>
+                                        ) : (
                                             <input
                                                 type="text"
-                                                value={recall.complexity}
-                                                onChange={e => setRecall(r => ({ ...r, complexity: e.target.value }))}
+                                                value={recall.timeComplexity}
+                                                onChange={e => setRecall(r => ({ ...r, timeComplexity: e.target.value }))}
                                                 placeholder="e.g. Time: O(n), Space: O(n)"
                                                 className="w-full bg-surface-3 border border-border-strong rounded-xl
                                                            text-sm text-text-primary placeholder:text-text-disabled
@@ -967,18 +1000,9 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                     {/* ── Footer actions ───────────────────────── */}
                     <div className="flex items-center gap-3 px-5 py-4 border-t border-border-default flex-shrink-0 bg-surface-1">
                         {FEATURE_CANONICAL && phase === 'brief' && (
-                            <>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => navigate(`/problems/${solution.problemId}`)}
-                                >
-                                    View Full Problem ↗
-                                </Button>
-                                <Button variant="primary" size="md" fullWidth onClick={() => setPhase('recall')}>
-                                    Start Recall →
-                                </Button>
-                            </>
+                            <Button variant="primary" size="md" fullWidth onClick={() => setPhase('recall')}>
+                                Start Recall →
+                            </Button>
                         )}
                         {phase === 'recall' && (
                             <>
@@ -991,19 +1015,6 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         👁 Show Answer
                                     </Button>
                                 )}
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => { onClose(); navigate(`/problems/${solution.problemId}`) }}
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="2"
-                                        strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                        <circle cx="12" cy="12" r="3" />
-                                    </svg>
-                                    View Problem
-                                </Button>
                                 <Button variant="primary" size="md" fullWidth onClick={handleReveal}>
                                     Reveal My Notes →
                                 </Button>
