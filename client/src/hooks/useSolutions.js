@@ -103,8 +103,8 @@ export function useSubmitReview() {
   const queryClient = useQueryClient();
   const { teamQueryKey } = useTeamContext();
   return useMutation({
-    mutationFn: ({ solutionId, confidence, recallText }) =>
-      api.post(`/solutions/${solutionId}/review`, { confidence, recallText }),
+    mutationFn: ({ solutionId, confidence, recallText, peeked }) =>
+      api.post(`/solutions/${solutionId}/review`, { confidence, recallText, peeked }),
     onSuccess: () => {
       // Invalidate review queue — item should disappear from due list
       queryClient.invalidateQueries({

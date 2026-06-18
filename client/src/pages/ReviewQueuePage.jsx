@@ -13,6 +13,12 @@ import { RecallAnalyticsPanel } from '@components/features/charts/RecallAnalytic
 import { ForgettingCurve } from '@components/features/charts/ForgettingCurve'
 import { RecallDiff } from '@components/features/solutions/RecallDiff'
 import FlashcardReviewSection from '@components/flashcards/FlashcardReviewSection'
+import { PatternSelector } from '@components/features/solutions/PatternSelector'
+import { OComplexityInput } from '@components/features/solutions/OComplexityInput'
+import { CanonicalAnswerPanel } from '@components/features/review/CanonicalAnswerPanel'
+import { useCanonicalAnswer } from '@hooks/useCanonical'
+
+const FEATURE_CANONICAL = import.meta.env.VITE_FEATURE_CANONICAL_ANSWERS === 'true'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 
@@ -193,6 +199,22 @@ function AiGradeView({ grade, loading, recall }) {
     )
 }
 
+// ── Complexity split/combine helpers ──────────────────
+// Used by the two-field OComplexityInput pair in the Recall phase.
+// The stored recall.complexity string stays as "Time: O(n), Space: O(n)"
+// so the server/grader contract is unchanged.
+function splitComplexity(combined) {
+    if (!combined) return { time: '', space: '' }
+    const m = /Time:\s*(O\([^)]+\))[^O]*Space:\s*(O\([^)]+\))/i.exec(combined)
+    return m ? { time: m[1], space: m[2] } : { time: combined, space: '' }
+}
+function combineComplexity(time, space) {
+    const t = (time || '').trim()
+    const s = (space || '').trim()
+    if (!t && !s) return ''
+    return `Time: ${t || '?'}, Space: ${s || '?'}`
+}
+
 // ══════════════════════════════════════════════════════
 // REVIEW MODAL — Three-phase active recall
 // ══════════════════════════════════════════════════════
@@ -200,9 +222,19 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const navigate = useNavigate()
     const reviewHints = useReviewHints()
     const reviewGrade = useReviewGrade()
+    // Prefetch canonical answer for Brief → Recall → Reveal progression.
+    // Enabled on 'brief' so the data is ready before the user can click
+    // Show Answer in Recall, or before Reveal renders the panel (Task 14).
+    const canonicalQ = useCanonicalAnswer(solution?.problemId, {
+        enabled: FEATURE_CANONICAL && !!solution?.problemId &&
+            (phase === 'brief' || phase === 'reveal' || peeked),
+    })
 
-    // Phase: 'recall' | 'reveal' | 'rate'
-    const [phase, setPhase] = useState('recall')
+    // Phase: 'brief' (flag-gated) | 'recall' | 'reveal' | 'rate'
+    const initialPhase = FEATURE_CANONICAL ? 'brief' : 'recall'
+    const [phase, setPhase] = useState(initialPhase)
+    const [peeked, setPeeked] = useState(false)
+    const [showInlineCanonical, setShowInlineCanonical] = useState(false)
     // Structured recall — Sooraj reported (2026-05-25) that a single textarea
     // gave no format guidance and the word-diff produced harshly false negatives
     // when the user used synonyms (e.g. "HashMap" vs "Hashing"). Three labeled
@@ -254,6 +286,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                     keyInsight: recall.keyInsight.trim(),
                     complexity: recall.complexity.trim(),
                 },
+                peeked,
             }).then((res) => {
                 setAiGrade(res.data.data)
                 setRevealView('ai-grade')
@@ -295,7 +328,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 z-overlay bg-black/70 backdrop-blur-sm"
-                onClick={phase === 'recall' ? undefined : onClose}
+                onClick={(phase === 'recall' || phase === 'brief') ? undefined : onClose}
             />
             <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
                 <motion.div
@@ -330,11 +363,15 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 {/* Phase indicator */}
                                 <span className={cn(
                                     'text-[9px] font-bold px-2 py-px rounded-full border ml-auto',
-                                    phase === 'recall' ? 'bg-warning-soft text-warning-fg border-warning-line'
-                                        : phase === 'reveal' ? 'bg-info-soft text-info-fg border-info-line'
-                                            : 'bg-success-soft text-success-fg border-success-line'
+                                    phase === 'brief' ? 'bg-surface-3 text-text-disabled border-border-default'
+                                        : phase === 'recall' ? 'bg-warning-soft text-warning-fg border-warning-line'
+                                            : phase === 'reveal' ? 'bg-info-soft text-info-fg border-info-line'
+                                                : 'bg-success-soft text-success-fg border-success-line'
                                 )}>
-                                    {phase === 'recall' ? '① Recall' : phase === 'reveal' ? '② Review' : '③ Rate'}
+                                    {phase === 'brief' ? '⓪ Brief'
+                                        : phase === 'recall' ? '① Recall'
+                                            : phase === 'reveal' ? '② Review'
+                                                : '③ Rate'}
                                 </span>
                             </div>
                             <h2 className="text-base font-bold text-text-primary leading-snug">
@@ -346,7 +383,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 {' · '}Solved {formatRelativeDate(solution.createdAt)}
                             </p>
                         </div>
-                        {phase !== 'recall' && (
+                        {phase !== 'recall' && phase !== 'brief' && (
                             <button
                                 onClick={onClose}
                                 className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0"
@@ -362,6 +399,36 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
 
                     {/* ── Scrollable body ──────────────────────── */}
                     <div className="flex-1 overflow-y-auto">
+
+                        {/* ════════════════════════════════════════
+                            PHASE 0 — BRIEF (flag-gated)
+                            ════════════════════════════════════════ */}
+                        {FEATURE_CANONICAL && phase === 'brief' && (
+                            <div className="p-5 space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <Badge variant={DIFF_VARIANT[solution.problem?.difficulty] || 'brand'}>
+                                        {solution.problem?.difficulty}
+                                    </Badge>
+                                    <span className="text-xs text-text-tertiary">{solution.problem?.category}</span>
+                                </div>
+                                <h2 className="text-base font-bold text-text-primary leading-snug">
+                                    {solution.problem?.title}
+                                </h2>
+                                {solution.problem?.description && (
+                                    <div className="rounded-xl border border-border-default bg-surface-2 p-4">
+                                        <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap line-clamp-12">
+                                            {solution.problem.description}
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="rounded-xl border border-brand-line bg-brand-soft p-3">
+                                    <p className="text-[11px] text-text-tertiary leading-relaxed">
+                                        Take a moment to refresh your memory. When you're ready, click below
+                                        and the timer starts.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* ════════════════════════════════════════
                             PHASE 1 — ACTIVE RECALL
@@ -397,18 +464,30 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                             <span>🧩</span> Pattern
                                             <span className="text-[10px] font-normal text-text-disabled">— What algorithm or data structure?</span>
                                         </label>
-                                        <input
-                                            ref={patternRef}
-                                            type="text"
-                                            value={recall.pattern}
-                                            onChange={e => setRecall(r => ({ ...r, pattern: e.target.value }))}
-                                            placeholder="e.g. HashMap, Two Pointers, Sliding Window"
-                                            className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                                       text-sm text-text-primary placeholder:text-text-disabled
-                                                       px-3.5 py-2 outline-none
-                                                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                                                       transition-all"
-                                        />
+                                        {FEATURE_CANONICAL ? (
+                                            <PatternSelector
+                                                value={
+                                                    Array.isArray(recall.pattern)
+                                                        ? recall.pattern
+                                                        : (recall.pattern ? recall.pattern.split(',').map(s => s.trim()).filter(Boolean) : [])
+                                                }
+                                                onChange={(patterns) => setRecall(r => ({ ...r, pattern: patterns.join(', ') }))}
+                                                compact
+                                            />
+                                        ) : (
+                                            <input
+                                                ref={patternRef}
+                                                type="text"
+                                                value={recall.pattern}
+                                                onChange={e => setRecall(r => ({ ...r, pattern: e.target.value }))}
+                                                placeholder="e.g. HashMap, Two Pointers, Sliding Window"
+                                                className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                                           text-sm text-text-primary placeholder:text-text-disabled
+                                                           px-3.5 py-2 outline-none
+                                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                                                           transition-all"
+                                            />
+                                        )}
                                     </div>
                                     <div>
                                         <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary mb-1.5">
@@ -432,22 +511,48 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                             <span>⏱</span> Complexity
                                             <span className="text-[10px] font-normal text-text-disabled">— Format: Time: O(?), Space: O(?)</span>
                                         </label>
-                                        <input
-                                            type="text"
-                                            value={recall.complexity}
-                                            onChange={e => setRecall(r => ({ ...r, complexity: e.target.value }))}
-                                            placeholder="e.g. Time: O(n), Space: O(n)"
-                                            className="w-full bg-surface-3 border border-border-strong rounded-xl
-                                                       text-sm text-text-primary placeholder:text-text-disabled
-                                                       px-3.5 py-2 outline-none font-mono
-                                                       focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
-                                                       transition-all"
-                                        />
+                                        {FEATURE_CANONICAL ? (() => {
+                                            const { time, space } = splitComplexity(recall.complexity)
+                                            return (
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <OComplexityInput
+                                                        label="Time"
+                                                        value={time}
+                                                        onChange={(t) => setRecall(r => ({ ...r, complexity: combineComplexity(t, splitComplexity(r.complexity).space) }))}
+                                                    />
+                                                    <OComplexityInput
+                                                        label="Space"
+                                                        value={space}
+                                                        onChange={(s) => setRecall(r => ({ ...r, complexity: combineComplexity(splitComplexity(r.complexity).time, s) }))}
+                                                    />
+                                                </div>
+                                            )
+                                        })() : (
+                                            <input
+                                                type="text"
+                                                value={recall.complexity}
+                                                onChange={e => setRecall(r => ({ ...r, complexity: e.target.value }))}
+                                                placeholder="e.g. Time: O(n), Space: O(n)"
+                                                className="w-full bg-surface-3 border border-border-strong rounded-xl
+                                                           text-sm text-text-primary placeholder:text-text-disabled
+                                                           px-3.5 py-2 outline-none font-mono
+                                                           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20
+                                                           transition-all"
+                                            />
+                                        )}
                                     </div>
                                     <p className="text-[10px] text-text-disabled">
                                         Roediger & Butler (2011): retrieval practice produces stronger long-term retention than re-reading. Synonyms are fine — the AI grader matches concepts, not exact words.
                                     </p>
                                 </div>
+                                {FEATURE_CANONICAL && showInlineCanonical && (
+                                    <CanonicalAnswerPanel
+                                        data={canonicalQ.data}
+                                        isLoading={canonicalQ.isLoading}
+                                        error={canonicalQ.error}
+                                        compact
+                                    />
+                                )}
                             </div>
                         )}
 
@@ -809,8 +914,31 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
 
                     {/* ── Footer actions ───────────────────────── */}
                     <div className="flex items-center gap-3 px-5 py-4 border-t border-border-default flex-shrink-0 bg-surface-1">
+                        {FEATURE_CANONICAL && phase === 'brief' && (
+                            <>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => navigate(`/problems/${solution.problemId}`)}
+                                >
+                                    View Full Problem ↗
+                                </Button>
+                                <Button variant="primary" size="md" fullWidth onClick={() => setPhase('recall')}>
+                                    Start Recall →
+                                </Button>
+                            </>
+                        )}
                         {phase === 'recall' && (
                             <>
+                                {FEATURE_CANONICAL && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => { setPeeked(true); setShowInlineCanonical(true) }}
+                                    >
+                                        👁 Show Answer
+                                    </Button>
+                                )}
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -850,7 +978,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     fullWidth
                                     disabled={confidence == null}
                                     loading={isSaving}
-                                    onClick={() => onSave(confidence, recallText)}
+                                    onClick={() => onSave(confidence, recallText, peeked)}
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" strokeWidth="2.5"
@@ -1163,13 +1291,14 @@ export default function ReviewQueuePage() {
     // Save review — sends confidence + recall attempt to the server.
     // Server computes SM-2 state, creates a ReviewAttempt row, returns
     // next interval.
-    async function handleSaveReview(confidenceLevel, recallText) {
+    async function handleSaveReview(confidenceLevel, recallText, peeked) {
         if (!reviewing) return
 
         await reviewMutation.mutateAsync({
             solutionId: reviewing.id,
             confidence: confidenceLevel,
             recallText: recallText?.trim() || null,
+            peeked: peeked ?? false,
         })
 
         setReviewed(prev => [...prev, reviewing.id])

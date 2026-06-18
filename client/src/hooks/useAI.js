@@ -82,8 +82,8 @@ export function useReviewHints() {
 // Reported by Sooraj Singh, 2026-05-25 (feedback ID cmpl5lefk0006bvxu3gppm9ph).
 export function useReviewGrade() {
   return useMutation({
-    mutationFn: ({ solutionId, recall }) =>
-      api.post(`/ai/review-grade/${solutionId}`, { recall }),
+    mutationFn: ({ solutionId, recall, peeked }) =>
+      api.post(`/ai/review-grade/${solutionId}`, { recall, peeked }),
   });
 }
 
