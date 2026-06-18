@@ -17,4 +17,10 @@ export const problemsApi = {
   delete: (id) =>
     api.delete(`/problems/${id}`),
 
+  getCanonical: (problemId) =>
+    api.get(`/problems/${problemId}/canonical`),
+
+  patchCanonical: (problemId, body) =>
+    api.patch(`/problems/${problemId}/canonical`, body),
+
 }
