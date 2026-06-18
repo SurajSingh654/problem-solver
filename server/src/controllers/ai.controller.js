@@ -100,7 +100,7 @@ function stableStringify(value) {
   );
 }
 
-function computeReviewInputHash(solution) {
+export function computeReviewInputHash(solution) {
   // The review prompt incorporates these fields. If any change → rerun.
   // RAG context (teammate solutions, pattern baseline) is intentionally
   // OUTSIDE the hash — those evolve with the team's other activity and

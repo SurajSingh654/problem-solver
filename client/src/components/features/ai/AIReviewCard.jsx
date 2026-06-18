@@ -9,6 +9,7 @@ import { Button } from '@components/ui/Button'
 import { cn } from '@utils/cn'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { HR_STAKES } from '@utils/constants'
+import { toast } from '@store/useUIStore'
 
 // ── Category-aware dimension label maps ───────────────
 // The AI always returns the same JSON keys (codeCorrectness, patternAccuracy, etc.)
@@ -481,11 +482,19 @@ export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, pr
     const showCodeTab = !NO_CODE_TAB_CATEGORIES.has(inferredCategory)
     const showComplexity = !NO_COMPLEXITY_CATEGORIES.has(inferredCategory)
 
-    async function handleReview() {
+    async function handleReview(force = false) {
         try {
-            const res = await aiReview.mutateAsync(solutionId)
+            const res = await aiReview.mutateAsync({ solutionId, force })
             const newReview = res.data.data.feedback
-            setLocalHistory(prev => [...prev, newReview])
+            const cached = res.data.data.cached === true
+            if (cached) {
+                // Server returned existing latest feedback — inputs haven't
+                // changed since last review. Surface so the click isn't silent;
+                // appending to localHistory would duplicate the existing entry.
+                toast.info('Reused cached analysis — no AI cost.')
+            } else {
+                setLocalHistory(prev => [...prev, newReview])
+            }
             setExpanded(true)
             setActiveTab('overview')
         } catch {
@@ -727,6 +736,27 @@ export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, pr
                         className="overflow-hidden"
                     >
                         <div className="border-t border-border-default">
+                            {/* Re-analyze affordance — surfaces the server-side
+                                force-bypass for the input-hash cache. Hidden
+                                while a review is in flight to avoid double clicks. */}
+                            <div className="flex justify-end px-5 pt-3 -mb-1">
+                                <button
+                                    type="button"
+                                    onClick={() => handleReview(true)}
+                                    disabled={aiReview.isPending}
+                                    className={cn(
+                                        'text-[11px] font-semibold px-2 py-1 rounded-md',
+                                        'transition-colors flex items-center gap-1',
+                                        aiReview.isPending
+                                            ? 'text-text-disabled cursor-not-allowed'
+                                            : 'text-text-tertiary hover:text-brand-fg-soft hover:bg-brand-soft'
+                                    )}
+                                    title="Bypass cache and re-run AI analysis"
+                                >
+                                    <span className={cn(aiReview.isPending && 'animate-spin')}>↻</span>
+                                    {aiReview.isPending ? 'Analyzing…' : 'Re-analyze'}
+                                </button>
+                            </div>
                             {/* Tabs */}
                             <div className="flex gap-1 px-5 pt-3">
                                 {availableTabs.map(tab => (

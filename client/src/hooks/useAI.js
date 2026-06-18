@@ -9,7 +9,14 @@ export function useAIReview() {
   const queryClient = useQueryClient();
   const { teamQueryKey } = useTeamContext();
   return useMutation({
-    mutationFn: (solutionId) => api.post(`/ai/review/${solutionId}`),
+    // Accept either a string solutionId (legacy) or an object with optional
+    // `force`. `force=true` bypasses the server-side input-hash cache and
+    // re-runs OpenAI even if inputs haven't changed.
+    mutationFn: (arg) => {
+      const { solutionId, force = false } =
+        typeof arg === "string" ? { solutionId: arg } : arg;
+      return api.post(`/ai/review/${solutionId}`, { force });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: [...teamQueryKey, "solutions"],

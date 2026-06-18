@@ -18,14 +18,14 @@ Three findings from learning science, all replicated:
 
 ## What you've already done (no need to relearn)
 
-| Concept | Status |
-|---|---|
-| Prompt engineering | ✅ Extensive — `ai.prompts.js` ~3000 lines |
-| Structured outputs | ✅ Zod schemas + validate-or-fallback |
-| Embeddings + RAG | ✅ pgvector + HNSW; similarity search |
-| Streaming | ✅ Mock interview, design studio, AI-from-template |
-| Tool calling (basic) | 🟡 1–2 tools in interview engine; not extended |
-| Rate limiting + cost engineering | ✅ Per-user daily cap, max-tokens clamp, retry |
+| Concept                          | Status                                             |
+| -------------------------------- | -------------------------------------------------- |
+| Prompt engineering               | ✅ Extensive — `ai.prompts.js` ~3000 lines         |
+| Structured outputs               | ✅ Zod schemas + validate-or-fallback              |
+| Embeddings + RAG                 | ✅ pgvector + HNSW; similarity search              |
+| Streaming                        | ✅ Mock interview, design studio, AI-from-template |
+| Tool calling (basic)             | 🟡 1–2 tools in interview engine; not extended     |
+| Rate limiting + cost engineering | ✅ Per-user daily cap, max-tokens clamp, retry     |
 
 These don't need explicit weeks. You'll deepen them through the new concepts (e.g., agents extend tool calling; advanced RAG extends current RAG).
 
@@ -35,14 +35,14 @@ These don't need explicit weeks. You'll deepen them through the new concepts (e.
 
 One concept per week. Each week culminates in a production feature + a worked example doc.
 
-| Week | Concept | What you build | Why this order |
-|---|---|---|---|
-| **1** | **Evals as a discipline** (LLM-as-judge, golden datasets, regression suites) | `server/eval/` harness; golden set for a real surface; `npm run eval:*` scripts | **You can't improve what you don't measure.** Without this every other concept is unmeasurable. Highest leverage. |
-| **2** | **Advanced RAG** (re-ranking, hybrid BM25+vector, query rewriting) | Upgrade notes-similarity + the related-notes panel; A/B against current via Week 1 evals | Builds on existing RAG. Immediate user-visible quality win you can measure. |
-| **3** | **Tool-calling at depth** (parallel tools, error recovery, tool schemas) | Extend interview engine OR add a Solution Reviewer that calls multiple tools | Foundation for Week 4 agents. Substrate already there. |
-| **4** | **AI agents** (ReAct loop, multi-step planning, autonomous task completion) | Auto-Solver agent: given a problem, plans → drafts → tests → critiques → revises in observable loop | Synthesizes weeks 1–3. The most-asked-about modern AI concept. |
-| **5** | **MCP** (Model Context Protocol) | Stand up an MCP server exposing problems / solutions / sessions as MCP resources | **Caveat:** stack is OpenAI; MCP is Anthropic's protocol. Learning is high-value (becoming a standard) but you'll integrate, not migrate. |
-| **6** | **Production AI engineering** (caching, model routing, semantic caching, latency budgets) | Semantic cache on AI-review surface; cost-reduction measurement via Week 1 evals | Production-grade polish. Saves real money. |
+| Week  | Concept                                                                                   | What you build                                                                                      | Why this order                                                                                                                            |
+| ----- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | **Evals as a discipline** (LLM-as-judge, golden datasets, regression suites)              | `server/eval/` harness; golden set for a real surface; `npm run eval:*` scripts                     | **You can't improve what you don't measure.** Without this every other concept is unmeasurable. Highest leverage.                         |
+| **2** | **Advanced RAG** (re-ranking, hybrid BM25+vector, query rewriting)                        | Upgrade notes-similarity + the related-notes panel; A/B against current via Week 1 evals            | Builds on existing RAG. Immediate user-visible quality win you can measure.                                                               |
+| **3** | **Tool-calling at depth** (parallel tools, error recovery, tool schemas)                  | Extend interview engine OR add a Solution Reviewer that calls multiple tools                        | Foundation for Week 4 agents. Substrate already there.                                                                                    |
+| **4** | **AI agents** (ReAct loop, multi-step planning, autonomous task completion)               | Auto-Solver agent: given a problem, plans → drafts → tests → critiques → revises in observable loop | Synthesizes weeks 1–3. The most-asked-about modern AI concept.                                                                            |
+| **5** | **MCP** (Model Context Protocol)                                                          | Stand up an MCP server exposing problems / solutions / sessions as MCP resources                    | **Caveat:** stack is OpenAI; MCP is Anthropic's protocol. Learning is high-value (becoming a standard) but you'll integrate, not migrate. |
+| **6** | **Production AI engineering** (caching, model routing, semantic caching, latency budgets) | Semantic cache on AI-review surface; cost-reduction measurement via Week 1 evals                    | Production-grade polish. Saves real money.                                                                                                |
 
 ---
 
@@ -76,14 +76,14 @@ The **Day 7 spaced review** is where retention happens. Skip it twice in a row a
 
 ## Deliverables checklist
 
-| Week | Doc deliverable | Code deliverable | Measurement deliverable |
-|---|---|---|---|
-| 1 | `/docs/concept-reviews/01-evals-as-a-discipline.md` ⏳ pending | `server/eval/` harness ✅ shipped | First baseline scores for one surface ✅ captured (note-summary, valid_rate 0.80) |
-| 2 | `02-advanced-rag.md` | Re-ranker + hybrid search in notes pipeline | Eval delta: new RAG vs. old RAG |
-| 3 | `03-tool-calling-deep.md` | Multi-tool surface (interview or solution reviewer) | Tool-call success rate metric |
-| 4 | `04-ai-agents.md` | Auto-Solver agent, observable | End-to-end success rate on a problem set |
-| 5 | `05-mcp.md` | MCP server (separate process / package) | Connection demo with Claude Desktop or other client |
-| 6 | `06-production-ai-engineering.md` | Semantic cache + model router | $/call reduction, latency p95 reduction |
+| Week | Doc deliverable                                                | Code deliverable                                    | Measurement deliverable                                                           |
+| ---- | -------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1    | `/docs/concept-reviews/01-evals-as-a-discipline.md` ⏳ pending | `server/eval/` harness ✅ shipped                   | First baseline scores for one surface ✅ captured (note-summary, valid_rate 0.80) |
+| 2    | `02-advanced-rag.md`                                           | Re-ranker + hybrid search in notes pipeline         | Eval delta: new RAG vs. old RAG                                                   |
+| 3    | `03-tool-calling-deep.md`                                      | Multi-tool surface (interview or solution reviewer) | Tool-call success rate metric                                                     |
+| 4    | `04-ai-agents.md`                                              | Auto-Solver agent, observable                       | End-to-end success rate on a problem set                                          |
+| 5    | `05-mcp.md`                                                    | MCP server (separate process / package)             | Connection demo with Claude Desktop or other client                               |
+| 6    | `06-production-ai-engineering.md`                              | Semantic cache + model router                       | $/call reduction, latency p95 reduction                                           |
 
 By end of week 6: 6 worked-example notes, 6 production features, a measurement framework, and the muscle memory of integrated learning.
 
@@ -92,6 +92,7 @@ By end of week 6: 6 worked-example notes, 6 production features, a measurement f
 ## Reading list per week (curated, not exhaustive)
 
 ### Week 1 — Evals
+
 - **Hamel Husain — "Your AI Product Needs Evals"** (definitive practitioner essay; 30 min)
 - **Eugene Yan — "LLM Evaluations: Patterns and Pitfalls"** series (2022–2024 archive)
 - **Anthropic — "Building Evals" docs** + Anthropic Evals cookbook
@@ -99,6 +100,7 @@ By end of week 6: 6 worked-example notes, 6 production features, a measurement f
 - **Bryan Bischof — "Vibe checks vs. Evals"** (essay on why vibes fail)
 
 ### Week 2 — Advanced RAG
+
 - **Anthropic — "Contextual Retrieval"** (2024; their re-ranking + chunking blog)
 - **Pinecone — "Hybrid Search" guide**
 - **Cohere — "Re-ranking with Rerank API"** (concept transferable to any reranker)
@@ -106,24 +108,28 @@ By end of week 6: 6 worked-example notes, 6 production features, a measurement f
 - **"RAG vs Long Context Windows"** — current debate framing
 
 ### Week 3 — Tool calling deep
+
 - **OpenAI — "Function Calling Guide"** (latest revision; tool_choice, parallel calls, structured tool args)
 - **Anthropic — "Tool use" docs**
 - **DSPy paper** (Khattab et al. 2023) — for the conceptual frame, not adoption
 - **A practical multi-tool agent walkthrough** (any well-cited 2024 tutorial)
 
 ### Week 4 — Agents
+
 - **ReAct paper** (Yao et al. 2022) — foundational
 - **Reflexion paper** (Shinn et al. 2023) — self-critique loops
 - **"Anatomy of an Agent"** (any 2024 essay, Lilian Weng's blog has one)
 - **AutoGen / CrewAI / LangGraph docs** (skim — don't adopt unless needed)
 
 ### Week 5 — MCP
+
 - **MCP spec** (modelcontextprotocol.io)
 - **Anthropic announcement post** (2024)
 - **MCP server quickstart** (TypeScript or Python)
 - Existing MCP servers as reference (filesystem, sqlite, github)
 
 ### Week 6 — Production AI engineering
+
 - **"Semantic caching with embeddings"** (any 2024 essay)
 - **OpenAI batch API + prompt caching docs**
 - **"Token economics: small models for big jobs"** (model-routing patterns)
@@ -144,6 +150,7 @@ By end of week 6: 6 worked-example notes, 6 production features, a measurement f
 ## Roadmap update cadence
 
 Re-read this doc on Day 7 of every week. Update:
+
 - `Current week` pointer
 - Any concept reordering (if a week revealed a stronger dependency)
 - "Parked" list (if something becomes relevant)
@@ -180,15 +187,15 @@ If you skip a week, **don't skip the spaced review of prior weeks**. The roadmap
 
 ### ⏳ Pending (the rest of Week 1)
 
-| Task | Owner | Notes |
-|---|---|---|
-| **Experiment 1**: fix the validator-vs-prompt inconsistency in `validateNoteSummary` (gate the keyTakeaways count check on `hasContent`) | You | Predicted: valid_rate 0.80 → 1.00. The "evals find bugs" lesson. |
-| **Experiment 2**: pick one prompt change (reduce few-shot count, lower temperature, or strengthen empty-note instruction), run, diff against baseline | You | Write the hypothesis BEFORE running. The hypothesis-vs-result gap IS the learning. |
-| **Experiment 3** (optional): deliberately game `valid_rate` with placeholder padding to experience Goodhart's law live | You | Skip if time tight. |
-| Run once with `EVAL_JUDGE=1` to see groundedness numbers and worst-offender hallucinations | You | Costs ~$0.005/item × 5 items = ~$0.025 per run |
-| Add 5+ adversarial golden items to `golden-sets/note-summary.json` | You | Templates: foreign-language, self-contradictory, repetition, mixed quality |
-| Day 6 — write the worked-example concept note `/docs/concept-reviews/01-evals-as-a-discipline.md` (using AI Topic Notes Template) | You | Productive failure: §3 mental model BEFORE reading authoritative sources |
-| Day 7 — spaced review of the self-test questions in the concept note (cold) | You | First week, no prior content to review yet |
+| Task                                                                                                                                                  | Owner | Notes                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------- |
+| **Experiment 1**: fix the validator-vs-prompt inconsistency in `validateNoteSummary` (gate the keyTakeaways count check on `hasContent`)              | You   | Predicted: valid_rate 0.80 → 1.00. The "evals find bugs" lesson.                   |
+| **Experiment 2**: pick one prompt change (reduce few-shot count, lower temperature, or strengthen empty-note instruction), run, diff against baseline | You   | Write the hypothesis BEFORE running. The hypothesis-vs-result gap IS the learning. |
+| **Experiment 3** (optional): deliberately game `valid_rate` with placeholder padding to experience Goodhart's law live                                | You   | Skip if time tight.                                                                |
+| Run once with `EVAL_JUDGE=1` to see groundedness numbers and worst-offender hallucinations                                                            | You   | Costs ~$0.005/item × 5 items = ~$0.025 per run                                     |
+| Add 5+ adversarial golden items to `golden-sets/note-summary.json`                                                                                    | You   | Templates: foreign-language, self-contradictory, repetition, mixed quality         |
+| Day 6 — write the worked-example concept note `/docs/concept-reviews/01-evals-as-a-discipline.md` (using AI Topic Notes Template)                     | You   | Productive failure: §3 mental model BEFORE reading authoritative sources           |
+| Day 7 — spaced review of the self-test questions in the concept note (cold)                                                                           | You   | First week, no prior content to review yet                                         |
 
 ### 🅿️ Parked (intentionally, until justified)
 
