@@ -11,6 +11,7 @@ import {
 import {
   listProblems,
   getProblem,
+  getCanonical,
   createProblem,
   batchCreateProblems,
   updateProblem,
@@ -23,6 +24,9 @@ router.use(authenticate)
 
 // ── Member operations ────────────────────────────────────────
 router.get('/', requireTeamContext, listProblems)
+// Registered before /:problemId to prevent Express matching "canonical"
+// as a problemId param.
+router.get('/:id/canonical', requireTeamContext, getCanonical)
 router.get('/:problemId', requireTeamContext, getProblem)
 
 // ── Admin operations ─────────────────────────────────────────

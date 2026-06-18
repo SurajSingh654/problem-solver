@@ -8,6 +8,8 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { normalizeSourceLists } from "../utils/sourceListTaxonomy.js";
+import { generateCanonicalAnswer } from "./ai.controller.js";
+import { isAIEnabled } from "../services/ai.service.js";
 
 // ============================================================================
 // LIST PROBLEMS
@@ -552,6 +554,121 @@ export async function toggleProblemFlag(req, res) {
   } catch (err) {
     console.error("Toggle flag error:", err);
     return error(res, "Failed to update problem.", 500);
+  }
+}
+
+// ============================================================================
+// GET CANONICAL ANSWER (lazy-fill with race lock)
+// ============================================================================
+// First request generates via AI and persists. Subsequent requests return
+// the cached columns. Concurrent first-requests are serialized via
+// SELECT ... FOR UPDATE so only one AI call is made.
+// ============================================================================
+export async function getCanonical(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const teamId = req.teamId;
+
+    const problem = await prisma.problem.findFirst({
+      where: { id, teamId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        difficulty: true,
+        category: true,
+        canonicalGeneratedAt: true,
+        canonicalPattern: true,
+        canonicalKeyInsight: true,
+        canonicalTimeComplexity: true,
+        canonicalSpaceComplexity: true,
+        canonicalEditedAt: true,
+      },
+    });
+    if (!problem) return error(res, "Problem not found.", 404);
+
+    if (problem.canonicalGeneratedAt) {
+      // Update lastCanonicalFetchAt for analytics (fire-and-forget; don't block).
+      prisma.solution
+        .updateMany({
+          where: { problemId: id, userId, teamId },
+          data: { lastCanonicalFetchAt: new Date() },
+        })
+        .catch((e) => console.warn("[canonical] fetchAt update failed", e));
+
+      return success(res, {
+        pattern: problem.canonicalPattern,
+        keyInsight: problem.canonicalKeyInsight,
+        timeComplexity: problem.canonicalTimeComplexity,
+        spaceComplexity: problem.canonicalSpaceComplexity,
+        generatedAt: problem.canonicalGeneratedAt,
+        editedAt: problem.canonicalEditedAt,
+      });
+    }
+
+    if (!isAIEnabled()) {
+      return error(res, "AI features are disabled.", 503);
+    }
+
+    let canonical;
+    try {
+      canonical = await prisma.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw`
+          SELECT "id", "canonicalGeneratedAt", "canonicalPattern",
+                 "canonicalKeyInsight", "canonicalTimeComplexity",
+                 "canonicalSpaceComplexity"
+          FROM "problems"
+          WHERE "id" = ${id}
+          FOR UPDATE
+        `;
+        if (!Array.isArray(rows) || rows.length === 0) return null;
+        const locked = rows[0];
+        if (locked.canonicalGeneratedAt) {
+          return {
+            pattern: locked.canonicalPattern,
+            keyInsight: locked.canonicalKeyInsight,
+            timeComplexity: locked.canonicalTimeComplexity,
+            spaceComplexity: locked.canonicalSpaceComplexity,
+          };
+        }
+
+        const generated = await generateCanonicalAnswer(problem, { userId, teamId });
+        if (!generated) return { __validatorRejected: true };
+
+        await tx.problem.update({
+          where: { id },
+          data: {
+            canonicalPattern: generated.pattern,
+            canonicalKeyInsight: generated.keyInsight,
+            canonicalTimeComplexity: generated.timeComplexity,
+            canonicalSpaceComplexity: generated.spaceComplexity,
+            canonicalGeneratedAt: new Date(),
+          },
+        });
+        return generated;
+      });
+    } catch (e) {
+      console.error("[canonical] generation failed:", e);
+      return error(res, "Couldn't prepare review yet — try again in a moment.", 503);
+    }
+
+    if (!canonical) return error(res, "Problem not found.", 404);
+    if (canonical.__validatorRejected) {
+      return error(res, "AI returned an invalid canonical answer; please retry.", 502);
+    }
+
+    return success(res, {
+      pattern: canonical.pattern,
+      keyInsight: canonical.keyInsight,
+      timeComplexity: canonical.timeComplexity,
+      spaceComplexity: canonical.spaceComplexity,
+      generatedAt: new Date(),
+      editedAt: null,
+    });
+  } catch (err) {
+    console.error("getCanonical error:", err);
+    return error(res, "Failed to fetch canonical answer.", 500);
   }
 }
 
