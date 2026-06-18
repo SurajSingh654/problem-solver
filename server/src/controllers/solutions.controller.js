@@ -409,7 +409,7 @@ export async function getReviewQueue(req, res) {
         where: { userId, teamId, nextReviewDate: { lte: now } },
         include: {
           problem: {
-            select: { id: true, title: true, difficulty: true, category: true, version: true },
+            select: { id: true, title: true, description: true, difficulty: true, category: true, version: true },
           },
         },
         orderBy: [{ nextReviewDate: "asc" }, { sm2Repetitions: "asc" }],
@@ -435,7 +435,7 @@ export async function getReviewQueue(req, res) {
           confidence: true,
           patterns: true,
           problem: {
-            select: { id: true, title: true, difficulty: true, category: true, version: true },
+            select: { id: true, title: true, description: true, difficulty: true, category: true, version: true },
           },
         },
         orderBy: { nextReviewDate: "asc" },
@@ -573,7 +573,7 @@ export async function getUserSolutions(req, res) {
         where: { userId: targetUserId, teamId },
         include: {
           problem: {
-            select: { id: true, title: true, difficulty: true, category: true, version: true },
+            select: { id: true, title: true, description: true, difficulty: true, category: true, version: true },
           },
         },
         orderBy: { createdAt: "desc" },

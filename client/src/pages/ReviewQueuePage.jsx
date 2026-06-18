@@ -282,6 +282,13 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
         }
     }, [phase])
 
+    // Lock background scroll while the modal is open. Restore on unmount.
+    useEffect(() => {
+        const previous = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        return () => { document.body.style.overflow = previous }
+    }, [])
+
     // Fetch AI hints AND AI grade when revealing — fired in parallel.
     // Hints are enhancement (silent failure ok). Grade is the primary
     // comparison surface; if it returns we default the reveal view to
@@ -761,7 +768,9 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                 {solution.keyInsight && (
                                                     <div>
                                                         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Key Insight</p>
-                                                        <p className="text-xs text-text-secondary leading-relaxed">{solution.keyInsight}</p>
+                                                        <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
+                                                            {stripHtml(solution.keyInsight)}
+                                                        </p>
                                                     </div>
                                                 )}
                                                 {(solution.timeComplexity || solution.spaceComplexity) && (
@@ -777,8 +786,8 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                 {solution.optimizedApproach && (
                                                     <div>
                                                         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Optimized Approach</p>
-                                                        <p className="text-xs text-text-secondary leading-relaxed line-clamp-3">
-                                                            {solution.optimizedApproach}
+                                                        <p className="text-xs text-text-secondary leading-relaxed line-clamp-6 whitespace-pre-wrap">
+                                                            {stripHtml(solution.optimizedApproach)}
                                                         </p>
                                                     </div>
                                                 )}
