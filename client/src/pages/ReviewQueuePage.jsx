@@ -16,6 +16,8 @@ import { PatternSelector } from '@components/features/solutions/PatternSelector'
 import { OComplexityInput } from '@components/features/solutions/OComplexityInput'
 import { CanonicalAnswerPanel } from '@components/features/review/CanonicalAnswerPanel'
 import { useCanonicalAnswer } from '@hooks/useCanonical'
+import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
+import DOMPurify from 'dompurify'
 
 const FEATURE_CANONICAL = import.meta.env.VITE_FEATURE_CANONICAL_ANSWERS === 'true'
 
@@ -432,20 +434,27 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                             PHASE 0 — BRIEF (flag-gated)
                             ════════════════════════════════════════ */}
                         {FEATURE_CANONICAL && phase === 'brief' && (
-                            <div className="p-5 space-y-4">
+                            <div className="p-6 space-y-5">
                                 <div className="flex items-center gap-2">
                                     <Badge variant={DIFF_VARIANT[solution.problem?.difficulty] || 'brand'}>
                                         {solution.problem?.difficulty}
                                     </Badge>
                                     <span className="text-xs text-text-tertiary">{solution.problem?.category}</span>
                                 </div>
-                                <h2 className="text-base font-bold text-text-primary leading-snug">
+                                <h2 className="text-lg font-bold text-text-primary leading-snug">
                                     {solution.problem?.title}
                                 </h2>
-                                {solution.problem?.description && (
+                                {solution.problem?.description ? (
+                                    <div className="rounded-xl border border-border-default bg-surface-2 p-4 max-h-80 overflow-y-auto">
+                                        <MarkdownRenderer
+                                            content={solution.problem.description}
+                                            size="sm"
+                                        />
+                                    </div>
+                                ) : (
                                     <div className="rounded-xl border border-border-default bg-surface-2 p-4">
-                                        <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap line-clamp-12">
-                                            {solution.problem.description}
+                                        <p className="text-xs text-text-disabled italic">
+                                            No description recorded for this problem.
                                         </p>
                                     </div>
                                 )}
@@ -482,9 +491,8 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     </p>
                                 </div>
 
-                                {/* Issue 1/5: replaces the "View Problem" buttons that
-                                    navigated away. User can re-show the description here
-                                    without losing recall progress. */}
+                                {/* Inline replacement for the removed View Problem button —
+                                    expand to re-read the description without losing recall progress. */}
                                 {FEATURE_CANONICAL && solution.problem?.description && (
                                     <div className="rounded-xl border border-border-default bg-surface-2 overflow-hidden">
                                         <button
@@ -498,10 +506,11 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                             </span>
                                         </button>
                                         {showProblemInline && (
-                                            <div className="px-4 pb-4 pt-1 border-t border-border-subtle">
-                                                <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
-                                                    {solution.problem.description}
-                                                </p>
+                                            <div className="px-4 pb-4 pt-1 border-t border-border-subtle max-h-72 overflow-y-auto">
+                                                <MarkdownRenderer
+                                                    content={solution.problem.description}
+                                                    size="sm"
+                                                />
                                             </div>
                                         )}
                                     </div>
@@ -767,15 +776,18 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                 )}
                                                 {solution.keyInsight && (
                                                     <div>
-                                                        <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Key Insight</p>
-                                                        <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
-                                                            {stripHtml(solution.keyInsight)}
-                                                        </p>
+                                                        <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-1">Key Insight</p>
+                                                        <div
+                                                            className="prose prose-invert prose-app prose-sm max-w-none text-xs leading-relaxed"
+                                                            dangerouslySetInnerHTML={{
+                                                                __html: DOMPurify.sanitize(solution.keyInsight),
+                                                            }}
+                                                        />
                                                     </div>
                                                 )}
                                                 {(solution.timeComplexity || solution.spaceComplexity) && (
                                                     <div>
-                                                        <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Complexity</p>
+                                                        <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-1">Complexity</p>
                                                         <p className="text-xs font-mono text-text-secondary">
                                                             {solution.timeComplexity && `T: ${solution.timeComplexity}`}
                                                             {solution.timeComplexity && solution.spaceComplexity && ' · '}
@@ -785,10 +797,13 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                                 )}
                                                 {solution.optimizedApproach && (
                                                     <div>
-                                                        <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Optimized Approach</p>
-                                                        <p className="text-xs text-text-secondary leading-relaxed line-clamp-6 whitespace-pre-wrap">
-                                                            {stripHtml(solution.optimizedApproach)}
-                                                        </p>
+                                                        <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-1">Optimized Approach</p>
+                                                        <div
+                                                            className="prose prose-invert prose-app prose-sm max-w-none text-xs leading-relaxed max-h-72 overflow-y-auto"
+                                                            dangerouslySetInnerHTML={{
+                                                                __html: DOMPurify.sanitize(solution.optimizedApproach),
+                                                            }}
+                                                        />
                                                     </div>
                                                 )}
                                             </div>
