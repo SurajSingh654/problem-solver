@@ -18,6 +18,8 @@
 // (solution review, design final eval, problem generation, etc.).
 // ============================================================================
 import crypto from "node:crypto";
+import { z } from "zod";
+import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 
 // ── Vocabulary used by claim-hedging rules ──────────────────────────
 export const TENTATIVE_VOCAB = [
@@ -1462,6 +1464,33 @@ export function validateInterviewDebrief(debrief, { preComputedVerdict } = {}) {
   }
 
   return { valid: violations.length === 0, violations };
+}
+
+// ── Canonical answer validator ──────────────────────────────────────
+//
+// Validates the structured canonical answer that admins store per problem
+// (pattern, key insight, complexity). Used to gate the generateCanonicalAnswer
+// helper output before persisting — same defend-in-depth pattern as review.
+const O_NOTATION_RE = /^O\(.+\)$/;
+
+const canonicalAnswerSchema = z
+  .object({
+    pattern: z.string().refine(
+      (v) => CANONICAL_PATTERN_LABELS.includes(v),
+      { message: "pattern must be in CANONICAL_PATTERN_LABELS" },
+    ),
+    keyInsight: z.string().refine((v) => v.trim().length > 0, {
+      message: "keyInsight must be non-empty after trimming",
+    }),
+    timeComplexity: z.string().regex(O_NOTATION_RE),
+    spaceComplexity: z.string().regex(O_NOTATION_RE),
+  })
+  .strict();
+
+export function validateCanonicalAnswer(parsed) {
+  if (parsed == null || typeof parsed !== "object") return null;
+  const result = canonicalAnswerSchema.safeParse(parsed);
+  return result.success ? result.data : null;
 }
 
 // ── Solution review validator ───────────────────────────────────────
