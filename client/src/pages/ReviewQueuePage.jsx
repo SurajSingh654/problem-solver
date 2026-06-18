@@ -11,7 +11,6 @@ import { formatRelativeDate, formatShortDate } from '@utils/formatters'
 import { CONFIDENCE_LEVELS, LANGUAGE_LABELS } from '@utils/constants'
 import { RecallAnalyticsPanel } from '@components/features/charts/RecallAnalyticsPanel'
 import { ForgettingCurve } from '@components/features/charts/ForgettingCurve'
-import { RecallDiff } from '@components/features/solutions/RecallDiff'
 import FlashcardReviewSection from '@components/flashcards/FlashcardReviewSection'
 import { PatternSelector } from '@components/features/solutions/PatternSelector'
 import { OComplexityInput } from '@components/features/solutions/OComplexityInput'
@@ -253,8 +252,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const [aiQuestions, setAiQuestions] = useState(null)
     const [showAiHints, setShowAiHints] = useState(false)
     const [aiGrade, setAiGrade] = useState(null)
-    // 'ai-grade' (default when AI grade exists) | 'side-by-side' | 'diff' (legacy
-    // word-diff, kept as a fallback for users who want the raw view).
+    // 'ai-grade' (default when AI grade exists) | 'side-by-side'
     const [revealView, setRevealView] = useState('side-by-side')
     const patternRef = useRef(null)
     // For backward compat with the existing onSave signature, we join the
@@ -617,24 +615,6 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                     >
                                         Side-by-side
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setRevealView('diff')}
-                                        disabled={!recallText.trim()}
-                                        className={cn(
-                                            'text-[11px] font-semibold px-3 py-1 rounded-md transition-colors',
-                                            revealView === 'diff'
-                                                ? 'bg-surface-4 text-text-primary'
-                                                : 'text-text-tertiary hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed',
-                                        )}
-                                        title={
-                                            recallText.trim()
-                                                ? 'Word-level diff — exact text comparison (legacy view)'
-                                                : 'Type a recall next time to unlock the diff view'
-                                        }
-                                    >
-                                        Diff
-                                    </button>
                                 </div>
                                 )}
 
@@ -643,8 +623,6 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                 ) : (
                                     revealView === 'ai-grade' ? (
                                         <AiGradeView grade={aiGrade} loading={reviewGrade.isPending} recall={recall} />
-                                    ) : revealView === 'diff' ? (
-                                        <RecallDiff recallText={recallText} solution={solution} />
                                     ) : (
                                     <>
                                     {/* Comparison grid */}
