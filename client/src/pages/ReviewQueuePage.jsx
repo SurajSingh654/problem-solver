@@ -162,6 +162,9 @@ function AiGradeView({ grade, loading, recall }) {
             <div className="space-y-2">
                 {fields.map(f => {
                     const v = grade[f.key]
+                    // Defensive: skip the field card if the validator/AI omitted
+                    // this key. Keeps the UI from crashing on a partial grade.
+                    if (!v || typeof v !== 'object') return null
                     return (
                         <div
                             key={f.key}
@@ -249,7 +252,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
     // fields + AI semantic grading address both.
     const [recall, setRecall] = useState({ pattern: '', keyInsight: '', complexity: '' })
     // null = unset. Server's submitReview endpoint rejects anything outside 1-5.
-    const [confidence, setConfidence] = useState(solution.confidence || null)
+    const [confidence, setConfidence] = useState(solution?.confidence || null)
     const [timerExpired, setTimerExpired] = useState(false)
     const [aiQuestions, setAiQuestions] = useState(null)
     const [showAiHints, setShowAiHints] = useState(false)

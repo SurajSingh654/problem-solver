@@ -43,16 +43,16 @@ export function CanonicalAnswerPanel({ data, isLoading, error, compact = false }
       </p>
       <div>
         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Pattern</p>
-        <p className="text-xs font-semibold text-brand-fg-soft">{data.pattern}</p>
+        <p className="text-xs font-semibold text-brand-fg-soft">{data.pattern ?? "—"}</p>
       </div>
       <div>
         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Key Insight</p>
-        <p className="text-xs text-text-secondary leading-relaxed">{data.keyInsight}</p>
+        <p className="text-xs text-text-secondary leading-relaxed">{data.keyInsight ?? "—"}</p>
       </div>
       <div>
         <p className="text-[9px] text-text-disabled uppercase tracking-wider mb-0.5">Complexity</p>
         <p className="text-xs font-mono text-text-secondary">
-          T: {data.timeComplexity} · S: {data.spaceComplexity}
+          T: {data.timeComplexity ?? "—"} · S: {data.spaceComplexity ?? "—"}
         </p>
       </div>
       {data.editedAt && (
