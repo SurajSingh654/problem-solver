@@ -1,7 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — Problem Form (Add + Edit)
 // ============================================================================
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -16,6 +16,9 @@ import { toast } from '@store/useUIStore'
 import { cn } from '@utils/cn'
 import { COMPANIES, PATTERNS, SOURCE_LABELS, PROBLEM_CATEGORIES, SOURCE_LISTS } from '@utils/constants'
 import { useConfirm } from '@hooks/useConfirm'
+import { useCanonicalAnswer, useUpdateCanonicalAnswer } from '@hooks/useCanonical'
+import { OComplexityInput } from '@components/features/solutions/OComplexityInput'
+import { useAuthStore } from '@store/useAuthStore'
 
 const schema = z.object({
     title: z.string().min(2, 'Title is required').max(200),
@@ -234,6 +237,37 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
     const [dbProblemType, setDbProblemType] = useState(
         initialData?.categoryData?.problemType || 'QUERY'
     )
+
+    const user = useAuthStore((s) => s.user)
+    const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
+
+    // Canonical answer admin override — only relevant when editing an existing problem.
+    const canonicalQ = useCanonicalAnswer(initialData?.id, {
+        enabled: isSuperAdmin && !!initialData?.id,
+    })
+    const updateCanonical = useUpdateCanonicalAnswer(initialData?.id)
+
+    const [canonicalPattern, setCanonicalPattern] = useState(
+        initialData?.canonicalPattern ?? '',
+    )
+    const [canonicalKeyInsight, setCanonicalKeyInsight] = useState(
+        initialData?.canonicalKeyInsight ?? '',
+    )
+    const [canonicalTimeComplexity, setCanonicalTimeComplexity] = useState(
+        initialData?.canonicalTimeComplexity ?? '',
+    )
+    const [canonicalSpaceComplexity, setCanonicalSpaceComplexity] = useState(
+        initialData?.canonicalSpaceComplexity ?? '',
+    )
+
+    useEffect(() => {
+        if (canonicalQ.data) {
+            setCanonicalPattern(canonicalQ.data.pattern ?? '')
+            setCanonicalKeyInsight(canonicalQ.data.keyInsight ?? '')
+            setCanonicalTimeComplexity(canonicalQ.data.timeComplexity ?? '')
+            setCanonicalSpaceComplexity(canonicalQ.data.spaceComplexity ?? '')
+        }
+    }, [canonicalQ.data])
 
     const aiGenerate = useGenerateContent()
     const { data: aiStatus } = useAIStatus()
@@ -646,6 +680,81 @@ export function ProblemForm({ initialData, onSubmit, isSubmitting, submitLabel }
                     </p>
                     <FollowUpBuilder value={followUps} onChange={setFollowUps} />
                 </FormSection>
+            )}
+
+            {/* ── Canonical Answer (SUPER_ADMIN, edit mode only) ───── */}
+            {initialData?.id && isSuperAdmin && (
+                <details className="rounded-xl border border-border-default bg-surface-2 p-4 mt-4">
+                    <summary className="cursor-pointer text-sm font-semibold text-text-primary">
+                        Canonical Answer (admin)
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                        <p className="text-[10px] text-text-disabled">
+                            These fields are the ground truth used by the spaced-repetition grader and shown to
+                            the user via &ldquo;Show Answer&rdquo;. The first review of this problem auto-fills them via
+                            AI; admins can override here.
+                        </p>
+                        <label className="block">
+                            <span className="text-xs font-semibold text-text-secondary">Canonical Pattern</span>
+                            <input
+                                type="text"
+                                value={canonicalPattern}
+                                onChange={(e) => setCanonicalPattern(e.target.value)}
+                                className="mt-1 w-full bg-surface-3 border border-border-strong rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="text-xs font-semibold text-text-secondary">Canonical Key Insight</span>
+                            <textarea
+                                value={canonicalKeyInsight}
+                                onChange={(e) => setCanonicalKeyInsight(e.target.value)}
+                                rows={3}
+                                className="mt-1 w-full bg-surface-3 border border-border-strong rounded-lg px-3 py-2 text-sm text-text-primary outline-none resize-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20"
+                            />
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <OComplexityInput
+                                label="Time"
+                                value={canonicalTimeComplexity}
+                                onChange={setCanonicalTimeComplexity}
+                            />
+                            <OComplexityInput
+                                label="Space"
+                                value={canonicalSpaceComplexity}
+                                onChange={setCanonicalSpaceComplexity}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                onClick={() => updateCanonical.mutate({
+                                    canonicalPattern,
+                                    canonicalKeyInsight,
+                                    canonicalTimeComplexity,
+                                    canonicalSpaceComplexity,
+                                })}
+                                disabled={updateCanonical.isPending}
+                            >
+                                {updateCanonical.isPending ? 'Saving...' : 'Save canonical'}
+                            </Button>
+                            {updateCanonical.isError && (
+                                <span className="text-xs text-danger-fg">
+                                    Save failed: {updateCanonical.error?.message ?? 'unknown error'}
+                                </span>
+                            )}
+                            {updateCanonical.isSuccess && !updateCanonical.isPending && (
+                                <span className="text-xs text-success-fg">Saved.</span>
+                            )}
+                        </div>
+                        {canonicalQ.data?.editedAt && (
+                            <p className="text-[10px] text-text-disabled italic">
+                                Last edited by an admin
+                            </p>
+                        )}
+                    </div>
+                </details>
             )}
 
             {/* Submit */}
