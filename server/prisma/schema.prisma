@@ -617,6 +617,11 @@ model Problem {
   // Soft audit reference — intentionally not a @relation. Survives user soft-delete.
   canonicalEditedByUserId  String?
   canonicalEditedAt        DateTime?
+  // Canonical alternatives — optional list of 0-3 valid alternative approaches
+  // (e.g. memoized recursion alongside iterative two-variable for Climbing Stairs).
+  // null = not yet generated; [] = AI considered alternatives, found none worth listing.
+  canonicalAlternatives    Json?
+  canonicalAltGeneratedAt  DateTime?
 
   // ── Timestamps ─────────────────────────────────────
   createdAt DateTime @default(now())
