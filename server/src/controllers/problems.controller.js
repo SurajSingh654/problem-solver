@@ -8,7 +8,7 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { normalizeSourceLists } from "../utils/sourceListTaxonomy.js";
-import { generateCanonicalAnswer } from "./ai.controller.js";
+import { generateCanonicalAnswer, augmentCanonicalAlternatives } from "./ai.controller.js";
 import { isAIEnabled } from "../services/ai.service.js";
 import { canonicalPatchSchema } from "../schemas/problem.schema.js";
 
@@ -564,6 +564,13 @@ export async function toggleProblemFlag(req, res) {
 // First request generates via AI and persists. Subsequent requests return
 // the cached columns. Concurrent first-requests are serialized via
 // SELECT ... FOR UPDATE so only one AI call is made.
+//
+// When FEATURE_CANONICAL_ALTERNATIVES is on:
+// - New canonicals: generator returns alternatives in a single call.
+// - Existing canonicals without alternatives: lazy-augment branch runs a
+//   second AI call (inside its own FOR UPDATE transaction) to backfill
+//   canonicalAlternatives + canonicalAltGeneratedAt. Non-fatal on failure.
+// - Response shape: alternatives array when flag on, null when flag off.
 // ============================================================================
 export async function getCanonical(req, res) {
   try {
@@ -585,12 +592,64 @@ export async function getCanonical(req, res) {
         canonicalTimeComplexity: true,
         canonicalSpaceComplexity: true,
         canonicalEditedAt: true,
+        canonicalAlternatives: true,
+        canonicalAltGeneratedAt: true,
       },
     });
     if (!problem) return error(res, "Problem not found.", 404);
 
+    const altsFlagOn = process.env.FEATURE_CANONICAL_ALTERNATIVES === "true";
+
+    // ─── Branch: canonical primary already cached ───────────────────────
     if (problem.canonicalGeneratedAt) {
-      // Update lastCanonicalFetchAt for analytics (fire-and-forget; don't block).
+      // Lazy-augment: primary cached but alternatives never generated.
+      if (altsFlagOn && problem.canonicalAltGeneratedAt == null && isAIEnabled()) {
+        try {
+          const augmented = await prisma.$transaction(async (tx) => {
+            const rows = await tx.$queryRaw`
+              SELECT "id", "canonicalGeneratedAt", "canonicalAltGeneratedAt",
+                     "canonicalPattern", "canonicalKeyInsight",
+                     "canonicalTimeComplexity", "canonicalSpaceComplexity"
+              FROM "problems"
+              WHERE "id" = ${id}
+              FOR UPDATE
+            `;
+            if (!Array.isArray(rows) || rows.length === 0) return null;
+            const locked = rows[0];
+            if (locked.canonicalAltGeneratedAt) {
+              // Race winner already filled; signal the outer code to keep its current values.
+              return null;
+            }
+            const lockedPrimary = {
+              pattern: locked.canonicalPattern,
+              keyInsight: locked.canonicalKeyInsight,
+              timeComplexity: locked.canonicalTimeComplexity,
+              spaceComplexity: locked.canonicalSpaceComplexity,
+            };
+            const alternatives = await augmentCanonicalAlternatives(
+              problem,
+              lockedPrimary,
+              { userId, teamId },
+            );
+            await tx.problem.update({
+              where: { id },
+              data: {
+                canonicalAlternatives: alternatives,
+                canonicalAltGeneratedAt: new Date(),
+              },
+            });
+            return alternatives;
+          });
+          if (augmented !== null) {
+            problem.canonicalAlternatives = augmented;
+            problem.canonicalAltGeneratedAt = new Date();
+          }
+        } catch (e) {
+          console.warn("[canonical-augment] failed; serving primary alone:", e.message);
+        }
+      }
+
+      // Update lastCanonicalFetchAt for analytics (fire-and-forget; preserved from v1).
       prisma.solution
         .updateMany({
           where: { problemId: id, userId, teamId },
@@ -605,9 +664,15 @@ export async function getCanonical(req, res) {
         spaceComplexity: problem.canonicalSpaceComplexity,
         generatedAt: problem.canonicalGeneratedAt,
         editedAt: problem.canonicalEditedAt,
+        alternatives: altsFlagOn
+          ? Array.isArray(problem.canonicalAlternatives)
+            ? problem.canonicalAlternatives
+            : []
+          : null,
       });
     }
 
+    // ─── Branch: full generate (primary not yet generated) ─────────────────
     if (!isAIEnabled()) {
       return error(res, "AI features are disabled.", 503);
     }
@@ -631,21 +696,27 @@ export async function getCanonical(req, res) {
             keyInsight: locked.canonicalKeyInsight,
             timeComplexity: locked.canonicalTimeComplexity,
             spaceComplexity: locked.canonicalSpaceComplexity,
+            alternatives: [],
           };
         }
 
         const generated = await generateCanonicalAnswer(problem, { userId, teamId });
         if (!generated) return { __validatorRejected: true };
 
+        const dataToPersist = {
+          canonicalPattern: generated.pattern,
+          canonicalKeyInsight: generated.keyInsight,
+          canonicalTimeComplexity: generated.timeComplexity,
+          canonicalSpaceComplexity: generated.spaceComplexity,
+          canonicalGeneratedAt: new Date(),
+        };
+        if (altsFlagOn) {
+          dataToPersist.canonicalAlternatives = generated.alternatives ?? [];
+          dataToPersist.canonicalAltGeneratedAt = new Date();
+        }
         await tx.problem.update({
           where: { id },
-          data: {
-            canonicalPattern: generated.pattern,
-            canonicalKeyInsight: generated.keyInsight,
-            canonicalTimeComplexity: generated.timeComplexity,
-            canonicalSpaceComplexity: generated.spaceComplexity,
-            canonicalGeneratedAt: new Date(),
-          },
+          data: dataToPersist,
         });
         return generated;
       });
@@ -666,6 +737,7 @@ export async function getCanonical(req, res) {
       spaceComplexity: canonical.spaceComplexity,
       generatedAt: new Date(),
       editedAt: null,
+      alternatives: altsFlagOn ? (canonical.alternatives ?? []) : null,
     });
   } catch (err) {
     console.error("getCanonical error:", err);

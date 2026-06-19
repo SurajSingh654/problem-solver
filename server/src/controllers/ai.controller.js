@@ -19,7 +19,10 @@ import {
   validateProblemSelection,
   validateProblemContent,
   validateCanonicalAnswer,
+  validateCanonicalAlternative,
+  validateAlternativeAllowingPrimaryPattern,
 } from "../services/ai.validators.js";
+import { dedupAndCapAlternatives } from "../utils/canonicalAltDedup.js";
 import {
   buildFallbackReview,
   buildFallbackProblemContent,
@@ -107,6 +110,33 @@ Output STRICT JSON:
   ]
 }`;
 
+const CANONICAL_AUGMENT_SYSTEM_PROMPT = `You augment an existing canonical answer for a coding problem with valid alternative approaches. The PRIMARY answer is already established and will NOT be modified. Your job: identify 0-3 textbook alternatives.
+
+When to include alternatives:
+Many interview problems have 2-3 valid approaches with materially different trade-offs (e.g. iterative O(1) space vs memoized O(n) space). Include an alternative ONLY when it differs from PRIMARY in at least one of:
+  - pattern
+  - timeComplexity
+  - spaceComplexity
+And ONLY when it's a textbook approach a strong candidate would mention. Do NOT pad with degenerate variants. Cap at 3.
+
+Alternative rules:
+- name: short label (≤ 60 chars), e.g. "Memoized recursion", "Iterative two-variable".
+- pattern: from canonical taxonomy OR same as primary.
+- keyInsight: 1-2 sentences specific to this approach (not a copy of primary).
+- timeComplexity / spaceComplexity: O(?) form.
+
+Do NOT propose changes to the primary. Do NOT include the primary in your output array.
+
+Canonical taxonomy: ${CANONICAL_TAXONOMY_LIST}
+
+Output STRICT JSON:
+{
+  "alternatives": [
+    { "name": "...", "pattern": "...", "keyInsight": "...",
+      "timeComplexity": "O(?)", "spaceComplexity": "O(?)" }
+  ]
+}`;
+
 /**
  * Generate the canonical answer for a problem. Returns null if the AI call
  * succeeds but the output fails validation — caller should NOT persist
@@ -140,6 +170,55 @@ Category: ${problem.category}`;
   });
 
   return validateCanonicalAnswer(parsed);
+}
+
+/**
+ * Generate alternatives for an existing canonical (legacy backfill path).
+ * Takes the existing primary as input. Never modifies the primary.
+ *
+ * Returns: array of validated alternatives (may be empty). Returns [] on
+ * malformed responses — caller decides whether to persist.
+ *
+ * Throws on AI errors (timeout / 5xx / not-enabled). Caller handles.
+ */
+export async function augmentCanonicalAlternatives(problem, primary, { userId, teamId }) {
+  const userPrompt = `<problem_title>${problem.title}</problem_title>
+<problem_description>${problem.description ?? ""}</problem_description>
+Difficulty: ${problem.difficulty}
+Category: ${problem.category}
+
+PRIMARY (already established, do not modify):
+<primary_pattern>${primary.pattern}</primary_pattern>
+<primary_key_insight>${primary.keyInsight}</primary_key_insight>
+<primary_complexity>${primary.timeComplexity} / ${primary.spaceComplexity}</primary_complexity>
+
+Identify 0-3 valid alternatives. Return JSON only.`;
+
+  const parsed = await aiComplete({
+    systemPrompt: CANONICAL_AUGMENT_SYSTEM_PROMPT,
+    userPrompt,
+    userId,
+    teamId,
+    model: AI_MODEL_FAST,
+    temperature: 0.1,
+    maxTokens: 400,
+    jsonMode: true,
+    surface: "canonical-augment",
+  });
+
+  if (!parsed || typeof parsed !== "object") return [];
+  const rawAlts = Array.isArray(parsed.alternatives) ? parsed.alternatives : [];
+
+  const validatedAlts = rawAlts
+    .map((alt) => {
+      if (alt && typeof alt === "object" && alt.pattern === primary.pattern) {
+        return validateAlternativeAllowingPrimaryPattern(alt);
+      }
+      return validateCanonicalAlternative(alt);
+    })
+    .filter((a) => a !== null);
+
+  return dedupAndCapAlternatives(validatedAlts, primary);
 }
 
 // Map AIError codes (rate limit, OpenAI down, parse fail, …) to HTTP
