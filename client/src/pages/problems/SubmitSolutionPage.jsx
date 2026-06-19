@@ -27,6 +27,8 @@ import {
     HR_STAKES, HR_QUESTION_CATEGORIES,
 } from '@utils/constants'
 import { getCategoryForm } from '@utils/categoryForms'
+import { iconForLabel } from '@components/features/submit/icons'
+import { SolveMethodCostBadge } from '@components/features/submit/SolveMethodCostBadge'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const EXTERNAL_LINK_CATEGORIES = ['CODING', 'SQL']
@@ -72,31 +74,37 @@ function FormSection({ icon, title, hint, badge, required, children, className }
 // row and read by AI review (confidence calibration) and the Coding
 // Pattern Mastery dim (only COLD solves count toward WORKING transitions).
 const SOLVE_METHODS = [
-    { value: 'COLD',         label: 'Cold',         hint: 'No hints, no peeking',           icon: '🧊' },
-    { value: 'HINTS',        label: 'With hints',   hint: 'Used a small nudge',             icon: '💡' },
-    { value: 'SAW_APPROACH', label: 'Saw approach', hint: 'Looked at the canonical answer', icon: '👀' },
+    { value: 'COLD',         label: 'Cold',         hint: 'No hints, no peeking',          iconKey: 'solve-method-cold' },
+    { value: 'HINTS',        label: 'With hints',   hint: 'Used a small nudge',            iconKey: 'solve-method-hints' },
+    { value: 'SAW_APPROACH', label: 'Saw approach', hint: 'Read the canonical first',      iconKey: 'solve-method-saw-approach' },
 ]
 function SolveMethodPicker({ value, onChange }) {
     return (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {SOLVE_METHODS.map(m => (
-                <button key={m.value} type="button" onClick={() => onChange(m.value)}
-                    className={cn(
-                        'border rounded-xl px-3 py-2.5 text-left transition-all',
-                        value === m.value
-                            ? 'bg-brand-soft border-brand-line scale-[1.01]'
-                            : 'bg-surface-3 border-border-default hover:border-border-strong',
-                    )}>
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm">{m.icon}</span>
-                        <span className={cn('text-xs font-bold',
-                            value === m.value ? 'text-brand-fg-soft' : 'text-text-primary')}>
-                            {m.label}
-                        </span>
-                    </div>
-                    <p className="text-[10px] text-text-tertiary mt-1 leading-tight">{m.hint}</p>
-                </button>
-            ))}
+            {SOLVE_METHODS.map(m => {
+                const Icon = iconForLabel(m.iconKey)
+                const selected = value === m.value
+                return (
+                    <button key={m.value} type="button" onClick={() => onChange(m.value)}
+                        className={cn(
+                            'border rounded-xl px-3 py-2.5 text-left transition-all min-h-[80px]',
+                            'flex flex-col gap-1.5',
+                            selected
+                                ? 'bg-brand-soft border-brand-line scale-[1.01]'
+                                : 'bg-surface-2 border-border-default hover:border-border-strong',
+                        )}>
+                        <div className="flex items-center gap-2">
+                            {Icon && <Icon className={cn('w-4 h-4', selected ? 'text-brand-fg-soft' : 'text-text-secondary')} aria-hidden="true" />}
+                            <span className={cn('text-xs font-bold',
+                                selected ? 'text-brand-fg-soft' : 'text-text-primary')}>
+                                {m.label}
+                            </span>
+                        </div>
+                        <p className="text-[10px] text-text-tertiary leading-tight">{m.hint}</p>
+                        <SolveMethodCostBadge solveMethod={m.value} className="self-start mt-auto" />
+                    </button>
+                )
+            })}
         </div>
     )
 }
@@ -104,29 +112,39 @@ function SolveMethodPicker({ value, onChange }) {
 // ── Confidence picker ──────────────────────────────────
 function ConfidencePicker({ value, onChange }) {
     return (
-        <div className="flex gap-3 flex-wrap">
-            {CONFIDENCE_LEVELS.map(c => (
-                <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => onChange(c.value)}
-                    className={cn(
-                        'flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border',
-                        'transition-all duration-150 min-w-[80px]',
-                        value === c.value
-                            ? 'bg-brand-soft border-brand-line scale-105'
-                            : 'bg-surface-3 border-border-default hover:border-border-strong'
-                    )}
-                >
-                    <span className="text-2xl">{c.emoji}</span>
-                    <span className={cn(
-                        'text-[10px] font-bold text-center leading-tight',
-                        value === c.value ? c.color : 'text-text-tertiary'
-                    )}>
-                        {c.label}
-                    </span>
-                </button>
-            ))}
+        <div className="grid grid-cols-5 gap-2">
+            {CONFIDENCE_LEVELS.map(c => {
+                const Icon = iconForLabel(c.iconKey)
+                const selected = value === c.value
+                return (
+                    <button
+                        key={c.value}
+                        type="button"
+                        onClick={() => onChange(c.value)}
+                        className={cn(
+                            'flex flex-col items-center gap-1 px-2 py-3 rounded-xl border',
+                            'transition-all duration-150 min-h-[88px]',
+                            selected
+                                ? 'bg-brand-soft border-brand-line scale-105'
+                                : 'bg-surface-2 border-border-default hover:border-border-strong'
+                        )}
+                    >
+                        {Icon && <Icon className={cn('w-5 h-5', selected ? c.color : 'text-text-tertiary')} aria-hidden="true" />}
+                        <span className={cn(
+                            'text-[10px] font-bold text-center leading-tight',
+                            selected ? c.color : 'text-text-tertiary'
+                        )}>
+                            {c.label}
+                        </span>
+                        <span className={cn(
+                            'text-[9px] text-center leading-tight opacity-70',
+                            selected ? c.color : 'text-text-disabled',
+                        )}>
+                            {c.desc}
+                        </span>
+                    </button>
+                )
+            })}
         </div>
     )
 }

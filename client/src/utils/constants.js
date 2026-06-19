@@ -185,12 +185,16 @@ export const COMPANIES = [
 ];
 
 // ── Confidence levels ──────────────────────────────
+// `iconKey` looks up a lucide component via iconForLabel('confidence-N')
+// in the submit / edit pages. `emoji` is kept for legacy consumers
+// (FlashcardReviewModal, SolutionCard, ReviewQueuePage, ProfilePage,
+// EditSolutionPage) until they migrate to lucide icons.
 export const CONFIDENCE_LEVELS = [
-  { value: 1, emoji: "😰", label: "Forgot it", color: "text-danger" },
-  { value: 2, emoji: "🤔", label: "Very hazy", color: "text-warning" },
-  { value: 3, emoji: "😐", label: "Somewhat clear", color: "text-info" },
-  { value: 4, emoji: "😊", label: "Pretty solid", color: "text-brand-300" },
-  { value: 5, emoji: "🔥", label: "Crystal clear", color: "text-success" },
+  { value: 1, iconKey: "confidence-1", emoji: "😰", label: "Forgot it",      desc: "Couldn't even start",   color: "text-danger" },
+  { value: 2, iconKey: "confidence-2", emoji: "🤔", label: "Very hazy",      desc: "Rough idea only",       color: "text-warning" },
+  { value: 3, iconKey: "confidence-3", emoji: "😐", label: "Somewhat clear", desc: "Got there with effort", color: "text-info" },
+  { value: 4, iconKey: "confidence-4", emoji: "😊", label: "Pretty solid",   desc: "Few rough patches",     color: "text-brand-300" },
+  { value: 5, iconKey: "confidence-5", emoji: "🔥", label: "Crystal clear",  desc: "No hesitation",         color: "text-success" },
 ];
 
 // ── Spaced repetition intervals (days) ────────────
