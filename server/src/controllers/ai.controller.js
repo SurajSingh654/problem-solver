@@ -23,6 +23,7 @@ import {
   validateAlternativeAllowingPrimaryPattern,
 } from "../services/ai.validators.js";
 import { dedupAndCapAlternatives } from "../utils/canonicalAltDedup.js";
+import { matchCanonicalApproach } from "../utils/canonicalApproachMatcher.js";
 import {
   buildFallbackReview,
   buildFallbackProblemContent,
@@ -2172,35 +2173,29 @@ Generate 2 questions that will test if they truly remember and understand this p
 const VALID_MATCH = new Set(["YES", "PARTIAL", "NO"]);
 const VALID_OVERALL = new Set(["pass", "partial", "miss"]);
 
-const MULTI_APPROACH_GRADER_SYSTEM = `You are a strict but fair spaced-repetition grader. The user is recalling a coding problem they previously solved. Many problems have multiple valid approaches; your job is to identify which approach the user implemented and grade their recall against THAT approach — not against a single "right answer".
+const GRADER_AGAINST_MATCHED_SYSTEM = `You are a strict but fair spaced-repetition grader. The server has already identified which approach the user implemented; your job is to grade their RECALL against that specific approach.
 
 You receive:
-  - <canonical_primary>: the main canonical approach (pattern, keyInsight, complexity).
-  - <canonical_alternatives>: 0-N additional valid approaches, each with a name + pattern + keyInsight + complexity.
-  - <user_notes>: what the user wrote when they originally solved the problem (their actual implementation).
-  - <user_recall>: what they typed just now (their memory check).
+  - <grade_against>: the approach to grade against (pattern + keyInsight + complexity).
+  - <user_recall>: what the user typed just now (pattern, keyInsight, complexity).
 
-PROCEDURE — follow exactly:
+Match SEMANTICALLY ("HashMap" matches "Hashing", "linear time" matches "O(n)").
 
-Step 1 — IDENTIFY which approach the user implemented.
-  Compare <user_notes_complexity> and <user_notes_pattern> against PRIMARY and each ALTERNATIVE. The MATCHED APPROACH is whichever scores closest on pattern + complexity. If user_notes are sparse or ambiguous, fall back to PRIMARY.
+For each field:
+  - YES: recall captures the same concept as <grade_against>.
+  - PARTIAL: right idea, missed an important detail.
+  - NO: empty, wrong, or unrelated.
 
-Step 2 — GRADE user_recall against the MATCHED APPROACH (not primary).
-  - Match SEMANTICALLY ("HashMap" matches "Hashing"; "linear time" matches "O(n)"; "two-pointer" matches "Two Pointers").
-  - YES: recall captures the same concept as the matched approach.
-  - PARTIAL: right idea, missed important detail.
-  - NO: empty, wrong, or unrelated to the matched approach AND to all other approaches.
-  - For complexity: O(n) ≠ O(n log n). If user gives one but matched approach has both time + space, PARTIAL on the missing one.
+For complexity: O(n) ≠ O(n log n). If user gives one but <grade_against> has both time and space, PARTIAL on the missing one.
 
-Step 3 — In feedback, name the approach the user used and reference the others where helpful. e.g. "You used the memoized recursion variant (O(n) space) — correct. The iterative two-variable approach achieves O(1) space." This trade-off awareness is the cognitive task interviewers test; surface it.
+In feedback: be specific. Reference the approach by name when helpful.
 
-Step 4 — suggestedConfidence (1-5) follows the matched approach's grade:
+suggestedConfidence (1-5):
   5 = all YES, 4 = one PARTIAL, 3 = one NO or two PARTIAL, 2 = multiple gaps, 1 = mostly wrong/empty.
   If \`peeked: true\`, suggestedConfidence MUST be ≤ 3.
 
-Output STRICT JSON, no prose:
+Output STRICT JSON (no matchedApproach — the server computed it):
 {
-  "matchedApproach":    "primary" | "<alternative.name>",
   "pattern":            { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
   "keyInsight":         { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
   "complexity":         { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
@@ -2219,7 +2214,7 @@ function clampConfidence(n) {
   return Math.max(1, Math.min(5, v));
 }
 
-function validateRecallGrade(parsed, { peeked = false, validAlternativeNames = [] } = {}) {
+function validateRecallGrade(parsed, { peeked = false } = {}) {
   if (!parsed || typeof parsed !== "object") return null;
   const fields = ["pattern", "keyInsight", "complexity"];
   const out = {};
@@ -2240,15 +2235,6 @@ function validateRecallGrade(parsed, { peeked = false, validAlternativeNames = [
     suggestedConfidence = 3;
   }
   out.suggestedConfidence = suggestedConfidence;
-  let { matchedApproach } = parsed;
-  if (matchedApproach != null) {
-    const validNames = new Set(["primary", ...validAlternativeNames]);
-    if (typeof matchedApproach !== "string" || !validNames.has(matchedApproach)) {
-      console.warn("[recall-grade:invalid-match]", matchedApproach, "→ primary");
-      matchedApproach = "primary";
-    }
-  }
-  out.matchedApproach = matchedApproach ?? null;
   return out;
 }
 
@@ -2305,6 +2291,7 @@ export async function gradeReviewRecall(req, res) {
         feynmanExplanation: true,
         timeComplexity: true,
         spaceComplexity: true,
+        aiFeedback: true,
         problem: {
           select: {
             id: true,
@@ -2337,9 +2324,35 @@ export async function gradeReviewRecall(req, res) {
 
     let systemPrompt;
     let userPrompt;
+    let matchedApproach = null;
+    let discrepancy = null;
 
     if (useMultiApproachPrompt) {
-      // ── Multi-approach grader (canonical + alternatives) ──────────────────
+      // ── Trust → Match → Grade pipeline ───────────────────────────────────
+      const primary = {
+        pattern: prob.canonicalPattern,
+        keyInsight: prob.canonicalKeyInsight,
+        timeComplexity: prob.canonicalTimeComplexity,
+        spaceComplexity: prob.canonicalSpaceComplexity,
+      };
+      const matchResult = matchCanonicalApproach({
+        solution: {
+          timeComplexity: solution.timeComplexity,
+          spaceComplexity: solution.spaceComplexity,
+          patterns: solution.patterns,
+        },
+        primary,
+        alternatives,
+        aiFeedback: solution.aiFeedback,
+      });
+      matchedApproach = matchResult.matchedApproach;
+      discrepancy = matchResult.discrepancy;
+
+      const chosen =
+        matchedApproach === "primary"
+          ? { name: "primary", ...primary }
+          : alternatives.find((a) => a.name === matchedApproach) || { name: "primary", ...primary };
+
       const notesPattern = (solution.patterns ?? []).join(", ") || "(none)";
       const notesInsight =
         stripHtmlServer(solution.keyInsight) ||
@@ -2350,28 +2363,15 @@ export async function gradeReviewRecall(req, res) {
         .filter(Boolean)
         .join(" / ") || "(none)";
 
-      const altsBlock = alternatives
-        .map(
-          (alt) =>
-            `${alt.name}:
-    pattern: ${alt.pattern}
-    keyInsight: ${alt.keyInsight}
-    time: ${alt.timeComplexity}  space: ${alt.spaceComplexity}`,
-        )
-        .join("\n  ");
-
-      systemPrompt = MULTI_APPROACH_GRADER_SYSTEM;
+      systemPrompt = GRADER_AGAINST_MATCHED_SYSTEM;
       userPrompt = `Problem: <problem_title>${prob.title}</problem_title> (${prob.difficulty} ${prob.category})
 
-<canonical_primary>
-  pattern: ${prob.canonicalPattern || "(none)"}
-  keyInsight: ${prob.canonicalKeyInsight || "(none)"}
-  time: ${prob.canonicalTimeComplexity || "(none)"}  space: ${prob.canonicalSpaceComplexity || "(none)"}
-</canonical_primary>
-
-<canonical_alternatives>
-  ${altsBlock}
-</canonical_alternatives>
+<grade_against>
+  approach: ${chosen.name}
+  pattern: ${chosen.pattern}
+  keyInsight: ${chosen.keyInsight}
+  time: ${chosen.timeComplexity}  space: ${chosen.spaceComplexity}
+</grade_against>
 
 <user_notes_pattern>${notesPattern}</user_notes_pattern>
 <user_notes_key_insight>${notesInsight.slice(0, 1500)}</user_notes_key_insight>
@@ -2383,7 +2383,7 @@ export async function gradeReviewRecall(req, res) {
 
 peeked: ${peeked}
 
-Identify the matched approach, then grade. Return JSON only.`;
+Grade each field. Return JSON only.`;
     } else if (hasCanonical) {
       // ── Canonical-anchor path ─────────────────────────────────────────────
       const canonicalComplexity = [prob.canonicalTimeComplexity, prob.canonicalSpaceComplexity]
@@ -2496,7 +2496,7 @@ Grade each field semantically. Return JSON only.`;
         teamId,
         model: AI_MODEL_FAST,
         temperature: 0.2,
-        maxTokens: useMultiApproachPrompt ? 800 : 600,
+        maxTokens: 600,
         jsonMode: true,
         surface: "review-grade",
       });
@@ -2508,15 +2508,20 @@ Grade each field semantically. Return JSON only.`;
       return success(res, { ...fallback, fallback: true });
     }
 
-    const validAlternativeNames = alternatives.map((a) => a.name);
-    const validated = validateRecallGrade(parsed, { peeked, validAlternativeNames });
+    const validated = validateRecallGrade(parsed, { peeked });
     if (!validated) {
       console.warn("review-grade: validator rejected LLM output, using fallback");
       const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity, peeked });
-      return success(res, { ...fallback, fallback: true });
+      return success(res, { ...fallback, fallback: true, matchedApproach, discrepancy });
     }
 
-    return success(res, { ...validated, fallback: false });
+    // Server is authoritative for matchedApproach and discrepancy.
+    return success(res, {
+      ...validated,
+      matchedApproach,
+      discrepancy,
+      fallback: false,
+    });
   } catch (err) {
     console.error("Review grade error:", err);
     return error(res, "Failed to grade recall.", 500);

@@ -1,15 +1,12 @@
 // ============================================================================
-// AI review-grade controller — multi-approach (matchedApproach) tests
+// AI review-grade controller — matchedApproach + discrepancy (trust pipeline)
 // ============================================================================
 //
-// Guards the third grader path introduced for canonical alternatives:
-//   - When FEATURE_CANONICAL_ALTERNATIVES=true AND the canonical has at least
-//     one alternative, the grader emits a <canonical_alternatives> block in
-//     the prompt and returns matchedApproach in the response.
-//   - matchedApproach must be coerced to "primary" if the model emits an
-//     unknown value.
-//   - When alternatives are empty (or flag is off), the v1 hybrid prompt is
-//     used (no <canonical_alternatives> block).
+// Guards the deterministic-matcher pipeline:
+//   - matchedApproach is server-computed (not LLM-emitted).
+//   - discrepancy is server-rendered with deterministic summary.
+//   - <grade_against> block (single approach) replaces <canonical_alternatives>.
+//   - aiFeedback flags override structural match (solve_time_flagged).
 // ============================================================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -54,7 +51,7 @@ const { gradeReviewRecall } = await import(
   "../../src/controllers/ai.controller.js"
 );
 
-const baseProblem = () => ({
+const climbingProblem = () => ({
   id: "prob_1",
   title: "Climbing Stairs",
   difficulty: "EASY",
@@ -77,7 +74,7 @@ const baseProblem = () => ({
   canonicalAltGeneratedAt: new Date(),
 });
 
-const baseSolution = () => ({
+const baseSolution = (overrides = {}) => ({
   id: "sol_1",
   problemId: "prob_1",
   patterns: ["Dynamic Programming"],
@@ -86,19 +83,20 @@ const baseSolution = () => ({
   optimizedApproach: null,
   timeComplexity: "O(n)",
   spaceComplexity: "O(n)",
-  problem: baseProblem(),
+  aiFeedback: null,
+  problem: climbingProblem(),
+  ...overrides,
 });
 
-describe("gradeReviewRecall — matchedApproach (FEATURE_CANONICAL_ALTERNATIVES=true)", () => {
+describe("gradeReviewRecall — happy path (notes match an alternative)", () => {
   beforeEach(() => {
     originalFlag = process.env.FEATURE_CANONICAL_ALTERNATIVES;
     process.env.FEATURE_CANONICAL_ALTERNATIVES = "true";
     solutionRow = baseSolution();
     aiPayload = {
-      matchedApproach: "Memoized recursion",
       pattern: { match: "YES", feedback: "DP confirmed." },
       keyInsight: { match: "YES", feedback: "Memoization captured." },
-      complexity: { match: "YES", feedback: "Your O(n) memoized space matches." },
+      complexity: { match: "YES", feedback: "Your O(n)/O(n) matches the memoized variant." },
       overall: "pass",
       suggestedConfidence: 5,
     };
@@ -109,72 +107,143 @@ describe("gradeReviewRecall — matchedApproach (FEATURE_CANONICAL_ALTERNATIVES=
     process.env.FEATURE_CANONICAL_ALTERNATIVES = originalFlag;
   });
 
-  it("includes <canonical_alternatives> block in the user prompt", async () => {
+  it("returns matchedApproach computed by the server (alt name)", async () => {
     const req = makeReq({
       params: { solutionId: "sol_1" },
-      body: {
-        recall: {
-          pattern: "DP, Memoization",
-          keyInsight: "use a cache",
-          complexity: "O(n) / O(n)",
-        },
-      },
-    });
-    await invoke(gradeReviewRecall, req);
-    expect(lastUserPrompt).toContain("<canonical_alternatives>");
-    expect(lastUserPrompt).toContain("Memoized recursion");
-  });
-
-  it("returns matchedApproach in the response", async () => {
-    const req = makeReq({
-      params: { solutionId: "sol_1" },
-      body: {
-        recall: {
-          pattern: "DP",
-          keyInsight: "memoize",
-          complexity: "O(n) / O(n)",
-        },
-      },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n) / O(n)" } },
     });
     const res = await invoke(gradeReviewRecall, req);
     expect(res.status).toBe(200);
     expect(res.body.data.matchedApproach).toBe("Memoized recursion");
+    expect(res.body.data.discrepancy).toBeNull();
   });
 
-  it("coerces invalid matchedApproach to 'primary'", async () => {
+  it("includes <grade_against> block in the prompt with the matched approach only", async () => {
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n) / O(n)" } },
+    });
+    await invoke(gradeReviewRecall, req);
+    expect(lastUserPrompt).toContain("<grade_against>");
+    expect(lastUserPrompt).toContain("Memoized recursion");
+    // The full alternatives list should NOT be passed (server already chose).
+    expect(lastUserPrompt).not.toContain("<canonical_alternatives>");
+  });
+
+  it("ignores LLM-emitted matchedApproach (server is authoritative)", async () => {
     aiPayload.matchedApproach = "Some approach AI made up";
     const req = makeReq({
       params: { solutionId: "sol_1" },
-      body: {
-        recall: {
-          pattern: "DP",
-          keyInsight: "memoize",
-          complexity: "O(n) / O(n)",
-        },
-      },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n) / O(n)" } },
     });
     const res = await invoke(gradeReviewRecall, req);
-    expect(res.body.data.matchedApproach).toBe("primary");
-  });
-
-  it("uses v1 hybrid prompt when canonical has no alternatives", async () => {
-    solutionRow.problem.canonicalAlternatives = [];
-    const req = makeReq({
-      params: { solutionId: "sol_1" },
-      body: {
-        recall: {
-          pattern: "DP",
-          keyInsight: "memoize",
-          complexity: "O(n) / O(n)",
-        },
-      },
-    });
-    await invoke(gradeReviewRecall, req);
-    expect(lastUserPrompt).not.toContain("<canonical_alternatives>");
+    expect(res.body.data.matchedApproach).toBe("Memoized recursion");
   });
 });
 
-describe("gradeReviewRecall with FEATURE_CANONICAL_ALTERNATIVES=false", () => {
+describe("gradeReviewRecall — discrepancy: off_canonical", () => {
+  beforeEach(() => {
+    originalFlag = process.env.FEATURE_CANONICAL_ALTERNATIVES;
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = "true";
+    solutionRow = baseSolution({ timeComplexity: "O(n^2)", spaceComplexity: "O(n)" });
+    aiPayload = {
+      pattern: { match: "YES", feedback: "ok" },
+      keyInsight: { match: "PARTIAL", feedback: "ok" },
+      complexity: { match: "PARTIAL", feedback: "ok" },
+      overall: "partial",
+      suggestedConfidence: 3,
+    };
+  });
+  afterEach(() => {
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = originalFlag;
+  });
+
+  it("falls back to primary and surfaces off_canonical discrepancy", async () => {
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n^2) / O(n)" } },
+    });
+    const res = await invoke(gradeReviewRecall, req);
+    expect(res.body.data.matchedApproach).toBe("primary");
+    expect(res.body.data.discrepancy.type).toBe("off_canonical");
+    expect(res.body.data.discrepancy.source).toBe("structural");
+  });
+});
+
+describe("gradeReviewRecall — discrepancy: pattern_mislabel", () => {
+  beforeEach(() => {
+    originalFlag = process.env.FEATURE_CANONICAL_ALTERNATIVES;
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = "true";
+    // Notes match primary by complexity but pattern is mislabeled.
+    solutionRow = baseSolution({
+      timeComplexity: "O(n)",
+      spaceComplexity: "O(1)",
+      patterns: ["Array"],
+    });
+    aiPayload = {
+      pattern: { match: "PARTIAL", feedback: "ok" },
+      keyInsight: { match: "YES", feedback: "ok" },
+      complexity: { match: "YES", feedback: "ok" },
+      overall: "partial",
+      suggestedConfidence: 4,
+    };
+  });
+  afterEach(() => {
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = originalFlag;
+  });
+
+  it("matches primary by complexity but flags pattern_mislabel", async () => {
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "iter", complexity: "O(n) / O(1)" } },
+    });
+    const res = await invoke(gradeReviewRecall, req);
+    expect(res.body.data.matchedApproach).toBe("primary");
+    expect(res.body.data.discrepancy.type).toBe("pattern_mislabel");
+  });
+});
+
+describe("gradeReviewRecall — discrepancy: solve_time_flagged", () => {
+  beforeEach(() => {
+    originalFlag = process.env.FEATURE_CANONICAL_ALTERNATIVES;
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = "true";
+    solutionRow = baseSolution({
+      // Structurally would match the memoized alt — but solve-time flagged.
+      aiFeedback: {
+        flags: { wrongPattern: false },
+        complexityCheck: {
+          timeCorrect: false,
+          spaceCorrect: true,
+          timeComplexity: "O(n^2)",
+          spaceComplexity: "O(n)",
+        },
+      },
+    });
+    aiPayload = {
+      pattern: { match: "PARTIAL", feedback: "ok" },
+      keyInsight: { match: "PARTIAL", feedback: "ok" },
+      complexity: { match: "PARTIAL", feedback: "ok" },
+      overall: "partial",
+      suggestedConfidence: 2,
+    };
+  });
+  afterEach(() => {
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = originalFlag;
+  });
+
+  it("forces primary when AI flagged complexity at solve time", async () => {
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n) / O(n)" } },
+    });
+    const res = await invoke(gradeReviewRecall, req);
+    expect(res.body.data.matchedApproach).toBe("primary");
+    expect(res.body.data.discrepancy.type).toBe("solve_time_flagged");
+    expect(res.body.data.discrepancy.source).toBe("ai_solve_time");
+  });
+});
+
+describe("gradeReviewRecall — flag off (v1 hybrid path)", () => {
   beforeEach(() => {
     originalFlag = process.env.FEATURE_CANONICAL_ALTERNATIVES;
     process.env.FEATURE_CANONICAL_ALTERNATIVES = "false";
@@ -188,23 +257,26 @@ describe("gradeReviewRecall with FEATURE_CANONICAL_ALTERNATIVES=false", () => {
     };
     lastUserPrompt = "";
   });
-
   afterEach(() => {
     process.env.FEATURE_CANONICAL_ALTERNATIVES = originalFlag;
   });
 
-  it("does NOT include <canonical_alternatives> block (uses v1 hybrid prompt)", async () => {
+  it("does not include <grade_against> block (uses v1 hybrid prompt)", async () => {
     const req = makeReq({
       params: { solutionId: "sol_1" },
-      body: {
-        recall: {
-          pattern: "DP",
-          keyInsight: "x",
-          complexity: "O(n) / O(n)",
-        },
-      },
+      body: { recall: { pattern: "DP", keyInsight: "x", complexity: "O(n) / O(n)" } },
     });
     await invoke(gradeReviewRecall, req);
-    expect(lastUserPrompt).not.toContain("<canonical_alternatives>");
+    expect(lastUserPrompt).not.toContain("<grade_against>");
+    expect(lastUserPrompt).toContain("<canonical_pattern>");
+  });
+
+  it("returns null discrepancy on flag-off path", async () => {
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "x", complexity: "O(n) / O(n)" } },
+    });
+    const res = await invoke(gradeReviewRecall, req);
+    expect(res.body.data.discrepancy ?? null).toBeNull();
   });
 });
