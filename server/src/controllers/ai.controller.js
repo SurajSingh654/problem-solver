@@ -64,6 +64,49 @@ Output STRICT JSON:
   "spaceComplexity": "O(?)"
 }`;
 
+const CANONICAL_SYSTEM_PROMPT_WITH_ALTS = `You produce the canonical interview answer for a coding problem. Your output is the ground truth that future spaced-repetition reviews will be graded against.
+
+Output a PRIMARY answer plus 0-3 ALTERNATIVES.
+
+Primary rules:
+- pattern: pick ONE label from the canonical taxonomy when possible.
+- keyInsight: 2-3 sentences. State the core idea, not the implementation.
+- timeComplexity / spaceComplexity: optimal complexity for the most teachable approach. Use "O(?)" form.
+
+When to include alternatives:
+Many interview problems have 2-3 valid approaches with materially different trade-offs (e.g. iterative O(1) space vs memoized O(n) space). Include an alternative ONLY when it differs from PRIMARY in at least one of:
+  - pattern
+  - timeComplexity
+  - spaceComplexity
+And ONLY when it's a textbook approach a strong candidate would mention. Do NOT pad with degenerate variants (e.g. "brute force O(n^3)" when the problem has obvious better solutions). Cap at 3.
+
+Alternative rules:
+- name: short label (≤ 60 chars), e.g. "Memoized recursion", "Iterative two-variable", "Heap-based selection".
+- pattern: from canonical taxonomy OR same as primary.
+- keyInsight: 1-2 sentences specific to this approach (not a copy of primary).
+- timeComplexity / spaceComplexity: O(?) form.
+
+Do not include code. Do not hedge. Be terse and precise.
+
+Canonical taxonomy: ${CANONICAL_TAXONOMY_LIST}
+
+Output STRICT JSON:
+{
+  "pattern":         "<single label>",
+  "keyInsight":      "<2-3 sentences>",
+  "timeComplexity":  "O(?)",
+  "spaceComplexity": "O(?)",
+  "alternatives": [
+    {
+      "name":            "<≤60 char label>",
+      "pattern":         "<taxonomy label or same as primary>",
+      "keyInsight":      "<1-2 sentences>",
+      "timeComplexity":  "O(?)",
+      "spaceComplexity": "O(?)"
+    }
+  ]
+}`;
+
 /**
  * Generate the canonical answer for a problem. Returns null if the AI call
  * succeeds but the output fails validation — caller should NOT persist
@@ -78,14 +121,20 @@ export async function generateCanonicalAnswer(problem, { userId, teamId }) {
 Difficulty: ${problem.difficulty}
 Category: ${problem.category}`;
 
+  const altsEnabled = process.env.FEATURE_CANONICAL_ALTERNATIVES === "true";
+  const systemPrompt = altsEnabled
+    ? CANONICAL_SYSTEM_PROMPT_WITH_ALTS
+    : CANONICAL_SYSTEM_PROMPT;
+  const maxTokens = altsEnabled ? 700 : 400;
+
   const parsed = await aiComplete({
-    systemPrompt: CANONICAL_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     userId,
     teamId,
     model: AI_MODEL_FAST,
     temperature: 0.1,
-    maxTokens: 400,
+    maxTokens,
     jsonMode: true,
     surface: "canonical-generate",
   });
