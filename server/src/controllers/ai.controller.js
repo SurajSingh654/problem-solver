@@ -2505,9 +2505,11 @@ Grade each field semantically. Return JSON only.`;
     } catch (aiErr) {
       // Fall through to deterministic fallback rather than 500 — this surface
       // is interactive; user is staring at the modal waiting for a response.
+      // Preserve matchedApproach + discrepancy: the matcher already ran before
+      // the AI call, so the educational signal must survive an LLM outage.
       console.error("review-grade aiComplete failed:", aiErr);
       const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity, peeked });
-      return success(res, { ...fallback, fallback: true });
+      return success(res, { ...fallback, fallback: true, matchedApproach, discrepancy });
     }
 
     const validated = validateRecallGrade(parsed, { peeked });

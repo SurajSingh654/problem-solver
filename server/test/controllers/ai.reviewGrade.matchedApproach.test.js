@@ -346,3 +346,31 @@ describe("gradeReviewRecall — flag off (v1 hybrid path)", () => {
     expect(res.body.data.discrepancy ?? null).toBeNull();
   });
 });
+
+describe("gradeReviewRecall — AI failure preserves matcher signal", () => {
+  beforeEach(() => {
+    originalFlag = process.env.FEATURE_CANONICAL_ALTERNATIVES;
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = "true";
+    // Off-canonical complexity so the matcher computes a real discrepancy.
+    solutionRow = baseSolution({ timeComplexity: "O(n^2)", spaceComplexity: "O(n)" });
+  });
+  afterEach(() => {
+    process.env.FEATURE_CANONICAL_ALTERNATIVES = originalFlag;
+  });
+
+  it("preserves matchedApproach and discrepancy when aiComplete throws", async () => {
+    const aiMod = await import("../../src/services/ai.service.js");
+    aiMod.aiComplete.mockImplementationOnce(async () => {
+      throw new Error("AI timed out");
+    });
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n^2) / O(n)" } },
+    });
+    const res = await invoke(gradeReviewRecall, req);
+    expect(res.status).toBe(200);
+    expect(res.body.data.fallback).toBe(true);
+    expect(res.body.data.matchedApproach).toBe("primary");
+    expect(res.body.data.discrepancy?.type).toBe("off_canonical");
+  });
+});
