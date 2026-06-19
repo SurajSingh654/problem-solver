@@ -17,6 +17,8 @@
  *   submitted code/explanations.
  */
 
+import { pickFinalTab } from "../utils/pickFinalTab.js";
+
 // ── Shared helpers (used across every prompt in this file) ────────────
 
 // Escape XML meta-characters so interpolated content can't close or spoof
@@ -35,6 +37,41 @@ function xmlEscape(str) {
 function truncated(str, max) {
   if (!str) return "";
   return str.length > max ? `${str.substring(0, max)}…` : str;
+}
+
+function hasCodeOrPath(s) {
+  return typeof s === "string" && s.trim().length > 0;
+}
+
+/**
+ * Build a <progression> block listing every CODING tab the user filled.
+ * Returns null when fewer than 2 tabs have code (no narrative to surface).
+ *
+ * Format (one line per tab):
+ *   BRUTE_FORCE: T:O(n^2) S:O(1) — "<approach>"
+ *   OPTIMIZED:   T:O(n)  S:O(1) — "<approach>"
+ */
+function buildProgressionBlock(data) {
+  const tabs = [];
+  if (hasCodeOrPath(data?.bruteForceMeta?.code)) {
+    const m = data.bruteForceMeta;
+    tabs.push(
+      `BRUTE_FORCE: T:${m.timeComplexity || "—"} S:${m.spaceComplexity || "—"} — "${truncated(data.bruteForce || "", 120)}"`,
+    );
+  }
+  if (hasCodeOrPath(data?.code)) {
+    tabs.push(
+      `OPTIMIZED:   T:${data.timeComplexity || "—"} S:${data.spaceComplexity || "—"} — "${truncated(data.optimizedApproach || data.approach || "", 120)}"`,
+    );
+  }
+  if (hasCodeOrPath(data?.alternativeMeta?.code)) {
+    const m = data.alternativeMeta;
+    tabs.push(
+      `ALTERNATIVE: T:${m.timeComplexity || "—"} S:${m.spaceComplexity || "—"} — "${truncated(data.alternativeApproach || "", 120)}"`,
+    );
+  }
+  if (tabs.length < 2) return null;
+  return tabs.join("\n");
 }
 
 // Single source of truth for the anti-prompt-injection instruction. Every
@@ -463,9 +500,21 @@ SCORING DIMENSIONS — score each 1-10 INDEPENDENTLY:
    1-3 = Severely miscalibrated
 
 CROSS-VALIDATION RULES:
-- If code is in a different language than selected: set languageMismatch=true, set detectedLanguage
-- If code is incomplete/pseudocode: set incompleteSubmission=true
-- If pattern is wrong: set wrongPattern=true, set correctPattern to the right one
+- If code is in a different language than selected: set languageMismatch=true, set detectedLanguage.
+- If code is incomplete/pseudocode (TODOs, placeholders, doesn't compile): set incompleteSubmission=true.
+- A brute-force-only solution that compiles and solves the problem is NOT incomplete — do not auto-flag.
+- If pattern is wrong: set wrongPattern=true, set correctPattern to the right one.
+
+PROGRESSION — when <progression> is present:
+- Treat it as positive evidence the candidate's thinking evolved from initial to final approach.
+- Lift understandingDepth by 1-2 points relative to a single-pass submission with the same prose (subject to the SAW_APPROACH cap below).
+- Do NOT grade lower tabs separately. They contextualize the final answer in <candidate_input>.
+
+SOLVE METHOD DISCOUNT — read solve_method from <candidate_meta>:
+- SAW_APPROACH: the candidate looked at the canonical solution before writing code. Score patternAccuracy and understandingDepth honestly — copying valid code does NOT demonstrate pattern recognition or depth. The code itself can still score 10 on correctness (it IS correct). Their key-insight prose is graded on what they actually wrote.
+- HINTS: a small nudge was used. Mild discount on patternAccuracy and understandingDepth.
+- COLD: no discount.
+The server enforces hard caps on these dimensions for SAW_APPROACH and HINTS. Returning scores above the caps will be silently lowered — there is no benefit to inflating them.
 
 BUG-CLAIM DISCIPLINE — read carefully, this prevents hallucinated bugs:
 - Before listing any code defect in "gaps" (off-by-one, wrong index, missing case, etc.), mentally trace the code on ONE concrete sample input from the problem and confirm the defect actually changes the output.
@@ -701,13 +750,21 @@ NoSQL Consideration:
 ${dbSpecific?.noSQLConsideration || "Not provided"}`;
     }
   } else {
-    // CODING and any unrecognized category — standard presentation
+    // CODING — final-tab-wins (Optimized > Alternative > BruteForce). The
+    // chosen tab's code is what the LLM grades; lower tabs surface as
+    // <progression> in the user prompt as positive evidence.
+    const final = pickFinalTab(data);
+    const finalLanguage = (final.language || data.language || "plaintext").toLowerCase();
+    const finalCodeBlock = final.code
+      ? final.code.substring(0, 2000)
+      : "No code provided";
     submissionSection = `Approach:
-${data.approach || "Not provided"}
-Code:
-\`\`\`${(data.language || "plaintext").toLowerCase()}
-${data.code ? data.code.substring(0, 2000) : "No code provided"}
+${final.approach || data.approach || "Not provided"}
+Code (${final.tab || "none"}, ${finalLanguage}):
+\`\`\`${finalLanguage}
+${finalCodeBlock}
 \`\`\`
+Complexity claim: T:${final.time || "—"} · S:${final.space || "—"}
 Key Insight: ${data.keyInsight || "Not provided"}
 Feynman Explanation: ${data.feynmanExplanation || "Not provided"}
 What was Challenging: ${data.realWorldConnection || "Not provided"}`;
@@ -735,6 +792,11 @@ What was Challenging: ${data.realWorldConnection || "Not provided"}`;
     xmlEscape(submissionSection),
     "</candidate_input>",
   ];
+
+  const progression = buildProgressionBlock(data);
+  if (progression) {
+    userParts.push("", "<progression>", progression, "</progression>");
+  }
 
   // Admin teaching notes — trusted reference (gold standard for evaluation).
   if (data.adminNotes && String(data.adminNotes).trim().length > 0) {
