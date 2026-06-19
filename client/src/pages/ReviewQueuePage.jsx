@@ -161,6 +161,11 @@ function AiGradeView({ grade, loading, recall }) {
 
     return (
         <div className="space-y-3">
+            {grade?.matchedApproach && grade.matchedApproach !== 'primary' && (
+                <p className="text-[11px] text-text-tertiary px-1">
+                    Matched approach: <span className="font-semibold text-text-secondary">{grade.matchedApproach}</span>
+                </p>
+            )}
             <div className="space-y-2">
                 {fields.map(f => {
                     const v = grade[f.key]
