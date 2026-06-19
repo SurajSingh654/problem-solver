@@ -29,6 +29,8 @@ import {
 import { getCategoryForm } from '@utils/categoryForms'
 import { iconForLabel } from '@components/features/submit/icons'
 import { SolveMethodCostBadge } from '@components/features/submit/SolveMethodCostBadge'
+import { useFormCompletion } from '@/hooks/useFormCompletion'
+import { FieldHint } from '@/components/features/submit/FieldHint'
 
 const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const EXTERNAL_LINK_CATEGORIES = ['CODING', 'SQL']
@@ -739,6 +741,13 @@ export default function SubmitSolutionPage() {
 
     const [hrQuestionCategory, setHrQuestionCategory] = useState('')
 
+    // ── Inline validation touched state ───────────────────
+    const [confidenceTouched, setConfidenceTouched] = useState(false)
+    const [hrAnalyzeTouched, setHrAnalyzeTouched] = useState(false)
+    const [behavioralSituationTouched, setBehavioralSituationTouched] = useState(false)
+    const [tkSubjectTouched, setTkSubjectTouched] = useState(false)
+    const [dbQueryApproachTouched, setDbQueryApproachTouched] = useState(false)
+
     // ── Helpers ────────────────────────────────────────────
     function handleFollowUpAnswer(questionId, text) {
         setFollowUpAnswers(prev => ({ ...prev, [questionId]: text }))
@@ -752,6 +761,38 @@ export default function SubmitSolutionPage() {
 
     const followUpCount = problem?.followUpQuestions?.length || 0
     const answeredCount = Object.values(followUpAnswers).filter(v => v?.trim()).length
+
+    // ── Completion progress (drives sticky bar) ───────────
+    // Derive the form-state shape useFormCompletion expects. For CODING
+    // (tabbed), code + meta come from solutionTabs; for CODING (legacy),
+    // code is the standalone `code` state. Category-specific data is mapped
+    // from the per-category state objects; field-name differences are
+    // bridged here so the hook stays a pure function.
+    const _optimizedTab = solutionTabs.find(s => s.type === 'OPTIMIZED')
+    const _bruteTab     = solutionTabs.find(s => s.type === 'BRUTE_FORCE')
+    const _altTab       = solutionTabs.find(s => s.type === 'ALTERNATIVE')
+    const _packMeta = (s) => (s && (s.code || s.timeComplexity || s.spaceComplexity)
+        ? { code: s.code || null, language: s.language || null, timeComplexity: s.timeComplexity || null, spaceComplexity: s.spaceComplexity || null }
+        : null)
+    const completion = useFormCompletion(
+        {
+            confidence,
+            patterns,
+            // CODING tabbed: use optimized-tab code; legacy: use standalone code
+            code: SUBMIT_TABBED_ENABLED ? (_optimizedTab?.code || '') : code,
+            bruteForceMeta:    _packMeta(_bruteTab),
+            alternativeMeta:   _packMeta(_altTab),
+            // HR — bridge underlyingConcern → analyze
+            hrSpecific:        { analyze: hrData.underlyingConcern, answer: hrData.answer },
+            // BEHAVIORAL — field names match directly
+            behavioralSpecific: behavioralData,
+            // CS_FUNDAMENTALS — bridge coreExplanation → mechanism
+            tkSpecific:        { subject: tkData.subject, mechanism: tkData.coreExplanation },
+            // SQL — field names match directly
+            dbSpecific:        dbData,
+        },
+        category,
+    )
 
     // ── Submit ─────────────────────────────────────────────
     async function onSubmit() {
@@ -986,7 +1027,7 @@ export default function SubmitSolutionPage() {
     }
 
     return (
-        <div className="p-6 max-w-[800px] mx-auto">
+        <div className="p-6 max-w-[800px] mx-auto pb-32">
             {/* Back — Bug fix: correct navigate syntax */}
             <button type="button" onClick={() => navigate(`/problems/${problemId}`)}
                 className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-text-primary transition-colors mb-6">
@@ -1088,13 +1129,33 @@ export default function SubmitSolutionPage() {
             {/* Form sections */}
             <div className="space-y-5">
                 {isHR ? (
-                    <HRWorkspace hrData={hrData} onHrDataChange={setHrData} questionCategory={hrQuestionCategory} onQuestionCategoryChange={setHrQuestionCategory} />
+                    <div onBlur={() => setHrAnalyzeTouched(true)}>
+                        <HRWorkspace hrData={hrData} onHrDataChange={(v) => { setHrData(v); setHrAnalyzeTouched(true) }} questionCategory={hrQuestionCategory} onQuestionCategoryChange={setHrQuestionCategory} />
+                        <FieldHint tone="error">
+                            {hrAnalyzeTouched && !(hrData.underlyingConcern?.trim()) ? 'Required — fill the Analyze section to enable Submit.' : null}
+                        </FieldHint>
+                    </div>
                 ) : isBehavioral ? (
-                    <BehavioralWorkspace behavioralData={behavioralData} onBehavioralDataChange={setBehavioralData} />
+                    <div onBlur={() => setBehavioralSituationTouched(true)}>
+                        <BehavioralWorkspace behavioralData={behavioralData} onBehavioralDataChange={(v) => { setBehavioralData(v); setBehavioralSituationTouched(true) }} />
+                        <FieldHint tone="error">
+                            {behavioralSituationTouched && !(behavioralData.situation?.trim()) ? 'Required — fill STAR Situation to enable Submit.' : null}
+                        </FieldHint>
+                    </div>
                 ) : isTechnicalKnowledge ? (
-                    <TechnicalKnowledgeWorkspace tkData={tkData} onTkDataChange={setTkData} />
+                    <div onBlur={() => setTkSubjectTouched(true)}>
+                        <TechnicalKnowledgeWorkspace tkData={tkData} onTkDataChange={(v) => { setTkData(v); setTkSubjectTouched(true) }} />
+                        <FieldHint tone="error">
+                            {tkSubjectTouched && !(tkData.subject?.trim()) ? 'Required — set the Subject to enable Submit.' : null}
+                        </FieldHint>
+                    </div>
                 ) : isDatabase ? (
-                    <DatabaseWorkspace dbData={dbData} onDbDataChange={setDbData} problemType={dbProblemType} schemaReference={dbSchemaReference} />
+                    <div onBlur={() => setDbQueryApproachTouched(true)}>
+                        <DatabaseWorkspace dbData={dbData} onDbDataChange={(v) => { setDbData(v); setDbQueryApproachTouched(true) }} problemType={dbProblemType} schemaReference={dbSchemaReference} />
+                        <FieldHint tone="error">
+                            {dbQueryApproachTouched && !(dbData.queryApproach?.trim()) && !(dbData.schemaDesign?.trim()) ? 'Required — fill your query approach to enable Submit.' : null}
+                        </FieldHint>
+                    </div>
                 ) : (
                     <>
                         {SUBMIT_TABBED_ENABLED && (category === 'CODING' || hasExternalLink) ? (
@@ -1186,7 +1247,12 @@ export default function SubmitSolutionPage() {
                                         : "Be honest — AI will flag if your confidence doesn't match your solution quality"
                     }>
                     {/* Bug 3 fix: use handleConfidenceChange instead of setConfidence directly */}
-                    <ConfidencePicker value={confidence} onChange={handleConfidenceChange} />
+                    <div onBlur={() => setConfidenceTouched(true)}>
+                        <ConfidencePicker value={confidence} onChange={(v) => { handleConfidenceChange(v); setConfidenceTouched(true) }} />
+                        <FieldHint tone="error">
+                            {confidenceTouched && confidence == null ? 'Required — pick a level to enable Submit.' : null}
+                        </FieldHint>
+                    </div>
                 </FormSection>
 
                 {/* Follow-up questions */}
@@ -1207,7 +1273,37 @@ export default function SubmitSolutionPage() {
                                     <span className="text-text-disabled">Progress</span>
                                     <span className={cn('font-semibold', answeredCount === followUpCount ? 'text-success-fg' : answeredCount > 0 ? 'text-brand-fg-soft' : 'text-text-disabled')}>
                                         {answeredCount}/{followUpCount} answered
-                                        {!isHR && answeredCount > 0 && `(+${Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus)`}
+                                        {!isHR && answeredCount > 0 && (
+                                            <span className="relative group inline-flex items-center gap-1 ml-1">
+                                                <span className="text-success-fg font-bold">
+                                                    +{Math.min(answeredCount * 0.5, 2).toFixed(1)} bonus
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    tabIndex={0}
+                                                    aria-label="Bonus details"
+                                                    className="text-text-disabled hover:text-text-tertiary cursor-help text-[10px] focus:outline-none"
+                                                    onClick={(e) => e.currentTarget.parentElement.classList.toggle('show-tip')}
+                                                >
+                                                    ⓘ
+                                                </button>
+                                                <span
+                                                    className={cn(
+                                                        'absolute bottom-full right-0 mb-1 w-56 p-2 rounded-lg',
+                                                        'bg-surface-3 border border-border-default text-[10px] leading-relaxed',
+                                                        'invisible opacity-0 group-hover:visible group-hover:opacity-100',
+                                                        'transition-opacity duration-150 z-10',
+                                                    )}
+                                                >
+                                                    <span className="block font-semibold text-text-primary mb-1">+0.5 per answer, capped at +2.0</span>
+                                                    {answeredCount * 0.5 < 2 && (
+                                                        <span className="block text-text-tertiary">
+                                                            You've answered {answeredCount} of {followUpCount} — answer one more for +0.5
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </span>
+                                        )}
                                     </span>
                                 </div>
                                 <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
@@ -1221,31 +1317,48 @@ export default function SubmitSolutionPage() {
             </div>
 
             {/* Sticky submit bar */}
-            <div className="sticky bottom-0 bg-surface-0/90 backdrop-blur-lg border-t border-border-default mt-6 -mx-6 px-6 py-4">
-                <div className="max-w-[800px] mx-auto flex items-center justify-between">
-                    {/* Bug fix: correct navigate syntax */}
-                    <Button type="button" variant="ghost" size="md" onClick={() => navigate(`/problems/${problemId}`)}>
-                        Cancel
-                    </Button>
-                    <div className="flex items-center gap-3">
-                        {(() => {
-                            if (isHR) {
-                                const workspaceEmpty = (hrData.underlyingConcern?.trim().length ?? 0) === 0 && (hrData.answer?.trim().length ?? 0) === 0
-                                if (workspaceEmpty) return <span className="text-xs text-warning-fg hidden sm:block font-semibold">Fill in the Answer workspace above first</span>
-                            }
-                            if (confidence == null) return <span className="text-xs text-text-disabled hidden sm:block">Set confidence to submit</span>
-                            return null
-                        })()}
-                        <Button type="button" variant="primary" size="lg" loading={submitSolution.isPending} disabled={confidence == null} onClick={onSubmit}>
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            {isHR ? 'Submit My Answer'
-                                : isBehavioral ? 'Submit My Story'
-                                    : isTechnicalKnowledge ? 'Submit Explanation'
-                                        : isDatabase ? (dbProblemType === 'SCHEMA_DESIGN' ? 'Submit Schema Design' : 'Submit Query')
-                                            : 'Submit Solution'}
+            <div className="sticky bottom-0 -mx-6 px-6 pt-2 pb-3 bg-surface-0 border-t border-border-default">
+                {/* Progress bar */}
+                <div className="h-1 rounded-full bg-surface-3 overflow-hidden mb-2">
+                    <div
+                        className="h-full bg-gradient-to-r from-brand to-success transition-all duration-300"
+                        style={{ width: `${(completion.filled / Math.max(1, completion.total)) * 100}%` }}
+                        aria-hidden="true"
+                    />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-text-tertiary leading-snug flex-1 min-w-0">
+                        <strong className="text-text-primary">{completion.filled}</strong> of {completion.total} required filled
+                        {completion.nextField && (
+                            <span className="ml-1 opacity-80">· Set <strong className="text-text-secondary">{completion.nextField}</strong> next</span>
+                        )}
+                    </p>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                        {/* Bug fix: correct navigate syntax */}
+                        <Button type="button" variant="ghost" size="md" onClick={() => navigate(`/problems/${problemId}`)}>
+                            Cancel
                         </Button>
+                        <button
+                            type="button"
+                            disabled={completion.filled < completion.total || submitSolution.isPending}
+                            onClick={onSubmit}
+                            className={cn(
+                                'px-4 py-2 rounded-lg text-sm font-bold transition-all flex-shrink-0 flex items-center gap-1.5',
+                                completion.filled < completion.total
+                                    ? 'bg-surface-2 border border-dashed border-warning-line text-warning-fg cursor-not-allowed'
+                                    : 'bg-brand text-white hover:bg-brand-hover',
+                                submitSolution.isPending && 'opacity-60 cursor-wait',
+                            )}
+                        >
+                            {submitSolution.isPending ? 'Submitting…' : (
+                                isHR ? 'Submit My Answer'
+                                    : isBehavioral ? 'Submit My Story'
+                                        : isTechnicalKnowledge ? 'Submit Explanation'
+                                            : isDatabase ? (dbProblemType === 'SCHEMA_DESIGN' ? 'Submit Schema Design' : 'Submit Query')
+                                                : 'Submit Solution'
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>
