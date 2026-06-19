@@ -34,23 +34,25 @@ const DIFF_VARIANT = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' }
 const EXTERNAL_LINK_CATEGORIES = ['CODING', 'SQL']
 
 // ── Section wrapper ────────────────────────────────────
-function FormSection({ icon, title, hint, badge, required, children, className }) {
+function FormSection({ Icon, title, hint, badge, required, children, className }) {
     return (
         <div className={cn(
             'bg-surface-1 border border-border-default rounded-2xl p-5',
             className
         )}>
             <div className="flex items-start gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-brand-soft flex items-center
-                                justify-center text-base flex-shrink-0 mt-0.5">
-                    {icon}
-                </div>
+                {Icon && (
+                    <div className="w-8 h-8 rounded-lg bg-surface-2 border border-border-default flex items-center
+                                    justify-center flex-shrink-0 mt-0.5">
+                        <Icon className="w-4 h-4 text-text-secondary" aria-hidden="true" />
+                    </div>
+                )}
                 <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-sm font-bold text-text-primary">{title}</h3>
                         {required && (
                             <span className="text-[9px] font-bold px-1.5 py-px rounded-full
-                                             bg-danger-soft text-danger-fg border border-danger-line">
+                                             bg-surface-3 text-text-secondary border border-border-default">
                                 Required
                             </span>
                         )}
@@ -239,7 +241,7 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
                 />
                 {!hasAnswer && (
                     <p className="text-[10px] text-text-disabled mt-1">
-                        Optional — AI will note this was skipped
+                        Skipping is fine — but answers help calibrate your AI feedback
                     </p>
                 )}
             </div>
@@ -264,7 +266,7 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
         <div className="space-y-4">
             <WorkspaceEditor
                 headerIcon="🤝"
-                headerLabel="HR Answer Workspace"
+                headerLabel="HR Interview"
                 progressColorClass="bg-brand-300"
                 sections={HR_SECTIONS}
                 fieldConfigs={hrConfig.hrFields || {}}
@@ -272,10 +274,12 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
                 onChange={onHrDataChange}
                 defaultActiveSection="underlyingConcern"
                 banner={({ completedCount }) => completedCount === 0 ? (
-                    <p className="text-[10px] text-warning-fg flex items-center gap-1.5 mt-2">
-                        <span>⚠️</span>
-                        Fill in <strong>Analyze</strong> or <strong>Answer</strong> sections above before submitting
-                    </p>
+                    <div className="rounded-lg bg-surface-2 border border-border-default px-3 py-2 mb-3 flex items-start gap-2">
+                        {(() => { const I = iconForLabel('ai-hint'); return I ? <I className="w-3.5 h-3.5 text-text-tertiary flex-shrink-0 mt-0.5" aria-hidden="true" /> : null })()}
+                        <p className="text-[11px] text-text-secondary leading-relaxed">
+                            Tip: complete <strong>Analyze</strong> first — it sharpens your <strong>Answer</strong>.
+                        </p>
+                    </div>
                 ) : null}
             />
 
@@ -324,7 +328,7 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
     return (
         <WorkspaceEditor
             headerIcon="🗣️"
-            headerLabel="STAR Workspace"
+            headerLabel="Behavioral Interview"
             progressColorClass="bg-brand-300"
             sections={BEHAVIORAL_SECTIONS}
             fieldConfigs={behavioralConfig.behavioralFields || {}}
@@ -333,16 +337,6 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
             defaultActiveSection="competency"
             nonRequiredBadgeLabel="High signal"
             showCoreCompleteBadge
-            banner={({ requiredComplete }) => !requiredComplete ? (
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                    className="bg-success-soft border border-success-line rounded-xl px-4 py-3 flex items-start gap-3">
-                    <span className="text-base flex-shrink-0 mt-0.5">💡</span>
-                    <div>
-                        <p className="text-xs font-semibold text-text-primary mb-1">Fill sections in order for the strongest answer</p>
-                        <p className="text-[11px] text-text-tertiary leading-relaxed">Naming the <strong>Competency</strong> first is the most important step.</p>
-                    </div>
-                </motion.div>
-            ) : null}
         />
     )
 }
@@ -460,7 +454,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
     return (
         <WorkspaceEditor
             headerIcon="🧠"
-            headerLabel="Technical Knowledge Workspace"
+            headerLabel="Technical Knowledge"
             progressColorClass="bg-brand-300"
             sections={TK_SECTIONS}
             fieldConfigs={tkConfig.technicalKnowledgeFields || {}}
@@ -571,7 +565,7 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
                 <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-bold text-text-primary flex items-center gap-2">
                         <span>{isQueryMode ? '🗄️' : '📐'}</span>
-                        {isQueryMode ? 'Query Workspace' : 'Schema Design Workspace'}
+                        {isQueryMode ? 'SQL' : 'Database'}
                     </p>
                     <span className="text-[10px] font-bold text-text-disabled">{completedCount}/{sections.length} sections</span>
                 </div>
@@ -1106,8 +1100,8 @@ export default function SubmitSolutionPage() {
                         {SUBMIT_TABBED_ENABLED && (category === 'CODING' || hasExternalLink) ? (
                             // Tabbed editor — same component Edit uses. Submit ↔ Edit
                             // are now structurally identical for CODING.
-                            <FormSection icon="💻" title="Solutions"
-                                hint="Add a Brute Force first, then your Optimized approach. AI reviews both.">
+                            <FormSection Icon={iconForLabel('section-coding')} title="Solutions"
+                                hint="Add an Initial solution first, then your Refined approach. AI reviews both.">
                                 <SolutionTabs
                                     solutions={solutionTabs}
                                     onChange={setSolutionTabs}
@@ -1117,7 +1111,7 @@ export default function SubmitSolutionPage() {
                         ) : (
                             <>
                                 {(category === 'CODING' || category === 'SQL' || hasExternalLink) && (
-                                    <FormSection icon="💻" title={hasExternalLink ? 'Paste Your Solution Code' : (formConfig.solutionTabConfig?.codeLabel || 'Your Code')}
+                                    <FormSection Icon={iconForLabel('section-coding')} title={hasExternalLink ? 'Paste Your Solution Code' : (formConfig.solutionTabConfig?.codeLabel || 'Your Code')}
                                         hint="AI will analyze correctness, complexity, and detect any issues">
                                         <CodeEditor code={code} onChange={setCode} language={language}
                                             onLanguageChange={lang => { setLanguage(lang); localStorage.setItem('ps_last_language', lang) }}
@@ -1127,7 +1121,7 @@ export default function SubmitSolutionPage() {
                                 )}
 
                                 <FormSection
-                                    icon={category === 'BEHAVIORAL' ? '🎯' : category === 'LOW_LEVEL_DESIGN' ? '📐' : '📝'}
+                                    Icon={iconForLabel(category === 'BEHAVIORAL' ? 'section-behavioral' : category === 'LOW_LEVEL_DESIGN' ? 'section-low-level-design' : 'section-approach')}
                                     title={category === 'BEHAVIORAL' ? (formConfig.actionField?.label || 'Your Response') : category === 'CS_FUNDAMENTALS' ? 'Your Explanation' : category === 'LOW_LEVEL_DESIGN' ? 'Your Design Approach' : 'Your Approach'}
                                     hint={hasExternalLink ? 'Explain your thought process. What pattern did you use and why?' : category === 'BEHAVIORAL' ? (formConfig.actionField?.hint || 'Use STAR format — be specific about YOUR actions.') : category === 'LOW_LEVEL_DESIGN' ? 'Walk through your entity identification and class hierarchy.' : 'Describe your approach step by step. Tab to indent pseudocode.'}
                                 >
@@ -1141,7 +1135,7 @@ export default function SubmitSolutionPage() {
 
 
                         {fields.patternIdentified?.show && (
-                            <FormSection icon="🧩" title={fields.patternIdentified.label || 'Pattern Identified'}
+                            <FormSection Icon={iconForLabel('section-patterns')} title={fields.patternIdentified.label || 'Patterns Used'}
                                 hint="AI will verify if your identified pattern matches your solution">
                                 <PatternSelector
                                     value={patterns}
@@ -1152,14 +1146,14 @@ export default function SubmitSolutionPage() {
                         )}
 
                         {fields.patternIdentified?.show && (
-                            <FormSection icon="🧭" title="How did you solve it?"
-                                hint="Honest signal for AI calibration. SAW_APPROACH heavily discounts confidence; only solves marked COLD count toward Pattern Mastery progression.">
+                            <FormSection Icon={iconForLabel('section-solve-method')} title="How did you solve it?"
+                                hint="Honest signal for AI calibration.">
                                 <SolveMethodPicker value={solveMethod} onChange={setSolveMethod} />
                             </FormSection>
                         )}
 
                         {fields.keyInsight?.show && (
-                            <FormSection icon="💡" title={fields.keyInsight.label || 'Key Insight'} hint={fields.keyInsight.hint} className="bg-brand-soft border-brand-line">
+                            <FormSection Icon={iconForLabel('section-key-insight')} title={fields.keyInsight.label || 'Key Insight'} hint={fields.keyInsight.hint}>
                                 <textarea rows={4} value={keyInsight} onChange={e => setKeyInsight(e.target.value)}
                                     placeholder={fields.keyInsight.placeholder || 'The one thing that makes this click...'}
                                     className="w-full bg-surface-3 border border-border-strong rounded-xl text-sm text-text-primary placeholder:text-text-tertiary px-3.5 py-2.5 outline-none resize-y leading-relaxed focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20" />
@@ -1167,14 +1161,14 @@ export default function SubmitSolutionPage() {
                         )}
 
                         {fields.simpleExplanation?.show && (
-                            <FormSection icon="🗣" title={fields.simpleExplanation.label || 'Explain It Simply'} hint="Explain to someone who doesn't know the topic">
+                            <FormSection Icon={iconForLabel('section-explain-simply')} title={fields.simpleExplanation.label || 'Explain It Simply'} hint="Explain to someone who doesn't know the topic">
                                 <RichTextEditor content={feynmanExplanation} onChange={setFeynmanExplanation}
                                     placeholder={fields.simpleExplanation.placeholder || 'Explain in simple terms...'} minHeight="100px" />
                             </FormSection>
                         )}
 
                         {fields.challenges?.show && (
-                            <FormSection icon="🤔" title={fields.challenges.label || 'What Was Challenging?'}>
+                            <FormSection Icon={iconForLabel('section-challenges')} title={fields.challenges.label || 'What Was Challenging?'}>
                                 <RichTextEditor content={realWorldConnection} onChange={setRealWorldConnection}
                                     placeholder={fields.challenges.placeholder || 'Where did you get stuck? What made this harder than expected?'} minHeight="80px" />
                             </FormSection>
@@ -1183,7 +1177,7 @@ export default function SubmitSolutionPage() {
                 )}
 
                 {/* Confidence — all categories */}
-                <FormSection icon="📊" title="Confidence Level"
+                <FormSection Icon={iconForLabel('section-chart')} title="How confident are you in this solution?"
                     hint={
                         isHR ? 'How authentic and specific does this answer feel?'
                             : isBehavioral ? 'How strong is your story? Does your Action section show clear ownership?'
@@ -1197,10 +1191,10 @@ export default function SubmitSolutionPage() {
 
                 {/* Follow-up questions */}
                 {problem.followUpQuestions?.length > 0 && (
-                    <FormSection icon={isHR ? '💬' : '🧠'}
+                    <FormSection Icon={iconForLabel(isHR ? 'section-followup' : 'section-technical-knowledge')}
                         title={isHR ? 'Probing Follow-up Questions' : 'Follow-up Questions'}
-                        badge={answeredCount > 0 ? `${answeredCount}/${followUpCount} answered` : 'Optional — earn bonus points'}
-                        hint={isHR ? 'These are the follow-up questions a real HR interviewer would ask.' : 'Each answer earns bonus points in your AI review. Skipped questions are noted.'}>
+                        badge={answeredCount > 0 ? `${answeredCount}/${followUpCount} answered` : 'Optional — adds up to +2 to your score'}
+                        hint={isHR ? 'These are the follow-up questions a real HR interviewer would ask.' : 'Skipping is fine — but answers help calibrate your AI feedback'}>
                         <div className="space-y-3">
                             {problem.followUpQuestions.map((fq, i) => (
                                 <FollowUpWithAnswer key={fq.id} followUp={fq} index={i}

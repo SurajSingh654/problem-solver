@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { CodeEditor } from '@components/ui/CodeEditor'
 import { RichTextEditor } from '@components/ui/RichTextEditor'
 import { cn } from '@utils/cn'
+import { tabLabel } from '@components/features/submit/icons'
 
 const SOLUTION_TYPES = [
-    { id: 'BRUTE_FORCE', label: 'Brute Force', icon: '🐌', color: 'text-warning' },
-    { id: 'OPTIMIZED', label: 'Optimized', icon: '⚡', color: 'text-brand-300' },
-    { id: 'ALTERNATIVE', label: 'Alternative', icon: '🔄', color: 'text-info' },
+    { id: 'BRUTE_FORCE', label: tabLabel('BRUTE_FORCE'), icon: '🐌', color: 'text-warning' },
+    { id: 'OPTIMIZED', label: tabLabel('OPTIMIZED'), icon: '⚡', color: 'text-brand-300' },
+    { id: 'ALTERNATIVE', label: tabLabel('ALTERNATIVE'), icon: '🔄', color: 'text-info' },
 ]
 
 const COMPLEXITY_SUGGESTIONS = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)', 'O(n²)', 'O(n³)', 'O(2ⁿ)', 'O(n!)']
@@ -220,6 +221,7 @@ export function SolutionTabs({ solutions = [], onChange, commonNotes, onNotesCha
                         <button
                             key={i}
                             type="button"
+                            title="Initial = brute-force; Refined = optimized; Alternative = a second valid approach"
                             onClick={() => setActiveTab(i)}
                             className={cn(
                                 'flex items-center gap-2 px-3.5 py-2 rounded-xl border',

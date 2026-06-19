@@ -6,7 +6,7 @@ import {
   Snowflake, Lightbulb, Sparkles, Lock, Scale, Check, X, CircleDashed,
   AlertTriangle, Info, ChevronDown, Layers, Activity, Mic, Briefcase,
   FlaskConical, Database, Code2, FileText, BookOpen, Frown, Smile, Meh,
-  Annoyed, Flame,
+  Annoyed, Flame, BarChart2, HelpCircle, Compass, NotebookPen,
 } from 'lucide-react'
 
 // Map a semantic label to a lucide icon component. Callers render the
@@ -29,6 +29,11 @@ export const SUBMIT_ICONS = {
   'section-mock-interview': Mic,
   'section-system-design': Briefcase,
   'section-low-level-design': FlaskConical,
+  'section-chart': BarChart2,
+  'section-key-insight': Lightbulb,
+  'section-explain-simply': NotebookPen,
+  'section-challenges': HelpCircle,
+  'section-approach': Compass,
 
   // Solve method
   'solve-method-cold':         Snowflake,
