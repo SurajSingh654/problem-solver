@@ -122,6 +122,44 @@ function RecallTimer({ seconds, onExpire }) {
     )
 }
 
+// ──────────────────────────────────────────────────────
+// DISCREPANCY CARD — alert for canonical alternatives
+// ──────────────────────────────────────────────────────
+//
+// Renders when grade.discrepancy != null. Three visual tones:
+// warning for off_canonical and solve_time_flagged,
+// info for pattern_mislabel.
+function DiscrepancyCard({ discrepancy }) {
+    if (!discrepancy) return null
+    const tone =
+        discrepancy.type === 'pattern_mislabel'
+            ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+            : 'bg-warning-soft border-warning-line text-warning-fg'
+    const icon = discrepancy.type === 'pattern_mislabel' ? 'ℹ' : '⚠'
+    const heading =
+        discrepancy.type === 'pattern_mislabel' ? 'Pattern mislabel' : 'Heads-up'
+
+    return (
+        <div className={cn('rounded-xl border p-3 space-y-2', tone)}>
+            <div className="flex items-center gap-2">
+                <span className="text-base font-bold leading-none">{icon}</span>
+                <span className="text-xs font-bold uppercase tracking-widest">{heading}</span>
+            </div>
+            <p className="text-xs leading-relaxed">{discrepancy.summary}</p>
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+                <span className="font-semibold opacity-70">Your notes:</span>
+                <span className="font-mono">
+                    {discrepancy.actual.pattern} · {discrepancy.actual.complexity}
+                </span>
+                <span className="font-semibold opacity-70">Canonical:</span>
+                <span className="font-mono">
+                    {discrepancy.expected.pattern} · {discrepancy.expected.complexity}
+                </span>
+            </div>
+        </div>
+    )
+}
+
 // ══════════════════════════════════════════════════════
 // AI GRADE VIEW — semantic recall verdict (replaces word-diff)
 // ══════════════════════════════════════════════════════
@@ -166,6 +204,7 @@ function AiGradeView({ grade, loading, recall }) {
                     Matched approach: <span className="font-semibold text-text-secondary">{grade.matchedApproach}</span>
                 </p>
             )}
+            <DiscrepancyCard discrepancy={grade?.discrepancy} />
             <div className="space-y-2">
                 {fields.map(f => {
                     const v = grade[f.key]
