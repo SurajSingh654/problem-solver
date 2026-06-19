@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { AlertTriangle, Info, Scale } from 'lucide-react'
 import { useReviewQueue, useSubmitReview } from '@hooks/useSolutions'
 import { useReviewHints, useReviewGrade } from '@hooks/useAI'
 import { Button } from '@components/ui/Button'
@@ -135,14 +136,14 @@ function DiscrepancyCard({ discrepancy }) {
         discrepancy.type === 'pattern_mislabel'
             ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
             : 'bg-warning-soft border-warning-line text-warning-fg'
-    const icon = discrepancy.type === 'pattern_mislabel' ? 'ℹ' : '⚠'
+    const Icon = discrepancy.type === 'pattern_mislabel' ? Info : AlertTriangle
     const heading =
         discrepancy.type === 'pattern_mislabel' ? 'Pattern mislabel' : 'Heads-up'
 
     return (
         <div className={cn('rounded-xl border p-3 space-y-2', tone)}>
             <div className="flex items-center gap-2">
-                <span aria-hidden="true" className="text-base font-bold leading-none">{icon}</span>
+                <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                 <span className="text-xs font-bold uppercase tracking-widest">{heading}</span>
             </div>
             <p className="text-xs leading-relaxed">{discrepancy.summary}</p>
@@ -981,7 +982,7 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                                         animate={{ opacity: 1, y: 0 }}
                                         className="bg-warning-soft border border-warning-line rounded-xl p-3 flex items-start gap-3"
                                     >
-                                        <span className="text-base mt-0.5">⚖️</span>
+                                        <Scale className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
                                         <div className="flex-1">
                                             <p className="text-[10px] font-bold text-warning-fg uppercase tracking-widest mb-0.5">
                                                 Calibration check

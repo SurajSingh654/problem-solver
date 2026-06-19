@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react'
 import { Spinner } from "@components/ui/Spinner";
 import { cn } from "@utils/cn";
 
@@ -68,8 +69,9 @@ export function CanonicalAnswerPanel({ data, isLoading, error, compact = false }
 
       {alternatives.length > 0 && (
         <details open className="rounded-xl border border-border-default bg-surface-2 overflow-hidden">
-          <summary className="cursor-pointer px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-surface-3 transition-colors">
-            ▼ Other valid approaches ({alternatives.length})
+          <summary className="cursor-pointer px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-surface-3 transition-colors flex items-center gap-2">
+            <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+            Other valid approaches ({alternatives.length})
           </summary>
           <div className="px-3 pb-3 pt-1 space-y-2">
             {alternatives.map((alt, i) => (
