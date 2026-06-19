@@ -31,7 +31,7 @@ const CAPS = {
  */
 export function applySolveMethodCaps(scores, solveMethod) {
   const caps = CAPS[solveMethod] ?? null
-  if (!caps) return { scores, adjustments: [] }
+  if (!caps) return { scores: { ...scores }, adjustments: [] }
 
   const adjusted = { ...scores }
   const adjustments = []

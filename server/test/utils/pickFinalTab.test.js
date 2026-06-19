@@ -91,6 +91,12 @@ describe("pickFinalTab", () => {
     })
   })
 
+  it("returns null tab when solution is null or undefined (defensive)", () => {
+    const expected = { tab: null, code: null, language: null, time: null, space: null, approach: null }
+    expect(pickFinalTab(null)).toEqual(expected)
+    expect(pickFinalTab(undefined)).toEqual(expected)
+  })
+
   it("treats whitespace-only code as empty", () => {
     const result = pickFinalTab({
       code: "   \n\t  ",

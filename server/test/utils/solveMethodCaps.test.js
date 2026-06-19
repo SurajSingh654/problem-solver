@@ -99,4 +99,19 @@ describe("applySolveMethodCaps — defensive shapes", () => {
     expect(result.scores.understandingDepth).toBeUndefined()
     expect(result.adjustments).toEqual([])
   })
+
+  it("never returns the input scores reference (caller can mutate the result safely)", () => {
+    const cold = fullScores()
+    const coldResult = applySolveMethodCaps(cold, "COLD")
+    expect(coldResult.scores).not.toBe(cold)
+
+    const saw = fullScores()
+    const sawResult = applySolveMethodCaps(saw, "SAW_APPROACH")
+    expect(sawResult.scores).not.toBe(saw)
+  })
+
+  it("does not crash when scores is null (returns empty-shape result)", () => {
+    expect(() => applySolveMethodCaps(null, "COLD")).not.toThrow()
+    expect(() => applySolveMethodCaps(null, "SAW_APPROACH")).not.toThrow()
+  })
 })
