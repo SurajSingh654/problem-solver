@@ -2335,6 +2335,10 @@ export async function gradeReviewRecall(req, res) {
         timeComplexity: prob.canonicalTimeComplexity,
         spaceComplexity: prob.canonicalSpaceComplexity,
       };
+      const latestAiFeedback = Array.isArray(solution.aiFeedback)
+        ? solution.aiFeedback[solution.aiFeedback.length - 1] ?? null
+        : solution.aiFeedback ?? null;
+
       const matchResult = matchCanonicalApproach({
         solution: {
           timeComplexity: solution.timeComplexity,
@@ -2343,7 +2347,7 @@ export async function gradeReviewRecall(req, res) {
         },
         primary,
         alternatives,
-        aiFeedback: solution.aiFeedback,
+        aiFeedback: latestAiFeedback,
       });
       matchedApproach = matchResult.matchedApproach;
       discrepancy = matchResult.discrepancy;
@@ -2352,16 +2356,6 @@ export async function gradeReviewRecall(req, res) {
         matchedApproach === "primary"
           ? { name: "primary", ...primary }
           : alternatives.find((a) => a.name === matchedApproach) || { name: "primary", ...primary };
-
-      const notesPattern = (solution.patterns ?? []).join(", ") || "(none)";
-      const notesInsight =
-        stripHtmlServer(solution.keyInsight) ||
-        stripHtmlServer(solution.feynmanExplanation) ||
-        stripHtmlServer(solution.optimizedApproach) ||
-        "(none)";
-      const notesComplexity = [solution.timeComplexity, solution.spaceComplexity]
-        .filter(Boolean)
-        .join(" / ") || "(none)";
 
       systemPrompt = GRADER_AGAINST_MATCHED_SYSTEM;
       userPrompt = `Problem: <problem_title>${prob.title}</problem_title> (${prob.difficulty} ${prob.category})
@@ -2372,10 +2366,6 @@ export async function gradeReviewRecall(req, res) {
   keyInsight: ${chosen.keyInsight}
   time: ${chosen.timeComplexity}  space: ${chosen.spaceComplexity}
 </grade_against>
-
-<user_notes_pattern>${notesPattern}</user_notes_pattern>
-<user_notes_key_insight>${notesInsight.slice(0, 1500)}</user_notes_key_insight>
-<user_notes_complexity>${notesComplexity}</user_notes_complexity>
 
 <user_recall_pattern>${pattern || "(empty)"}</user_recall_pattern>
 <user_recall_key_insight>${keyInsight || "(empty)"}</user_recall_key_insight>

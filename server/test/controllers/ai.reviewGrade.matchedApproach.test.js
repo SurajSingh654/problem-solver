@@ -139,6 +139,17 @@ describe("gradeReviewRecall — happy path (notes match an alternative)", () => 
     const res = await invoke(gradeReviewRecall, req);
     expect(res.body.data.matchedApproach).toBe("Memoized recursion");
   });
+
+  it("does not include <user_notes_*> tags in the user prompt (spec compliance)", async () => {
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n) / O(n)" } },
+    });
+    await invoke(gradeReviewRecall, req);
+    expect(lastUserPrompt).not.toContain("<user_notes_pattern>");
+    expect(lastUserPrompt).not.toContain("<user_notes_key_insight>");
+    expect(lastUserPrompt).not.toContain("<user_notes_complexity>");
+  });
 });
 
 describe("gradeReviewRecall — discrepancy: off_canonical", () => {
@@ -240,6 +251,58 @@ describe("gradeReviewRecall — discrepancy: solve_time_flagged", () => {
     expect(res.body.data.matchedApproach).toBe("primary");
     expect(res.body.data.discrepancy.type).toBe("solve_time_flagged");
     expect(res.body.data.discrepancy.source).toBe("ai_solve_time");
+  });
+
+  it("forces primary when aiFeedback is an array (production shape) with flagged latest entry", async () => {
+    solutionRow = baseSolution({
+      aiFeedback: [
+        // older review — clean
+        {
+          reviewedAt: "2026-01-01",
+          flags: { wrongPattern: false },
+          complexityCheck: { timeCorrect: true, spaceCorrect: true },
+        },
+        // latest review — flagged
+        {
+          reviewedAt: "2026-06-01",
+          flags: { wrongPattern: true, correctPattern: "Sliding Window" },
+          complexityCheck: { timeCorrect: true, spaceCorrect: true },
+        },
+      ],
+    });
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n) / O(n)" } },
+    });
+    const res = await invoke(gradeReviewRecall, req);
+    expect(res.body.data.matchedApproach).toBe("primary");
+    expect(res.body.data.discrepancy.type).toBe("solve_time_flagged");
+    expect(res.body.data.discrepancy.source).toBe("ai_solve_time");
+  });
+
+  it("ignores older flagged entries when latest entry is clean", async () => {
+    solutionRow = baseSolution({
+      aiFeedback: [
+        {
+          reviewedAt: "2026-01-01",
+          flags: { wrongPattern: true, correctPattern: "Sliding Window" },
+          complexityCheck: { timeCorrect: false, spaceCorrect: true },
+        },
+        {
+          reviewedAt: "2026-06-01",
+          flags: { wrongPattern: false },
+          complexityCheck: { timeCorrect: true, spaceCorrect: true },
+        },
+      ],
+    });
+    const req = makeReq({
+      params: { solutionId: "sol_1" },
+      body: { recall: { pattern: "DP", keyInsight: "memoize", complexity: "O(n) / O(n)" } },
+    });
+    const res = await invoke(gradeReviewRecall, req);
+    // Latest is clean, so the structural matcher runs and finds the alt.
+    expect(res.body.data.matchedApproach).toBe("Memoized recursion");
+    expect(res.body.data.discrepancy).toBeNull();
   });
 });
 
