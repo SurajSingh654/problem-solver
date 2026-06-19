@@ -251,10 +251,10 @@ function FollowUpWithAnswer({ followUp, index, answer, onAnswerChange, isHR = fa
 // HR WORKSPACE
 // ══════════════════════════════════════════════════════
 const HR_SECTIONS = [
-    { key: 'underlyingConcern', label: 'Analyze', icon: '🔍', sublabel: 'What are they really checking?', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: true, tabDoneThreshold: 21 },
+    { key: 'underlyingConcern', label: 'Analyze', icon: '🔍', sublabel: 'What are they really checking?', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 21 },
     { key: 'answer', label: 'Answer', icon: '💬', sublabel: 'Your complete polished response', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 21 },
-    { key: 'companyConnection', label: 'Tailor', icon: '🎯', sublabel: 'Make it specific to this company', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false, tabDoneThreshold: 21 },
-    { key: 'selfAssessment', label: 'Reflect', icon: '🪞', sublabel: 'Honest self-assessment', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false, tabDoneThreshold: 21 },
+    { key: 'companyConnection', label: 'Tailor', icon: '🎯', sublabel: 'Make it specific to this company', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false, tabDoneThreshold: 21 },
+    { key: 'selfAssessment', label: 'Reflect', icon: '🪞', sublabel: 'Honest self-assessment', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false, tabDoneThreshold: 21 },
 ]
 
 function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCategoryChange }) {
@@ -265,7 +265,7 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
             <WorkspaceEditor
                 headerIcon="🤝"
                 headerLabel="HR Answer Workspace"
-                progressColorClass="bg-danger"
+                progressColorClass="bg-brand-300"
                 sections={HR_SECTIONS}
                 fieldConfigs={hrConfig.hrFields || {}}
                 values={hrData}
@@ -311,11 +311,11 @@ function HRWorkspace({ hrData, onHrDataChange, questionCategory, onQuestionCateg
 // BEHAVIORAL WORKSPACE
 // ══════════════════════════════════════════════════════
 const BEHAVIORAL_SECTIONS = [
-    { key: 'competency', label: 'Competency', icon: '🎯', sublabel: 'What is this question really testing?', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: true, tabDoneThreshold: 31, charThreshold: 100 },
+    { key: 'competency', label: 'Competency', icon: '🎯', sublabel: 'What is this question really testing?', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 31, charThreshold: 100 },
     { key: 'situation', label: 'Situation', icon: '📖', sublabel: 'Set the scene — specific and scoped', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 31, charThreshold: 300 },
-    { key: 'action', label: 'Action', icon: '⚡', sublabel: 'What YOU did — use "I" not "we"', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true, tabDoneThreshold: 31, charThreshold: 600 },
-    { key: 'result', label: 'Result', icon: '📊', sublabel: 'Quantified outcome and impact', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false, tabDoneThreshold: 31, charThreshold: 150 },
-    { key: 'reflection', label: 'Reflection', icon: '🔬', sublabel: "Learning and what you'd change", color: 'text-purple-400', activeBg: 'bg-purple-400/10 border-purple-400/30', required: false, tabDoneThreshold: 31, charThreshold: 200 },
+    { key: 'action', label: 'Action', icon: '⚡', sublabel: 'What YOU did — use "I" not "we"', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 31, charThreshold: 600 },
+    { key: 'result', label: 'Result', icon: '📊', sublabel: 'Quantified outcome and impact', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false, tabDoneThreshold: 31, charThreshold: 150 },
+    { key: 'reflection', label: 'Reflection', icon: '🔬', sublabel: "Learning and what you'd change", color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false, tabDoneThreshold: 31, charThreshold: 200 },
 ]
 
 function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
@@ -325,7 +325,7 @@ function BehavioralWorkspace({ behavioralData, onBehavioralDataChange }) {
         <WorkspaceEditor
             headerIcon="🗣️"
             headerLabel="STAR Workspace"
-            progressColorClass="bg-success"
+            progressColorClass="bg-brand-300"
             sections={BEHAVIORAL_SECTIONS}
             fieldConfigs={behavioralConfig.behavioralFields || {}}
             values={behavioralData}
@@ -424,8 +424,8 @@ function TKSubjectPicker({ tkData, update, setActiveSection }) {
                                         className={cn(
                                             'text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150',
                                             tkData.subject === `${group} — ${item}`
-                                                ? 'bg-warning-soft border-warning-line text-warning-fg'
-                                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-warning-line hover:text-warning-fg',
+                                                ? 'bg-brand-soft border-brand-line text-brand-fg-soft'
+                                                : 'bg-surface-3 border-border-default text-text-secondary hover:border-brand-line hover:text-brand-fg-soft',
                                         )}
                                     >
                                         {item}
@@ -447,11 +447,11 @@ function TKSubjectPicker({ tkData, update, setActiveSection }) {
 // threshold flips the tab to "done" but we don't want a depth progress bar
 // for what is essentially a single-line label.
 const TK_SECTIONS = [
-    { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: true, tabDoneThreshold: 20 },
+    { key: 'subject', label: 'Subject', icon: '📚', sublabel: 'Topic area and concept', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 20 },
     { key: 'coreExplanation', label: 'Mechanism', icon: '⚙️', sublabel: 'How it works — not the definition', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true, tabDoneThreshold: 400, charThreshold: 400 },
-    { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
-    { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices, when to choose differently', color: 'text-danger-fg', activeBg: 'bg-danger-soft border-danger-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
-    { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
+    { key: 'whyItExists', label: 'Design', icon: '🎯', sublabel: 'Why it was designed this way', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
+    { key: 'tradeoffs', label: 'Trade-offs', icon: '⚖️', sublabel: 'What it sacrifices, when to choose differently', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
+    { key: 'realWorldUsage', label: 'Production', icon: '🌍', sublabel: 'Real systems + misconceptions', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false, tabDoneThreshold: 200, charThreshold: 200 },
 ]
 
 function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
@@ -461,7 +461,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
         <WorkspaceEditor
             headerIcon="🧠"
             headerLabel="Technical Knowledge Workspace"
-            progressColorClass="bg-warning"
+            progressColorClass="bg-brand-300"
             sections={TK_SECTIONS}
             fieldConfigs={tkConfig.technicalKnowledgeFields || {}}
             values={tkData}
@@ -470,7 +470,7 @@ function TechnicalKnowledgeWorkspace({ tkData, onTkDataChange }) {
             nonRequiredBadgeLabel="High signal"
             banner={({ values }) => !(values.coreExplanation?.trim?.()?.length > 100) ? (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                    className="bg-warning-soft border border-warning-line rounded-xl px-4 py-3 flex items-start gap-3">
+                    className="bg-surface-2 border border-border-default rounded-xl px-4 py-3 flex items-start gap-3">
                     <span className="text-base flex-shrink-0 mt-0.5">⚙️</span>
                     <div>
                         <p className="text-xs font-semibold text-text-primary mb-1">Explain the mechanism, not the definition</p>
@@ -512,14 +512,14 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
 
     const sections = isQueryMode ? [
         { key: 'queryApproach', label: 'Approach', icon: '🧠', sublabel: 'Schema analysis and query plan', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
-        { key: 'sqlEditor', label: 'Query', icon: '🗄️', sublabel: 'Write your SQL', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: true },
-        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', sublabel: 'What indexes you would add and why', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
-        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', sublabel: 'Performance and edge cases', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
+        { key: 'sqlEditor', label: 'Query', icon: '🗄️', sublabel: 'Write your SQL', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
+        { key: 'indexStrategy', label: 'Indexing', icon: '⚡', sublabel: 'What indexes you would add and why', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false },
+        { key: 'optimizationNotes', label: 'Optimization', icon: '⚖️', sublabel: 'Performance and edge cases', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false },
     ] : [
         { key: 'schemaDesign', label: 'Schema', icon: '🗄️', sublabel: 'Table definitions and constraints', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: true },
-        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', sublabel: 'Normalization and design choices', color: 'text-success-fg', activeBg: 'bg-success-soft border-success-line', required: false },
-        { key: 'indexDesign', label: 'Indexes', icon: '⚡', sublabel: 'Index design per access pattern', color: 'text-warning-fg', activeBg: 'bg-warning-soft border-warning-line', required: false },
-        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', sublabel: 'Would any part benefit from NoSQL?', color: 'text-info-fg', activeBg: 'bg-info-soft border-info-line', required: false },
+        { key: 'normalizationReasoning', label: 'Decisions', icon: '🧠', sublabel: 'Normalization and design choices', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false },
+        { key: 'indexDesign', label: 'Indexes', icon: '⚡', sublabel: 'Index design per access pattern', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false },
+        { key: 'noSQLConsideration', label: 'NoSQL?', icon: '⚖️', sublabel: 'Would any part benefit from NoSQL?', color: 'text-brand-fg-soft', activeBg: 'bg-brand-soft border-brand-line', required: false },
     ]
 
     const activeSectionConfig = sections.find(s => s.key === activeSection)
@@ -578,7 +578,7 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
                 <div className="h-1 bg-surface-3 rounded-full overflow-hidden mb-3">
                     <motion.div animate={{ width: `${(completedCount / sections.length) * 100}%` }} transition={{ duration: 0.4 }} className="h-full bg-brand-300 rounded-full" />
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                     {sections.map(s => {
                         const val = getSectionValue(s.key)
                         const isDone = (val?.trim?.()?.length ?? 0) >= (minThresholds[s.key] || 30)
@@ -586,13 +586,13 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
                         return (
                             <button key={s.key} onClick={() => setActiveSection(s.key)}
                                 className={cn('flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
-                                    isActive ? s.activeBg : isDone ? 'bg-success-soft border-success-line' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
+                                    isActive ? 'bg-brand-soft border-brand-line' : isDone ? 'bg-surface-2 border-border-strong' : 'bg-surface-3 border-border-default hover:border-border-strong')}>
                                 <div className="flex items-center gap-0.5">
                                     <span className="text-sm">{s.icon}</span>
                                     {s.required && !isDone && !isActive && <span className="text-danger-fg text-[9px] font-bold">*</span>}
                                     {isDone && !isActive && <span className="text-success-fg text-[9px] font-bold">✓</span>}
                                 </div>
-                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled')}>{s.label}</span>
+                                <span className={cn('text-[9px] font-bold uppercase tracking-wider text-center leading-tight', isActive ? 'text-brand-fg-soft' : isDone ? 'text-success-fg' : 'text-text-disabled')}>{s.label}</span>
                             </button>
                         )
                     })}
@@ -601,11 +601,11 @@ function DatabaseWorkspace({ dbData, onDbDataChange, problemType, schemaReferenc
 
             <motion.div key={activeSection} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
                 className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden">
-                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig?.activeBg)}>
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-border-default bg-surface-2">
                     <span className="text-xl">{activeSectionConfig?.icon}</span>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <p className={cn('text-sm font-bold', activeSectionConfig?.color)}>{activeSectionConfig?.label}</p>
+                            <p className="text-sm font-bold text-text-primary">{activeSectionConfig?.label}</p>
                             {activeSectionConfig?.required && <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">Required</span>}
                             {!activeSectionConfig?.required && <span className="text-[9px] font-bold text-text-disabled bg-surface-3 border border-border-default px-1.5 py-px rounded-full">High signal</span>}
                         </div>
@@ -1060,7 +1060,7 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
             {isBehavioral && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-success-soft border border-success-line rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-surface-2 border border-border-default rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🗣️</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">Name the competency before writing your story</p>
@@ -1069,7 +1069,7 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
             {isTechnicalKnowledge && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-warning-soft border border-warning-line rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-surface-2 border border-border-default rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🧠</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">Explain the mechanism, not the definition</p>
@@ -1078,7 +1078,7 @@ export default function SubmitSolutionPage() {
                 </motion.div>
             )}
             {isDatabase && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-brand-soft border border-brand-line rounded-xl p-4 mb-6 flex items-start gap-3">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-surface-2 border border-border-default rounded-xl p-4 mb-6 flex items-start gap-3">
                     <span className="text-lg flex-shrink-0">🗄️</span>
                     <div>
                         <p className="text-sm font-semibold text-text-primary mb-0.5">

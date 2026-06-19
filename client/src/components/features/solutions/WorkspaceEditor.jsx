@@ -106,7 +106,7 @@ export function WorkspaceEditor({
                         className={cn('h-full rounded-full', progressColorClass)}
                     />
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                     {sections.map(s => {
                         const isDone = isSectionDone(s)
                         const isActive = activeSection === s.key
@@ -117,9 +117,9 @@ export function WorkspaceEditor({
                                 className={cn(
                                     'flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border transition-all duration-150 min-w-[72px]',
                                     isActive
-                                        ? s.activeBg
+                                        ? 'bg-brand-soft border-brand-line'
                                         : isDone
-                                            ? 'bg-success-soft border-success-line'
+                                            ? 'bg-surface-2 border-border-strong'
                                             : 'bg-surface-3 border-border-default hover:border-border-strong',
                                 )}
                             >
@@ -131,7 +131,7 @@ export function WorkspaceEditor({
                                 <span
                                     className={cn(
                                         'text-[9px] font-bold uppercase tracking-wider text-center leading-tight',
-                                        isActive ? s.color : isDone ? 'text-success-fg' : 'text-text-disabled',
+                                        isActive ? 'text-brand-fg-soft' : isDone ? 'text-success-fg' : 'text-text-disabled',
                                     )}
                                 >
                                     {s.label}
@@ -152,11 +152,11 @@ export function WorkspaceEditor({
                 transition={{ duration: 0.15 }}
                 className="bg-surface-1 border border-border-default rounded-2xl overflow-hidden"
             >
-                <div className={cn('flex items-center gap-3 px-5 py-4 border-b border-border-default', activeSectionConfig?.activeBg)}>
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-border-default bg-surface-2">
                     <span className="text-xl">{activeSectionConfig?.icon}</span>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <p className={cn('text-sm font-bold', activeSectionConfig?.color)}>{activeSectionConfig?.label}</p>
+                            <p className="text-sm font-bold text-text-primary">{activeSectionConfig?.label}</p>
                             {activeSectionConfig?.required && (
                                 <span className="text-[9px] font-bold text-danger-fg bg-danger-soft border border-danger-line px-1.5 py-px rounded-full">
                                     Required
