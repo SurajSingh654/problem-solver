@@ -115,6 +115,40 @@ function inferCategory(review) {
     return 'CODING'
 }
 
+// ── Score adjustments badge ────────────────────────────
+function ScoreAdjustmentsBadge({ adjustments, dimLabels }) {
+    if (!Array.isArray(adjustments) || adjustments.length === 0) return null
+    return (
+        <div className="mt-3 rounded-xl border border-border-default bg-surface-2 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-base font-bold leading-none">⚖</span>
+                <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
+                    Score Adjustments
+                </span>
+            </div>
+            <div className="space-y-2">
+                {adjustments.map((a) => (
+                    <div key={a.dimension} className="space-y-0.5">
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-text-primary">
+                                {dimLabels?.[a.dimension]?.label || a.dimension}
+                            </span>
+                            <span className="font-mono text-text-tertiary">
+                                AI scored {a.fromAI} → applied {a.applied}
+                            </span>
+                        </div>
+                        {a.reason && (
+                            <p className="text-[11px] text-text-tertiary leading-relaxed">
+                                {a.reason}
+                            </p>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 // ── Score ring ─────────────────────────────────────────
 function ScoreRing({ score, size = 72 }) {
     const r = (size / 2) - 6
@@ -899,6 +933,10 @@ export function AIReviewCard({ solutionId, existingReview, solutionCreatedAt, pr
                                                 delay={i * 0.08}
                                             />
                                         ))}
+                                        <ScoreAdjustmentsBadge
+                                            adjustments={latestReview?.scoreAdjustments}
+                                            dimLabels={dimLabels}
+                                        />
                                         <div className="pt-3 border-t border-border-subtle space-y-1.5">
                                             <div className="flex justify-between text-[10px]">
                                                 <span className="text-text-disabled">Weighted score</span>
