@@ -2172,6 +2172,42 @@ Generate 2 questions that will test if they truly remember and understand this p
 const VALID_MATCH = new Set(["YES", "PARTIAL", "NO"]);
 const VALID_OVERALL = new Set(["pass", "partial", "miss"]);
 
+const MULTI_APPROACH_GRADER_SYSTEM = `You are a strict but fair spaced-repetition grader. The user is recalling a coding problem they previously solved. Many problems have multiple valid approaches; your job is to identify which approach the user implemented and grade their recall against THAT approach — not against a single "right answer".
+
+You receive:
+  - <canonical_primary>: the main canonical approach (pattern, keyInsight, complexity).
+  - <canonical_alternatives>: 0-N additional valid approaches, each with a name + pattern + keyInsight + complexity.
+  - <user_notes>: what the user wrote when they originally solved the problem (their actual implementation).
+  - <user_recall>: what they typed just now (their memory check).
+
+PROCEDURE — follow exactly:
+
+Step 1 — IDENTIFY which approach the user implemented.
+  Compare <user_notes_complexity> and <user_notes_pattern> against PRIMARY and each ALTERNATIVE. The MATCHED APPROACH is whichever scores closest on pattern + complexity. If user_notes are sparse or ambiguous, fall back to PRIMARY.
+
+Step 2 — GRADE user_recall against the MATCHED APPROACH (not primary).
+  - Match SEMANTICALLY ("HashMap" matches "Hashing"; "linear time" matches "O(n)"; "two-pointer" matches "Two Pointers").
+  - YES: recall captures the same concept as the matched approach.
+  - PARTIAL: right idea, missed important detail.
+  - NO: empty, wrong, or unrelated to the matched approach AND to all other approaches.
+  - For complexity: O(n) ≠ O(n log n). If user gives one but matched approach has both time + space, PARTIAL on the missing one.
+
+Step 3 — In feedback, name the approach the user used and reference the others where helpful. e.g. "You used the memoized recursion variant (O(n) space) — correct. The iterative two-variable approach achieves O(1) space." This trade-off awareness is the cognitive task interviewers test; surface it.
+
+Step 4 — suggestedConfidence (1-5) follows the matched approach's grade:
+  5 = all YES, 4 = one PARTIAL, 3 = one NO or two PARTIAL, 2 = multiple gaps, 1 = mostly wrong/empty.
+  If \`peeked: true\`, suggestedConfidence MUST be ≤ 3.
+
+Output STRICT JSON, no prose:
+{
+  "matchedApproach":    "primary" | "<alternative.name>",
+  "pattern":            { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
+  "keyInsight":         { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
+  "complexity":         { "match": "YES"|"PARTIAL"|"NO", "feedback": "..." },
+  "overall":            "pass"|"partial"|"miss",
+  "suggestedConfidence": <1-5>
+}`;
+
 function stripHtmlServer(html) {
   if (typeof html !== "string") return "";
   return html.replace(/<[^>]*>/g, "").trim();
@@ -2281,6 +2317,7 @@ export async function gradeReviewRecall(req, res) {
             canonicalKeyInsight: true,
             canonicalTimeComplexity: true,
             canonicalSpaceComplexity: true,
+            canonicalAlternatives: true,
           },
         },
       },
@@ -2293,10 +2330,61 @@ export async function gradeReviewRecall(req, res) {
       prob?.canonicalGeneratedAt != null &&
       (prob.canonicalPattern || prob.canonicalKeyInsight || prob.canonicalTimeComplexity);
 
+    const altsFlagOn = process.env.FEATURE_CANONICAL_ALTERNATIVES === "true";
+    const alternatives =
+      Array.isArray(prob?.canonicalAlternatives) ? prob.canonicalAlternatives : [];
+    const useMultiApproachPrompt = altsFlagOn && hasCanonical && alternatives.length > 0;
+
     let systemPrompt;
     let userPrompt;
 
-    if (hasCanonical) {
+    if (useMultiApproachPrompt) {
+      // ── Multi-approach grader (canonical + alternatives) ──────────────────
+      const notesPattern = (solution.patterns ?? []).join(", ") || "(none)";
+      const notesInsight =
+        stripHtmlServer(solution.keyInsight) ||
+        stripHtmlServer(solution.feynmanExplanation) ||
+        stripHtmlServer(solution.optimizedApproach) ||
+        "(none)";
+      const notesComplexity = [solution.timeComplexity, solution.spaceComplexity]
+        .filter(Boolean)
+        .join(" / ") || "(none)";
+
+      const altsBlock = alternatives
+        .map(
+          (alt) =>
+            `${alt.name}:
+    pattern: ${alt.pattern}
+    keyInsight: ${alt.keyInsight}
+    time: ${alt.timeComplexity}  space: ${alt.spaceComplexity}`,
+        )
+        .join("\n  ");
+
+      systemPrompt = MULTI_APPROACH_GRADER_SYSTEM;
+      userPrompt = `Problem: <problem_title>${prob.title}</problem_title> (${prob.difficulty} ${prob.category})
+
+<canonical_primary>
+  pattern: ${prob.canonicalPattern || "(none)"}
+  keyInsight: ${prob.canonicalKeyInsight || "(none)"}
+  time: ${prob.canonicalTimeComplexity || "(none)"}  space: ${prob.canonicalSpaceComplexity || "(none)"}
+</canonical_primary>
+
+<canonical_alternatives>
+  ${altsBlock}
+</canonical_alternatives>
+
+<user_notes_pattern>${notesPattern}</user_notes_pattern>
+<user_notes_key_insight>${notesInsight.slice(0, 1500)}</user_notes_key_insight>
+<user_notes_complexity>${notesComplexity}</user_notes_complexity>
+
+<user_recall_pattern>${pattern || "(empty)"}</user_recall_pattern>
+<user_recall_key_insight>${keyInsight || "(empty)"}</user_recall_key_insight>
+<user_recall_complexity>${complexity || "(empty)"}</user_recall_complexity>
+
+peeked: ${peeked}
+
+Identify the matched approach, then grade. Return JSON only.`;
+    } else if (hasCanonical) {
       // ── Canonical-anchor path ─────────────────────────────────────────────
       const canonicalComplexity = [prob.canonicalTimeComplexity, prob.canonicalSpaceComplexity]
         .filter(Boolean)
@@ -2408,7 +2496,7 @@ Grade each field semantically. Return JSON only.`;
         teamId,
         model: AI_MODEL_FAST,
         temperature: 0.2,
-        maxTokens: 600,
+        maxTokens: useMultiApproachPrompt ? 800 : 600,
         jsonMode: true,
         surface: "review-grade",
       });
@@ -2420,7 +2508,8 @@ Grade each field semantically. Return JSON only.`;
       return success(res, { ...fallback, fallback: true });
     }
 
-    const validated = validateRecallGrade(parsed, { peeked });
+    const validAlternativeNames = alternatives.map((a) => a.name);
+    const validated = validateRecallGrade(parsed, { peeked, validAlternativeNames });
     if (!validated) {
       console.warn("review-grade: validator rejected LLM output, using fallback");
       const fallback = buildFallbackRecallGrade({ pattern, keyInsight, complexity, peeked });
