@@ -643,10 +643,16 @@ export async function reviewSolution(req, res) {
     }
 
     // ── Apply solveMethod caps (server-authoritative discount) ─────────
-    const cappedResult = applySolveMethodCaps(
-      aiResponse.scores || {},
-      solution.solveMethod || null,
-    );
+    // Skip on the fallback path: buildFallbackReview emits deterministic
+    // placeholder scores (all 5s); applying caps to those would surface
+    // misleading "score adjustments" for an output the AI never produced.
+    const normalizedSolveMethod =
+      typeof solution.solveMethod === "string"
+        ? solution.solveMethod.trim().toUpperCase()
+        : null;
+    const cappedResult = usedReviewFallback
+      ? { scores: { ...(aiResponse.scores || {}) }, adjustments: [] }
+      : applySolveMethodCaps(aiResponse.scores || {}, normalizedSolveMethod || null);
     const dimScores = cappedResult.scores;
     const scoreAdjustments = cappedResult.adjustments;
     const aiFlags = aiResponse.flags || {};
@@ -816,9 +822,6 @@ export async function reviewSolution(req, res) {
 
     return success(res, {
       feedback: reviewRecord,
-      overallScore,
-      dimensionScores: dimScores,
-      scoreAdjustments,
       isFirstReview: existingFeedback.length === 0,
       previousScore:
         existingFeedback.length > 0
@@ -826,6 +829,12 @@ export async function reviewSolution(req, res) {
           : null,
       totalReviews: updatedFeedback.length,
       usedFallback: usedReviewFallback,
+      // Source-of-truth for the response payload — read from reviewRecord
+      // so a future mutation to the persisted blob automatically updates
+      // the wire format (no two-place drift).
+      overallScore: reviewRecord.overallScore,
+      dimensionScores: reviewRecord.dimensionScores,
+      scoreAdjustments: reviewRecord.scoreAdjustments,
     });
   } catch (err) {
     console.error("AI review error:", err);

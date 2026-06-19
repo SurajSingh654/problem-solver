@@ -290,3 +290,32 @@ describe("reviewSolution — COLD path unchanged", () => {
     expect(res.body.data.scoreAdjustments).toEqual([]);
   });
 });
+
+describe("reviewSolution — fallback path (Issue 1)", () => {
+  it("does not apply caps on the fallback path (LLM error → buildFallbackReview placeholder scores)", async () => {
+    solutionRow = baseSolution({ solveMethod: "SAW_APPROACH" });
+    // Force the AI call to throw so the controller takes the buildFallbackReview path.
+    const aiMod = await import("../../src/services/ai.service.js");
+    aiMod.aiComplete.mockImplementationOnce(async () => {
+      throw new Error("AI timed out");
+    });
+    const req = makeReq({ params: { solutionId: "sol_1" } });
+    const res = await invoke(reviewSolution, req);
+    expect(res.status).toBe(200);
+    expect(res.body.data.scoreAdjustments).toEqual([]);
+    // Fallback scores are deterministic 5s; they should pass through unchanged.
+    // (We don't assert exact values — just that no cap-driven mutation occurred.)
+    // The point of this test: caps must not silently fire on placeholder scores
+    // if the cap values are ever tightened in the future.
+  });
+});
+
+describe("reviewSolution — solveMethod normalization (Issue 3)", () => {
+  it("normalizes solveMethod (uppercase + trim) before cap lookup", async () => {
+    solutionRow = baseSolution({ solveMethod: "saw_approach " });
+    const req = makeReq({ params: { solutionId: "sol_1" } });
+    const res = await invoke(reviewSolution, req);
+    expect(res.body.data.dimensionScores.patternAccuracy).toBe(5);
+    expect(res.body.data.dimensionScores.understandingDepth).toBe(6);
+  });
+});
