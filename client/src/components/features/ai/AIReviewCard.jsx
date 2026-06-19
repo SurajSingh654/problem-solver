@@ -3,6 +3,7 @@
 // ============================================================================
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Scale } from 'lucide-react'
 import { useAIReview } from '@hooks/useAI'
 import { FRESH_REVIEW_WAIT_MS } from '@hooks/useSolutions'
 import { Button } from '@components/ui/Button'
@@ -121,7 +122,7 @@ function ScoreAdjustmentsBadge({ adjustments, dimLabels }) {
     return (
         <div className="mt-3 rounded-xl border border-border-default bg-surface-2 p-3 space-y-2">
             <div className="flex items-center gap-2">
-                <span aria-hidden="true" className="text-base font-bold leading-none">⚖</span>
+                <Scale className="w-4 h-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                 <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
                     Score Adjustments
                 </span>
