@@ -138,6 +138,10 @@ function buildPatternMislabel(solution, chosen) {
 
 function isTrusted(aiFeedback) {
   if (!aiFeedback || typeof aiFeedback !== "object") return true
+  // Defensive: callers must normalize the array shape (Solution.aiFeedback is
+  // stored as an array of review records). If we receive the raw array, treat
+  // it as no-signal rather than silently no-opping the trust check.
+  if (Array.isArray(aiFeedback)) return true
   if (aiFeedback.flags?.wrongPattern === true) return false
   if (aiFeedback.complexityCheck?.timeCorrect === false) return false
   if (aiFeedback.complexityCheck?.spaceCorrect === false) return false

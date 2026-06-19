@@ -274,6 +274,24 @@ describe("matchCanonicalApproach — solve_time_flagged (TRUST gate)", () => {
     expect(result.matchedApproach).toBe("Memoized recursion")
   })
 
+  it("trusts notes when aiFeedback is passed as a raw array (defensive — caller must normalize)", () => {
+    // The controller normalizes Solution.aiFeedback before calling. If a caller forgets,
+    // the matcher should treat the array as no-signal (trust=true), not as a flagged record.
+    const result = matchCanonicalApproach({
+      solution: validSolution,
+      primary: climbingPrimary,
+      alternatives: [memoizedAlt],
+      aiFeedback: [
+        {
+          flags: { wrongPattern: true },
+          complexityCheck: { timeCorrect: false, spaceCorrect: false },
+        },
+      ],
+    })
+    expect(result.matchedApproach).toBe("Memoized recursion")
+    expect(result.discrepancy).toBeNull()
+  })
+
   it("solve_time_flagged: summary includes both wrongPattern and complexity reasons when both fire", () => {
     const result = matchCanonicalApproach({
       solution: {

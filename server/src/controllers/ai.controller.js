@@ -2352,10 +2352,22 @@ export async function gradeReviewRecall(req, res) {
       matchedApproach = matchResult.matchedApproach;
       discrepancy = matchResult.discrepancy;
 
-      const chosen =
-        matchedApproach === "primary"
-          ? { name: "primary", ...primary }
-          : alternatives.find((a) => a.name === matchedApproach) || { name: "primary", ...primary };
+      let chosen;
+      if (matchedApproach === "primary") {
+        chosen = { name: "primary", ...primary };
+      } else {
+        const norm = (s) => (typeof s === "string" ? s.trim().toLowerCase() : "");
+        const found = alternatives.find((a) => norm(a.name) === norm(matchedApproach));
+        if (!found) {
+          console.warn(
+            "[recall-grade:chosen-fallback] matched approach not found in alternatives; grading against primary",
+            { matchedApproach, altNames: alternatives.map((a) => a.name) },
+          );
+          chosen = { name: "primary", ...primary };
+        } else {
+          chosen = found;
+        }
+      }
 
       systemPrompt = GRADER_AGAINST_MATCHED_SYSTEM;
       userPrompt = `Problem: <problem_title>${prob.title}</problem_title> (${prob.difficulty} ${prob.category})
