@@ -15,6 +15,10 @@ import { normalizeBigO } from "./optimizationStats.js"
  *     discrepancy: null | { type, summary, expected, actual, source } }
  */
 export function matchCanonicalApproach({ solution, primary, alternatives, aiFeedback }) {
+  if (!primary || typeof primary !== "object") {
+    return { matchedApproach: "primary", discrepancy: null }
+  }
+
   const alts = Array.isArray(alternatives) ? alternatives : []
 
   if (!isTrusted(aiFeedback)) {
@@ -30,9 +34,16 @@ export function matchCanonicalApproach({ solution, primary, alternatives, aiFeed
   ]
 
   const userTuple = tupleKey(solution.timeComplexity, solution.spaceComplexity)
-  const candidates = approaches.filter(
-    (a) => tupleKey(a.timeComplexity, a.spaceComplexity) === userTuple,
-  )
+  if (userTuple === null) {
+    return {
+      matchedApproach: "primary",
+      discrepancy: buildOffCanonical(solution, primary),
+    }
+  }
+  const candidates = approaches.filter((a) => {
+    const key = tupleKey(a.timeComplexity, a.spaceComplexity)
+    return key !== null && key === userTuple
+  })
 
   if (candidates.length === 0) {
     return {
@@ -61,13 +72,17 @@ export function matchCanonicalApproach({ solution, primary, alternatives, aiFeed
 }
 
 function tupleKey(time, space) {
-  return `${normalizeBigO(time)}|${normalizeBigO(space)}`
+  const t = normalizeBigO(time)
+  const s = normalizeBigO(space)
+  if (t === "" || s === "") return null
+  return `${t}|${s}`
 }
 
 function patternsOverlap(canonicalPattern, userPatterns) {
   const canonical = tokenizePattern(canonicalPattern)
   const user = (userPatterns || []).flatMap(tokenizePattern)
-  if (canonical.length === 0 || user.length === 0) return false
+  if (canonical.length === 0) return true
+  if (user.length === 0) return false
   const userSet = new Set(user)
   return canonical.some((t) => userSet.has(t))
 }
@@ -143,10 +158,10 @@ function buildSolveTimeFlagged(solution, primary, aiFeedback) {
     const stored = fmtComplexity(solution.timeComplexity, solution.spaceComplexity)
     reasons.push(`AI flagged your stored complexity at solve time (you stored ${stored}, AI read ${aiRead})`)
   }
-  const reasonText = reasons.length > 0 ? reasons.join("; ") : "AI flagged your stored solution at solve time"
+  const summary = `${reasons.join("; ")}. Grading against the canonical primary.`
   return {
     type: "solve_time_flagged",
-    summary: `${reasonText}. Grading against the canonical primary.`,
+    summary,
     expected: {
       pattern: primary.pattern || "—",
       complexity: fmtComplexity(primary.timeComplexity, primary.spaceComplexity),

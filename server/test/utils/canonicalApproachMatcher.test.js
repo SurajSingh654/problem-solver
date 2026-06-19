@@ -273,4 +273,122 @@ describe("matchCanonicalApproach — solve_time_flagged (TRUST gate)", () => {
     })
     expect(result.matchedApproach).toBe("Memoized recursion")
   })
+
+  it("solve_time_flagged: summary includes both wrongPattern and complexity reasons when both fire", () => {
+    const result = matchCanonicalApproach({
+      solution: {
+        timeComplexity: "O(n)",
+        spaceComplexity: "O(n)",
+        patterns: ["Recursion"],
+      },
+      primary: climbingPrimary,
+      alternatives: [memoizedAlt],
+      aiFeedback: {
+        flags: { wrongPattern: true, correctPattern: "Dynamic Programming" },
+        complexityCheck: {
+          timeCorrect: false,
+          spaceCorrect: true,
+          timeComplexity: "O(n^2)",
+          spaceComplexity: "O(n)",
+        },
+      },
+    })
+    expect(result.discrepancy.type).toBe("solve_time_flagged")
+    expect(result.discrepancy.summary).toContain("AI flagged your stored pattern")
+    expect(result.discrepancy.summary).toContain("AI flagged your stored complexity")
+  })
+})
+
+describe("matchCanonicalApproach — malformed input safety", () => {
+  it("treats solution with missing complexity as off_canonical (no false match)", () => {
+    const result = matchCanonicalApproach({
+      solution: {
+        timeComplexity: null,
+        spaceComplexity: null,
+        patterns: ["Dynamic Programming"],
+      },
+      primary: climbingPrimary,
+      alternatives: [memoizedAlt],
+      aiFeedback: null,
+    })
+    expect(result.matchedApproach).toBe("primary")
+    expect(result.discrepancy.type).toBe("off_canonical")
+  })
+
+  it("does not match an alternative with missing complexity even when user's is also missing", () => {
+    const altMissing = {
+      name: "Malformed alt",
+      pattern: "Dynamic Programming",
+      keyInsight: "x",
+      timeComplexity: null,
+      spaceComplexity: null,
+    }
+    const result = matchCanonicalApproach({
+      solution: {
+        timeComplexity: null,
+        spaceComplexity: null,
+        patterns: ["Dynamic Programming"],
+      },
+      primary: climbingPrimary,
+      alternatives: [altMissing],
+      aiFeedback: null,
+    })
+    expect(result.matchedApproach).toBe("primary")
+    expect(result.discrepancy.type).toBe("off_canonical")
+  })
+})
+
+describe("matchCanonicalApproach — defensive: missing canonical pattern", () => {
+  it("does not flag pattern_mislabel when matched approach has empty pattern", () => {
+    const primaryNoPattern = {
+      pattern: "",
+      keyInsight: "x",
+      timeComplexity: "O(n)",
+      spaceComplexity: "O(1)",
+    }
+    const result = matchCanonicalApproach({
+      solution: {
+        timeComplexity: "O(n)",
+        spaceComplexity: "O(1)",
+        patterns: ["Array"],
+      },
+      primary: primaryNoPattern,
+      alternatives: [],
+      aiFeedback: null,
+    })
+    expect(result.matchedApproach).toBe("primary")
+    expect(result.discrepancy).toBeNull()
+  })
+})
+
+describe("matchCanonicalApproach — defensive: null/missing primary", () => {
+  it("returns matchedApproach='primary' with no discrepancy when primary is null", () => {
+    const result = matchCanonicalApproach({
+      solution: {
+        timeComplexity: "O(n)",
+        spaceComplexity: "O(1)",
+        patterns: ["Array"],
+      },
+      primary: null,
+      alternatives: [],
+      aiFeedback: null,
+    })
+    expect(result.matchedApproach).toBe("primary")
+    expect(result.discrepancy).toBeNull()
+  })
+
+  it("returns matchedApproach='primary' with no discrepancy when primary is undefined", () => {
+    const result = matchCanonicalApproach({
+      solution: {
+        timeComplexity: "O(n)",
+        spaceComplexity: "O(1)",
+        patterns: ["Array"],
+      },
+      primary: undefined,
+      alternatives: [],
+      aiFeedback: null,
+    })
+    expect(result.matchedApproach).toBe("primary")
+    expect(result.discrepancy).toBeNull()
+  })
 })
