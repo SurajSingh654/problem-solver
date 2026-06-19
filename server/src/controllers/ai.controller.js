@@ -2055,7 +2055,7 @@ function clampConfidence(n) {
   return Math.max(1, Math.min(5, v));
 }
 
-function validateRecallGrade(parsed, { peeked = false } = {}) {
+function validateRecallGrade(parsed, { peeked = false, validAlternativeNames = [] } = {}) {
   if (!parsed || typeof parsed !== "object") return null;
   const fields = ["pattern", "keyInsight", "complexity"];
   const out = {};
@@ -2076,6 +2076,15 @@ function validateRecallGrade(parsed, { peeked = false } = {}) {
     suggestedConfidence = 3;
   }
   out.suggestedConfidence = suggestedConfidence;
+  let { matchedApproach } = parsed;
+  if (matchedApproach != null) {
+    const validNames = new Set(["primary", ...validAlternativeNames]);
+    if (typeof matchedApproach !== "string" || !validNames.has(matchedApproach)) {
+      console.warn("[recall-grade:invalid-match]", matchedApproach, "→ primary");
+      matchedApproach = "primary";
+    }
+  }
+  out.matchedApproach = matchedApproach ?? null;
   return out;
 }
 

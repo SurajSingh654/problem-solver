@@ -20,6 +20,7 @@
 import crypto from "node:crypto";
 import { z } from "zod";
 import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
+import { dedupAndCapAlternatives } from "../utils/canonicalAltDedup.js";
 
 // ── Vocabulary used by claim-hedging rules ──────────────────────────
 export const TENTATIVE_VOCAB = [
@@ -1487,10 +1488,88 @@ const canonicalAnswerSchema = z
   })
   .strict();
 
+const canonicalAlternativeSchema = z
+  .object({
+    name: z
+      .string()
+      .refine((v) => v.trim().length > 0, { message: "name must be non-empty after trimming" })
+      .refine((v) => v.length <= 60, { message: "name must be ≤ 60 chars" }),
+    pattern: z.string().refine(
+      (v) => CANONICAL_PATTERN_LABELS.includes(v),
+      { message: "pattern must be in CANONICAL_PATTERN_LABELS" },
+    ),
+    keyInsight: z
+      .string()
+      .refine((v) => v.trim().length > 0, { message: "keyInsight must be non-empty after trimming" })
+      .refine((v) => v.length <= 600, { message: "keyInsight must be ≤ 600 chars" }),
+    timeComplexity: z.string().regex(O_NOTATION_RE),
+    spaceComplexity: z.string().regex(O_NOTATION_RE),
+  })
+  .strict();
+
+/**
+ * Validate one canonical alternative item.
+ *
+ * Note: this validates against CANONICAL_PATTERN_LABELS only — the
+ * "alternative.pattern may equal primary.pattern" relaxation is applied
+ * at the validateCanonicalAnswer level (where primary is in scope).
+ */
+export function validateCanonicalAlternative(parsed) {
+  if (parsed == null || typeof parsed !== "object") return null;
+  const result = canonicalAlternativeSchema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
+// Used internally when an alternative's pattern equals the primary's pattern;
+// skips the taxonomy-membership refinement on `pattern` and validates the rest.
+// Module-scoped to avoid rebuilding the Zod schema on every call (the
+// augmenter in ai.controller.js calls this in a hot path).
+const canonicalAlternativeRelaxedSchema = z
+  .object({
+    name: z
+      .string()
+      .refine((v) => v.trim().length > 0)
+      .refine((v) => v.length <= 60),
+    pattern: z.string().min(1),
+    keyInsight: z
+      .string()
+      .refine((v) => v.trim().length > 0)
+      .refine((v) => v.length <= 600),
+    timeComplexity: z.string().regex(O_NOTATION_RE),
+    spaceComplexity: z.string().regex(O_NOTATION_RE),
+  })
+  .strict();
+
+// Exported so the augmenter helper in ai.controller.js can also use this path.
+export function validateAlternativeAllowingPrimaryPattern(parsed) {
+  if (parsed == null || typeof parsed !== "object") return null;
+  const result = canonicalAlternativeRelaxedSchema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
 export function validateCanonicalAnswer(parsed) {
   if (parsed == null || typeof parsed !== "object") return null;
-  const result = canonicalAnswerSchema.safeParse(parsed);
-  return result.success ? result.data : null;
+  // Strip `alternatives` before strict-schema parse — canonicalAnswerSchema is
+  // .strict() and would reject unknown keys. Alternatives are processed separately.
+  const { alternatives: rawAltsInput, ...primaryFields } = parsed;
+  const result = canonicalAnswerSchema.safeParse(primaryFields);
+  if (!result.success) return null;
+  const primary = result.data;
+
+  // Process alternatives independently — lenient: drop invalid items, never reject the whole answer.
+  const rawAlts = Array.isArray(rawAltsInput) ? rawAltsInput : [];
+  const validatedAlts = rawAlts
+    .map((alt) => {
+      if (alt && typeof alt === "object" && alt.pattern === primary.pattern) {
+        return validateAlternativeAllowingPrimaryPattern(alt);
+      }
+      return validateCanonicalAlternative(alt);
+    })
+    .filter((a) => a !== null);
+
+  const dedupedAlts = dedupAndCapAlternatives(validatedAlts, primary);
+
+  return { ...primary, alternatives: dedupedAlts };
 }
 
 // ── Solution review validator ───────────────────────────────────────
