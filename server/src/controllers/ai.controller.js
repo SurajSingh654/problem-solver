@@ -42,6 +42,7 @@ import {
   FAANG_CORE_PATTERNS,
 } from "../utils/patternTaxonomy.js";
 import { CANONICAL_SOURCE_LISTS } from "../utils/sourceListTaxonomy.js";
+import { applySolveMethodCaps } from "../utils/solveMethodCaps.js";
 
 // ============================================================================
 // CANONICAL ANSWER GENERATOR
@@ -568,7 +569,15 @@ export async function reviewSolution(req, res) {
       ragContext,
       followUpAnswers: followUpAnswersForPrompt,
       patternBaseline, // ← new
-      categorySpecificData: solution.categorySpecificData || null, // ADD THIS
+      categorySpecificData: solution.categorySpecificData || null,
+      // ── Multi-tab fields for pickFinalTab + <progression> ──
+      timeComplexity: solution.timeComplexity,
+      spaceComplexity: solution.spaceComplexity,
+      bruteForce: solution.bruteForce,
+      bruteForceMeta: solution.bruteForceMeta,
+      optimizedApproach: solution.optimizedApproach,
+      alternativeApproach: solution.alternativeApproach,
+      alternativeMeta: solution.alternativeMeta,
     });
 
     // ── AI call → validate → fallback if needed ───────────
@@ -633,9 +642,16 @@ export async function reviewSolution(req, res) {
       reviewViolations = [`llm-error:${aiErr?.code || aiErr?.message || "unknown"}`];
     }
 
-    // ── Compute weighted score ─────────────────────────
-    const dimScores = aiResponse.scores || {};
+    // ── Apply solveMethod caps (server-authoritative discount) ─────────
+    const cappedResult = applySolveMethodCaps(
+      aiResponse.scores || {},
+      solution.solveMethod || null,
+    );
+    const dimScores = cappedResult.scores;
+    const scoreAdjustments = cappedResult.adjustments;
     const aiFlags = aiResponse.flags || {};
+
+    // ── Compute weighted score from CAPPED dimension scores ────────────
     let computedScore =
       (dimScores.codeCorrectness || 5) * 0.35 +
       (dimScores.patternAccuracy || 5) * 0.2 +
@@ -708,6 +724,7 @@ export async function reviewSolution(req, res) {
       reviewNumber: (solution.reviewCount || 0) + 1,
       overallScore,
       dimensionScores: dimScores,
+      scoreAdjustments,
       flags,
       strengths: aiResponse.strengths || [],
       gaps: aiResponse.gaps || [],
@@ -799,6 +816,9 @@ export async function reviewSolution(req, res) {
 
     return success(res, {
       feedback: reviewRecord,
+      overallScore,
+      dimensionScores: dimScores,
+      scoreAdjustments,
       isFirstReview: existingFeedback.length === 0,
       previousScore:
         existingFeedback.length > 0
