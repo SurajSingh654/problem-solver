@@ -142,18 +142,18 @@ function DiscrepancyCard({ discrepancy }) {
     return (
         <div className={cn('rounded-xl border p-3 space-y-2', tone)}>
             <div className="flex items-center gap-2">
-                <span className="text-base font-bold leading-none">{icon}</span>
+                <span aria-hidden="true" className="text-base font-bold leading-none">{icon}</span>
                 <span className="text-xs font-bold uppercase tracking-widest">{heading}</span>
             </div>
             <p className="text-xs leading-relaxed">{discrepancy.summary}</p>
             <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
                 <span className="font-semibold opacity-70">Your notes:</span>
                 <span className="font-mono">
-                    {discrepancy.actual.pattern} · {discrepancy.actual.complexity}
+                    {discrepancy.actual?.pattern ?? '—'} · {discrepancy.actual?.complexity ?? '—'}
                 </span>
                 <span className="font-semibold opacity-70">Canonical:</span>
                 <span className="font-mono">
-                    {discrepancy.expected.pattern} · {discrepancy.expected.complexity}
+                    {discrepancy.expected?.pattern ?? '—'} · {discrepancy.expected?.complexity ?? '—'}
                 </span>
             </div>
         </div>
