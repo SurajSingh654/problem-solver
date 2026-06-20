@@ -80,14 +80,24 @@ describe("runAISurface — fallback paths", () => {
     expect(result.reason).toBe(FALLBACK_REASONS.TIMEOUT);
   });
 
-  it("returns RATE_LIMIT fallback when aiComplete throws RATE_LIMITED (per-user cap)", async () => {
+  it("returns USER_RATE_LIMIT fallback when aiComplete throws RATE_LIMITED (per-user cap)", async () => {
     aiCompleteMock = vi.fn(async () => { const e = new Error("rate"); e.code = "RATE_LIMITED"; throw e; });
     const result = await runAISurface({
       surface: "test", promptVersion: "v1",
       buildPrompt: promptOk, validate: validatorOk, buildFallback: fallback,
       aiOptions: {},
     });
-    expect(result.reason).toBe(FALLBACK_REASONS.RATE_LIMIT);
+    expect(result.reason).toBe(FALLBACK_REASONS.USER_RATE_LIMIT);
+  });
+
+  it("returns PROVIDER_RATE_LIMIT fallback when aiComplete throws OPENAI_RATE_LIMITED (provider 429)", async () => {
+    aiCompleteMock = vi.fn(async () => { const e = new Error("provider rate"); e.code = "OPENAI_RATE_LIMITED"; throw e; });
+    const result = await runAISurface({
+      surface: "test", promptVersion: "v1",
+      buildPrompt: promptOk, validate: validatorOk, buildFallback: fallback,
+      aiOptions: {},
+    });
+    expect(result.reason).toBe(FALLBACK_REASONS.PROVIDER_RATE_LIMIT);
   });
 
   it("returns VALIDATION fallback when validator rejects", async () => {

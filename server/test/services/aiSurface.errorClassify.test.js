@@ -26,12 +26,12 @@ describe("classifyAIError — against real ai.service.js error codes", () => {
     expect(classifyAIError({ code: "OPENAI_TIMEOUT" })).toBe(FALLBACK_REASONS.TIMEOUT);
   });
 
-  it("maps RATE_LIMITED (per-user-per-day cap) to RATE_LIMIT", () => {
-    expect(classifyAIError({ code: "RATE_LIMITED" })).toBe(FALLBACK_REASONS.RATE_LIMIT);
+  it("maps RATE_LIMITED (per-user-per-day cap) to USER_RATE_LIMIT", () => {
+    expect(classifyAIError({ code: "RATE_LIMITED" })).toBe(FALLBACK_REASONS.USER_RATE_LIMIT);
   });
 
-  it("maps OPENAI_RATE_LIMITED (HTTP 429 from OpenAI) to RATE_LIMIT", () => {
-    expect(classifyAIError({ code: "OPENAI_RATE_LIMITED" })).toBe(FALLBACK_REASONS.RATE_LIMIT);
+  it("maps OPENAI_RATE_LIMITED (HTTP 429 from OpenAI) to PROVIDER_RATE_LIMIT", () => {
+    expect(classifyAIError({ code: "OPENAI_RATE_LIMITED" })).toBe(FALLBACK_REASONS.PROVIDER_RATE_LIMIT);
   });
 
   it("maps INVALID_API_KEY to UNKNOWN (not a user-actionable surface event)", () => {

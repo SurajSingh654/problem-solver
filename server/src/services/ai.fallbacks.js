@@ -518,7 +518,10 @@ export function buildFallbackVerdict(evidence) {
 // followUpQuestionIds (optional): when provided, we echo each id back with
 // score=null so the controller's followUpEvaluations.map alignment doesn't
 // break and the existing UI renders cleanly.
-export function buildFallbackReview({ followUpQuestionIds = [] } = {}) {
+export function buildFallbackReview({ followUpQuestionIds = [], reason: _reason = null } = {}) {
+  // _reason is currently unused; reserved for future reason-aware fallback
+  // logic (e.g. "we couldn't validate the AI's output: <violations>" copy).
+  // Underscore prefix opts out of no-unused-vars per project ESLint config.
   return {
     scores: {
       codeCorrectness: 5,

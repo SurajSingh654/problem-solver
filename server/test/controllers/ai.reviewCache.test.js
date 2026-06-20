@@ -183,6 +183,7 @@ vi.mock("../../src/lib/prisma.js", () => {
 });
 
 vi.mock("../../src/services/ai.service.js", () => ({
+    isAIEnabled: vi.fn(() => true),
     aiComplete: vi.fn(async () => {
         aiCompleteCalled += 1;
         return {

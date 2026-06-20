@@ -5,12 +5,13 @@
 import { aiComplete, isAIEnabled } from "./ai.service.js";
 
 export const FALLBACK_REASONS = Object.freeze({
-  AI_DISABLED:     "AI_DISABLED",
-  TIMEOUT:         "TIMEOUT",
-  RATE_LIMIT:      "RATE_LIMIT",
-  MODEL_NOT_FOUND: "MODEL_NOT_FOUND",
-  VALIDATION:      "VALIDATION",
-  UNKNOWN:         "UNKNOWN",
+  AI_DISABLED:         "AI_DISABLED",
+  TIMEOUT:             "TIMEOUT",
+  USER_RATE_LIMIT:     "USER_RATE_LIMIT",     // user daily cap (RATE_LIMITED)
+  PROVIDER_RATE_LIMIT: "PROVIDER_RATE_LIMIT", // OpenAI 429 (OPENAI_RATE_LIMITED)
+  MODEL_NOT_FOUND:     "MODEL_NOT_FOUND",
+  VALIDATION:          "VALIDATION",
+  UNKNOWN:             "UNKNOWN",
 });
 
 // Maps the wrapped-AIError codes that ai.service.js actually throws.
@@ -38,7 +39,8 @@ export const FALLBACK_REASONS = Object.freeze({
 export function classifyAIError(err) {
   const code = err?.code;
   if (code === "OPENAI_TIMEOUT")                                    return FALLBACK_REASONS.TIMEOUT;
-  if (code === "RATE_LIMITED" || code === "OPENAI_RATE_LIMITED")    return FALLBACK_REASONS.RATE_LIMIT;
+  if (code === "RATE_LIMITED")                                      return FALLBACK_REASONS.USER_RATE_LIMIT;
+  if (code === "OPENAI_RATE_LIMITED")                               return FALLBACK_REASONS.PROVIDER_RATE_LIMIT;
   if (code === "model_not_found" || code === "model_not_available") return FALLBACK_REASONS.MODEL_NOT_FOUND;
   return FALLBACK_REASONS.UNKNOWN;
 }

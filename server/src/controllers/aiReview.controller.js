@@ -17,9 +17,8 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_FAST } from "../config/env.js";
-import { aiComplete, AIError } from "../services/ai.service.js";
-import { validateReview } from "../services/ai.validators.js";
-import { buildFallbackReview } from "../services/ai.fallbacks.js";
+import { AIError } from "../services/ai.service.js";
+import { runAISurface, FALLBACK_REASONS } from "../services/aiSurface.js";
 import { applySolveMethodCaps } from "../utils/solveMethodCaps.js";
 import { computeReviewInputHash } from "../utils/aiReviewHash.js";
 
@@ -286,11 +285,12 @@ export async function reviewSolution(req, res) {
       }),
     );
 
-    // ── Call AI ────────────────────────────────────────
+    // ── Call AI via runAISurface() ─────────────────────
     const { solutionReviewPrompt, SOLUTION_REVIEW_FEWSHOT } = await import(
       "../services/ai.prompts.js"
     );
-    const { system, user } = solutionReviewPrompt({
+    const expectedQuestionIds = followUpAnswersForPrompt.map((q) => q.id);
+    const promptBundle = solutionReviewPrompt({
       problem: solution.problem,
       category: solution.problem.category,
       difficulty: solution.problem.difficulty,
@@ -307,7 +307,8 @@ export async function reviewSolution(req, res) {
       adminNotes: solution.problem.adminNotes,
       ragContext,
       followUpAnswers: followUpAnswersForPrompt,
-      patternBaseline, // ← new
+      followUpQuestionIds: expectedQuestionIds,
+      patternBaseline,
       categorySpecificData: solution.categorySpecificData || null,
       // ── Multi-tab fields for pickFinalTab + <progression> ──
       timeComplexity: solution.timeComplexity,
@@ -319,26 +320,22 @@ export async function reviewSolution(req, res) {
       alternativeMeta: solution.alternativeMeta,
     });
 
-    // ── AI call → validate → fallback if needed ───────────
-    // The grounded-AI pattern from the readiness verdict applied here:
-    //   1. Try the LLM. Transient errors (429/5xx) already retried inside
-    //      aiComplete; only terminal failures throw.
-    //   2. If the call returns, validate against validateReview's hard
-    //      rules (score ranges, flag/explainer consistency, follow-up
-    //      questionId echo-back, refusal detection).
-    //   3. On any AI error or validation failure → buildFallbackReview.
-    //      User sees a working "review unavailable, please retry"
-    //      response instead of a 500.
-    const expectedQuestionIds = followUpAnswersForPrompt.map((q) => q.id);
-    let aiResponse;
-    let usedReviewFallback = false;
-    let reviewViolations = [];
-    try {
-      aiResponse = await aiComplete({
-        systemPrompt: system,
-        userPrompt: user,
-        userId,
-        teamId,
+    // The grounded-AI pattern from the readiness verdict, factored out
+    // into runAISurface(): build → call → validate → fallback. The bundle
+    // returned by solutionReviewPrompt binds the validator + fallback to
+    // the producer (no drift between prompt schema and validator).
+    //
+    // USER_RATE_LIMIT preserves the user-visible HTTP 429 envelope (the
+    // user must wait until tomorrow). Every other failure mode — including
+    // PROVIDER_RATE_LIMIT (OpenAI 429, transient) — falls through to the
+    // safe placeholder review, mirroring pre-refactor behavior.
+    const surfaceResult = await runAISurface({
+      surface: "solution-review",
+      promptVersion: promptBundle.promptVersion,
+      buildPrompt: () => ({ system: promptBundle.system, user: promptBundle.user }),
+      validate: promptBundle.validate,
+      buildFallback: promptBundle.buildFallback,
+      aiOptions: {
         model: AI_MODEL_FAST,
         temperature: 0.6,
         maxTokens: 2000,
@@ -348,38 +345,31 @@ export async function reviewSolution(req, res) {
         // claim-with-evidence style. Cache-friendly — same array on
         // every call.
         fewShotMessages: SOLUTION_REVIEW_FEWSHOT,
-        surface: "solution-review",
-      });
-      const check = validateReview(aiResponse, {
-        followUpQuestionIds: expectedQuestionIds,
-      });
-      if (!check.valid) {
-        reviewViolations = check.violations;
-        console.warn(
-          `[solution-review] validation failed for solution ${solutionId}: ${reviewViolations.join(", ")}`,
-        );
-        aiResponse = buildFallbackReview({
-          followUpQuestionIds: expectedQuestionIds,
-        });
-        usedReviewFallback = true;
-      }
-    } catch (aiErr) {
-      // Hard AI failure (429, 5xx exhaustion, parse error, rate limit).
-      // Map RATE_LIMITED to a user-visible 429 — they explicitly hit the
-      // per-day cap and should know. Everything else falls back to a safe
-      // review so the user isn't blocked on transient infra problems.
-      if (aiErr instanceof AIError && aiErr.code === "RATE_LIMITED") {
-        return aiErrorResponse(res, aiErr, "Failed to generate AI feedback.");
-      }
-      console.warn(
-        `[solution-review] AI call failed (${aiErr?.code || aiErr?.message}); using fallback`,
+        userId,
+        teamId,
+      },
+      requestId: req.id,
+    });
+
+    // Branch on USER_RATE_LIMIT only — that's the per-user daily cap, where
+    // the user must wait until tomorrow. PROVIDER_RATE_LIMIT (OpenAI throttle)
+    // is transient and pre-refactor degraded gracefully to a fallback review;
+    // keeping that behavior here means it falls through to surfaceResult.data.
+    if (surfaceResult.reason === FALLBACK_REASONS.USER_RATE_LIMIT) {
+      return aiErrorResponse(
+        res,
+        new AIError("RATE_LIMITED", "AI daily limit reached. Try again tomorrow."),
+        "Failed to generate AI feedback.",
       );
-      aiResponse = buildFallbackReview({
-        followUpQuestionIds: expectedQuestionIds,
-      });
-      usedReviewFallback = true;
-      reviewViolations = [`llm-error:${aiErr?.code || aiErr?.message || "unknown"}`];
     }
+
+    const aiResponse = surfaceResult.data;
+    const usedReviewFallback = surfaceResult.fromFallback;
+    // reviewViolations is populated only on VALIDATION-reason fallbacks. For
+    // other fallback reasons (TIMEOUT, PROVIDER_RATE_LIMIT, AI_DISABLED, etc.)
+    // the array is empty — the structured [ai-surface] log carries the error
+    // code as the better diagnostic surface (was [`llm-error:CODE`] pre-refactor).
+    const reviewViolations = surfaceResult.violations || [];
 
     // ── Apply solveMethod caps (server-authoritative discount) ─────────
     // Skip on the fallback path: buildFallbackReview emits deterministic
