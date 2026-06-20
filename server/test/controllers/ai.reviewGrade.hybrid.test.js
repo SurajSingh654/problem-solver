@@ -50,7 +50,7 @@ vi.mock("../../src/config/env.js", async (importOriginal) => {
 });
 
 const { gradeReviewRecall } = await import(
-  "../../src/controllers/ai.controller.js"
+  "../../src/controllers/aiRecallGrade.controller.js"
 );
 
 describe("gradeReviewRecall (hybrid anchor)", () => {

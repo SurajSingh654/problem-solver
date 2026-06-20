@@ -12,8 +12,8 @@ import {
   findSimilarProblems,
   generateProblemsAI,
   generateReviewHints,
-  gradeReviewRecall,
 } from "../controllers/ai.controller.js";
+import { gradeReviewRecall } from "../controllers/aiRecallGrade.controller.js";
 
 const router = Router();
 router.use(authenticate);

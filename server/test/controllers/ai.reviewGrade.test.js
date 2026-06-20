@@ -61,7 +61,7 @@ vi.mock("../../src/config/env.js", async (importOriginal) => {
     return { ...real, AI_ENABLED: true };
 });
 
-import { gradeReviewRecall } from "../../src/controllers/ai.controller.js";
+import { gradeReviewRecall } from "../../src/controllers/aiRecallGrade.controller.js";
 
 const VALID_AI_GRADE = {
     pattern: { match: "YES", feedback: "HashMap is the same family as Hashing — solid recall." },
