@@ -1321,7 +1321,7 @@ export default function SubmitSolutionPage() {
                 {/* Progress bar */}
                 <div className="h-1 rounded-full bg-surface-3 overflow-hidden mb-2">
                     <div
-                        className="h-full bg-gradient-to-r from-brand to-success transition-all duration-300"
+                        className="h-full bg-gradient-to-r from-brand-400 to-success transition-all duration-300"
                         style={{ width: `${(completion.filled / Math.max(1, completion.total)) * 100}%` }}
                         aria-hidden="true"
                     />
@@ -1347,7 +1347,7 @@ export default function SubmitSolutionPage() {
                                 'px-4 py-2 rounded-lg text-sm font-bold transition-all flex-shrink-0 flex items-center gap-1.5',
                                 completion.filled < completion.total
                                     ? 'bg-surface-2 border border-dashed border-warning-line text-warning-fg cursor-not-allowed'
-                                    : 'bg-brand text-white hover:bg-brand-hover',
+                                    : 'bg-brand-400 text-white hover:bg-brand-500 shadow-glow-sm',
                                 submitSolution.isPending && 'opacity-60 cursor-wait',
                             )}
                         >
