@@ -10,7 +10,7 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { AI_ENABLED, AI_MODEL_FAST } from "../config/env.js";
-import { aiComplete, AIError } from "../services/ai.service.js";
+import { aiComplete } from "../services/ai.service.js";
 import {
   hasBothApproaches,
   isCodingSolution,
@@ -19,35 +19,7 @@ import {
   CANONICAL_PATTERN_LABELS,
   FAANG_CORE_PATTERNS,
 } from "../utils/patternTaxonomy.js";
-
-// Duplicated from ai.controller.js — consolidate to a shared util in a
-// future sprint (tracked as ai-error-response-consolidation).
-function aiErrorResponse(res, err, defaultMessage) {
-  if (err instanceof AIError) {
-    if (err.code === "RATE_LIMITED") {
-      return error(res, err.message, 429, err.code);
-    }
-    if (err.code === "OPENAI_RATE_LIMITED") {
-      return error(
-        res,
-        "AI is temporarily rate-limited. Please retry shortly.",
-        503,
-        err.code,
-      );
-    }
-    if (err.code === "OPENAI_DOWN" || err.code === "OPENAI_TIMEOUT") {
-      return error(res, "AI is temporarily unavailable.", 503, err.code);
-    }
-    if (err.code === "INVALID_API_KEY") {
-      return error(res, "AI is not configured correctly.", 500, err.code);
-    }
-    if (err.code === "PARSE_ERROR") {
-      return error(res, defaultMessage, 500, err.code);
-    }
-  }
-  console.error(`AI controller error: ${err?.message || err}`);
-  return error(res, defaultMessage, 500);
-}
+import { aiErrorResponse } from "../utils/aiErrorResponse.js";
 
 // ============================================================================
 // AI WEEKLY COACHING PLAN — Data-Driven, 6D-Grounded

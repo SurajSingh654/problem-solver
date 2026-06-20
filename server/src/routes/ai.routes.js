@@ -8,7 +8,7 @@ import {
   generateProblemContent,
   findSimilarProblems,
   generateProblemsAI,
-} from "../controllers/ai.controller.js";
+} from "../controllers/aiProblemGen.controller.js";
 import { reviewSolution } from "../controllers/aiReview.controller.js";
 import { gradeReviewRecall } from "../controllers/aiRecallGrade.controller.js";
 import { getHint, generateReviewHints } from "../controllers/aiHints.controller.js";
