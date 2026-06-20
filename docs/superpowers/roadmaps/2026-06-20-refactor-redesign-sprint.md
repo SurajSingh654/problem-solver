@@ -51,27 +51,28 @@ Audit categories (weighted toward AI/RAG/vector + security/reliability/reusabili
 13. **Test-gap analysis** — which surfaces lack regression guards. Tests assert *what code does*, not *what it should do* — wrong formulas pass tests.
 14. **Infrastructure security** — JWT signing/rotation, MCP token handling, password storage (bcrypt rounds), CORS, secrets handling, admin-endpoint gating, rate-limiter key collisions.
 
-### Sprint 2 — High-severity fixes (Wave 1)
-**Status:** queued (scope set by Sprint 1 audit)
-**Scope:** the audit's `high` findings get batched into a single fix sprint or split if too large. Each fix follows the validate→fix→test pattern.
+### Re-framing — sprints 2 onward are surface-by-surface, not severity-batched
 
-### Sprint 3 — Medium-severity fixes (Wave 2)
-**Status:** queued (scope set by Sprint 1 audit)
-**Scope:** the audit's `medium` findings + any high findings deferred from Sprint 2.
+Sprint 1 found ~80 issues across the codebase. The original Sprint 2/3 plan batched them by severity (HIGH wave first, MEDIUM wave second). That framing is wrong: it produces grab-bag PRs that touch unrelated files and skip the *refinement* work (re-architecture, consolidation, dead-code removal, missing-capability addition) that doesn't show up as a "bug" in an audit.
 
----
+**Reframed pattern (from Sprint 2 onward):**
 
-## Phase 2 — Foundation (~2-3 weeks, sprints 4-5)
+Each sprint takes one logical surface (e.g. "AI controller layer", "auth + email", "RAG + embeddings") and does the full pass on it: re-audit specific to that surface, refine architecture, fix bugs, remove dead code, add missing tests, optionally split mega-files, polish the public contract. The Sprint 1 audit feeds priorities into each surface sprint; it does not drive sprint structure on its own.
 
-### Sprint 4 — Shared design system
-**Status:** queued
-**Scope:** audit existing primitives (`Button`, `Input`, `Card`, `Modal`, `Toast`, `Spinner`); codify token usage (brand-{300..600}, surface-{0..3}, text-primary/secondary/tertiary, border-default/strong); add missing primitives (`<EmptyState>`, `<LoadingState>`, `<ErrorState>`); produce a 1-page reference doc.
-**Why now:** every Phase 3 sprint consumes these. Skipping means re-inventing per page.
+**Surface sprints planned (proposed order, see "Status tracker" for current state):**
 
-### Sprint 5 — Dead-code + frontend duplication purge
-**Status:** queued
-**Scope:** ESLint strict on `unused-vars` / `unused-imports`; manual cross-page dedup pass; replace deprecated `CONFIDENCE_LEVELS.emoji` field across 5 known consumers; server-side scan for orphaned utilities + unused Prisma fields.
-**Output:** smaller surface area for the page sprints; net LoC delta probably negative.
+- **Sprint 2: AI controller surface** — `ai.controller.js` (~2500 LoC, 7+ feature surfaces), plus `ai.prompts.js` / `ai.validators.js` / `ai.fallbacks.js` / `ai.service.js`. Concentrates 7 of the 15 HIGH findings (H3 race, H6 envelope adjacent, H7-H10 validation, H11 prompt injection). Largest surface; biggest payoff.
+- **Sprint 3: Security + auth surface** — `auth.controller.js` + `email.service.js` + `mcp/middleware/mcpAuth.js` + `designReferences.controller.js`. Addresses H1 (cross-team leak, live exploit), H12-H13 (zero tests on most security-sensitive controllers), reset-code single-use, MCP revocation propagation. Smaller surface; locks down user data immediately.
+- **Sprint 4: RAG + embeddings surface** — `embedding.service.js` + `notes.embedding.js` + RAG retrieval in `ai.controller.js` + vector indexes. Addresses H4 (silent NULL, "the Life of the project" per user), M10-M16 (note-delete race, RAG freshness, HNSW tuning, model upgrade path).
+- **Sprint 5: Problems + solutions controllers** — CRUD-heavy. Untested mutations (M28-M30), `data: ...spread` checks, soft-delete + restore flows, canonical augment race (M17).
+- **Sprint 6: Notes surface** — `notes.controller.js` + `notesAiTemplate.controller.js` (H6 envelope bypass) + AI features (M31), embeddings overlap with Sprint 4.
+- **Sprint 7: Persist-rate-limiter migration** — H5 (rate-limiter doubles at >1 replica, blocks horizontal scale). Cross-cutting infrastructure work.
+- **Sprint 8: Test foundation + concurrency tests** — Prisma soft-delete middleware tests (H15), Zod schema tests (M34), concurrency tests (M35), test-smell remediation. Pays off every later sprint.
+- **Sprint 9: Frontend foundation — design system + dead code** — was the original Sprint 4/5; runs after backend surfaces stabilize so polish work has a stable backend to build on.
+- **Sprints 10+: Frontend page-by-page** — Review Queue, Problem Detail, Dashboard/6D, Auth, Mock Interview, Design Studio, Teaching. Same pattern as Submit Solution.
+- **Sprints final: Architectural splits** — `SubmitSolutionPage.jsx` per-category split, `AIReviewCard.jsx` subcomponents, `ai.controller.js` per-surface split (already addressed inside Sprint 2 if it makes sense to split there).
+
+This produces fewer "fix-only" sprints and more "surface owned end-to-end" sprints. Each sprint ships a coherent story.
 
 ---
 
@@ -98,65 +99,31 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 
 ---
 
-## Phase 4 — Heavy interactive surfaces (~2-3 weeks, sprints 10-12)
-
-### Sprint 10 — Mock Interview UX
-**Status:** queued
-**Scope:** realtime WebSocket flows, transcript rendering, phase indicator, debrief view, pre-session confidence capture.
-
-### Sprint 11 — Design Studio UX
-**Status:** queued
-**Scope:** Excalidraw integration polish, scenario testing card, evaluation results, INTERVIEW-mode pairing handoff.
-
-### Sprint 12 — Teaching Sessions
-**Status:** queued
-**Scope:** live rooms, peer ratings, scheduler UX, flag handling.
-
----
-
-## Phase 5 — Architectural cleanups (~1-2 weeks, sprints 13-14)
-
-### Sprint 13 — Split mega-files (client)
-**Status:** queued
-**Scope:** `SubmitSolutionPage.jsx` (1241 LoC) → per-category page modules (`/coding`, `/hr`, `/behavioral`, `/cs-fundamentals`, `/sql`); `AIReviewCard.jsx` (1074 LoC) → focused subcomponents (DimensionBars, FollowUpReview, FlagsRibbon, etc.).
-**Risk:** every PR for the next month touches the new structure. Adoption window matters.
-
-### Sprint 14 — Split server `ai.controller.js`
-**Status:** queued
-**Scope:** the controller has accumulated 7+ feature surfaces (canonical, recall-grade, review, augment, follow-up eval, embedding-related). Split per surface, mirror what Sprint 13 does on the client.
-
----
-
 ## Out of scope for this roadmap
 
 - Full greenfield rewrite (rejected upfront — see "Why a roadmap, not a rewrite")
-- Schema redesign (current Prisma model is sound; no breaking changes)
+- Schema redesign across the board (current Prisma model is mostly sound; per-surface schema refinements happen inside their own surface sprint)
 - Stack swap (Node/React/Postgres/Tailwind all current)
-- New product features (sprint focus is polish + refactor; new features go through the normal feature-dev process in parallel)
-- Save-draft / autosave on Submit (separate feature spec, queued post-sprint)
-- Architectural split of the 1241-line page DURING Phase 2 polish (Sprint 10 handles it cleanly with foundations in place)
+- New product features (sprint focus is refactor + refine + fix; new features go through the normal feature-dev process in parallel)
 
 ---
 
 ## Status tracker
 
-| # | Sprint | Status | Spec | Shipped |
+| # | Sprint (surface) | Status | Spec | Shipped |
 |---|---|---|---|---|
 | 0 | Submit Solution Page UX polish | ✅ shipped | [`2026-06-19-submit-solution-ux-polish-design.md`](../specs/2026-06-19-submit-solution-ux-polish-design.md) | 2026-06-20 |
-| 1 | Wholesale backend correctness audit | UP NEXT (in progress) | — | — |
-| 2 | High-severity fixes (Wave 1) | queued (scope from Sprint 1) | — | — |
-| 3 | Medium-severity fixes (Wave 2) | queued (scope from Sprint 1) | — | — |
-| 4 | Shared design system | queued | — | — |
-| 5 | Dead-code + duplication purge | queued | — | — |
-| 6 | Review Queue Page | queued | — | — |
-| 7 | Problem Detail Page | queued | — | — |
-| 8 | Dashboard + 6D + Verdict | queued | — | — |
-| 9 | Auth + Onboarding | queued | — | — |
-| 10 | Mock Interview UX | queued | — | — |
-| 11 | Design Studio UX | queued | — | — |
-| 12 | Teaching Sessions | queued | — | — |
-| 13 | Mega-file splits (client) | queued | — | — |
-| 14 | `ai.controller.js` split | queued | — | — |
+| 1 | Wholesale backend correctness audit | ✅ shipped | [`2026-06-20-backend-correctness-audit.md`](../audits/2026-06-20-backend-correctness-audit.md) | 2026-06-20 |
+| 2 | AI controller surface (refine + fix + remove + add) | UP NEXT | — | — |
+| 3 | Security + auth surface | queued | — | — |
+| 4 | RAG + embeddings surface | queued | — | — |
+| 5 | Problems + solutions controllers surface | queued | — | — |
+| 6 | Notes surface | queued | — | — |
+| 7 | Persist-rate-limiter migration | queued | — | — |
+| 8 | Test foundation + concurrency tests | queued | — | — |
+| 9 | Frontend foundation (design system + dead code) | queued | — | — |
+| 10+ | Frontend page-by-page (Review, Problem Detail, Dashboard, Auth, Mock Interview, Design Studio, Teaching) | queued | — | — |
+| Final | Architectural splits (client mega-files, server ai.controller.js if not done in Sprint 2) | queued | — | — |
 
 ---
 
