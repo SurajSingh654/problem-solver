@@ -7,38 +7,53 @@ function tupleKey(item) {
 /**
  * Dedupe + cap alternatives.
  *
- * Drops:
- * - Items identical to primary in (pattern, timeComplexity, spaceComplexity)
- * - Items that duplicate another alternative's name (keeps first)
- * - Items that duplicate another alternative's (pattern, time, space) tuple (keeps first)
+ * Returns { kept, dropped } where dropped is an array of
+ * { item, reason }, reason ∈ "equals-primary" | "dup-name" |
+ * "dup-tuple" | "over-cap".
  *
- * Caps the result at 3 items. Returns [] for non-array input.
+ * Items that fail the `typeof item === "object"` shape check are
+ * silently skipped (not counted as drops) — those are handled at the
+ * upstream Zod-validation layer in processAlternatives.
  *
- * Lenient by design: input that doesn't conform to expected shape is ignored,
- * not rejected. Caller validates each item separately via Zod.
+ * Caps the kept result at 3 items. Returns { kept: [], dropped: [] }
+ * for non-array input.
  */
 export function dedupAndCapAlternatives(input, primary) {
-  if (!Array.isArray(input)) return [];
+  if (!Array.isArray(input)) return { kept: [], dropped: [] };
 
   const primaryTuple = primary ? tupleKey(primary) : null;
   const seenNames = new Set();
   const seenTuples = new Set();
-  const out = [];
+  const kept = [];
+  const dropped = [];
 
   for (const item of input) {
     if (!item || typeof item !== "object") continue;
-    if (out.length >= MAX_ALTERNATIVES) break;
+
+    if (kept.length >= MAX_ALTERNATIVES) {
+      dropped.push({ item, reason: "over-cap" });
+      continue;
+    }
 
     const itemTuple = tupleKey(item);
 
-    if (primaryTuple && itemTuple === primaryTuple) continue;
-    if (seenNames.has(item.name)) continue;
-    if (seenTuples.has(itemTuple)) continue;
+    if (primaryTuple && itemTuple === primaryTuple) {
+      dropped.push({ item, reason: "equals-primary" });
+      continue;
+    }
+    if (seenNames.has(item.name)) {
+      dropped.push({ item, reason: "dup-name" });
+      continue;
+    }
+    if (seenTuples.has(itemTuple)) {
+      dropped.push({ item, reason: "dup-tuple" });
+      continue;
+    }
 
     seenNames.add(item.name);
     seenTuples.add(itemTuple);
-    out.push(item);
+    kept.push(item);
   }
 
-  return out;
+  return { kept, dropped };
 }

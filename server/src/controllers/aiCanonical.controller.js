@@ -15,10 +15,8 @@ import { AI_MODEL_FAST } from "../config/env.js";
 import { aiComplete } from "../services/ai.service.js";
 import {
   validateCanonicalAnswer,
-  validateCanonicalAlternative,
-  validateAlternativeAllowingPrimaryPattern,
+  processAlternatives,
 } from "../services/ai.validators.js";
-import { dedupAndCapAlternatives } from "../utils/canonicalAltDedup.js";
 import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 
 // ============================================================================
@@ -152,7 +150,7 @@ Category: ${problem.category}`;
     surface: "canonical-generate",
   });
 
-  return validateCanonicalAnswer(parsed);
+  return validateCanonicalAnswer(parsed, { problemId: problem.id, surface: "canonical-generate" });
 }
 
 /**
@@ -190,16 +188,9 @@ Identify 0-3 valid alternatives. Return JSON only.`;
   });
 
   if (!parsed || typeof parsed !== "object") return [];
-  const rawAlts = Array.isArray(parsed.alternatives) ? parsed.alternatives : [];
 
-  const validatedAlts = rawAlts
-    .map((alt) => {
-      if (alt && typeof alt === "object" && alt.pattern === primary.pattern) {
-        return validateAlternativeAllowingPrimaryPattern(alt);
-      }
-      return validateCanonicalAlternative(alt);
-    })
-    .filter((a) => a !== null);
-
-  return dedupAndCapAlternatives(validatedAlts, primary);
+  return processAlternatives(parsed.alternatives, primary, {
+    problemId: problem.id,
+    surface: "canonical-augment",
+  });
 }

@@ -1547,7 +1547,75 @@ export function validateAlternativeAllowingPrimaryPattern(parsed) {
   return result.success ? result.data : null;
 }
 
-export function validateCanonicalAnswer(parsed) {
+/**
+ * Validate, dedup, and cap canonical alternatives, emitting a structured
+ * `[canonical:alt-dropped]` console.warn per drop so admin/debug tooling
+ * can trace why an alternative was rejected.
+ *
+ * Drops collected and logged:
+ *   zod-invalid     — per-item Zod validation failed
+ *   equals-primary  — same (pattern, time, space) tuple as primary
+ *   dup-name        — duplicate of an earlier alt's name
+ *   dup-tuple       — duplicate of an earlier alt's tuple
+ *   over-cap        — beyond MAX_ALTERNATIVES (3)
+ *
+ * @param {Array} rawAlts  — raw alternatives array from AI output
+ * @param {Object} primary — canonical primary (validated upstream)
+ * @param {Object} ctx
+ * @param {string|null} [ctx.problemId] — for log correlation
+ * @param {string} ctx.surface — "canonical-generate" | "canonical-augment"
+ * @returns {Array} survivor alternatives (validated, deduped, capped at 3)
+ */
+export function processAlternatives(rawAlts, primary, { problemId = null, surface }) {
+  const drops = [];
+  const validated = [];
+
+  const arr = Array.isArray(rawAlts) ? rawAlts : [];
+  for (const alt of arr) {
+    const v = alt && typeof alt === "object" && alt.pattern === primary.pattern
+      ? validateAlternativeAllowingPrimaryPattern(alt)
+      : validateCanonicalAlternative(alt);
+    if (v) {
+      validated.push(v);
+    } else {
+      drops.push({ item: alt, reason: "zod-invalid" });
+    }
+  }
+
+  const { kept, dropped } = dedupAndCapAlternatives(validated, primary);
+  drops.push(...dropped);
+
+  // Escape backslash first, then double-quote, so AI-hallucinated values
+  // containing those characters produce grep-uniform log lines. Order
+  // matters: a "-first pass would double-escape backslashes the second
+  // pass introduces.
+  const escapeLogValue = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+  for (const drop of drops) {
+    const name = drop.item && typeof drop.item === "object" && typeof drop.item.name === "string"
+      ? drop.item.name
+      : "?";
+    const pattern = drop.item && typeof drop.item === "object" && typeof drop.item.pattern === "string"
+      ? drop.item.pattern
+      : "?";
+    const parts = [
+      `surface=${surface}`,
+      ...(problemId ? [`problemId=${problemId}`] : []),
+      `reason=${drop.reason}`,
+      `name="${escapeLogValue(name)}"`,
+      `pattern="${escapeLogValue(pattern)}"`,
+    ];
+    console.warn(`[canonical:alt-dropped] ${parts.join(" ")}`);
+  }
+
+  return kept;
+}
+
+// surface defaults to "canonical-generate" for backward-compatibility with
+// existing test fixtures that call validateCanonicalAnswer(parsed) without
+// ctx. New production callers MUST pass ctx explicitly so logs label drops
+// with the correct surface (canonical-generate vs canonical-augment).
+export function validateCanonicalAnswer(parsed, { problemId = null, surface = "canonical-generate" } = {}) {
   if (parsed == null || typeof parsed !== "object") return null;
   // Strip `alternatives` before strict-schema parse — canonicalAnswerSchema is
   // .strict() and would reject unknown keys. Alternatives are processed separately.
@@ -1556,20 +1624,10 @@ export function validateCanonicalAnswer(parsed) {
   if (!result.success) return null;
   const primary = result.data;
 
-  // Process alternatives independently — lenient: drop invalid items, never reject the whole answer.
-  const rawAlts = Array.isArray(rawAltsInput) ? rawAltsInput : [];
-  const validatedAlts = rawAlts
-    .map((alt) => {
-      if (alt && typeof alt === "object" && alt.pattern === primary.pattern) {
-        return validateAlternativeAllowingPrimaryPattern(alt);
-      }
-      return validateCanonicalAlternative(alt);
-    })
-    .filter((a) => a !== null);
+  // Validate + dedup + cap alternatives, emitting a structured log per drop.
+  const alternatives = processAlternatives(rawAltsInput, primary, { problemId, surface });
 
-  const dedupedAlts = dedupAndCapAlternatives(validatedAlts, primary);
-
-  return { ...primary, alternatives: dedupedAlts };
+  return { ...primary, alternatives };
 }
 
 // ── Solution review validator ───────────────────────────────────────
