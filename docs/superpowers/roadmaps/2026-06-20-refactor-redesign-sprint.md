@@ -114,7 +114,8 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 |---|---|---|---|---|
 | 0 | Submit Solution Page UX polish | ✅ shipped | [`2026-06-19-submit-solution-ux-polish-design.md`](../specs/2026-06-19-submit-solution-ux-polish-design.md) | 2026-06-20 |
 | 1 | Wholesale backend correctness audit | ✅ shipped | [`2026-06-20-backend-correctness-audit.md`](../audits/2026-06-20-backend-correctness-audit.md) | 2026-06-20 |
-| 2 | AI controller surface (refine + fix + remove + add) | UP NEXT | — | — |
+| 2 | AI controller surface (split + scaffolding extraction) | ✅ shipped | [`2026-06-20-ai-controller-surface-design.md`](../specs/2026-06-20-ai-controller-surface-design.md) | 2026-06-20 |
+| 2.5 | AI feature surface deep-fixes (Pass B reviewSolution + H3 race + H7/H9/H10 + solutionReviewPrompt contract) | queued (carved from Sprint 2 deferrals) | — | — |
 | 3 | Security + auth surface | queued | — | — |
 | 4 | RAG + embeddings surface | queued | — | — |
 | 5 | Problems + solutions controllers surface | queued | — | — |
