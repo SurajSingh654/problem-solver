@@ -151,6 +151,8 @@ let updatedHash = null;
 
 vi.mock("../../src/lib/prisma.js", () => {
     const tx = {
+        // H3 fix: controller now does SELECT FOR UPDATE inside the tx.
+        $queryRaw: vi.fn(async () => [{ id: storedSolution?.id ?? "sol_x" }]),
         solution: {
             update: vi.fn(async ({ data }) => {
                 if (data.aiFeedbackInputHash !== undefined)
@@ -162,6 +164,7 @@ vi.mock("../../src/lib/prisma.js", () => {
         solutionAttempt: {
             findFirst: vi.fn(async () => null),
             create: vi.fn(async () => ({})),
+            update: vi.fn(async () => ({})),
         },
         problem: { update: vi.fn(async () => ({})) },
     };

@@ -32,7 +32,14 @@ vi.mock("../../src/lib/prisma.js", () => ({
     $queryRawUnsafe: vi.fn(async () => []),
     $transaction: vi.fn(async (fn) => {
       const tx = {
+        // H3 fix: controller now does SELECT FOR UPDATE + findUnique inside
+        // the transaction. Mock both so the tx body completes.
+        $queryRaw: vi.fn(async () => [{ id: solutionRow.id }]),
         solution: {
+          findUnique: vi.fn(async () => ({
+            aiFeedback: solutionRow.aiFeedback,
+            reviewCount: solutionRow.reviewCount || 0,
+          })),
           update: vi.fn(async ({ data }) => {
             if (data.aiFeedback) updatedFeedback = data.aiFeedback;
             return solutionRow;

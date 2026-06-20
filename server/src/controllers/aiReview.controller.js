@@ -466,6 +466,9 @@ export async function reviewSolution(req, res) {
 
     const reviewRecord = {
       reviewedAt: new Date().toISOString(),
+      // reviewNumber is a placeholder here; it gets overwritten inside the
+      // transaction below using the row-locked reviewCount so concurrent
+      // reviews on the same solution can't both compute reviewNumber: 1.
       reviewNumber: (solution.reviewCount || 0) + 1,
       overallScore,
       dimensionScores: dimScores,
@@ -491,18 +494,34 @@ export async function reviewSolution(req, res) {
       fallbackReason: usedReviewFallback ? reviewViolations : undefined,
     };
 
-    const existingFeedback = Array.isArray(solution.aiFeedback)
-      ? solution.aiFeedback
-      : solution.aiFeedback
-        ? [solution.aiFeedback]
-        : [];
-    const updatedFeedback = [...existingFeedback, reviewRecord];
-
+    // H3 fix: read aiFeedback + reviewCount INSIDE the transaction with a
+    // SELECT FOR UPDATE row-lock so two concurrent reviews on the same
+    // solution serialize at the persistence boundary instead of racing on
+    // a stale pre-tx snapshot. reviewCount: { increment: 1 } below stays
+    // as Prisma's atomic increment (already race-safe at the SQL layer).
     // Also freeze this review onto the most-recent SolutionAttempt so the
-    // attempt-history UI can show AI score deltas per attempt. The attempt
-    // log is never nullable once Commit 1 has shipped; this is a best-effort
-    // update — missing attempts just means older data (pre-history).
+    // attempt-history UI can show AI score deltas per attempt.
+    let updatedFeedback = [];
+    let existingFeedback = [];
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM solutions WHERE id = ${solutionId} FOR UPDATE`;
+
+      const locked = await tx.solution.findUnique({
+        where: { id: solutionId },
+        select: { aiFeedback: true, reviewCount: true },
+      });
+      if (!locked) throw new Error(`Solution disappeared mid-review: ${solutionId}`);
+
+      existingFeedback = Array.isArray(locked.aiFeedback)
+        ? locked.aiFeedback
+        : locked.aiFeedback
+          ? [locked.aiFeedback]
+          : [];
+      // Override reviewNumber using the locked reviewCount — pre-tx value
+      // would race with another concurrent review (both would compute 1).
+      reviewRecord.reviewNumber = (locked.reviewCount || 0) + 1;
+      updatedFeedback = [...existingFeedback, reviewRecord];
+
       await tx.solution.update({
         where: { id: solutionId },
         data: {
