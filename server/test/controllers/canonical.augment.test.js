@@ -63,7 +63,7 @@ vi.mock("../../src/services/ai.service.js", () => ({
 }));
 
 const { augmentCanonicalAlternatives } = await import(
-  "../../src/controllers/ai.controller.js"
+  "../../src/controllers/aiCanonical.controller.js"
 );
 const { getCanonical } = await import(
   "../../src/controllers/problems.controller.js"

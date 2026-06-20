@@ -20,7 +20,7 @@ vi.mock("../../src/services/ai.service.js", () => ({
 }));
 
 const { generateCanonicalAnswer } = await import(
-  "../../src/controllers/ai.controller.js"
+  "../../src/controllers/aiCanonical.controller.js"
 );
 
 const problem = {

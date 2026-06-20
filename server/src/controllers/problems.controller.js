@@ -8,7 +8,7 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { normalizeSourceLists } from "../utils/sourceListTaxonomy.js";
-import { generateCanonicalAnswer, augmentCanonicalAlternatives } from "./ai.controller.js";
+import { generateCanonicalAnswer, augmentCanonicalAlternatives } from "./aiCanonical.controller.js";
 import { isAIEnabled } from "../services/ai.service.js";
 import { canonicalPatchSchema } from "../schemas/problem.schema.js";
 
