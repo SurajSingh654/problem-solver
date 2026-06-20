@@ -45,8 +45,8 @@ vi.mock("../../src/utils/sm2.js", () => ({
     confidenceToQuality: () => 3,
     estimateRetention: () => 1,
 }));
-vi.mock("../ai.controller.js", () => ({}));
-vi.mock("../../src/controllers/ai.controller.js", () => ({
+vi.mock("../aiReview.controller.js", () => ({}));
+vi.mock("../../src/controllers/aiReview.controller.js", () => ({
     reviewSolution: vi.fn(),
 }));
 

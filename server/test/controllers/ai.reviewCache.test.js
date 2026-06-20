@@ -26,7 +26,7 @@
 // ============================================================================
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { computeReviewInputHash } from "../../src/controllers/ai.controller.js";
+import { computeReviewInputHash } from "../../src/utils/aiReviewHash.js";
 
 // ── A) Hash invariants — pure unit tests ────────────────────────────
 
@@ -234,7 +234,7 @@ vi.mock("../../src/config/env.js", async (importOriginal) => {
     return { ...real, AI_ENABLED: true };
 });
 
-import { reviewSolution } from "../../src/controllers/ai.controller.js";
+import { reviewSolution } from "../../src/controllers/aiReview.controller.js";
 import { invoke, makeReq } from "./_harness.js";
 
 const baseSolutionRow = {

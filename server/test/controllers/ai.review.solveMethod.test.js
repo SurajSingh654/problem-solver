@@ -75,7 +75,7 @@ vi.mock("../../src/config/env.js", async (importOriginal) => {
   return { ...real, AI_ENABLED: true };
 });
 
-const { reviewSolution } = await import("../../src/controllers/ai.controller.js");
+const { reviewSolution } = await import("../../src/controllers/aiReview.controller.js");
 
 const validAiPayload = () => ({
   scores: {

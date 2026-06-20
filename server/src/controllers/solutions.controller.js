@@ -10,7 +10,7 @@ import {
   confidenceToQuality,
   estimateRetention,
 } from "../utils/sm2.js";
-import { reviewSolution } from "./ai.controller.js";
+import { reviewSolution } from "./aiReview.controller.js";
 
 // After the existing embedding generation:
 import { recomputeSkillsFromSolution } from '../services/skillComputation.service.js'

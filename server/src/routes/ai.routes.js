@@ -5,7 +5,6 @@ import {
   requireTeamAdmin,
 } from "../middleware/team.middleware.js";
 import {
-  reviewSolution,
   getHint,
   getWeeklyPlan,
   generateProblemContent,
@@ -13,6 +12,7 @@ import {
   generateProblemsAI,
   generateReviewHints,
 } from "../controllers/ai.controller.js";
+import { reviewSolution } from "../controllers/aiReview.controller.js";
 import { gradeReviewRecall } from "../controllers/aiRecallGrade.controller.js";
 
 const router = Router();
