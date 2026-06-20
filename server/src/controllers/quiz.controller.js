@@ -11,8 +11,9 @@ import {
   validateQuizAnalysis,
 } from "../services/ai.validators.js";
 
-// Map AIError → HTTP envelope. Mirrors the helper in ai.controller.js so
-// every AI controller surfaces failure modes consistently.
+// Map AIError → HTTP envelope. Local copy of the shared `aiErrorResponse`
+// in `../utils/aiErrorResponse.js` — kept inline here to avoid pulling
+// the import in for now. TODO: consolidate to the shared util.
 function aiErrorResponse(res, err, defaultMessage) {
   if (err instanceof AIError) {
     if (err.code === "RATE_LIMITED")

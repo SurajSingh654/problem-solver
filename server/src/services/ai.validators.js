@@ -1523,7 +1523,7 @@ export function validateCanonicalAlternative(parsed) {
 // Used internally when an alternative's pattern equals the primary's pattern;
 // skips the taxonomy-membership refinement on `pattern` and validates the rest.
 // Module-scoped to avoid rebuilding the Zod schema on every call (the
-// augmenter in ai.controller.js calls this in a hot path).
+// augmenter in aiCanonical.controller.js calls this in a hot path).
 const canonicalAlternativeRelaxedSchema = z
   .object({
     name: z

@@ -2,7 +2,7 @@
 // AUTO-NOTE FROM AI SOLUTION REVIEW
 // ============================================================================
 //
-// Triggered (fire-and-forget) by ai.controller.js::reviewSolution after a
+// Triggered (fire-and-forget) by aiReview.controller.js::reviewSolution after a
 // NEW review lands (cache hits skip — note already exists). Generates a
 // structured study note from (problem, solution, AI review), persists it
 // with linkedEntityType=SOLUTION, then auto-extracts flashcards on the
