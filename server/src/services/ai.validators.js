@@ -1639,6 +1639,7 @@ export function validateReview(review, { followUpQuestionIds = [] } = {}) {
   // ── prose fields ──
   if (!isNonEmptyString(review.improvement)) violations.push("improvement-empty");
   if (!isNonEmptyString(review.interviewTip)) violations.push("interviewTip-empty");
+  if (!isNonEmptyString(review.readinessVerdict)) violations.push("readinessVerdict-empty");
 
   // ── complexityCheck shape ──
   const cc = review.complexityCheck;
@@ -1671,7 +1672,7 @@ export function validateReview(review, { followUpQuestionIds = [] } = {}) {
   // ── refusal-detection: AI shouldn't flat-out refuse to review ──
   // Catches cases where the model returns a nominally-valid JSON shape but the
   // prose is "I cannot help with this request" — would otherwise pass schema.
-  const refusalProbe = `${review.improvement || ""} ${review.interviewTip || ""}`.toLowerCase();
+  const refusalProbe = `${review.improvement || ""} ${review.interviewTip || ""} ${review.readinessVerdict || ""}`.toLowerCase();
   if (/^i (cannot|can't|am unable to)/.test(refusalProbe.trim()) ||
       refusalProbe.includes("i cannot review") ||
       refusalProbe.includes("i'm unable to review")) {

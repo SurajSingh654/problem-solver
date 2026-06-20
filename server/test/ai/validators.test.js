@@ -2631,10 +2631,75 @@ describe('validateReview — rejections', () => {
         expect(r.violations).toContain('refusal-detected')
     })
 
+    it('rejects refusal-style readinessVerdict (symmetric with improvement/interviewTip)', () => {
+        // Symmetry guard: all three prose fields must be in the refusal probe.
+        // If a future refactor removes readinessVerdict from the probe, this fails.
+        const v = {
+            ...VALID_REVIEW,
+            readinessVerdict: "I cannot review this submission.",
+        }
+        const r = validateReview(v)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('refusal-detected')
+    })
+
     it('rejects malformed scores object', () => {
         const r = validateReview({ ...VALID_REVIEW, scores: 'oops' })
         expect(r.valid).toBe(false)
         expect(r.violations).toContain('scores-shape')
+    })
+})
+
+describe('validateReview — followUpEvaluations empty (H7 audit-verified regression)', () => {
+    // The Sprint 1 backend correctness audit (lines 97-101 of
+    // 2026-06-20-backend-correctness-audit.md) flagged this case as a HIGH bug,
+    // claiming validateReview does not fail when followUpEvaluations is empty
+    // despite followUpQuestionIds being non-empty. Close reading of the
+    // validator (ai.validators.js:1652-1669) shows the per-qid missing-id
+    // loop already catches this case — every input qid produces a missing
+    // violation. The audit finding was a false positive.
+    //
+    // This test locks in the existing correct behavior so a future refactor
+    // of the followUpEvaluations validation block (e.g. extracting it into a
+    // helper) can't silently regress this guarantee.
+    it('rejects empty followUpEvaluations when followUpQuestionIds is non-empty', () => {
+        const r = validateReview(
+            { ...VALID_REVIEW, followUpEvaluations: [] },
+            { followUpQuestionIds: ['fu-1', 'fu-2'] },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('followUp-missing-questionId:fu-1')
+        expect(r.violations).toContain('followUp-missing-questionId:fu-2')
+    })
+})
+
+describe('validateReview — readinessVerdict (H9)', () => {
+    // The system prompt (ai.prompts.js:553) declares output must include
+    // `readinessVerdict: <string>` but validateReview never enforced it.
+    // AI could omit; validation passed; downstream UI ("Ready for X" line)
+    // and the 6D verdict log feed silently received undefined / empty.
+    // Sprint 2.6 closes this gap by adding a non-empty-string check
+    // alongside the existing improvement / interviewTip checks.
+
+    it('passes when readinessVerdict is a non-empty string', () => {
+        const r = validateReview({
+            ...VALID_REVIEW,
+            readinessVerdict: 'Junior-ready on hashing problems.',
+        })
+        expect(r.valid).toBe(true)
+    })
+
+    it('fails when readinessVerdict is missing', () => {
+        const { readinessVerdict, ...withoutVerdict } = VALID_REVIEW
+        const r = validateReview(withoutVerdict)
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('readinessVerdict-empty')
+    })
+
+    it('fails when readinessVerdict is an empty string', () => {
+        const r = validateReview({ ...VALID_REVIEW, readinessVerdict: '' })
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('readinessVerdict-empty')
     })
 })
 
