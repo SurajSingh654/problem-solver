@@ -68,6 +68,7 @@
 // ============================================================================
 
 import { SOLVE_METHOD_REQUIRED_AFTER } from "./patternMastery.js";
+import { stripHtml } from "./stripHtml.js";
 
 export const DEPTH_STATES = Object.freeze({
   NONE:       { points: 0,   label: "None"       },
@@ -87,13 +88,6 @@ const RECALL_QUALITY_FLOOR = 4;    // ReviewAttempt.quality ≥ this for OWNED (
 const RECALL_TEXT_FLOOR    = 80;   // recallText length floor — 20 chars is a label, not retrieval; 80 forces a sentence
 const CALIBRATION_FLOOR    = 0.70; // severe Dunning-Kruger → 30% off
 const CALIBRATION_CEILING  = 1.00; // calibration is expected, not a bonus
-
-// Naive HTML strip — D2 reads HTML-rich text from RichTextEditor. Same logic
-// the legacy controller uses; kept local here so the utility is self-contained.
-function stripHtml(s) {
-  if (typeof s !== "string") return "";
-  return s.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
-}
 
 function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));

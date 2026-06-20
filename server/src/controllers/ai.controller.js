@@ -43,6 +43,7 @@ import {
 } from "../utils/patternTaxonomy.js";
 import { CANONICAL_SOURCE_LISTS } from "../utils/sourceListTaxonomy.js";
 import { applySolveMethodCaps } from "../utils/solveMethodCaps.js";
+import { stripHtml } from "../utils/stripHtml.js";
 
 // ============================================================================
 // CANONICAL ANSWER GENERATOR
@@ -2232,11 +2233,6 @@ Output STRICT JSON (no matchedApproach — the server computed it):
   "suggestedConfidence": <1-5>
 }`;
 
-function stripHtmlServer(html) {
-  if (typeof html !== "string") return "";
-  return html.replace(/<[^>]*>/g, "").trim();
-}
-
 function clampConfidence(n) {
   const v = Math.round(Number(n));
   if (!Number.isFinite(v)) return 3;
@@ -2422,9 +2418,9 @@ Grade each field. Return JSON only.`;
         .join(" / ") || "(not recorded)";
       const notesPattern = (solution.patterns ?? []).join(", ") || "(none)";
       const notesInsight =
-        stripHtmlServer(solution.keyInsight) ||
-        stripHtmlServer(solution.feynmanExplanation) ||
-        stripHtmlServer(solution.optimizedApproach) ||
+        stripHtml(solution.keyInsight) ||
+        stripHtml(solution.feynmanExplanation) ||
+        stripHtml(solution.optimizedApproach) ||
         "(none)";
       const notesComplexity = [solution.timeComplexity, solution.spaceComplexity]
         .filter(Boolean)
@@ -2476,9 +2472,9 @@ Grade each field. Return JSON only.`;
       // ── Legacy notes-anchor path (canonical not yet generated) ────────────
       const referencePattern = (solution.patterns ?? []).join(", ") || "(not recorded)";
       const referenceInsight =
-        stripHtmlServer(solution.keyInsight) ||
-        stripHtmlServer(solution.feynmanExplanation) ||
-        stripHtmlServer(solution.optimizedApproach) ||
+        stripHtml(solution.keyInsight) ||
+        stripHtml(solution.feynmanExplanation) ||
+        stripHtml(solution.optimizedApproach) ||
         "(not recorded)";
       const referenceComplexity = [solution.timeComplexity, solution.spaceComplexity]
         .filter(Boolean)

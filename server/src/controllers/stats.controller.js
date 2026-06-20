@@ -49,11 +49,7 @@ import {
 } from "../services/ai.validators.js";
 import { buildFallbackVerdict } from "../services/ai.fallbacks.js";
 import { AI_MODEL_PREMIUM, AI_MODEL_FAST } from "../config/env.js";
-
-function stripHtml(html) {
-  if (!html) return "";
-  return html.replace(/<[^>]*>/g, "").trim();
-}
+import { stripHtml } from "../utils/stripHtml.js";
 
 // ============================================================================
 // QUIZ SUBJECT → 6D DIMENSION MAPPER

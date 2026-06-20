@@ -73,6 +73,7 @@ import {
   RECALL_QUALITY_FLOOR,
   RECALL_TEXT_FLOOR,
 } from "./solutionDepth.js";
+import { stripHtml } from "./stripHtml.js";
 
 export const OPT_STATES = Object.freeze({
   NONE:       { points: 0,   label: "None"       },
@@ -105,12 +106,6 @@ export function normalizeBigO(s) {
     .replace(/nlog\(n\)/g, "nlogn")
     .replace(/n\(logn\)/g, "nlogn")
     .replace(/n\*n/g, "n^2");
-}
-
-// Naive HTML strip — D4 reads HTML-rich text from RichTextEditor.
-function stripHtml(s) {
-  if (typeof s !== "string") return "";
-  return s.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
 }
 
 function clamp(n, lo, hi) {
