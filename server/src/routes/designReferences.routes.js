@@ -8,7 +8,7 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requireAnyAdmin } from "../middleware/superAdmin.middleware.js";
-import { optionalTeamContext } from "../middleware/team.middleware.js";
+import { requireTeamContext } from "../middleware/team.middleware.js";
 import {
   listReferences,
   getReference,
@@ -20,7 +20,12 @@ import {
 const router = Router();
 
 router.use(authenticate);
-router.use(optionalTeamContext);
+// H1 fix (Sprint 3.1): requireTeamContext (strict), replacing the prior
+// optional-team variant. Logged-in users without a team now get 403
+// NO_TEAM_CONTEXT instead of pass-through with req.teamId === null (which
+// previously let the controller's missing teamId filter leak references
+// across teams).
+router.use(requireTeamContext);
 
 // Learner-accessible
 router.get("/", listReferences);
