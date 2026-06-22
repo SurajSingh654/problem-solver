@@ -299,6 +299,63 @@ describe('aiComplete — usage emission', () => {
         expect(seen).toHaveLength(1)
         expect(seen[0].errorCode).toBe('INVALID_API_KEY')
     })
+
+    it('emits usage with modelUsed=AI_MODEL_FAST when primary 404s and fast-fallback also fails', async () => {
+        // Primary "gpt-imaginary" returns 404 model_not_found → fast-fallback
+        // attempts AI_MODEL_FAST ("gpt-4o-mini"), which also fails (500). The
+        // emitted usage event must attribute the failure to AI_MODEL_FAST,
+        // not the originally-requested primary. Pre-fix: modelUsed === "gpt-imaginary",
+        // usedFallback === false (telemetry incorrectly blames the primary).
+        vi.useFakeTimers()
+        const create = vi.fn((args) => {
+            if (args.model === 'gpt-imaginary') throw new FakeApiError(404, 'model_not_found')
+            // Fast-fallback (AI_MODEL_FAST) also fails — 500 from OpenAI.
+            throw new FakeApiError(500, 'server_error')
+        })
+        _setClientForTests(mockClient(create))
+        const seen = []
+        const off = onUsageEvent((e) => seen.push(e))
+        const p = aiComplete({
+            systemPrompt: 's',
+            userPrompt: 'u',
+            userId: nextUserId(),
+            model: 'gpt-imaginary',
+            surface: 'fallback-double-fail',
+        }).catch(() => {})
+        await vi.runAllTimersAsync()
+        await p
+        off()
+        expect(seen).toHaveLength(1)
+        expect(seen[0].modelRequested).toBe('gpt-imaginary')
+        expect(seen[0].modelUsed).toBe('gpt-4o-mini')
+        expect(seen[0].usedFallback).toBe(true)
+        expect(seen[0].errorCode).toBe('OPENAI_DOWN')
+    })
+
+    it('emits usage with modelUsed=primary (no fallback) when primary fails with non-model-missing error', async () => {
+        // Requesting "gpt-4o" with a 401 INVALID_API_KEY response — fast-fallback
+        // never fires (401 is not "model not found"). Annotated err.modelUsed must
+        // be "gpt-4o" so telemetry correctly attributes the failure to the primary.
+        _setClientForTests(mockClient(() => { throw new FakeApiError(401) }))
+        const seen = []
+        const off = onUsageEvent((e) => seen.push(e))
+        try {
+            await aiComplete({
+                systemPrompt: 's',
+                userPrompt: 'u',
+                userId: nextUserId(),
+                model: 'gpt-4o',
+                surface: 'primary-non-model-missing-fail',
+            }).catch(() => {})
+        } finally {
+            off()
+        }
+        expect(seen).toHaveLength(1)
+        expect(seen[0].modelRequested).toBe('gpt-4o')
+        expect(seen[0].modelUsed).toBe('gpt-4o')
+        expect(seen[0].usedFallback).toBe(false)
+        expect(seen[0].errorCode).toBe('INVALID_API_KEY')
+    })
 })
 
 // ── Rate limit ──────────────────────────────────────────────────────

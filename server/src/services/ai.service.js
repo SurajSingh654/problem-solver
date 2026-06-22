@@ -167,12 +167,27 @@ async function callWithModelFallback(buildRequest, primaryModel, label = "ai") {
             console.warn(
                 `[AI] ${label} primary model "${primaryModel}" unavailable (${code || status}); falling back to "${AI_MODEL_FAST}"`,
             );
-            const response = await callWithRetry(
-                () => client.chat.completions.create(buildRequest(AI_MODEL_FAST)),
-                `${label}:${AI_MODEL_FAST}-fallback`,
-            );
-            return { response, modelUsed: AI_MODEL_FAST };
+            try {
+                const response = await callWithRetry(
+                    () => client.chat.completions.create(buildRequest(AI_MODEL_FAST)),
+                    `${label}:${AI_MODEL_FAST}-fallback`,
+                );
+                return { response, modelUsed: AI_MODEL_FAST };
+            } catch (fallbackErr) {
+                const fbCode = fallbackErr?.code ?? fallbackErr?.error?.code ?? fallbackErr?.status ?? "unknown";
+                console.warn(
+                    `[AI] ${label} fast-fallback "${AI_MODEL_FAST}" also failed (${fbCode}); rethrowing`,
+                );
+                // Annotate so aiComplete's outer catch can attribute the
+                // failure to the secondary (AI_MODEL_FAST), not the primary.
+                // Standard JS pattern — mirrors Node core's err.code / errno.
+                fallbackErr.modelUsed = AI_MODEL_FAST;
+                throw fallbackErr;
+            }
         }
+        // Primary failed with a non-model-missing error — fast fallback was
+        // never attempted. Annotate symmetrically so telemetry is consistent.
+        err.modelUsed = primaryModel;
         throw err;
     }
 }
@@ -341,17 +356,23 @@ export async function aiComplete({
     } catch (err) {
         const latencyMs = Date.now() - t0;
         const code = mapErrorToCode(err);
+        // callWithModelFallback annotates err.modelUsed with the model that
+        // was actually last-attempted (primary on direct failure, AI_MODEL_FAST
+        // on fast-fallback failure). Defensive ?? model fallback handles paths
+        // that don't go through the helper (e.g. checkRateLimit throwing
+        // RATE_LIMITED before any HTTP call).
+        const modelUsed = err?.modelUsed ?? model;
         emitUsage({
             surface,
             userId,
             teamId,
             modelRequested: model,
-            modelUsed: model,
+            modelUsed,
             promptTokens: 0,
             completionTokens: 0,
             totalTokens: 0,
             latencyMs,
-            usedFallback: false,
+            usedFallback: modelUsed !== model,
             errorCode: code,
         });
         if (err instanceof AIError) throw err;
