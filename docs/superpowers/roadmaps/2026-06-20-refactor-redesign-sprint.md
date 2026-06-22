@@ -118,7 +118,7 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 | 2.5 | AI Review surface deep-fixes (H3 race fix + Pass B reviewSolution → runAISurface + solutionReviewPrompt contract migration) | ✅ shipped | [`2026-06-20-ai-review-deep-fixes-design.md`](../specs/2026-06-20-ai-review-deep-fixes-design.md) | 2026-06-21 |
 | 2.6 | validateReview hardening (H7 audit-verified regression + H9 readinessVerdict required + refusal-probe symmetry) | ✅ shipped | [`2026-06-21-ai-review-validator-hardening-design.md`](../specs/2026-06-21-ai-review-validator-hardening-design.md) | 2026-06-21 |
 | 2.7 | Canonical alternatives drop observability (H10 `[canonical:alt-dropped]` log per drop + DRY refactor extracts `processAlternatives` orchestrator) | ✅ shipped | [`2026-06-21-canonical-alt-drop-observability-design.md`](../specs/2026-06-21-canonical-alt-drop-observability-design.md) | 2026-06-21 |
-| 2.8 | ai.service.js M9 (callWithModelFallback usage event reports actual attempted model) | queued | — | — |
+| 2.8 | ai.service.js M9 (callWithModelFallback annotates `err.modelUsed`; `aiComplete` outer catch attributes failure to the last-attempted model + double-fail log line) | ✅ shipped | [`2026-06-22-ai-service-fallback-telemetry-design.md`](../specs/2026-06-22-ai-service-fallback-telemetry-design.md) | 2026-06-22 |
 | 3 | Security + auth surface | queued | — | — |
 | 4 | RAG + embeddings surface | queued | — | — |
 | 5 | Problems + solutions controllers surface | queued | — | — |
