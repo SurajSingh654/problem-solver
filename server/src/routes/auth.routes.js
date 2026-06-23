@@ -39,6 +39,7 @@ import {
   changePasswordSchema,
   updateUnverifiedEmailSchema,
   onboardingSchema,
+  switchTeamSchema,
   updateProfileSchema,
 } from "../schemas/auth.schema.js";
 import {
@@ -392,7 +393,7 @@ router.post("/onboarding", authenticate, validate(onboardingSchema), completeOnb
  *       200:
  *         description: Team switched, returns new token
  */
-router.post("/switch-team", authenticate, switchTeam);
+router.post("/switch-team", authenticate, validate(switchTeamSchema), switchTeam);
 
 
 export default router;

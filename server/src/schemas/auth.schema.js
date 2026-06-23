@@ -119,6 +119,14 @@ export const updateUnverifiedEmailSchema = z.object({
   newEmail: emailField,
 });
 
+// Team context switch — requires only the target teamId. Both the
+// existence check and membership check live in the controller.
+export const switchTeamSchema = z.object({
+  teamId: z
+    .string({ required_error: "Team ID is required." })
+    .min(1, "Team ID is required."),
+});
+
 // ── Onboarding (post-registration team/individual choice) ────
 
 export const onboardingSchema = z
