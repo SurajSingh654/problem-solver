@@ -632,17 +632,74 @@ export async function resetPassword(req, res) {
       );
     }
 
+    // M22 fix (Sprint 3.2): atomic CAS claim + transactional password write.
+    //
+    // The CAS (updateMany with resetCode + resetExpiry in WHERE) invalidates
+    // the code BEFORE bcrypt, closing the ~200ms TOCTOU window where two
+    // concurrent requests could both reach the password update. The CAS +
+    // final update are wrapped in $transaction so a bcrypt/update failure
+    // doesn't consume the code without updating the password (bricking the
+    // user). bcrypt.hash runs OUTSIDE the transaction — it's CPU-only and
+    // holding a DB connection during the ~200ms hash would serialize all
+    // concurrent reset attempts behind a single backend.
     const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        password: hashedPassword,
-        resetCode: null,
-        resetExpiry: null,
-        mustChangePassword: false,
-      },
-    });
+    const now = new Date();
+    let claimedAndUpdated = false;
+    try {
+      await prisma.$transaction(async (tx) => {
+        const claim = await tx.user.updateMany({
+          where: {
+            id: user.id,
+            resetCode: code,
+            resetExpiry: { gt: now },
+          },
+          data: {
+            resetCode: null,
+            resetExpiry: null,
+          },
+        });
+
+        if (claim.count === 0) {
+          // Race-loser or expired-since-pre-check. Throw to roll the tx back.
+          // (Nothing to roll back yet — the updateMany matched zero rows —
+          // but we still want the outer await to reject so the catch path
+          // emits the user-facing 400.)
+          const e = new Error("RESET_CODE_CLAIM_FAILED");
+          e.code = "RESET_CODE_CLAIM_FAILED";
+          throw e;
+        }
+
+        // We won the claim — write the new password inside the same tx so
+        // a failure here rolls back the resetCode/resetExpiry clear, leaving
+        // the user able to retry with the same code.
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            password: hashedPassword,
+            mustChangePassword: false,
+          },
+        });
+      });
+      claimedAndUpdated = true;
+    } catch (txErr) {
+      if (txErr?.code === "RESET_CODE_CLAIM_FAILED") {
+        console.warn(
+          `[security:reset-code-replay] userId=${user.id} email=${email}`,
+        );
+        return error(
+          res,
+          "Reset code has expired or been used. Please request a new one.",
+          400,
+        );
+      }
+      throw txErr; // bubble unexpected errors to the outer catch
+    }
+
+    if (!claimedAndUpdated) {
+      // Unreachable in normal flow — defensive guard.
+      return error(res, "Password reset failed.", 500);
+    }
 
     return success(res, {
       message: "Password reset successfully. Please log in.",
