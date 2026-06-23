@@ -37,6 +37,7 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  updateUnverifiedEmailSchema,
   onboardingSchema,
   updateProfileSchema,
 } from "../schemas/auth.schema.js";
@@ -242,7 +243,7 @@ router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
  *       200:
  *         description: Email updated, new code sent
  */
-router.post('/update-unverified-email', updateUnverifiedEmail);
+router.post('/update-unverified-email', validate(updateUnverifiedEmailSchema), updateUnverifiedEmail);
 
 // ── Authenticated routes ─────────────────────────────────────
 /**

@@ -112,6 +112,13 @@ export const confirmEmailChangeSchema = z.object({
   code: verificationCodeField,
 });
 
+// Pre-verification email update — user can't log in yet, so no password gate.
+// Both fields use emailField (z.string().email().max(255).transform(lowercase+trim)).
+export const updateUnverifiedEmailSchema = z.object({
+  currentEmail: emailField,
+  newEmail: emailField,
+});
+
 // ── Onboarding (post-registration team/individual choice) ────
 
 export const onboardingSchema = z

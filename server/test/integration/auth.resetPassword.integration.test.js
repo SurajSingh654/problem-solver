@@ -273,14 +273,17 @@ describe("POST /auth/reset-password — M22 single-use guarantees", () => {
     expect(bcryptHashCalls).toEqual([validPassword]);
   });
 
-  it("wrong code returns 400 'Invalid reset code'", async () => {
+  it("wrong code returns 400 'Invalid email or reset code'", async () => {
     const { status, body } = await postReset({
       email: "alice@example.com",
       code: "000000",
       newPassword: validPassword,
     });
     expect(status).toBe(400);
-    expect(body?.error?.message).toMatch(/invalid reset code/i);
+    // Sprint 3.3b unified the wrong-code message with the no-user message
+    // to eliminate user-enumeration via response-message-shape diff.
+    // Previous text: "Invalid reset code." — now: "Invalid email or reset code."
+    expect(body?.error?.message).toMatch(/invalid email or reset code/i);
     // updateMany must NOT have been called — the pre-check rejected.
     expect(updateManyCalls).toHaveLength(0);
     // bcrypt must NOT have run.

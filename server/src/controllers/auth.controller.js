@@ -587,7 +587,9 @@ export async function forgotPassword(req, res) {
     }
 
     const code = generateCode();
-    console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
+    }
 
     await prisma.user.update({
       where: { id: user.id },
@@ -626,7 +628,10 @@ export async function resetPassword(req, res) {
       return error(res, "Invalid email or reset code.", 400);
     }
     if (!user.resetCode || user.resetCode !== code) {
-      return error(res, "Invalid reset code.", 400);
+      // Unified message matches the !user branch above — eliminates
+      // user-enumeration via response-message-shape diff (Sprint 3.2
+      // code-review finding deferred to 3.3b).
+      return error(res, "Invalid email or reset code.", 400);
     }
     if (!user.resetExpiry || new Date() > user.resetExpiry) {
       return error(
@@ -868,9 +873,11 @@ export async function updateUnverifiedEmail(req, res) {
     }
 
     const code = generateCode();
-    console.log(
-      `[DEV] Verification code: ${code} for ${newEmail || currentEmail || "unknown"}`,
-    );
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[DEV] Verification code: ${code} for ${newEmail || currentEmail || "unknown"}`,
+      );
+    }
 
     await prisma.user.update({
       where: { id: user.id },
