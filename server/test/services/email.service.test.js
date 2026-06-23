@@ -573,3 +573,178 @@ describe("formatSessionTime (via sendTeachingSessionCreatedEmail)", () => {
     expect(html).toContain("📅 Soon");
   });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// XSS REGRESSION TESTS (Sprint 3.4.b)
+// ════════════════════════════════════════════════════════════════════
+// One test per non-teaching send function. Each fires the function with
+// HTML-laden values in EVERY escapable field and asserts:
+//   1. The escaped form (e.g. `&lt;script&gt;`) appears in the output HTML.
+//   2. The raw form (e.g. `<script>`) does NOT appear.
+//
+// Pre-retrofit, these tests fail (raw HTML interpolated into the email
+// body, no escapeHtml applied). Post-retrofit, they pass.
+//
+// The 4 teaching functions are NOT covered here — they already use
+// escapeHtml correctly (verified by Sprint 3.4 happy-path tests).
+// ════════════════════════════════════════════════════════════════════
+
+const XSS_PAYLOAD = `<script>alert("xss")</script>`;
+const XSS_ESCAPED = "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;";
+
+describe("XSS regression — user-controlled fields are HTML-escaped", () => {
+  it("sendVerificationEmail escapes `name`", async () => {
+    await sendVerificationEmail("u@e.com", XSS_PAYLOAD, "123456");
+    const html = lastSentEmail().html;
+    expect(html).toContain(XSS_ESCAPED);
+    expect(html).not.toContain(XSS_PAYLOAD);
+  });
+
+  it("sendWelcomeEmail escapes `name`", async () => {
+    await sendWelcomeEmail("u@e.com", XSS_PAYLOAD);
+    const html = lastSentEmail().html;
+    expect(html).toContain(XSS_ESCAPED);
+    expect(html).not.toContain(XSS_PAYLOAD);
+  });
+
+  it("sendPasswordResetEmail escapes `name`", async () => {
+    await sendPasswordResetEmail("u@e.com", XSS_PAYLOAD, "654321");
+    const html = lastSentEmail().html;
+    expect(html).toContain(XSS_ESCAPED);
+    expect(html).not.toContain(XSS_PAYLOAD);
+  });
+
+  it("sendTeamInviteEmail escapes `teamName`", async () => {
+    await sendTeamInviteEmail("u@e.com", XSS_PAYLOAD, "ABC123", "tok_x");
+    const html = lastSentEmail().html;
+    expect(html).toContain(XSS_ESCAPED);
+    expect(html).not.toContain(XSS_PAYLOAD);
+  });
+
+  it("sendTeamApprovedEmail escapes `name` and `teamName`", async () => {
+    // Use distinct markers per field so we can catch a per-field miss.
+    const nameXss = `<NAME-${Math.random()}>`;
+    const teamXss = `<TEAM-${Math.random()}>`;
+    await sendTeamApprovedEmail("u@e.com", nameXss, teamXss, "JC123");
+    const html = lastSentEmail().html;
+    // Both fields must be escaped (assert escaped form present + raw absent).
+    expect(html).toContain(nameXss.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+    expect(html).toContain(teamXss.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+    expect(html).not.toContain(nameXss);
+    expect(html).not.toContain(teamXss);
+  });
+
+  it("sendTeamRejectedEmail escapes `name`, `teamName`, and `reason`", async () => {
+    const nameXss = `<NAME-${Math.random()}>`;
+    const teamXss = `<TEAM-${Math.random()}>`;
+    const reasonXss = `<REASON-${Math.random()}>`;
+    await sendTeamRejectedEmail("u@e.com", nameXss, teamXss, reasonXss);
+    const html = lastSentEmail().html;
+    const escape = (s) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    expect(html).toContain(escape(nameXss));
+    expect(html).toContain(escape(teamXss));
+    expect(html).toContain(escape(reasonXss));
+    expect(html).not.toContain(nameXss);
+    expect(html).not.toContain(teamXss);
+    expect(html).not.toContain(reasonXss);
+  });
+
+  it("sendEmailChangeNotification escapes `name`", async () => {
+    await sendEmailChangeNotification("u@e.com", XSS_PAYLOAD);
+    const html = lastSentEmail().html;
+    expect(html).toContain(XSS_ESCAPED);
+    expect(html).not.toContain(XSS_PAYLOAD);
+  });
+
+  it("sendEmailChangeVerification escapes `name`", async () => {
+    await sendEmailChangeVerification("u@e.com", XSS_PAYLOAD, "777888");
+    const html = lastSentEmail().html;
+    expect(html).toContain(XSS_ESCAPED);
+    expect(html).not.toContain(XSS_PAYLOAD);
+  });
+
+  it("sendMemberRemovedEmail escapes `name` and `teamName`", async () => {
+    const nameXss = `<NAME-${Math.random()}>`;
+    const teamXss = `<TEAM-${Math.random()}>`;
+    await sendMemberRemovedEmail("u@e.com", nameXss, teamXss);
+    const html = lastSentEmail().html;
+    const escape = (s) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    expect(html).toContain(escape(nameXss));
+    expect(html).toContain(escape(teamXss));
+    expect(html).not.toContain(nameXss);
+    expect(html).not.toContain(teamXss);
+  });
+
+  it("sendFeedbackNotificationEmail escapes every user-controlled field", async () => {
+    // 7 distinct markers so we can prove every interpolation site escapes.
+    const markers = {
+      title: `<TITLE-${Math.random()}>`,
+      description: `<DESC-${Math.random()}>`,
+      affectedArea: `<AREA-${Math.random()}>`,
+      stepsToReproduce: `<STEPS-${Math.random()}>`,
+      userName: `<UNAME-${Math.random()}>`,
+      userEmail: `<UMAIL-${Math.random()}>`,
+      teamName: `<TNAME-${Math.random()}>`,
+    };
+    const report = {
+      id: "rpt_xss_1",
+      type: "BUG",
+      severity: "CRITICAL",
+      title: markers.title,
+      description: markers.description,
+      affectedArea: markers.affectedArea,
+      stepsToReproduce: markers.stepsToReproduce,
+      user: { name: markers.userName, email: markers.userEmail },
+      team: { name: markers.teamName },
+    };
+    await sendFeedbackNotificationEmail("admin@e.com", report);
+    const html = lastSentEmail().html;
+    const escape = (s) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    for (const [field, raw] of Object.entries(markers)) {
+      expect(html, `field "${field}" must appear escaped`).toContain(escape(raw));
+      expect(html, `field "${field}" must NOT appear raw`).not.toContain(raw);
+    }
+  });
+
+  it("sendFeedbackNotificationEmail escapes typeLabel when report.type is an unknown enum value", async () => {
+    // Defense-in-depth: if the Prisma enum is widened (new FeedbackType
+    // added) before the typeLabels map is updated, the fallback at
+    // `typeLabels[report.type] || escapeHtml(report.type)` runs. Make
+    // sure the raw value is escaped, not injected raw into the HTML body.
+    const xssType = `<UNKNOWN-${Math.random()}>`;
+    const report = {
+      id: "rpt_xss_2",
+      type: xssType, // intentionally not BUG/SUGGESTION/QUESTION
+      severity: "CRITICAL",
+      title: "Plain title",
+      description: "Plain description",
+      affectedArea: "Plain area",
+      stepsToReproduce: "Plain steps",
+      user: { name: "Plain user", email: "u@e.com" },
+      team: { name: "Plain team" },
+    };
+    await sendFeedbackNotificationEmail("admin@e.com", report);
+    const html = lastSentEmail().html;
+    const escaped = xssType.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    expect(html).toContain(escaped);
+    expect(html).not.toContain(xssType);
+  });
+});

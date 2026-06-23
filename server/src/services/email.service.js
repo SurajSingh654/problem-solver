@@ -117,7 +117,7 @@ function button(text, url) {
 
 export async function sendVerificationEmail(to, name, code) {
   const html = emailWrapper(`
-    ${heading(`Welcome, ${name}!`)}
+    ${heading(`Welcome, ${escapeHtml(name)}!`)}
     ${paragraph("Thanks for signing up for ProbSolver. Enter this code to verify your email:")}
     ${codeBlock(code)}
     ${paragraph('This code expires in <strong style="color:#f3f4f6;">15 minutes</strong>.')}
@@ -131,7 +131,7 @@ export async function sendVerificationEmail(to, name, code) {
 
 export async function sendWelcomeEmail(to, name) {
   const html = emailWrapper(`
-    ${heading(`You're in, ${name}!`)}
+    ${heading(`You're in, ${escapeHtml(name)}!`)}
     ${paragraph("Your email is verified and your account is ready. You can now:")}
     ${paragraph('• <strong style="color:#f3f4f6;">Join a team</strong> with a join code from your team admin')}
     ${paragraph('• <strong style="color:#f3f4f6;">Create a team</strong> and invite your colleagues')}
@@ -147,7 +147,7 @@ export async function sendWelcomeEmail(to, name) {
 export async function sendPasswordResetEmail(to, name, code) {
   const html = emailWrapper(`
     ${heading("Password Reset")}
-    ${paragraph(`Hi ${name}, we received a request to reset your password. Enter this code:`)}
+    ${paragraph(`Hi ${escapeHtml(name)}, we received a request to reset your password. Enter this code:`)}
     ${codeBlock(code)}
     ${paragraph('This code expires in <strong style="color:#f3f4f6;">15 minutes</strong>.')}
     ${paragraph("If you didn't request this, your account is secure — no action needed.")}
@@ -162,7 +162,7 @@ export async function sendTeamInviteEmail(to, teamName, joinCode, inviteToken) {
   const joinUrl = `${CLIENT_URL}/join?token=${inviteToken}`;
 
   const html = emailWrapper(`
-    ${heading(`You're invited to ${teamName}`)}
+    ${heading(`You're invited to ${escapeHtml(teamName)}`)}
     ${paragraph("A team on ProbSolver has invited you to join. ProbSolver is a team interview intelligence platform with AI-powered mock interviews, coding practice, and readiness tracking.")}
     ${paragraph("You can join using either method:")}
     ${heading("Option 1: Join Code")}
@@ -181,7 +181,7 @@ export async function sendTeamInviteEmail(to, teamName, joinCode, inviteToken) {
 export async function sendTeamApprovedEmail(to, name, teamName, joinCode) {
   const html = emailWrapper(`
     ${heading("Your team is approved!")}
-    ${paragraph(`Great news, ${name}! Your team <strong style="color:#f3f4f6;">${teamName}</strong> has been approved and is now active.`)}
+    ${paragraph(`Great news, ${escapeHtml(name)}! Your team <strong style="color:#f3f4f6;">${escapeHtml(teamName)}</strong> has been approved and is now active.`)}
     ${paragraph("Share this join code with your team members:")}
     ${codeBlock(joinCode)}
     ${paragraph("You've been automatically switched to your new team. You can start adding problems and inviting members right away.")}
@@ -196,9 +196,9 @@ export async function sendTeamApprovedEmail(to, name, teamName, joinCode) {
 export async function sendTeamRejectedEmail(to, name, teamName, reason) {
   const html = emailWrapper(`
     ${heading("Team Request Update")}
-    ${paragraph(`Hi ${name}, your team <strong style="color:#f3f4f6;">${teamName}</strong> was not approved.`)}
+    ${paragraph(`Hi ${escapeHtml(name)}, your team <strong style="color:#f3f4f6;">${escapeHtml(teamName)}</strong> was not approved.`)}
     <div style="background:#0f1117;border:1px solid #ef4444;border-radius:12px;padding:16px;margin:16px 0;">
-      <p style="margin:0;font-size:13px;color:#fca5a5;"><strong>Reason:</strong> ${reason}</p>
+      <p style="margin:0;font-size:13px;color:#fca5a5;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
     </div>
     ${paragraph("You can create a new team request or continue practicing individually.")}
     ${paragraph("If you believe this was a mistake, please contact the platform administrator.")}
@@ -212,7 +212,7 @@ export async function sendTeamRejectedEmail(to, name, teamName, reason) {
 export async function sendEmailChangeNotification(to, name) {
   const html = emailWrapper(`
     ${heading("Email Address Changed")}
-    ${paragraph(`Hi ${name}, your ProbSolver account email has been changed. If you didn't make this change, please contact the platform administrator immediately.`)}
+    ${paragraph(`Hi ${escapeHtml(name)}, your ProbSolver account email has been changed. If you didn't make this change, please contact the platform administrator immediately.`)}
   `);
 
   return sendEmail(to, "ProbSolver — Email address changed", html);
@@ -223,7 +223,7 @@ export async function sendEmailChangeNotification(to, name) {
 export async function sendEmailChangeVerification(to, name, code) {
   const html = emailWrapper(`
     ${heading("Verify New Email")}
-    ${paragraph(`Hi ${name}, enter this code to confirm your new email address:`)}
+    ${paragraph(`Hi ${escapeHtml(name)}, enter this code to confirm your new email address:`)}
     ${codeBlock(code)}
     ${paragraph('This code expires in <strong style="color:#f3f4f6;">15 minutes</strong>.')}
   `);
@@ -236,7 +236,7 @@ export async function sendEmailChangeVerification(to, name, code) {
 export async function sendMemberRemovedEmail(to, name, teamName) {
   const html = emailWrapper(`
     ${heading("Team Membership Update")}
-    ${paragraph(`Hi ${name}, you have been removed from <strong style="color:#f3f4f6;">${teamName}</strong>. You've been switched to your personal practice space.`)}
+    ${paragraph(`Hi ${escapeHtml(name)}, you have been removed from <strong style="color:#f3f4f6;">${escapeHtml(teamName)}</strong>. You've been switched to your personal practice space.`)}
     ${paragraph("Your personal practice data, quizzes, and mock interview history are still intact.")}
     ${button("Continue Practicing", CLIENT_URL)}
   `);
@@ -260,9 +260,12 @@ export async function sendFeedbackNotificationEmail(to, report) {
     MEDIUM: "#eab308",
     LOW: "#22c55e",
   };
-  const severityLabel = report.severity;
+  const severityLabel = escapeHtml(report.severity);
   const severityColor = severityColors[report.severity] || "#6b7280";
-  const typeLabel = typeLabels[report.type] || report.type;
+  // typeLabels lookup uses the trusted enum-keyed table when possible;
+  // fall through to escapeHtml on the raw value defensively (covers any
+  // Zod gap, future-migration race, or accidental free-text type).
+  const typeLabel = typeLabels[report.type] || escapeHtml(report.type);
 
   const html = emailWrapper(`
         ${heading("New Feedback Report")}
@@ -278,14 +281,14 @@ export async function sendFeedbackNotificationEmail(to, report) {
                 </tr>
                 <tr>
                     <td style="padding:4px 0;font-size:12px;color:#6b7280;">From</td>
-                    <td style="padding:4px 0;font-size:12px;color:#f3f4f6;">${report.user?.name || "Unknown"} (${report.user?.email || ""})</td>
+                    <td style="padding:4px 0;font-size:12px;color:#f3f4f6;">${escapeHtml(report.user?.name || "Unknown")} (${escapeHtml(report.user?.email || "")})</td>
                 </tr>
                 ${
                   report.team
                     ? `
                 <tr>
                     <td style="padding:4px 0;font-size:12px;color:#6b7280;">Team</td>
-                    <td style="padding:4px 0;font-size:12px;color:#f3f4f6;">${report.team.name}</td>
+                    <td style="padding:4px 0;font-size:12px;color:#f3f4f6;">${escapeHtml(report.team.name)}</td>
                 </tr>`
                     : ""
                 }
@@ -294,27 +297,27 @@ export async function sendFeedbackNotificationEmail(to, report) {
                     ? `
                 <tr>
                     <td style="padding:4px 0;font-size:12px;color:#6b7280;">Area</td>
-                    <td style="padding:4px 0;font-size:12px;color:#f3f4f6;">${report.affectedArea}</td>
+                    <td style="padding:4px 0;font-size:12px;color:#f3f4f6;">${escapeHtml(report.affectedArea)}</td>
                 </tr>`
                     : ""
                 }
             </table>
         </div>
         <div style="margin-bottom:16px;">
-            <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#f3f4f6;">${report.title}</p>
-            <p style="margin:0;font-size:13px;line-height:1.6;color:#d1d5db;">${report.description}</p>
+            <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#f3f4f6;">${escapeHtml(report.title)}</p>
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#d1d5db;">${escapeHtml(report.description)}</p>
         </div>
         ${
           report.stepsToReproduce
             ? `
         <div style="background:#0f1117;border:1px solid #2a2d3a;border-radius:8px;padding:12px;margin-bottom:16px;">
             <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Steps to Reproduce</p>
-            <p style="margin:0;font-size:12px;line-height:1.6;color:#d1d5db;white-space:pre-wrap;">${report.stepsToReproduce}</p>
+            <p style="margin:0;font-size:12px;line-height:1.6;color:#d1d5db;white-space:pre-wrap;">${escapeHtml(report.stepsToReproduce)}</p>
         </div>`
             : ""
         }
         ${button("View in Dashboard", `${CLIENT_URL}/super-admin`)}
-        <p style="margin:0;font-size:11px;color:#6b7280;">Report ID: ${report.id}</p>
+        <p style="margin:0;font-size:11px;color:#6b7280;">Report ID: ${escapeHtml(report.id)}</p>
     `);
 
   const subjectPrefix =
@@ -444,10 +447,13 @@ export async function sendTeachingFlaggedEmail({ to, session, flag }) {
   return sendEmail(to, `Teaching session flagged: ${session.title}`, html);
 }
 
-// Defense-in-depth: callers shouldn't be sending pre-escaped strings,
-// but if they are we don't want to break the layout. Keep this private —
-// the existing code paths use raw template-literal interpolation and we
-// don't want to retrofit them.
+// HTML-escape helper. Defense-in-depth applied across ALL 14 send
+// functions (Sprint 3.4.b — 2026-06-23). Originally only the 4 teaching
+// functions used it; the historical comment said "we don't want to
+// retrofit them" but the production bar reversed that decision. Future
+// callers MUST escapeHtml any user-controlled field before interpolating
+// into HTML body templates. Subject lines and URLs stay raw (subjects
+// are plain text; URLs use server-generated tokens with no special chars).
 function escapeHtml(str) {
   if (typeof str !== "string") return "";
   return str
