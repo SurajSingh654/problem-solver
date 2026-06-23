@@ -123,7 +123,7 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 | 3.2 | Reset-code single-use (M22 — `resetPassword` atomic CAS claim wrapped in `$transaction` closes the bcrypt-window TOCTOU race) | ✅ shipped | [`2026-06-22-security-reset-code-single-use-design.md`](../specs/2026-06-22-security-reset-code-single-use-design.md) | 2026-06-23 |
 | 3.3a | Sign-in flow test foundation (H12 part 1 — register / login / verifyEmail / resendVerification + production verification-code log gate) | ✅ shipped | [`2026-06-23-test-auth-signin-design.md`](../specs/2026-06-23-test-auth-signin-design.md) | 2026-06-23 |
 | 3.3b | Password & credential mgmt test foundation (H12 part 2 — forgotPassword / changePassword / updateUnverifiedEmail + resetPassword message unification + extend log-gate to forgotPassword/updateUnverifiedEmail + new updateUnverifiedEmailSchema) | ✅ shipped | [`2026-06-23-test-auth-password-mgmt-design.md`](../specs/2026-06-23-test-auth-password-mgmt-design.md) | 2026-06-23 |
-| 3.3c | Team context & profile test foundation (H12 part 3 — completeOnboarding / getMe / switchTeam) | queued | — | — |
+| 3.3c | Team context & profile test foundation (H12 part 3 — completeOnboarding / getMe / switchTeam + new switchTeamSchema; **completes audit H12 in full**) | ✅ shipped | [`2026-06-23-test-auth-team-context-design.md`](../specs/2026-06-23-test-auth-team-context-design.md) | 2026-06-23 |
 | 3.4 | Email service test foundation (H13 — template rendering, missing-email handling, service-failure fallback, zero tests today) | queued | — | — |
 | 3.5 | MCP revocation Redis upgrade (M23 — 60s cache TTL today; deferred to Phase 2) | deferred | — | — |
 | 4 | RAG + embeddings surface | queued | — | — |
