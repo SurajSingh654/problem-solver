@@ -126,7 +126,9 @@ export async function register(req, res) {
 
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const code = generateCode();
-    console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
+    }
 
     const user = await prisma.user.create({
       data: {
@@ -250,7 +252,9 @@ export async function resendVerification(req, res) {
     }
 
     const code = generateCode();
-    console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[DEV] Verification code: ${code} for ${email || "unknown"}`);
+    }
 
     await prisma.user.update({
       where: { id: user.id },
