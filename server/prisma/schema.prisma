@@ -2574,3 +2574,38 @@ model McpToken {
   @@index([userId, issuedAt(sort: Desc)])
   @@map("mcp_tokens")
 }
+
+// ============================================================================
+// EMBEDDING OUTBOX — Retry queue for failed embedding writes
+// ============================================================================
+//
+// Polymorphic single-table queue. One scheduler, one retry policy. Rows are
+// upserted on (entityType, entityId), so re-enqueueing a still-pending row
+// fast-tracks the latest attempt. Worker (`embedding.outbox.js`) claims due
+// rows with FOR UPDATE SKIP LOCKED and dispatches to the matching embed fn.
+// On success the row is deleted; on failure attempts++ and nextRetryAt is
+// pushed out per BACKOFF_SCHEDULE_MS. After MAX_ATTEMPTS (5) the row is
+// flipped to status='FAILED' and preserved for admin investigation.
+//
+// Orphan rows (entity deleted between enqueue and retry) are self-healed:
+// the worker deletes the outbox row and logs `[embedding-outbox:orphan]`.
+//
+// Stale-RUNNING reclaim: if updatedAt is more than 5 minutes old while
+// status='RUNNING', the worker is presumed dead and the next claim picks
+// the row up again.
+// ============================================================================
+model EmbeddingOutbox {
+  id           String   @id @default(cuid())
+  entityType   String   // "Solution" | "Problem" | "Note"
+  entityId     String
+  status       String   @default("PENDING") // PENDING | RUNNING | FAILED
+  attempts     Int      @default(0)
+  lastError    String?  // truncated to 500 chars at write time
+  nextRetryAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([entityType, entityId])
+  @@index([status, nextRetryAt])
+  @@map("embedding_outbox")
+}
