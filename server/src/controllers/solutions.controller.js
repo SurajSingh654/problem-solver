@@ -992,7 +992,7 @@ async function updateStreak(userId) {
   });
 }
 
-async function generateSolutionEmbedding(solutionId) {
+export async function generateSolutionEmbedding(solutionId) {
   try {
     const { AI_ENABLED } = await import("../config/env.js");
     if (!AI_ENABLED) return;
@@ -1017,12 +1017,30 @@ async function generateSolutionEmbedding(solutionId) {
     const { generateEmbedding } =
       await import("../services/embedding.service.js");
     const embedding = await generateEmbedding(text);
-    if (embedding) {
+    if (!embedding) {
+      const { enqueueEmbedding } =
+        await import("../services/embedding.outbox.js");
+      await enqueueEmbedding(
+        "Solution",
+        solutionId,
+        "generateEmbedding returned null",
+      );
+      return;
+    }
+    try {
       const vectorStr = `[${embedding.join(",")}]`;
       await prisma.$executeRawUnsafe(
         `UPDATE solutions SET embedding = $1::vector WHERE id = $2`,
         vectorStr,
         solutionId,
+      );
+    } catch (dbErr) {
+      const { enqueueEmbedding } =
+        await import("../services/embedding.outbox.js");
+      await enqueueEmbedding(
+        "Solution",
+        solutionId,
+        `db update failed: ${dbErr.message}`,
       );
     }
   } catch (err) {

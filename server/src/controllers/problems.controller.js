@@ -798,7 +798,7 @@ export async function patchCanonical(req, res) {
 // ============================================================================
 // BACKGROUND: Generate embedding
 // ============================================================================
-async function generateProblemEmbedding(problemId) {
+export async function generateProblemEmbedding(problemId) {
   try {
     const { AI_ENABLED } = await import("../config/env.js");
     if (!AI_ENABLED) return;
@@ -820,12 +820,30 @@ async function generateProblemEmbedding(problemId) {
       await import("../services/embedding.service.js");
     const embedding = await generateEmbedding(text);
 
-    if (embedding) {
+    if (!embedding) {
+      const { enqueueEmbedding } =
+        await import("../services/embedding.outbox.js");
+      await enqueueEmbedding(
+        "Problem",
+        problemId,
+        "generateEmbedding returned null",
+      );
+      return;
+    }
+    try {
       const vectorStr = `[${embedding.join(",")}]`;
       await prisma.$executeRawUnsafe(
         `UPDATE problems SET embedding = $1::vector WHERE id = $2`,
         vectorStr,
         problemId,
+      );
+    } catch (dbErr) {
+      const { enqueueEmbedding } =
+        await import("../services/embedding.outbox.js");
+      await enqueueEmbedding(
+        "Problem",
+        problemId,
+        `db update failed: ${dbErr.message}`,
       );
     }
   } catch (err) {

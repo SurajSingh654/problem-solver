@@ -313,16 +313,43 @@ export async function embedNote(noteId) {
     if (!text || text.length < 20) return null;
 
     const embedding = await generateEmbedding(text);
-    if (!embedding) return null;
+    if (!embedding) {
+      // Lazy import to break the embedding.service.js ↔ embedding.outbox.js cycle
+      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      await enqueueEmbedding(
+        "Note",
+        noteId,
+        "generateEmbedding returned null",
+      );
+      return null;
+    }
 
-    await prisma.$executeRawUnsafe(
-      `UPDATE notes SET embedding = $1::vector WHERE id = $2`,
-      `[${embedding.join(",")}]`,
-      noteId,
-    );
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE notes SET embedding = $1::vector WHERE id = $2`,
+        `[${embedding.join(",")}]`,
+        noteId,
+      );
+    } catch (dbErr) {
+      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      await enqueueEmbedding(
+        "Note",
+        noteId,
+        `db update failed: ${dbErr.message}`,
+      );
+      return null;
+    }
     return embedding;
   } catch (error) {
     console.error(`[Embedding] Note ${noteId} failed:`, error.message);
+    try {
+      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      await enqueueEmbedding("Note", noteId, error.message);
+    } catch {
+      // enqueueEmbedding already has its own CRITICAL log on self-failure;
+      // a nested error here is best-effort, swallow to avoid masking the
+      // original error.
+    }
     return null;
   }
 }
