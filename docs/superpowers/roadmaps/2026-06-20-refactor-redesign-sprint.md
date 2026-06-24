@@ -127,7 +127,9 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 | 3.4 | Email service test foundation (H13 — template rendering + missing-email + service-failure tests across 14 send functions; HTML-escape retrofit deferred to 3.4.b) | ✅ shipped | [`2026-06-23-test-email-service-design.md`](../specs/2026-06-23-test-email-service-design.md) | 2026-06-23 |
 | 3.4.b | Email service HTML-escape retrofit (10 non-teaching send functions now escape user-controlled fields + typeLabel/severityLabel fallback in feedback emails; defense-in-depth XSS hardening) | ✅ shipped | [`2026-06-23-email-html-escape-retrofit-design.md`](../specs/2026-06-23-email-html-escape-retrofit-design.md) | 2026-06-23 |
 | 3.5 | MCP revocation Redis upgrade (M23 — 60s cache TTL today; deferred to Phase 2) | deferred | — | — |
-| 4 | RAG + embeddings surface | queued | — | — |
+| 4.1 | Embedding outbox retry queue (H4 — silent NULL embeddings now retried with exponential backoff; new `EmbeddingOutbox` table + 60s scheduler + 3-site wiring + 20 tests; bundled vite 5→6 upgrade clearing GHSA-fx2h-pf6j-xcff) | ✅ shipped | [`2026-06-24-embedding-outbox-retry-queue-design.md`](../specs/2026-06-24-embedding-outbox-retry-queue-design.md) | 2026-06-24 |
+| 4.2 | M10-M16 RAG/embeddings audit fixes + DRY refactor of the 3 embedding write sites | queued | — | — |
+| 4.3 | Embedding service test foundation (H14) | queued | — | — |
 | 5 | Problems + solutions controllers surface | queued | — | — |
 | 6 | Notes surface | queued | — | — |
 | 7 | Persist-rate-limiter migration | queued | — | — |
