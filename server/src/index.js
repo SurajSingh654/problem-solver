@@ -54,6 +54,10 @@ import platformRoutes from "./routes/platform.routes.js";
 
 // ── WebSocket ────────────────────────────────────────────────
 import { setupWebSocket, closeAllWebSockets } from "./services/websocket.service.js";
+import {
+  startOutboxScheduler,
+  stopOutboxScheduler,
+} from "./services/embedding.outbox.js";
 
 // ── Feedback routes ───────────────────────────────────────────────
 import feedbackRoutes from "./routes/feedback.routes.js";
@@ -324,6 +328,9 @@ async function start() {
       console.log(`   ├── /api-docs            (Swagger UI)`);
       console.log(`   └── /health`);
       console.log(`\n   Backward-compatible aliases at /api/* → /api/v1/*\n`);
+      console.log(`\n   Background workers:`);
+      console.log(`   └── embedding-outbox scheduler (60s interval)`);
+      startOutboxScheduler();
     });
   } catch (err) {
     console.error("❌ Failed to start server:", err);
@@ -336,6 +343,8 @@ async function start() {
 // ============================================================================
 async function shutdown(signal) {
   console.log(`\n🛑 ${signal} received. Shutting down gracefully...`);
+  console.log("   Stopping embedding-outbox scheduler...");
+  stopOutboxScheduler();
   // Drain WebSockets BEFORE closing the HTTP server. Without this, SIGTERM
   // produces ECONNRESET on every active mock interview / design coaching /
   // teaching room — users see "connection lost" mid-conversation on every
