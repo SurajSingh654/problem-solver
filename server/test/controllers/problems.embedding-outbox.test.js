@@ -37,6 +37,7 @@ describe("generateProblemEmbedding → outbox wiring", () => {
   it("test 19: when generateEmbedding returns null, enqueueEmbedding('Problem', id) is called", async () => {
     embeddingServiceMock.generateEmbedding.mockResolvedValueOnce(null);
     await problemsCtrl.generateProblemEmbedding("prob_test_1");
+    expect(outboxMock.enqueueEmbedding).toHaveBeenCalledTimes(1);
     expect(outboxMock.enqueueEmbedding).toHaveBeenCalledWith(
       "Problem",
       "prob_test_1",
@@ -61,5 +62,6 @@ describe("generateProblemEmbedding → outbox wiring", () => {
     prismaMock.$executeRawUnsafe.mockResolvedValueOnce(undefined);
     await problemsCtrl.generateProblemEmbedding("prob_test_3");
     expect(outboxMock.enqueueEmbedding).not.toHaveBeenCalled();
+    expect(prismaMock.$executeRawUnsafe).toHaveBeenCalledTimes(1);
   });
 });

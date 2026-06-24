@@ -9,10 +9,11 @@ Personal study log of LeetCode problems with explanations. Each entry follows th
 
 ## Index
 
-| #   | Title            | Difficulty | Pattern             | File                                               |
-| --- | ---------------- | ---------- | ------------------- | -------------------------------------------------- |
-| 75  | Sort Colors      | Medium     | Dutch National Flag | [75-sort-colors.md](75-sort-colors.md)             |
-| 169 | Majority Element | Easy       | Boyer-Moore Voting  | [169-majority-element.md](169-majority-element.md) |
+| #   | Title            | Difficulty | Pattern                                   | File                                               |
+| --- | ---------------- | ---------- | ----------------------------------------- | -------------------------------------------------- |
+| 31  | Next Permutation | Medium     | Narayana Pandita / in-place rearrangement | [31-next-permutation.md](31-next-permutation.md)   |
+| 75  | Sort Colors      | Medium     | Dutch National Flag                       | [75-sort-colors.md](75-sort-colors.md)             |
+| 169 | Majority Element | Easy       | Boyer-Moore Voting                        | [169-majority-element.md](169-majority-element.md) |
 
 ---
 
