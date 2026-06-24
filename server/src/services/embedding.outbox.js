@@ -10,11 +10,11 @@ import {
 const SCHEDULER_INTERVAL_MS = 60_000;
 const BATCH_SIZE = 10;
 const BACKOFF_SCHEDULE_MS = [
-  60_000,
-  5 * 60_000,
-  30 * 60_000,
-  2 * 60 * 60_000,
-  12 * 60 * 60_000,
+  60_000,            // 1 min after attempt 1 failure
+  5 * 60_000,        // 5 min after attempt 2 failure
+  30 * 60_000,       // 30 min after attempt 3 failure
+  2 * 60 * 60_000,   // 2 hr after attempt 4 failure
+  12 * 60 * 60_000,  // 12 hr after attempt 5 failure
 ];
 const MAX_ATTEMPTS = BACKOFF_SCHEDULE_MS.length;
 const STALE_RUNNING_MS = 5 * 60_000;
@@ -23,6 +23,12 @@ const DISPATCH = {
   Solution: embedSolution,
   Problem: embedProblem,
   Note: embedNote,
+};
+
+const TABLE_MAP = {
+  Solution: "solutions",
+  Problem: "problems",
+  Note: "notes",
 };
 
 let timer = null;
@@ -92,84 +98,28 @@ export async function processOutboxBatch({ batchSize = BATCH_SIZE } = {}) {
           );
           result.orphaned++;
         } else {
-          await markRetryOrFail(row, "embed returned null");
+          try {
+            await markRetryOrFail(row, "embed returned null");
+          } catch (retryErr) {
+            console.error(
+              `[embedding-outbox:CRITICAL] markRetryOrFail failed for ${row.entityType} ${row.entityId}: ${retryErr.message}`,
+            );
+          }
           result.failed++;
         }
       }
     } catch (err) {
-      await markRetryOrFail(row, err.message);
+      try {
+        await markRetryOrFail(row, err.message);
+      } catch (retryErr) {
+        console.error(
+          `[embedding-outbox:CRITICAL] markRetryOrFail failed for ${row.entityType} ${row.entityId}: ${retryErr.message}`,
+        );
+      }
       result.failed++;
     }
   }
   return result;
-}
-
-async function claimDueRows(batchSize) {
-  const now = new Date();
-  const staleThreshold = new Date(Date.now() - STALE_RUNNING_MS);
-  const rows = await prisma.$queryRawUnsafe(
-    `UPDATE embedding_outbox
-     SET status = 'RUNNING', "updatedAt" = now()
-     WHERE id IN (
-       SELECT id FROM embedding_outbox
-       WHERE (status = 'PENDING' AND "nextRetryAt" <= $1)
-          OR (status = 'RUNNING' AND "updatedAt" < $2)
-       ORDER BY "nextRetryAt" ASC
-       LIMIT $3
-       FOR UPDATE SKIP LOCKED
-     )
-     RETURNING *`,
-    now,
-    staleThreshold,
-    batchSize,
-  );
-  return rows;
-}
-
-const TABLE_MAP = {
-  Solution: "solutions",
-  Problem: "problems",
-  Note: "notes",
-};
-
-async function checkEntityExists(entityType, entityId) {
-  const table = TABLE_MAP[entityType];
-  if (!table) return false;
-  const rows = await prisma.$queryRawUnsafe(
-    `SELECT 1 FROM "${table}" WHERE id = $1 LIMIT 1`,
-    entityId,
-  );
-  return rows.length > 0;
-}
-
-async function markRetryOrFail(row, errorMessage) {
-  const attempts = row.attempts + 1;
-  const truncatedError = String(errorMessage).slice(0, 500);
-
-  if (attempts >= MAX_ATTEMPTS) {
-    await prisma.embeddingOutbox.update({
-      where: { id: row.id },
-      data: { status: "FAILED", attempts, lastError: truncatedError },
-    });
-    console.log(
-      `[embedding-outbox:failed] type=${row.entityType} id=${row.entityId} attempts=${attempts} lastError="${truncatedError}"`,
-    );
-    return;
-  }
-
-  const backoffMs = BACKOFF_SCHEDULE_MS[attempts - 1];
-  await prisma.embeddingOutbox.update({
-    where: { id: row.id },
-    data: {
-      status: "PENDING",
-      attempts,
-      lastError: truncatedError,
-      nextRetryAt: new Date(Date.now() + backoffMs),
-    },
-  });
-  console.log(
-    `[embedding-outbox:attempt] type=${row.entityType} id=${row.entityId} attempt=${attempts}/${MAX_ATTEMPTS} nextRetryMs=${backoffMs}`,
-  );
 }
 
 export function startOutboxScheduler() {
@@ -195,4 +145,67 @@ export function stopOutboxScheduler() {
     timer = null;
     console.log("[embedding-outbox] scheduler stopped");
   }
+}
+
+async function claimDueRows(batchSize) {
+  const nowMs = Date.now();
+  const now = new Date(nowMs);
+  const staleThreshold = new Date(nowMs - STALE_RUNNING_MS);
+  const rows = await prisma.$queryRawUnsafe(
+    `UPDATE embedding_outbox
+     SET status = 'RUNNING', "updatedAt" = now()
+     WHERE id IN (
+       SELECT id FROM embedding_outbox
+       WHERE (status = 'PENDING' AND "nextRetryAt" <= $1)
+          OR (status = 'RUNNING' AND "updatedAt" < $2)
+       ORDER BY "nextRetryAt" ASC
+       LIMIT $3
+       FOR UPDATE SKIP LOCKED
+     )
+     RETURNING *`,
+    now,
+    staleThreshold,
+    batchSize,
+  );
+  return rows;
+}
+
+async function checkEntityExists(entityType, entityId) {
+  const table = TABLE_MAP[entityType];
+  if (!table) return false;
+  const rows = await prisma.$queryRawUnsafe(
+    `SELECT 1 FROM "${table}" WHERE id = $1 LIMIT 1`,
+    entityId,
+  );
+  return rows.length > 0;
+}
+
+async function markRetryOrFail(row, errorMessage) {
+  const attempts = row.attempts + 1;
+  const truncatedError = String(errorMessage).slice(0, 500);
+
+  if (attempts > MAX_ATTEMPTS) {
+    await prisma.embeddingOutbox.update({
+      where: { id: row.id },
+      data: { status: "FAILED", attempts, lastError: truncatedError },
+    });
+    console.log(
+      `[embedding-outbox:failed] type=${row.entityType} id=${row.entityId} attempts=${attempts} lastError="${truncatedError}"`,
+    );
+    return;
+  }
+
+  const backoffMs = BACKOFF_SCHEDULE_MS[attempts - 1];
+  await prisma.embeddingOutbox.update({
+    where: { id: row.id },
+    data: {
+      status: "PENDING",
+      attempts,
+      lastError: truncatedError,
+      nextRetryAt: new Date(Date.now() + backoffMs),
+    },
+  });
+  console.log(
+    `[embedding-outbox:attempt] type=${row.entityType} id=${row.entityId} attempt=${attempts}/${MAX_ATTEMPTS} nextRetryMs=${backoffMs}`,
+  );
 }

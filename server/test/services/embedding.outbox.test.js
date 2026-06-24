@@ -6,8 +6,6 @@ const prismaMock = vi.hoisted(() => ({
     upsert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    findMany: vi.fn(),
-    count: vi.fn(),
   },
   $queryRawUnsafe: vi.fn(),
   $executeRawUnsafe: vi.fn(),
@@ -173,15 +171,15 @@ describe("processOutboxBatch", () => {
 
   it("test 9: max attempts → status FAILED, row preserved", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    // Row has already failed 4 times; this is attempt 5 = MAX_ATTEMPTS
-    prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ ...SOL_ROW, attempts: 4 }]);
+    // Row has already failed 5 times; this is attempt 6 > MAX_ATTEMPTS (5) → FAILED
+    prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ ...SOL_ROW, attempts: 5 }]);
     embeddingServiceMock.embedSolution.mockResolvedValueOnce(null);
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ "?column?": 1 }]);
     await processOutboxBatch();
     expect(prismaMock.embeddingOutbox.update).toHaveBeenCalledTimes(1);
     const updateArg = prismaMock.embeddingOutbox.update.mock.calls[0][0];
     expect(updateArg.data.status).toBe("FAILED");
-    expect(updateArg.data.attempts).toBe(5);
+    expect(updateArg.data.attempts).toBe(6);
     // delete NOT called — FAILED rows persist
     expect(prismaMock.embeddingOutbox.delete).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledWith(
@@ -227,6 +225,11 @@ describe("processOutboxBatch", () => {
     expect(result.processed).toBe(3);
     expect(result.succeeded).toBe(2);
     expect(result.failed).toBe(1);
+    // Verify WHICH rows succeeded and which failed
+    const deletedIds = prismaMock.embeddingOutbox.delete.mock.calls.map(c => c[0].where.id);
+    expect(deletedIds).toContain("ob_1");
+    expect(deletedIds).toContain("ob_3");
+    expect(deletedIds).not.toContain("ob_2");
     consoleErrSpy.mockRestore();
     consoleLogSpy.mockRestore();
   });
@@ -237,8 +240,8 @@ describe("backoff schedule", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const EXPECTED_DELAYS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000, 12 * 60 * 60_000];
 
-    // Simulate 5 sequential failures on the same row
-    for (let priorAttempts = 0; priorAttempts < 5; priorAttempts++) {
+    // Simulate 6 sequential failures: 5 use all BACKOFF entries, 6th triggers FAILED
+    for (let priorAttempts = 0; priorAttempts < 6; priorAttempts++) {
       vi.clearAllMocks();
       prismaMock.$queryRawUnsafe.mockResolvedValueOnce([
         {
@@ -255,13 +258,15 @@ describe("backoff schedule", () => {
       ]);
       embeddingServiceMock.embedSolution.mockResolvedValueOnce(null);
       prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ "?column?": 1 }]); // entity exists
+      prismaMock.embeddingOutbox.update.mockResolvedValue({});
       await processOutboxBatch();
       const updateArg = prismaMock.embeddingOutbox.update.mock.calls[0][0];
 
-      if (priorAttempts + 1 >= 5) {
-        // Last attempt should produce FAILED — no nextRetryAt change asserted
+      if (priorAttempts + 1 > 5) {
+        // Attempt 6 > MAX_ATTEMPTS(5) → FAILED
         expect(updateArg.data.status).toBe("FAILED");
       } else {
+        // Attempts 1-5 → schedule using BACKOFF_SCHEDULE_MS[priorAttempts]
         const delay = new Date(updateArg.data.nextRetryAt).getTime() - Date.now();
         const expected = EXPECTED_DELAYS[priorAttempts];
         expect(delay).toBeGreaterThan(expected - 1500);
