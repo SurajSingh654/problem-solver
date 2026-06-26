@@ -1,11 +1,20 @@
 /**
- * EMBEDDING SERVICE — Generate and store vector embeddings
- * Uses OpenAI's text-embedding-3-small model (1536 dimensions)
- * Stores embeddings in pgvector columns for similarity search
+ * EMBEDDING SERVICE — Generate and store vector embeddings.
+ *
+ * Default model: text-embedding-3-small (1536 dimensions). Override via
+ * `AI_EMBEDDING_MODEL` env var. NOTE: changing to a model with different
+ * dimensions (e.g. text-embedding-3-large at 3072) requires a separate
+ * schema migration — vector columns are declared `vector(1536)` and a
+ * dimension mismatch on INSERT throws a Postgres error. Out of scope for
+ * Sprint 4.2a; tracked separately for any future model-upgrade work.
  */
 import OpenAI from "openai";
 import prisma from "../lib/prisma.js";
-import { OPENAI_API_KEY, AI_REQUEST_TIMEOUT_MS } from "../config/env.js";
+import {
+  OPENAI_API_KEY,
+  AI_REQUEST_TIMEOUT_MS,
+  AI_EMBEDDING_MODEL,
+} from "../config/env.js";
 
 let openai = null;
 
@@ -30,14 +39,12 @@ function getClient() {
 // ── Generate embedding from text ───────────────────────
 export async function generateEmbedding(text) {
   if (!text || text.trim().length === 0) return null;
-
   try {
     const client = getClient();
     const response = await client.embeddings.create({
-      model: "text-embedding-3-small",
-      input: text.trim().slice(0, 8000), // Max ~8000 chars for safety
+      model: AI_EMBEDDING_MODEL,
+      input: text.trim().slice(0, 8000),
     });
-
     return response.data[0].embedding;
   } catch (error) {
     console.error("[Embedding] Generation failed:", error.message);
@@ -386,6 +393,22 @@ export async function findSimilarNotes(noteId, userId, limit = 5) {
 export async function findProblemsByNoteEmbedding(noteId, teamIds, limit = 5) {
   try {
     if (!Array.isArray(teamIds) || teamIds.length === 0) return [];
+
+    // Pre-check: source note must have a non-NULL embedding. Otherwise
+    // the `<=>` operator returns NULL for every candidate and we silently
+    // get zero results — indistinguishable from "no similar problems".
+    // Better to log + bail explicitly.
+    const sourceCheck = await prisma.$queryRawUnsafe(
+      `SELECT 1 FROM notes WHERE id = $1 AND embedding IS NOT NULL LIMIT 1`,
+      noteId,
+    );
+    if (sourceCheck.length === 0) {
+      console.log(
+        `[Embedding] findProblemsByNoteEmbedding: note ${noteId} has no embedding yet — returning empty`,
+      );
+      return [];
+    }
+
     const results = await prisma.$queryRawUnsafe(
       `
       SELECT p.id, p.title, p.difficulty, p.category, p.tags,
