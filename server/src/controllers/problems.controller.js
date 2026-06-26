@@ -799,54 +799,8 @@ export async function patchCanonical(req, res) {
 // BACKGROUND: Generate embedding
 // ============================================================================
 export async function generateProblemEmbedding(problemId) {
-  try {
-    const { AI_ENABLED } = await import("../config/env.js");
-    if (!AI_ENABLED) return;
-
-    const problem = await prisma.problem.findUnique({
-      where: { id: problemId },
-      select: { title: true, description: true, tags: true, category: true },
-    });
-    if (!problem) return;
-
-    const text = [
-      problem.title,
-      problem.description || "",
-      problem.tags?.join(", ") || "",
-      problem.category,
-    ].join(" ");
-
-    const { generateEmbedding } =
-      await import("../services/embedding.service.js");
-    const embedding = await generateEmbedding(text);
-
-    if (!embedding) {
-      const { enqueueEmbedding } =
-        await import("../services/embedding.outbox.js");
-      await enqueueEmbedding(
-        "Problem",
-        problemId,
-        "generateEmbedding returned null",
-      );
-      return;
-    }
-    try {
-      const vectorStr = `[${embedding.join(",")}]`;
-      await prisma.$executeRawUnsafe(
-        `UPDATE problems SET embedding = $1::vector WHERE id = $2`,
-        vectorStr,
-        problemId,
-      );
-    } catch (dbErr) {
-      const { enqueueEmbedding } =
-        await import("../services/embedding.outbox.js");
-      await enqueueEmbedding(
-        "Problem",
-        problemId,
-        `db update failed: ${dbErr.message}`,
-      );
-    }
-  } catch (err) {
-    console.error("Problem embedding error:", err.message);
-  }
+  const { AI_ENABLED } = await import("../config/env.js");
+  if (!AI_ENABLED) return;
+  const { embedAndPersist } = await import("../services/embedding.service.js");
+  await embedAndPersist("Problem", problemId);
 }

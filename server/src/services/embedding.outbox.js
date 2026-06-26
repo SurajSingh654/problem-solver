@@ -1,11 +1,16 @@
 // Sprint 4.1 — embedding outbox retry queue.
 // See docs/superpowers/specs/2026-06-24-embedding-outbox-retry-queue-design.md
 import prisma from "../lib/prisma.js";
-import {
-  embedSolution,
-  embedProblem,
-  embedNote,
-} from "./embedding.service.js";
+
+// No static import of embedAndPersist — lazy to break the import cycle
+// (embedding.service.js lazy-imports enqueueEmbedding symmetrically).
+
+async function dispatchEmbed(entityType, entityId) {
+  const { embedAndPersist } = await import("./embedding.service.js");
+  return embedAndPersist(entityType, entityId);
+}
+
+const KNOWN_ENTITY_TYPES = new Set(["Solution", "Problem", "Note"]);
 
 const SCHEDULER_INTERVAL_MS = 60_000;
 const BATCH_SIZE = 10;
@@ -19,12 +24,6 @@ const BACKOFF_SCHEDULE_MS = [
 const MAX_ATTEMPTS = BACKOFF_SCHEDULE_MS.length;
 const STALE_RUNNING_MS = 5 * 60_000;
 
-const DISPATCH = {
-  Solution: embedSolution,
-  Problem: embedProblem,
-  Note: embedNote,
-};
-
 const TABLE_MAP = {
   Solution: "solutions",
   Problem: "problems",
@@ -35,7 +34,7 @@ let timer = null;
 let running = false;
 
 export async function enqueueEmbedding(entityType, entityId, lastError = null) {
-  if (!DISPATCH[entityType]) return;
+  if (!KNOWN_ENTITY_TYPES.has(entityType)) return;
   const truncatedError = lastError ? String(lastError).slice(0, 500) : null;
   try {
     await prisma.embeddingOutbox.upsert({
@@ -73,8 +72,7 @@ export async function processOutboxBatch({ batchSize = BATCH_SIZE } = {}) {
     result.processed++;
     const startMs = Date.now();
     try {
-      const dispatchFn = DISPATCH[row.entityType];
-      if (!dispatchFn) {
+      if (!KNOWN_ENTITY_TYPES.has(row.entityType)) {
         await prisma.embeddingOutbox.delete({ where: { id: row.id } });
         console.log(
           `[embedding-outbox:orphan] type=${row.entityType} id=${row.entityId} — unknown entityType, dropping`,
@@ -82,7 +80,7 @@ export async function processOutboxBatch({ batchSize = BATCH_SIZE } = {}) {
         result.orphaned++;
         continue;
       }
-      const embedded = await dispatchFn(row.entityId);
+      const embedded = await dispatchEmbed(row.entityType, row.entityId);
       if (embedded) {
         await prisma.embeddingOutbox.delete({ where: { id: row.id } });
         console.log(

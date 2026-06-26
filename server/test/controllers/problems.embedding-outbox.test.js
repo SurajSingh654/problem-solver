@@ -1,67 +1,50 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const outboxMock = vi.hoisted(() => ({
-  enqueueEmbedding: vi.fn(),
-}));
-vi.mock("../../src/services/embedding.outbox.js", () => outboxMock);
-
 const embeddingServiceMock = vi.hoisted(() => ({
-  generateEmbedding: vi.fn(),
+  embedAndPersist: vi.fn(),
 }));
 vi.mock("../../src/services/embedding.service.js", () => embeddingServiceMock);
 
+const envMock = vi.hoisted(() => ({ AI_ENABLED: true }));
 vi.mock("../../src/config/env.js", async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, AI_ENABLED: true };
+  return new Proxy(actual, {
+    get(target, key) {
+      if (key === "AI_ENABLED") return envMock.AI_ENABLED;
+      return target[key];
+    },
+  });
 });
-
-const prismaMock = vi.hoisted(() => ({
-  problem: { findUnique: vi.fn() },
-  $executeRawUnsafe: vi.fn(),
-}));
-vi.mock("../../src/lib/prisma.js", () => ({ default: prismaMock }));
 
 const problemsCtrl = await import("../../src/controllers/problems.controller.js");
 
 describe("generateProblemEmbedding → outbox wiring", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prismaMock.problem.findUnique.mockResolvedValue({
-      title: "Test problem",
-      description: "test desc",
-      tags: ["dp"],
-      category: "CODING",
-    });
+    envMock.AI_ENABLED = true;
+    embeddingServiceMock.embedAndPersist.mockResolvedValue([0.1, 0.2]);
   });
 
-  it("test 19: when generateEmbedding returns null, enqueueEmbedding('Problem', id) is called", async () => {
-    embeddingServiceMock.generateEmbedding.mockResolvedValueOnce(null);
+  it("test 19: invokes embedAndPersist('Problem', id) when AI is enabled", async () => {
+    embeddingServiceMock.embedAndPersist.mockResolvedValueOnce([0.1, 0.2]);
     await problemsCtrl.generateProblemEmbedding("prob_test_1");
-    expect(outboxMock.enqueueEmbedding).toHaveBeenCalledTimes(1);
-    expect(outboxMock.enqueueEmbedding).toHaveBeenCalledWith(
-      "Problem",
-      "prob_test_1",
-      expect.stringContaining("generateEmbedding returned null"),
-    );
-    expect(prismaMock.$executeRawUnsafe).not.toHaveBeenCalled();
+    expect(embeddingServiceMock.embedAndPersist).toHaveBeenCalledTimes(1);
+    expect(embeddingServiceMock.embedAndPersist).toHaveBeenCalledWith("Problem", "prob_test_1");
   });
 
-  it("test 20: when SQL UPDATE throws, enqueueEmbedding is called with db-update reason", async () => {
-    embeddingServiceMock.generateEmbedding.mockResolvedValueOnce([0.1, 0.2]);
-    prismaMock.$executeRawUnsafe.mockRejectedValueOnce(new Error("connection refused"));
-    await problemsCtrl.generateProblemEmbedding("prob_test_2");
-    expect(outboxMock.enqueueEmbedding).toHaveBeenCalledWith(
-      "Problem",
-      "prob_test_2",
-      expect.stringContaining("db update failed"),
-    );
+  it("test 20: propagates without throwing when embedAndPersist returns null", async () => {
+    embeddingServiceMock.embedAndPersist.mockResolvedValueOnce(null);
+    await expect(problemsCtrl.generateProblemEmbedding("prob_test_2")).resolves.toBeUndefined();
+    expect(embeddingServiceMock.embedAndPersist).toHaveBeenCalledTimes(1);
   });
 
-  it("test 21: when embedding succeeds, enqueueEmbedding is NOT called", async () => {
-    embeddingServiceMock.generateEmbedding.mockResolvedValueOnce([0.1, 0.2]);
-    prismaMock.$executeRawUnsafe.mockResolvedValueOnce(undefined);
-    await problemsCtrl.generateProblemEmbedding("prob_test_3");
-    expect(outboxMock.enqueueEmbedding).not.toHaveBeenCalled();
-    expect(prismaMock.$executeRawUnsafe).toHaveBeenCalledTimes(1);
+  it("test 21: short-circuits when AI is disabled (no embedAndPersist call)", async () => {
+    envMock.AI_ENABLED = false;
+    try {
+      await problemsCtrl.generateProblemEmbedding("prob_test_3");
+      expect(embeddingServiceMock.embedAndPersist).not.toHaveBeenCalled();
+    } finally {
+      envMock.AI_ENABLED = true;
+    }
   });
 });

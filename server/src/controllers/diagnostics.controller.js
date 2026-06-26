@@ -277,7 +277,7 @@ async function databaseFindings() {
           severity: SEVERITY.WARNING,
           title: `${notesMissing} notes missing embeddings (${pct.toFixed(0)}% of active)`,
           detail: `Notes without embeddings can't appear in the "Related" panel. The notes.embedding writer fires 5s after every save; misses usually mean OPENAI_API_KEY was missing during a window.`,
-          recommendedFix: `Run a one-shot backfill: iterate notes where embedding IS NULL and call embedNote(). Mirrors the embedAllExisting() pattern in embedding.service.js.`,
+          recommendedFix: `Run a one-shot backfill: iterate notes where embedding IS NULL and call embedAndPersist("Note", id). Mirrors the embedAllExisting() pattern in embedding.service.js.`,
           metric: notesMissing,
         }),
       );

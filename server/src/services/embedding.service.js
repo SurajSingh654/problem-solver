@@ -115,166 +115,97 @@ export function buildProblemText(problem) {
   return parts.join("\n");
 }
 
-// ── Generate and store embedding for a solution ────────
-export async function embedSolution(solutionId) {
-  try {
-    const solution = await prisma.solution.findUnique({
-      where: { id: solutionId },
-      include: {
-        problem: {
-          select: { title: true, difficulty: true, category: true, tags: true },
+// ── Unified writer: load → buildText → embed → persist (+ enqueue on failure)
+// ── Polymorphic over entityType via the ENTITY_CONFIG map.
+
+const ENTITY_CONFIG = {
+  Solution: {
+    table: "solutions",
+    load: (id) =>
+      prisma.solution.findUnique({
+        where: { id },
+        select: {
+          approach: true,
+          code: true,
+          keyInsight: true,
+          patterns: true,
+          problem: {
+            select: { title: true, difficulty: true, category: true, tags: true },
+          },
         },
-      },
-    });
+      }),
+    buildText: (s) => buildSolutionText(s, s.problem),
+  },
+  Problem: {
+    table: "problems",
+    load: (id) => prisma.problem.findUnique({ where: { id } }),
+    buildText: (p) => buildProblemText(p),
+  },
+  Note: {
+    table: "notes",
+    load: (id) => prisma.note.findUnique({ where: { id } }),
+    buildText: (n) => buildNoteText(n),
+  },
+};
 
-    if (!solution) return null;
+export async function embedAndPersist(entityType, entityId) {
+  const config = ENTITY_CONFIG[entityType];
+  if (!config) {
+    console.error(`[Embedding] Unknown entityType: ${entityType}`);
+    return null;
+  }
+  try {
+    const entity = await config.load(entityId);
+    if (!entity) return null;
 
-    const text = buildSolutionText(solution, solution.problem);
+    const text = config.buildText(entity);
     if (!text || text.length < 20) return null;
 
     const embedding = await generateEmbedding(text);
-    if (!embedding) return null;
+    if (!embedding) {
+      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      await enqueueEmbedding(
+        entityType,
+        entityId,
+        "generateEmbedding returned null",
+      );
+      return null;
+    }
 
-    // Store using raw SQL since Prisma doesn't support vector type natively
-    await prisma.$executeRawUnsafe(
-      `UPDATE solutions SET embedding = $1::vector WHERE id = $2`,
-      `[${embedding.join(",")}]`,
-      solutionId,
-    );
-
-    console.log(
-      `[Embedding] Solution ${solutionId} embedded (${text.length} chars)`,
-    );
-    return embedding;
-  } catch (error) {
-    console.error(
-      `[Embedding] Failed for solution ${solutionId}:`,
-      error.message,
-    );
+    try {
+      const vectorStr = `[${embedding.join(",")}]`;
+      await prisma.$executeRawUnsafe(
+        `UPDATE "${config.table}" SET embedding = $1::vector WHERE id = $2`,
+        vectorStr,
+        entityId,
+      );
+      console.log(
+        `[Embedding] ${entityType} ${entityId} embedded (${text.length} chars)`,
+      );
+      return embedding;
+    } catch (dbErr) {
+      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      await enqueueEmbedding(
+        entityType,
+        entityId,
+        `db update failed: ${dbErr.message}`,
+      );
+      return null;
+    }
+  } catch (err) {
+    console.error(`[Embedding] ${entityType} ${entityId} failed:`, err.message);
+    try {
+      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      await enqueueEmbedding(entityType, entityId, err.message);
+    } catch {
+      // enqueue self-failure already CRITICAL-logs; don't mask original error
+    }
     return null;
   }
 }
 
-// ── Generate and store embedding for a problem ─────────
-export async function embedProblem(problemId) {
-  try {
-    const problem = await prisma.problem.findUnique({
-      where: { id: problemId },
-    });
-
-    if (!problem) return null;
-
-    const text = buildProblemText(problem);
-    if (!text || text.length < 20) return null;
-
-    const embedding = await generateEmbedding(text);
-    if (!embedding) return null;
-
-    await prisma.$executeRawUnsafe(
-      `UPDATE problems SET embedding = $1::vector WHERE id = $2`,
-      `[${embedding.join(",")}]`,
-      problemId,
-    );
-
-    console.log(
-      `[Embedding] Problem ${problemId} embedded (${text.length} chars)`,
-    );
-    return embedding;
-  } catch (error) {
-    console.error(
-      `[Embedding] Failed for problem ${problemId}:`,
-      error.message,
-    );
-    return null;
-  }
-}
-
-// ── Find similar solutions using vector search ─────────
-// ── Find similar solutions using vector search ─────────
-export async function findSimilarSolutions(solutionId, teamId, limit = 5) {
-  try {
-    const results = await prisma.$queryRawUnsafe(
-      `
-      SELECT s.id, s."problemId", s."userId", s.patterns,
-             s."optimizedApproach", s."keyInsight", s."timeComplexity",
-             s.confidence, s.language,
-             s.embedding <=> (SELECT embedding FROM solutions WHERE id = $1) AS distance
-      FROM solutions s
-      WHERE s.id != $1
-        AND s."teamId" = $2
-        AND s.embedding IS NOT NULL
-      ORDER BY distance ASC
-      LIMIT $3
-    `,
-      solutionId,
-      teamId,
-      limit,
-    );
-    return results;
-  } catch (error) {
-    console.error(
-      "[Embedding] Similar solutions search failed:",
-      error.message,
-    );
-    return [];
-  }
-}
-
-// ── Find similar problems using vector search ──────────
-export async function findSimilarProblems(problemId, teamId, limit = 5) {
-  try {
-    const results = await prisma.$queryRawUnsafe(
-      `
-      SELECT p.id, p.title, p.difficulty, p.category, p.tags,
-             p.embedding <=> (SELECT embedding FROM problems WHERE id = $1) AS distance
-      FROM problems p
-      WHERE p.id != $1
-        AND p."teamId" = $2
-        AND p."isPublished" = true
-        AND p.embedding IS NOT NULL
-      ORDER BY distance ASC
-      LIMIT $3
-    `,
-      problemId,
-      teamId,
-      limit,
-    );
-    return results;
-  } catch (error) {
-    console.error("[Embedding] Similar problems search failed:", error.message);
-    return [];
-  }
-}
-
-// ── Find solutions similar to a text query ─────────────
-export async function searchSolutionsByText(queryText, teamId, limit = 5) {
-  try {
-    const embedding = await generateEmbedding(queryText);
-    if (!embedding) return [];
-    const vectorStr = `[${embedding.join(",")}]`;
-    const results = await prisma.$queryRawUnsafe(
-      `
-      SELECT s.id, s."problemId", s."userId", s.patterns,
-             s."optimizedApproach", s."keyInsight",
-             s.embedding <=> $1::vector AS distance
-      FROM solutions s
-      WHERE s."teamId" = $2
-        AND s.embedding IS NOT NULL
-      ORDER BY distance ASC
-      LIMIT $3
-    `,
-      vectorStr,
-      teamId,
-      limit,
-    );
-    return results;
-  } catch (error) {
-    console.error("[Embedding] Text search failed:", error.message);
-    return [];
-  }
-}
-
-// ── Batch embed all existing solutions and problems ────
+// ── Batch embed all existing solutions and problems (manual recovery tool).
+// Failed rows are queued into the outbox via embedAndPersist for retry.
 export async function embedAllExisting() {
   console.log("[Embedding] Starting batch embedding...");
   const problems = await prisma.$queryRawUnsafe(`
@@ -282,7 +213,7 @@ export async function embedAllExisting() {
   `);
   console.log(`[Embedding] ${problems.length} problems need embedding`);
   for (const p of problems) {
-    await embedProblem(p.id);
+    await embedAndPersist("Problem", p.id);
     await new Promise((r) => setTimeout(r, 200));
   }
   const solutions = await prisma.$queryRawUnsafe(`
@@ -290,7 +221,7 @@ export async function embedAllExisting() {
   `);
   console.log(`[Embedding] ${solutions.length} solutions need embedding`);
   for (const s of solutions) {
-    await embedSolution(s.id);
+    await embedAndPersist("Solution", s.id);
     await new Promise((r) => setTimeout(r, 200));
   }
   console.log("[Embedding] Batch embedding complete");
@@ -310,55 +241,6 @@ export function buildNoteText(note) {
   if (note.linkedEntityType) parts.push(`Linked: ${note.linkedEntityType}`);
   if (note.contentMarkdown) parts.push(note.contentMarkdown);
   return parts.join("\n\n");
-}
-
-export async function embedNote(noteId) {
-  try {
-    const note = await prisma.note.findUnique({ where: { id: noteId } });
-    if (!note) return null;
-    const text = buildNoteText(note);
-    if (!text || text.length < 20) return null;
-
-    const embedding = await generateEmbedding(text);
-    if (!embedding) {
-      // Lazy import to break the embedding.service.js ↔ embedding.outbox.js cycle
-      const { enqueueEmbedding } = await import("./embedding.outbox.js");
-      await enqueueEmbedding(
-        "Note",
-        noteId,
-        "generateEmbedding returned null",
-      );
-      return null;
-    }
-
-    try {
-      await prisma.$executeRawUnsafe(
-        `UPDATE notes SET embedding = $1::vector WHERE id = $2`,
-        `[${embedding.join(",")}]`,
-        noteId,
-      );
-    } catch (dbErr) {
-      const { enqueueEmbedding } = await import("./embedding.outbox.js");
-      await enqueueEmbedding(
-        "Note",
-        noteId,
-        `db update failed: ${dbErr.message}`,
-      );
-      return null;
-    }
-    return embedding;
-  } catch (error) {
-    console.error(`[Embedding] Note ${noteId} failed:`, error.message);
-    try {
-      const { enqueueEmbedding } = await import("./embedding.outbox.js");
-      await enqueueEmbedding("Note", noteId, error.message);
-    } catch {
-      // enqueueEmbedding already has its own CRITICAL log on self-failure;
-      // a nested error here is best-effort, swallow to avoid masking the
-      // original error.
-    }
-    return null;
-  }
 }
 
 // Find similar notes belonging to the same user. Excludes archived rows

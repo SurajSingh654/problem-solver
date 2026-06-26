@@ -993,57 +993,8 @@ async function updateStreak(userId) {
 }
 
 export async function generateSolutionEmbedding(solutionId) {
-  try {
-    const { AI_ENABLED } = await import("../config/env.js");
-    if (!AI_ENABLED) return;
-    const solution = await prisma.solution.findUnique({
-      where: { id: solutionId },
-      select: {
-        approach: true,
-        code: true,
-        keyInsight: true,
-        patterns: true,
-        problem: { select: { title: true } },
-      },
-    });
-    if (!solution) return;
-    const text = [
-      solution.problem?.title || "",
-      solution.approach || "",
-      solution.keyInsight || "",
-      (solution.patterns ?? []).join(" "),
-      solution.code ? solution.code.substring(0, 500) : "",
-    ].join(" ");
-    const { generateEmbedding } =
-      await import("../services/embedding.service.js");
-    const embedding = await generateEmbedding(text);
-    if (!embedding) {
-      const { enqueueEmbedding } =
-        await import("../services/embedding.outbox.js");
-      await enqueueEmbedding(
-        "Solution",
-        solutionId,
-        "generateEmbedding returned null",
-      );
-      return;
-    }
-    try {
-      const vectorStr = `[${embedding.join(",")}]`;
-      await prisma.$executeRawUnsafe(
-        `UPDATE solutions SET embedding = $1::vector WHERE id = $2`,
-        vectorStr,
-        solutionId,
-      );
-    } catch (dbErr) {
-      const { enqueueEmbedding } =
-        await import("../services/embedding.outbox.js");
-      await enqueueEmbedding(
-        "Solution",
-        solutionId,
-        `db update failed: ${dbErr.message}`,
-      );
-    }
-  } catch (err) {
-    console.error("Solution embedding error:", err.message);
-  }
+  const { AI_ENABLED } = await import("../config/env.js");
+  if (!AI_ENABLED) return;
+  const { embedAndPersist } = await import("../services/embedding.service.js");
+  await embedAndPersist("Solution", solutionId);
 }

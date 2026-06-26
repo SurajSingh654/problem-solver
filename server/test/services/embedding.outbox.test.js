@@ -16,9 +16,7 @@ vi.mock("../../src/lib/prisma.js", () => ({
 }));
 
 const embeddingServiceMock = vi.hoisted(() => ({
-  embedSolution: vi.fn(),
-  embedProblem: vi.fn(),
-  embedNote: vi.fn(),
+  embedAndPersist: vi.fn(),
   generateEmbedding: vi.fn(),
 }));
 
@@ -40,9 +38,7 @@ beforeEach(() => {
   prismaMock.embeddingOutbox.upsert.mockResolvedValue({});
   prismaMock.embeddingOutbox.update.mockResolvedValue({});
   prismaMock.embeddingOutbox.delete.mockResolvedValue({});
-  embeddingServiceMock.embedSolution.mockResolvedValue([0.1, 0.2]);
-  embeddingServiceMock.embedProblem.mockResolvedValue([0.1, 0.2]);
-  embeddingServiceMock.embedNote.mockResolvedValue([0.1, 0.2]);
+  embeddingServiceMock.embedAndPersist.mockResolvedValue([0.1, 0.2]);
 });
 
 afterEach(() => {
@@ -136,7 +132,7 @@ describe("processOutboxBatch", () => {
   it("test 7: successful embed deletes the row and logs success", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([SOL_ROW]);
-    embeddingServiceMock.embedSolution.mockResolvedValueOnce([0.1, 0.2, 0.3]);
+    embeddingServiceMock.embedAndPersist.mockResolvedValueOnce([0.1, 0.2, 0.3]);
     const result = await processOutboxBatch();
     expect(prismaMock.embeddingOutbox.delete).toHaveBeenCalledWith({
       where: { id: "outbox_1" },
@@ -151,7 +147,7 @@ describe("processOutboxBatch", () => {
   it("test 8: failed embed bumps attempts and reschedules per backoff", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ ...SOL_ROW, attempts: 0 }]);
-    embeddingServiceMock.embedSolution.mockResolvedValueOnce(null);
+    embeddingServiceMock.embedAndPersist.mockResolvedValueOnce(null);
     // checkEntityExists query — entity DOES exist → not orphan
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ "?column?": 1 }]);
     const result = await processOutboxBatch();
@@ -173,7 +169,7 @@ describe("processOutboxBatch", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     // Row has already failed 5 times; this is attempt 6 > MAX_ATTEMPTS (5) → FAILED
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ ...SOL_ROW, attempts: 5 }]);
-    embeddingServiceMock.embedSolution.mockResolvedValueOnce(null);
+    embeddingServiceMock.embedAndPersist.mockResolvedValueOnce(null);
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ "?column?": 1 }]);
     await processOutboxBatch();
     expect(prismaMock.embeddingOutbox.update).toHaveBeenCalledTimes(1);
@@ -191,7 +187,7 @@ describe("processOutboxBatch", () => {
   it("test 10: orphan self-heal — entity not found → delete row", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([SOL_ROW]);
-    embeddingServiceMock.embedSolution.mockResolvedValueOnce(null);
+    embeddingServiceMock.embedAndPersist.mockResolvedValueOnce(null);
     // checkEntityExists — entity GONE
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce([]);
     const result = await processOutboxBatch();
@@ -215,7 +211,7 @@ describe("processOutboxBatch", () => {
     ];
     prismaMock.$queryRawUnsafe.mockResolvedValueOnce(ROWS);
     // 1st succeeds, 2nd throws unexpected, 3rd succeeds
-    embeddingServiceMock.embedSolution
+    embeddingServiceMock.embedAndPersist
       .mockResolvedValueOnce([0.1])
       .mockRejectedValueOnce(new Error("unexpected"))
       .mockResolvedValueOnce([0.2]);
@@ -256,7 +252,7 @@ describe("backoff schedule", () => {
           updatedAt: new Date(),
         },
       ]);
-      embeddingServiceMock.embedSolution.mockResolvedValueOnce(null);
+      embeddingServiceMock.embedAndPersist.mockResolvedValueOnce(null);
       prismaMock.$queryRawUnsafe.mockResolvedValueOnce([{ "?column?": 1 }]); // entity exists
       prismaMock.embeddingOutbox.update.mockResolvedValue({});
       await processOutboxBatch();

@@ -2,7 +2,7 @@
 // Notes — embedding writer with per-note debounce
 // ============================================================================
 //
-// Fires `embedNote(noteId)` ~5 seconds after the user stops editing.
+// Fires `embedAndPersist("Note", noteId)` ~5 seconds after the user stops editing.
 // Coalesces rapid saves so we don't burn embeddings on every keystroke
 // (the detail page auto-saves every 1.2s).
 //
@@ -13,7 +13,7 @@
 // Failures log silently. Embedding is best-effort; the note save path
 // never blocks on it.
 // ============================================================================
-import { embedNote, isEmbeddingEnabled } from "./embedding.service.js";
+import { embedAndPersist, isEmbeddingEnabled } from "./embedding.service.js";
 
 const DEBOUNCE_MS = 5000;
 const timers = new Map();
@@ -28,7 +28,7 @@ export function scheduleNoteEmbedding(noteId) {
   const t = setTimeout(async () => {
     timers.delete(noteId);
     try {
-      await embedNote(noteId);
+      await embedAndPersist("Note", noteId);
     } catch (err) {
       console.error(`[notes.embedding] schedule failed for ${noteId}:`, err.message);
     }
