@@ -13,7 +13,10 @@
 // ============================================================================
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
-import { scheduleNoteEmbedding } from "../services/notes.embedding.js";
+import {
+  scheduleNoteEmbedding,
+  cancelNoteEmbedding,
+} from "../services/notes.embedding.js";
 import {
   findSimilarNotes,
   findProblemsByNoteEmbedding,
@@ -527,13 +530,17 @@ export async function archiveNote(req, res) {
 export async function deleteNotePermanent(req, res) {
   try {
     const userId = req.user.id;
-    // updateMany-style guard: try to find first to ensure ownership,
-    // then delete by id.
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, userId },
       select: { id: true },
     });
     if (!existing) return error(res, "Note not found", 404);
+
+    // Cancel any pending 5s debounced embed BEFORE deleting the row.
+    // If the timer races and fires anyway, the embed will find no note
+    // (findUnique returns null) and bail. Defense-in-depth.
+    cancelNoteEmbedding(existing.id);
+
     await prisma.note.delete({ where: { id: existing.id } });
     return success(res, { deleted: true });
   } catch (err) {
