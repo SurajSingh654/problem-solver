@@ -4,6 +4,11 @@ import prisma from "../lib/prisma.js";
 
 // No static import of embedAndPersist — lazy to break the import cycle
 // (embedding.service.js lazy-imports enqueueEmbedding symmetrically).
+// KNOWN_ENTITY_TYPES is intentionally kept local (not imported from
+// embedding.service.js) because a static import there forms an ESM cycle that
+// breaks Vitest's module-mock isolation. Keep this Set in sync with
+// Object.keys(ENTITY_CONFIG) in embedding.service.js — update both files in
+// the same commit when adding a new entity type.
 
 async function dispatchEmbed(entityType, entityId) {
   const { embedAndPersist } = await import("./embedding.service.js");

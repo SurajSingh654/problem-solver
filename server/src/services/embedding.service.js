@@ -115,6 +115,30 @@ export function buildProblemText(problem) {
   return parts.join("\n");
 }
 
+// ── Notes ──────────────────────────────────────────────
+//
+// Notes are user-scoped. The text representation includes title + tags +
+// the markdown body so the embedding captures both topic and content.
+// Generation runs from `notes.embedding.js` after every save (debounced).
+
+export function buildNoteText(note) {
+  const parts = [];
+  if (note.title) parts.push(`Title: ${note.title}`);
+  if (Array.isArray(note.tags) && note.tags.length > 0)
+    parts.push(`Tags: ${note.tags.join(", ")}`);
+  if (note.linkedEntityType) parts.push(`Linked: ${note.linkedEntityType}`);
+  if (note.contentMarkdown) parts.push(note.contentMarkdown);
+  return parts.join("\n\n");
+}
+
+// ── Lazy-import helper for the outbox enqueue function.
+// Keeps the import on-demand so the service→outbox cycle
+// only resolves at call time, not at module load.
+async function getOutboxEnqueue() {
+  const { enqueueEmbedding } = await import("./embedding.outbox.js");
+  return enqueueEmbedding;
+}
+
 // ── Unified writer: load → buildText → embed → persist (+ enqueue on failure)
 // ── Polymorphic over entityType via the ENTITY_CONFIG map.
 
@@ -148,6 +172,8 @@ const ENTITY_CONFIG = {
   },
 };
 
+export const KNOWN_ENTITY_TYPES = new Set(Object.keys(ENTITY_CONFIG));
+
 export async function embedAndPersist(entityType, entityId) {
   const config = ENTITY_CONFIG[entityType];
   if (!config) {
@@ -163,7 +189,7 @@ export async function embedAndPersist(entityType, entityId) {
 
     const embedding = await generateEmbedding(text);
     if (!embedding) {
-      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      const enqueueEmbedding = await getOutboxEnqueue();
       await enqueueEmbedding(
         entityType,
         entityId,
@@ -184,7 +210,7 @@ export async function embedAndPersist(entityType, entityId) {
       );
       return embedding;
     } catch (dbErr) {
-      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      const enqueueEmbedding = await getOutboxEnqueue();
       await enqueueEmbedding(
         entityType,
         entityId,
@@ -195,7 +221,7 @@ export async function embedAndPersist(entityType, entityId) {
   } catch (err) {
     console.error(`[Embedding] ${entityType} ${entityId} failed:`, err.message);
     try {
-      const { enqueueEmbedding } = await import("./embedding.outbox.js");
+      const enqueueEmbedding = await getOutboxEnqueue();
       await enqueueEmbedding(entityType, entityId, err.message);
     } catch {
       // enqueue self-failure already CRITICAL-logs; don't mask original error
@@ -225,22 +251,6 @@ export async function embedAllExisting() {
     await new Promise((r) => setTimeout(r, 200));
   }
   console.log("[Embedding] Batch embedding complete");
-}
-
-// ── Notes ──────────────────────────────────────────────
-//
-// Notes are user-scoped. The text representation includes title + tags +
-// the markdown body so the embedding captures both topic and content.
-// Generation runs from `notes.embedding.js` after every save (debounced).
-
-export function buildNoteText(note) {
-  const parts = [];
-  if (note.title) parts.push(`Title: ${note.title}`);
-  if (Array.isArray(note.tags) && note.tags.length > 0)
-    parts.push(`Tags: ${note.tags.join(", ")}`);
-  if (note.linkedEntityType) parts.push(`Linked: ${note.linkedEntityType}`);
-  if (note.contentMarkdown) parts.push(note.contentMarkdown);
-  return parts.join("\n\n");
 }
 
 // Find similar notes belonging to the same user. Excludes archived rows

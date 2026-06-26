@@ -40,11 +40,7 @@ describe("generateSolutionEmbedding → outbox wiring", () => {
 
   it("test 18: short-circuits when AI is disabled (no embedAndPersist call)", async () => {
     envMock.AI_ENABLED = false;
-    try {
-      await solutionsCtrl.generateSolutionEmbedding("sol_test_3");
-      expect(embeddingServiceMock.embedAndPersist).not.toHaveBeenCalled();
-    } finally {
-      envMock.AI_ENABLED = true;
-    }
+    await solutionsCtrl.generateSolutionEmbedding("sol_test_3");
+    expect(embeddingServiceMock.embedAndPersist).not.toHaveBeenCalled();
   });
 });
