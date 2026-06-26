@@ -126,49 +126,24 @@ export async function reviewSolution(req, res) {
 
     // ── RAG: Find similar teammate solutions ────────────
     let teammateSolutions = [];
+    let ragContext = "";
     try {
-      const solutionText = [
+      const { findSimilarTeammateSolutions, formatTeammateContext } =
+        await import("../services/rag.service.js");
+      const queryText = [
         solution.approach || "",
         solution.keyInsight || "",
         solution.code ? solution.code.substring(0, 300) : "",
       ].join(" ");
-      const { generateEmbedding } =
-        await import("../services/embedding.service.js");
-      const queryEmbedding = await generateEmbedding(solutionText);
-      if (queryEmbedding) {
-        const vectorStr = `[${queryEmbedding.join(",")}]`;
-        teammateSolutions = await prisma.$queryRawUnsafe(
-          `SELECT s.id, s.approach, s."keyInsight" as "key_insight",
-           s."timeComplexity" as "time_complexity", s."spaceComplexity" as "space_complexity",
-           s.confidence, s.patterns, u.name as author_name,
-           1 - (s.embedding <=> $1::vector) as similarity
-           FROM solutions s JOIN users u ON s."userId" = u.id
-           WHERE s."teamId" = $2 AND s."problemId" = $3 AND s."userId" != $4
-           AND s.embedding IS NOT NULL ORDER BY s.embedding <=> $1::vector LIMIT 3`,
-          vectorStr,
-          teamId,
-          solution.problemId,
-          userId,
-        );
-      }
+      teammateSolutions = await findSimilarTeammateSolutions({
+        problemId: solution.problemId,
+        teamId,
+        userId,
+        queryText,
+      });
+      ragContext = formatTeammateContext(teammateSolutions);
     } catch (err) {
       console.error("RAG search failed (continuing without):", err.message);
-    }
-
-    // ── Build RAG context ──────────────────────────────
-    let ragContext = "";
-    if (teammateSolutions.length > 0) {
-      ragContext = teammateSolutions
-        .map(
-          (ts, i) =>
-            `Teammate ${i + 1} (${ts.author_name}):
-  Approach: ${ts.approach || "Not provided"}
-  Key Insight: ${ts.key_insight || "Not provided"}
-  Complexity: ${ts.time_complexity || "?"} time, ${ts.space_complexity || "?"} space
-  Pattern: ${(ts.patterns ?? []).join(", ") || "Not identified"}
-  Confidence: ${ts.confidence}/5`,
-        )
-        .join("\n\n");
     }
 
     // ── Pattern baseline: user's historical performance on this pattern ──
