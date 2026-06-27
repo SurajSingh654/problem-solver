@@ -129,7 +129,7 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 | 3.5 | MCP revocation Redis upgrade (M23 — 60s cache TTL today; deferred to Phase 2) | deferred | — | — |
 | 4.1 | Embedding outbox retry queue (H4 — silent NULL embeddings now retried with exponential backoff; new `EmbeddingOutbox` table + 60s scheduler + 3-site wiring + 20 tests; bundled vite 5→6 upgrade clearing GHSA-fx2h-pf6j-xcff) | ✅ shipped | [`2026-06-24-embedding-outbox-retry-queue-design.md`](../specs/2026-06-24-embedding-outbox-retry-queue-design.md) | 2026-06-24 |
 | 4.2a | Embedding write-path consolidation (M10 cancel-on-delete + M15 wire AI_EMBEDDING_MODEL + M16 source pre-check + DRY refactor to embedAndPersist + dead-code removal; +15 tests) | ✅ shipped | [`2026-06-25-embedding-write-path-consolidation-design.md`](../specs/2026-06-25-embedding-write-path-consolidation-design.md) | 2026-06-25 |
-| 4.2b | RAG retrieval hardening (M11 updatedAt freshness floor + M12 token-bounded RAG context + M14 LIMIT consistency; dedup aiReview + interview.engine RAG SQL) | queued | — | — |
+| 4.2b | RAG retrieval hardening (M11 180d freshness floor + M12 per-field/total char caps + M14 lock LIMIT 3 via constant + new rag.service.js dedup; +17 tests) | ✅ shipped | [`2026-06-26-rag-retrieval-hardening-design.md`](../specs/2026-06-26-rag-retrieval-hardening-design.md) | 2026-06-27 |
 | 4.2c | HNSW index tuning (M13: m / ef_construction tuning + migration) | queued | — | — |
 | 4.3 | Embedding service test foundation (H14) | queued | — | — |
 | 5 | Problems + solutions controllers surface | queued | — | — |
