@@ -275,23 +275,29 @@ const toolHandlers = {
     const targetProblemId = problemId || context.problemId;
     try {
       if (query) {
-        const { generateEmbedding } = await import("./embedding.service.js");
-        const embedding = await generateEmbedding(query);
-        if (embedding) {
-          const vectorStr = `[${embedding.join(",")}]`;
-          const results = await prisma.$queryRawUnsafe(
-            `SELECT s.approach, s."keyInsight" as "key_insight",
-             s."timeComplexity" as "time_complexity", s."spaceComplexity" as "space_complexity",
-             s.patterns, s.confidence, u.name as author_name
-             FROM solutions s JOIN users u ON s."userId" = u.id
-             WHERE s."teamId" = $1 AND s."problemId" = $2 AND s."userId" != $3
-             AND s.embedding IS NOT NULL ORDER BY s.embedding <=> $4::vector LIMIT 3`,
-            context.teamId,
-            targetProblemId,
-            context.userId,
-            vectorStr,
-          );
-          if (results.length > 0) return { solutions: results };
+        const { findSimilarTeammateSolutions } = await import(
+          "./rag.service.js"
+        );
+        const rows = await findSimilarTeammateSolutions({
+          problemId: targetProblemId,
+          teamId: context.teamId,
+          userId: context.userId,
+          queryText: query,
+        });
+        if (rows.length > 0) {
+          // Map camelCase rag.service rows → snake_case keys expected by the
+          // AI's tool-call schema (key_insight, time_complexity, etc).
+          return {
+            solutions: rows.map((r) => ({
+              approach: r.approach,
+              key_insight: r.keyInsight,
+              time_complexity: r.timeComplexity,
+              space_complexity: r.spaceComplexity,
+              patterns: r.patterns,
+              confidence: r.confidence,
+              author_name: r.authorName,
+            })),
+          };
         }
       }
     } catch (err) {
@@ -477,6 +483,8 @@ const toolHandlers = {
     return { recorded: true };
   },
 };
+
+export { toolHandlers as tools };
 
 // ============================================================================
 // MAIN MESSAGE HANDLER
