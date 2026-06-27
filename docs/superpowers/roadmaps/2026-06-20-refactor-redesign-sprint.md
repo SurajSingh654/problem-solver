@@ -130,7 +130,7 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 | 4.1 | Embedding outbox retry queue (H4 — silent NULL embeddings now retried with exponential backoff; new `EmbeddingOutbox` table + 60s scheduler + 3-site wiring + 20 tests; bundled vite 5→6 upgrade clearing GHSA-fx2h-pf6j-xcff) | ✅ shipped | [`2026-06-24-embedding-outbox-retry-queue-design.md`](../specs/2026-06-24-embedding-outbox-retry-queue-design.md) | 2026-06-24 |
 | 4.2a | Embedding write-path consolidation (M10 cancel-on-delete + M15 wire AI_EMBEDDING_MODEL + M16 source pre-check + DRY refactor to embedAndPersist + dead-code removal; +15 tests) | ✅ shipped | [`2026-06-25-embedding-write-path-consolidation-design.md`](../specs/2026-06-25-embedding-write-path-consolidation-design.md) | 2026-06-25 |
 | 4.2b | RAG retrieval hardening (M11 180d freshness floor + M12 per-field/total char caps + M14 lock LIMIT 3 via constant + new rag.service.js dedup; +17 tests) | ✅ shipped | [`2026-06-26-rag-retrieval-hardening-design.md`](../specs/2026-06-26-rag-retrieval-hardening-design.md) | 2026-06-27 |
-| 4.2c | HNSW index tuning (M13: m / ef_construction tuning + migration) | queued | — | — |
+| 4.2c | HNSW index tuning (M13 — bumped m=16→24, ef_construction=64→128 across 3 indexes for 10k+ scale; plain DROP+CREATE inside Prisma's standard migrate flow) | ✅ shipped | [`2026-06-27-hnsw-tuning-design.md`](../specs/2026-06-27-hnsw-tuning-design.md) | 2026-06-27 |
 | 4.3 | Embedding service test foundation (H14) | queued | — | — |
 | 5 | Problems + solutions controllers surface | queued | — | — |
 | 6 | Notes surface | queued | — | — |
