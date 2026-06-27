@@ -1,11 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../src/lib/prisma.js", () => ({ default: {} }));
-vi.mock("../../src/config/env.js", () => ({
-  OPENAI_API_KEY: "sk-test",
-  AI_REQUEST_TIMEOUT_MS: 30000,
-  AI_EMBEDDING_MODEL: "text-embedding-3-small",
-}));
 vi.mock("openai", () => ({
   default: class {
     constructor() {
@@ -14,36 +9,37 @@ vi.mock("openai", () => ({
   },
 }));
 
-const { isEmbeddingEnabled } = await import(
-  "../../src/services/embedding.service.js"
-);
-
-const ORIGINAL_AI_ENABLED = process.env.AI_ENABLED;
-const ORIGINAL_OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// Per-test env mock — re-set before each test, then dynamically import the
+// service so it picks up the current AI_ENABLED value at module-load time.
 
 beforeEach(() => {
-  if (ORIGINAL_AI_ENABLED === undefined) delete process.env.AI_ENABLED;
-  else process.env.AI_ENABLED = ORIGINAL_AI_ENABLED;
-  if (ORIGINAL_OPENAI_API_KEY === undefined) delete process.env.OPENAI_API_KEY;
-  else process.env.OPENAI_API_KEY = ORIGINAL_OPENAI_API_KEY;
+  vi.resetModules();
 });
 
-describe("isEmbeddingEnabled", () => {
-  it("test 53: both AI_ENABLED=true AND OPENAI_API_KEY set → true", () => {
-    process.env.AI_ENABLED = "true";
-    process.env.OPENAI_API_KEY = "sk-real-key";
+async function importWithEnv(envOverrides) {
+  vi.doMock("../../src/config/env.js", () => ({
+    OPENAI_API_KEY: envOverrides.OPENAI_API_KEY ?? "",
+    AI_ENABLED: envOverrides.AI_ENABLED ?? false,
+    AI_REQUEST_TIMEOUT_MS: 30000,
+    AI_EMBEDDING_MODEL: "text-embedding-3-small",
+  }));
+  return await import("../../src/services/embedding.service.js");
+}
+
+describe("isEmbeddingEnabled — aligned with env.js AI_ENABLED", () => {
+  it("test 53: returns true when env.js AI_ENABLED is true (OPENAI_API_KEY set)", async () => {
+    const { isEmbeddingEnabled } = await importWithEnv({
+      OPENAI_API_KEY: "sk-real-key",
+      AI_ENABLED: true,
+    });
     expect(isEmbeddingEnabled()).toBe(true);
   });
 
-  it("test 54: AI_ENABLED=false → false even with OPENAI_API_KEY set", () => {
-    process.env.AI_ENABLED = "false";
-    process.env.OPENAI_API_KEY = "sk-real-key";
-    expect(isEmbeddingEnabled()).toBe(false);
-  });
-
-  it("test 55: OPENAI_API_KEY missing → false even with AI_ENABLED=true", () => {
-    process.env.AI_ENABLED = "true";
-    delete process.env.OPENAI_API_KEY;
+  it("test 54: returns false when env.js AI_ENABLED is false (no OPENAI_API_KEY)", async () => {
+    const { isEmbeddingEnabled } = await importWithEnv({
+      OPENAI_API_KEY: "",
+      AI_ENABLED: false,
+    });
     expect(isEmbeddingEnabled()).toBe(false);
   });
 });

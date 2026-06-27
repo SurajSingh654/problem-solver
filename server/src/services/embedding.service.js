@@ -14,6 +14,7 @@ import {
   OPENAI_API_KEY,
   AI_REQUEST_TIMEOUT_MS,
   AI_EMBEDDING_MODEL,
+  AI_ENABLED,
 } from "../config/env.js";
 
 let openai = null;
@@ -327,6 +328,12 @@ export async function findProblemsByNoteEmbedding(noteId, teamIds, limit = 5) {
 }
 
 // ── Check if embedding service is available ────────────
+//
+// Aligned with env.js's derived AI_ENABLED constant (which is `!!OPENAI_API_KEY`).
+// Matches CLAUDE.md's documented intent: "AI_ENABLED derives from OPENAI_API_KEY".
+// Previously read process.env directly which created a latent inconsistency
+// with the rest of the codebase — if Railway had OPENAI_API_KEY set but no
+// explicit AI_ENABLED env var, note embeddings would silently never schedule.
 export function isEmbeddingEnabled() {
-  return process.env.AI_ENABLED === "true" && !!process.env.OPENAI_API_KEY;
+  return AI_ENABLED;
 }
