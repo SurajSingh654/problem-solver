@@ -132,7 +132,9 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 | 4.2b | RAG retrieval hardening (M11 180d freshness floor + M12 per-field/total char caps + M14 lock LIMIT 3 via constant + new rag.service.js dedup; +17 tests) | ✅ shipped | [`2026-06-26-rag-retrieval-hardening-design.md`](../specs/2026-06-26-rag-retrieval-hardening-design.md) | 2026-06-27 |
 | 4.2c | HNSW index tuning (M13 — bumped m=16→24, ef_construction=64→128 across 3 indexes for 10k+ scale; plain DROP+CREATE inside Prisma's standard migrate flow) | ✅ shipped | [`2026-06-27-hnsw-tuning-design.md`](../specs/2026-06-27-hnsw-tuning-design.md) | 2026-06-27 |
 | 4.3 | Embedding service test foundation (H14 — 19 tests covering generateEmbedding edge cases + 3 text builders + findSimilarNotes + isEmbeddingEnabled; closes the Sprint 4 cluster) | ✅ shipped | [`2026-06-27-embedding-service-tests-design.md`](../specs/2026-06-27-embedding-service-tests-design.md) | 2026-06-27 |
-| 5 | Problems + solutions controllers surface | queued | — | — |
+| 5a | Solutions controller test foundation (M30 partial — 26 tests across 9 exports covering multi-tenant scope, authorization, state transitions, error envelope; surfaced 7 spec-vs-shipped divergences documented in test comments) | ✅ shipped | [`2026-06-28-solutions-controller-tests-design.md`](../specs/2026-06-28-solutions-controller-tests-design.md) | 2026-06-28 |
+| 5b | Problems controller test foundation (M29 — ~35 tests across 10 exports) | queued | — | — |
+| 5c | M17 canonical augment race verification + regression test | queued | — | — |
 | 6 | Notes surface | queued | — | — |
 | 7 | Persist-rate-limiter migration | queued | — | — |
 | 8 | Test foundation + concurrency tests | queued | — | — |
