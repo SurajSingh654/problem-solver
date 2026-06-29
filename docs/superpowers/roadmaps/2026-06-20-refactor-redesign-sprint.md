@@ -134,7 +134,7 @@ Same pattern as the just-shipped Submit Solution Page sprint: audit → spec →
 | 4.3 | Embedding service test foundation (H14 — 19 tests covering generateEmbedding edge cases + 3 text builders + findSimilarNotes + isEmbeddingEnabled; closes the Sprint 4 cluster) | ✅ shipped | [`2026-06-27-embedding-service-tests-design.md`](../specs/2026-06-27-embedding-service-tests-design.md) | 2026-06-27 |
 | 5a | Solutions controller test foundation (M30 partial — 26 tests across 9 exports covering multi-tenant scope, authorization, state transitions, error envelope; surfaced 7 spec-vs-shipped divergences documented in test comments) | ✅ shipped | [`2026-06-28-solutions-controller-tests-design.md`](../specs/2026-06-28-solutions-controller-tests-design.md) | 2026-06-28 |
 | 5b | Problems controller test foundation (M29 — 31 tests across 9 exports covering multi-tenant scope, authorization, state transitions, canonical cache branches; surfaced 8 spec-vs-shipped divergences; M17 race deferred to 5c) | ✅ shipped | [`2026-06-28-problems-controller-tests-design.md`](../specs/2026-06-28-problems-controller-tests-design.md) | 2026-06-28 |
-| 5c | M17 canonical augment race verification + regression test | queued | — | — |
+| 5c | M17 canonical augment race verification (2 regression tests locking in the post-lock double-check at problems.controller.js:619; audit M17 confirmed obsolete — race was fixed before Sprint 5c, likely in Sprint 2.7. Closes Sprint 5 cluster.) | ✅ shipped | [`2026-06-28-m17-canonical-race-design.md`](../specs/2026-06-28-m17-canonical-race-design.md) | 2026-06-29 |
 | 6 | Notes surface | queued | — | — |
 | 7 | Persist-rate-limiter migration | queued | — | — |
 | 8 | Test foundation + concurrency tests | queued | — | — |
