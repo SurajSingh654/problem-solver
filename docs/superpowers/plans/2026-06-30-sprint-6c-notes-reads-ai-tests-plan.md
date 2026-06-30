@@ -14,7 +14,19 @@
 
 **Baseline test count:** 1361 (post Sprint 6b, commit `8665b60`). Capture exact in Task 0. Target after sprint: **1386** (+25).
 
-**Review history:** Pre-implementation 4-role panel review (PO + BA + Security Manager + Lead Engineer) runs on this plan BEFORE the implementer subagent is dispatched, per `feedback_multi_agent_review_before_code.md`. All CHANGES_REQUESTED fold-ins must land in spec/plan before Task 0.
+**Review history (plan v2):** Full 4-role panel reviewed pre-implementation; all 4 verdicts returned with fold-ins (PO APPROVED_WITH_NOTES, BA/Security/Lead all CHANGES_REQUESTED). Folded into spec v2 (commit pending) and this plan v2:
+- T143 `res.status` assertion inverted (Lead C1)
+- T153 expanded to 4 sub-cases for full authz coverage (Security C2)
+- T155 + T156 embedding mocks wired + team-scope passthrough asserted (BA + Lead + Security C1)
+- T149 ordering + `where.userId` (PO + Security I1)
+- T154/T157/T159/T163 explicit `where.userId` (Security I2)
+- T161 anti-all-DEFINITION footgun documented (BA)
+- T165 team-scope re-fetch via `problemId` (Security I3)
+- T166 declaration reorder + `await Promise.resolve()` for deterministic disconnect timing (Lead I1)
+- Pattern B `beforeEach` block added (Lead I2)
+- Validator path fixed to `server/src/services/ai.validators.js` (BA)
+- AI-payload divergence rule added (BA)
+- T156 added to security-override list (PO)
 
 ---
 
@@ -174,11 +186,15 @@ cd /Users/surajsingh/Downloads/Projects/problem-solver && sed -n '789,855p' serv
 cd /Users/surajsingh/Downloads/Projects/problem-solver && sed -n '859,930p' server/src/controllers/notes.controller.js   # suggestNoteTags
 ```
 
-Confirm valid payloads to use in T155/T156/T158/T161/T162 happy and validator-reject cases — read the validator (`server/src/ai/validators.js`) for the exact shape requirements of each surface:
+Confirm valid payloads to use in T155/T156/T158/T161/T162 happy and validator-reject cases — read the validator file (correct path is `server/src/services/ai.validators.js`, BA fold-in: the v1 plan said `server/src/ai/validators.js` which doesn't exist):
 
 ```bash
-cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -nE "validateNoteSummary|validateNoteFlashcards|validateNoteAutoTag|validateNoteRelated" server/src/ai/validators.js
+cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -nE "validateNoteSummary|validateNoteFlashcards|validateNoteAutoTag|validateNoteRelated" server/src/services/ai.validators.js
 ```
+
+**T161 anti-laziness footgun** (BA fold-in): the flashcards validator rejects an "all same type" drafts array as anti-laziness. `VALID_DRAFTS_PAYLOAD` for T161 MUST use a mix of `type` values (e.g., 3 `CONCEPT` + 2 `DEFINITION` + 1 `CONTRAST`), NOT 5 `DEFINITION` entries.
+
+**AI-payload divergence rule** (BA fold-in): if a test fails because the validator's required shape has shifted (e.g., a new required field, or a different `type` enum), update the test payload + record the divergence. If a test fails because the controller's BRANCH behavior changed (e.g., happy path now persists a fallback summary, or fallback branch now 500s), STOP and escalate — that's a real bug, not a validator-shape drift.
 
 - [ ] **Step 2: Create the test file**
 
@@ -432,5 +448,5 @@ No "TBD" / "implement later" / "fill in details". Plan is mechanical (write file
 - Client `npm run build` clean.
 - Feature branch FF-merged to main; both pushed to origin.
 - Roadmap row 6c → ✅ shipped 2026-06-30, Sprint 6 cluster complete.
-- Any divergences captured per Task 1/2/3 Step 3 with security-escalation override on T146/T150/T152/T153/T154/T157/T159/T163.
+- Any divergences captured per Task 1/2/3 Step 3 with security-escalation override on T146/T150/T152/T153/T154/T156/T157/T159/T163/T165 (PO + Security fold-ins: T156 graceful fallback and T165 team-scope re-fetch are also security/reliability-critical — divergences MUST escalate, not auto-update).
 - 4-role panel CHANGES_REQUESTED items (if any) folded in before Task 0.

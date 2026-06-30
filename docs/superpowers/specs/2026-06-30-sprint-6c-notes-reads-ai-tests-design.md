@@ -6,7 +6,11 @@
 **Branch:** `feat/notes-reads-ai-tests`
 **Layers on:** main, post Sprint 6b (`8665b60`)
 **Feature flag:** None — pure additive test work
-**Review history:** Will require the standing 4-role panel review (PO + BA + Security Manager + Lead Engineer) on the implementation plan BEFORE implementer dispatch, per `feedback_multi_agent_review_before_code.md`.
+**Review history (spec v2, plan v2):** Full 4-role panel completed pre-implementation:
+- Project Owner — APPROVED WITH NOTES → folded (T149 ordering, T156 AIError code pin, T156 in security override)
+- Business Analyst — CHANGES REQUESTED → folded (validator path fix, embedding-mock wiring for T155/T156, anti-all-DEFINITION rule for T161, AI-payload divergence rule)
+- Security Manager — CHANGES REQUESTED → folded (T153 expanded to 4 sub-cases covering all branches with positive+negative authz, T155 `findProblemsByNoteEmbedding` teamIds passthrough assertion, T145/T149 `where.userId`, explicit `where.userId` on T154/T157/T159/T163, T165 team-scope re-fetch via problemId)
+- Lead Engineer — CHANGES REQUESTED → folded (T143 `res.status` inversion, T155/T156 embedding-mock override corroborates BA, T166 declaration reordering for disconnect timing, Pattern B `beforeEach` block)
 
 ---
 
@@ -164,11 +168,15 @@ beforeEach(() => {
 });
 ```
 
-### Pattern B — `notes.ai.test.js` (adds `aiComplete` + embedding-search + env override)
+### Pattern B — `notes.ai.test.js` (adds `aiComplete` + embedding-search + env override + the 4 entity prismas needed by T153 all-branches sub-cases)
 
 ```js
 const prismaMock = vi.hoisted(() => ({
   note: { findFirst: vi.fn(), update: vi.fn() },
+  problem: { findMany: vi.fn() },
+  interviewSession: { findMany: vi.fn() },
+  designSession: { findMany: vi.fn() },
+  teachingSession: { findMany: vi.fn() },
   teamMembership: { findMany: vi.fn().mockResolvedValue([]) },
 }));
 vi.mock("../../src/lib/prisma.js", () => ({ default: prismaMock }));
@@ -193,8 +201,27 @@ vi.mock("../../src/config/env.js", async (importOriginal) => {
 });
 
 const {
-  getRelatedForNote, generateNoteSummary, generateNoteFlashcards, suggestNoteTags,
+  getRelatedForNote, generateNoteSummary, generateNoteFlashcards,
+  suggestNoteTags, searchLinkableEntities,
 } = await import("../../src/controllers/notes.controller.js");
+
+// Pattern B beforeEach (Lead Engineer fold-in: was missing in v1)
+beforeEach(() => {
+  vi.clearAllMocks();
+  prismaMock.note.findFirst.mockReset();
+  prismaMock.note.update.mockReset();
+  prismaMock.problem.findMany.mockReset();
+  prismaMock.interviewSession.findMany.mockReset();
+  prismaMock.designSession.findMany.mockReset();
+  prismaMock.teachingSession.findMany.mockReset();
+  prismaMock.teamMembership.findMany.mockReset();
+  prismaMock.teamMembership.findMany.mockResolvedValue([]);
+  aiMock.aiComplete.mockReset();
+  embeddingMock.findSimilarNotes.mockReset();
+  embeddingMock.findSimilarNotes.mockResolvedValue([]);
+  embeddingMock.findProblemsByNoteEmbedding.mockReset();
+  embeddingMock.findProblemsByNoteEmbedding.mockResolvedValue([]);
+});
 ```
 
 ### Pattern C — `notes.stream.test.js` (streaming `aiStream` async-iterable + write-capturing `res`)
@@ -289,18 +316,19 @@ beforeEach(() => {
 
 ### File 1 — `notes.reads.test.js` (T143-T152)
 
-**T143 listNotes happy default:**
+**T143 listNotes happy default** (Lead Engineer fold-in: `success()` DOES call `status(200)`):
 ```js
 prismaMock.note.findMany.mockResolvedValueOnce([]);
 const { req, res } = mockReqRes({});
 await listNotes(req, res);
-expect(res.status).not.toHaveBeenCalled();  // success() doesn't call status()
+expect(res.status).toHaveBeenCalledWith(200);
 const json = res.json.mock.calls[0][0];
 expect(json.success).toBe(true);
 expect(json.data.notes).toEqual([]);
 expect(json.data.nextCursor).toBeNull();
 const arg = prismaMock.note.findMany.mock.calls[0][0];
 expect(arg.where).toMatchObject({ userId: "user_1", archivedAt: null });
+expect(arg.where.userId).toBe("user_1");  // explicit authz pin
 expect(arg.orderBy).toEqual([{ pinned: "desc" }, { updatedAt: "desc" }]);
 ```
 
@@ -320,7 +348,7 @@ expect(arg.where).toMatchObject({
 });
 ```
 
-**T145 listNotes cursor pagination:**
+**T145 listNotes cursor pagination** (Security Manager fold-in: explicit `where.userId` assertion):
 ```js
 // Mock returns limit+1 rows so hasMore=true.
 const rows = Array.from({ length: 11 }, (_, i) => ({
@@ -333,6 +361,7 @@ const json = res.json.mock.calls[0][0];
 expect(json.data.notes.length).toBe(10);
 expect(json.data.nextCursor).toBe("note_9");
 const arg = prismaMock.note.findMany.mock.calls[0][0];
+expect(arg.where.userId).toBe("user_1");  // authz invariant
 expect(arg.take).toBe(11);  // limit + 1
 expect(arg.skip).toBe(1);
 expect(arg.cursor).toEqual({ id: "note_seed" });
@@ -371,7 +400,7 @@ expect(arg.include._count.select.flashcards).toBe(true);
 expect(arg.include.folder.select).toEqual({ id: true, name: true, parentId: true });
 ```
 
-**T148 listTags ordering + excludes archived:**
+**T148 listTags aggregation + ordering + excludes archived** (controller L948-951 does NOT dedupe within a row — "a" appears 2× in row 1 + 1× in row 2 = 3):
 ```js
 prismaMock.note.findMany.mockResolvedValueOnce([
   { tags: ["a", "a", "b"] },  // dupe-within-row possible
@@ -381,7 +410,7 @@ prismaMock.note.findMany.mockResolvedValueOnce([
 const { req, res } = mockReqRes({});
 await listTags(req, res);
 const json = res.json.mock.calls[0][0];
-// "a" appears 3 times (across rows + within), "b" 2, "c" 1
+// "a" total = 3 (2 from row1 + 1 from row2), "b" 2, "c" 1
 expect(json.data.tags).toEqual([
   { tag: "a", count: 3 },
   { tag: "b", count: 2 },
@@ -393,14 +422,30 @@ expect(prismaMock.note.findMany.mock.calls[0][0].where).toMatchObject({
 });
 ```
 
-**T149 listTags top-50 cap:**
+**T149 listTags top-50 cap + ordering by count desc** (PO + Security fold-in: explicit count-desc + `where.userId`):
 ```js
-// Generate 60 distinct tags across 60 notes (one tag per note).
-const rows = Array.from({ length: 60 }, (_, i) => ({ tags: [`tag${i}`] }));
+// 60 distinct tags, varying counts so ordering is testable.
+// tag0 appears 60×, tag1 appears 59×, ..., tag59 appears 1×.
+const rows = [];
+for (let i = 0; i < 60; i++) {
+  for (let j = 0; j <= 60 - i - 1; j++) {
+    rows.push({ tags: [`tag${i}`] });
+  }
+}
 prismaMock.note.findMany.mockResolvedValueOnce(rows);
 const { req, res } = mockReqRes({});
 await listTags(req, res);
-expect(res.json.mock.calls[0][0].data.tags.length).toBe(50);
+const tags = res.json.mock.calls[0][0].data.tags;
+expect(tags.length).toBe(50);
+// Top-50 by count means the highest-frequency tag is first AND
+// the array is sorted strictly descending by count.
+expect(tags[0].tag).toBe("tag0");
+expect(tags[0].count).toBe(60);
+expect(tags[49].count).toBeGreaterThanOrEqual(tags[0].count - 49);
+for (let i = 1; i < tags.length; i++) {
+  expect(tags[i].count).toBeLessThanOrEqual(tags[i - 1].count);  // monotonically non-increasing
+}
+expect(prismaMock.note.findMany.mock.calls[0][0].where.userId).toBe("user_1");
 ```
 
 **T150 listNotesByEntity invalid type:**
@@ -440,47 +485,280 @@ expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6c");
 
 ### File 2 — `notes.ai.test.js` (T153-T164)
 
-**T153 searchLinkableEntities PROBLEM team-scoped authz:**
+**T153 searchLinkableEntities — ALL FOUR branches mixed-authz** (Security Manager C2 fold-in: covers PROBLEM team-scoped, INTERVIEW_SESSION user-scoped, DESIGN_SESSION user-scoped, TEACHING_SESSION team-scoped — each with positive `where.X === ...` AND negative `where.Y === undefined` assertions):
+
+```js
+// Pattern B's prismaMock must include problem/interviewSession/designSession/teachingSession
+// — for this AI-file location, add them to the Pattern B hoisted mock surface.
+// (Or use the reads-file mock and call this test from there; either works,
+// but keeping it in notes.ai.test.js means Pattern B must include all 4 entity prismas.)
+
+// Sub-case A: PROBLEM — team-scoped via teamId IN userTeamIds
+{
+  prismaMock.teamMembership.findMany.mockResolvedValueOnce([
+    { teamId: "team_1" }, { teamId: "team_2" },
+  ]);
+  prismaMock.problem.findMany.mockResolvedValueOnce([
+    { id: "prob_1", title: "Two Sum", difficulty: "EASY", category: "CODING" },
+  ]);
+  const { req, res } = mockReqRes({ query: { type: "PROBLEM", q: "two" } });
+  await searchLinkableEntities(req, res);
+  const arg = prismaMock.problem.findMany.mock.calls[0][0];
+  expect(arg.where.teamId).toEqual({ in: ["team_1", "team_2"] });
+  expect(arg.where.userId).toBeUndefined();  // POSITIVE+NEGATIVE authz pin
+}
+
+// Sub-case B: INTERVIEW_SESSION — user-scoped via userId
+{
+  prismaMock.teamMembership.findMany.mockResolvedValueOnce([{ teamId: "team_1" }]);
+  prismaMock.interviewSession.findMany.mockResolvedValueOnce([
+    { id: "iv_1", createdAt: new Date(), status: "COMPLETED", problem: { title: "Two Sum" } },
+  ]);
+  const { req, res } = mockReqRes({ query: { type: "INTERVIEW_SESSION" } });
+  await searchLinkableEntities(req, res);
+  const arg = prismaMock.interviewSession.findMany.mock.calls[0][0];
+  expect(arg.where.userId).toBe("user_1");
+  expect(arg.where.teamId).toBeUndefined();  // private to the user, NOT team-shared
+}
+
+// Sub-case C: DESIGN_SESSION — user-scoped via userId
+{
+  prismaMock.teamMembership.findMany.mockResolvedValueOnce([{ teamId: "team_1" }]);
+  prismaMock.designSession.findMany.mockResolvedValueOnce([
+    { id: "ds_1", title: "Url Shortener", designType: "SYSTEM_DESIGN", difficulty: "MEDIUM" },
+  ]);
+  const { req, res } = mockReqRes({ query: { type: "DESIGN_SESSION" } });
+  await searchLinkableEntities(req, res);
+  const arg = prismaMock.designSession.findMany.mock.calls[0][0];
+  expect(arg.where.userId).toBe("user_1");
+  expect(arg.where.teamId).toBeUndefined();
+}
+
+// Sub-case D: TEACHING_SESSION — team-scoped via teamId IN userTeamIds
+{
+  prismaMock.teamMembership.findMany.mockResolvedValueOnce([
+    { teamId: "team_1" }, { teamId: "team_2" },
+  ]);
+  prismaMock.teachingSession.findMany.mockResolvedValueOnce([
+    { id: "ts_1", title: "Hashing 101", topic: "Algorithms", status: "SCHEDULED" },
+  ]);
+  const { req, res } = mockReqRes({ query: { type: "TEACHING_SESSION" } });
+  await searchLinkableEntities(req, res);
+  const arg = prismaMock.teachingSession.findMany.mock.calls[0][0];
+  expect(arg.where.teamId).toEqual({ in: ["team_1", "team_2"] });
+  expect(arg.where.userId).toBeUndefined();
+}
+```
+
+This single test (4 sub-cases) covers 75% of the authz attack surface that a single PROBLEM-only test would leave ungated. Future refactor swapping any branch's filter (e.g., DESIGN_SESSION to `teamId`) immediately fails the corresponding sub-case.
+
+**T154 getRelatedForNote ownership 404** (Security I2 fold-in: explicit `where.userId`):
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce(null);
+const { req, res } = mockReqRes({ params: { id: "note_other" } });
+await getRelatedForNote(req, res);
+expect(res.status).toHaveBeenCalledWith(404);
+expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6c");
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other",
+  userId: "user_1",
+});
+```
+
+**T155 getRelatedForNote LLM-rank happy** (BA + Lead + Security C1 fold-in: override embedding mocks so candidate IDs match payload; assert team-scope passthrough on the embedding query):
 ```js
 prismaMock.teamMembership.findMany.mockResolvedValueOnce([
   { teamId: "team_1" }, { teamId: "team_2" },
 ]);
-prismaMock.problem.findMany.mockResolvedValueOnce([
-  { id: "prob_1", title: "Two Sum", difficulty: "EASY", category: "CODING" },
+prismaMock.note.findFirst.mockResolvedValueOnce({
+  id: "note_src", title: "Two Sum", summary: { tldr: "Hash lookup pattern.", keyTakeaways: [] },
+});
+// Embedding mocks must return rows whose IDs the validator can find as
+// candidates — without this T155 silently routes to the fallback branch
+// (BA + Lead fold-in).
+embeddingMock.findSimilarNotes.mockResolvedValueOnce([
+  { id: "note_sim1", title: "3Sum", tags: [], updatedAt: new Date(), distance: 0.2 },
 ]);
-const { req, res } = mockReqRes({ query: { type: "PROBLEM", q: "two" } });
-await searchLinkableEntities(req, res);
-const arg = prismaMock.problem.findMany.mock.calls[0][0];
-// AUTHZ INVARIANT: PROBLEM is team-scoped via teamId IN userTeamIds, NOT user-scoped
-expect(arg.where.teamId).toEqual({ in: ["team_1", "team_2"] });
-expect(arg.where.userId).toBeUndefined();
+embeddingMock.findProblemsByNoteEmbedding.mockResolvedValueOnce([
+  { id: "prob_1", title: "Two Sum II", difficulty: "EASY", category: "CODING", tags: [], distance: 0.3 },
+]);
+aiMock.aiComplete.mockResolvedValueOnce({
+  relatedNotes: [{ id: "note_sim1", rationale: "Both use hash complement." }],
+  relatedProblems: [{ id: "prob_1", rationale: "Similar pattern, ascending input." }],
+});
+
+const { req, res } = mockReqRes({ params: { id: "note_src" } });
+await getRelatedForNote(req, res);
+
+expect(res.status).toHaveBeenCalledWith(200);
+const json = res.json.mock.calls[0][0];
+expect(json.data.aiGenerated).toBe(true);
+expect(json.data.relatedNotes[0]).toMatchObject({
+  id: "note_sim1", rationale: "Both use hash complement.",
+});
+
+// SECURITY C1 fold-in: team-scope passthrough on the embedding query is the
+// load-bearing authz invariant for getRelatedForNote. A future refactor that
+// drops teamIds (or passes userId/null) cross-team-leaks problems.
+expect(embeddingMock.findSimilarNotes).toHaveBeenCalledWith("note_src", "user_1", 10);
+expect(embeddingMock.findProblemsByNoteEmbedding).toHaveBeenCalledWith(
+  "note_src",
+  ["team_1", "team_2"],  // teamIds from userTeamIds(userId)
+  10,
+);
 ```
 
-**T154-T156 getRelatedForNote** — full code blocks structured per the Section 3 plan. Each independently configures `aiMock.aiComplete` to return: valid (T155), invalid (T156), or — for T154 ownership 404 — never reached. Assertions:
-- T155: `data.aiGenerated === true`, `relatedNotes[0].rationale` from the LLM payload, `relatedProblems` ordered by LLM rank
-- T156: `data.aiGenerated === false`, ranking is `buildFallbackNoteRelated` output (raw similarity, no LLM rationale), endpoint still returns 200
+**T156 getRelatedForNote graceful fallback** (PO fold-in: pin specific AIError code; Security override-list addition):
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce({
+  id: "note_src", title: "Two Sum", summary: null,
+});
+embeddingMock.findSimilarNotes.mockResolvedValueOnce([
+  { id: "note_sim1", title: "3Sum", tags: ["array"], updatedAt: new Date(), distance: 0.2 },
+]);
+embeddingMock.findProblemsByNoteEmbedding.mockResolvedValueOnce([
+  { id: "prob_1", title: "Two Sum II", difficulty: "EASY", category: "CODING", tags: [], distance: 0.3 },
+]);
+// Specific AIError path (PO fold-in: pin the fallback trigger so the test
+// isn't ambiguous about which branch fired). AIError with code TIMEOUT.
+aiMock.aiComplete.mockRejectedValueOnce(new aiMock.AIError("openai timeout", "TIMEOUT"));
 
-**T157-T158 generateNoteSummary**:
-- T157 ownership 404 with `where.userId` assertion
-- T158 happy: assert `prisma.note.update` called with `data: {summary: <payload>, summaryGeneratedAt: <Date>}`, `where: { id: "note_1" }`
+const { req, res } = mockReqRes({ params: { id: "note_src" } });
+await getRelatedForNote(req, res);
 
-**T159-T162 generateNoteFlashcards** — 4 tests covering full surface:
-- T159 ownership 404
-- T160 quality gate: content "Short content" → 400, `aiComplete` NOT called
-- T161 happy: valid drafts payload → response `data.drafts.length > 0`, `data.fallback === false`
-- T162 validator fallback: invalid drafts payload → `data.fallback === true`, `data.fallbackReason` starts with `"validator:"`
+expect(res.status).toHaveBeenCalledWith(200);
+const json = res.json.mock.calls[0][0];
+expect(json.data.aiGenerated).toBe(false);
+// Fallback ranking hydrates from the embedding-only candidates.
+expect(json.data.relatedNotes).toHaveLength(1);
+expect(json.data.relatedNotes[0].id).toBe("note_sim1");
+expect(json.data.relatedProblems).toHaveLength(1);
+expect(json.data.relatedProblems[0].id).toBe("prob_1");
+```
 
-**T163-T164 suggestNoteTags**:
-- T163 ownership 404
-- T164 quality gate (chars < 60): 400, message matches `/too thin for tag suggestions/i`
+**T157 generateNoteSummary ownership 404** (Security I2 fold-in: explicit `where.userId`):
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce(null);
+const { req, res } = mockReqRes({ params: { id: "note_other" } });
+await generateNoteSummary(req, res);
+expect(res.status).toHaveBeenCalledWith(404);
+expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6c");
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other", userId: "user_1",
+});
+```
+
+**T158 generateNoteSummary persist invariant**:
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce({
+  id: "note_1", title: "Two Sum", contentMarkdown: LONG_NOTE_CONTENT, tags: [],
+});
+aiMock.aiComplete.mockResolvedValueOnce(VALID_SUMMARY_PAYLOAD);
+prismaMock.note.update.mockResolvedValueOnce({});
+const { req, res } = mockReqRes({ params: { id: "note_1" } });
+await generateNoteSummary(req, res);
+expect(prismaMock.note.update).toHaveBeenCalledTimes(1);
+const arg = prismaMock.note.update.mock.calls[0][0];
+expect(arg.where).toEqual({ id: "note_1" });
+expect(arg.data.summary).toEqual(VALID_SUMMARY_PAYLOAD);
+expect(arg.data.summaryGeneratedAt).toBeInstanceOf(Date);
+```
+
+**T159 generateNoteFlashcards ownership 404** (Security I2 fold-in: explicit `where.userId`):
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce(null);
+const { req, res } = mockReqRes({ params: { id: "note_other" } });
+await generateNoteFlashcards(req, res);
+expect(res.status).toHaveBeenCalledWith(404);
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other", userId: "user_1",
+});
+expect(aiMock.aiComplete).not.toHaveBeenCalled();
+```
+
+**T160 generateNoteFlashcards quality gate 400** — content < 200 chars (real `assessNoteContentQuality`, not mocked):
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce({
+  id: "note_1", title: "T", contentMarkdown: "Short body content.", tags: [],
+});
+const { req, res } = mockReqRes({ params: { id: "note_1" } });
+await generateNoteFlashcards(req, res);
+expect(res.status).toHaveBeenCalledWith(400);
+expect(res.json.mock.calls[0][0].error.message).toMatch(/too thin for flashcards/i);
+expect(aiMock.aiComplete).not.toHaveBeenCalled();
+```
+
+**T161 generateNoteFlashcards happy** (BA fold-in: avoid the all-DEFINITION anti-laziness trap at `services/ai.validators.js` ~L1870 — payload must have varied `type` values across drafts):
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce({
+  id: "note_1", title: "T", contentMarkdown: LONG_NOTE_CONTENT, tags: [],
+});
+// VALID_DRAFTS_PAYLOAD has 3-7 drafts with MIXED types (not all DEFINITION) —
+// the validator at services/ai.validators.js rejects "all same type" as
+// anti-laziness. Use a mix of CONCEPT, DEFINITION, CONTRAST.
+aiMock.aiComplete.mockResolvedValueOnce(VALID_DRAFTS_PAYLOAD);
+const { req, res } = mockReqRes({ params: { id: "note_1" } });
+await generateNoteFlashcards(req, res);
+expect(res.status).toHaveBeenCalledWith(200);
+const json = res.json.mock.calls[0][0];
+expect(json.data.drafts.length).toBeGreaterThanOrEqual(3);
+expect(json.data.fallback).toBe(false);
+```
+
+**T162 generateNoteFlashcards validator fallback**:
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce({
+  id: "note_1", title: "T", contentMarkdown: LONG_NOTE_CONTENT, tags: [],
+});
+// Invalid: only 1 draft (validator requires 3-7) — triggers fallback
+aiMock.aiComplete.mockResolvedValueOnce({ drafts: [{ type: "CONCEPT", front: "x", back: "y" }] });
+const { req, res } = mockReqRes({ params: { id: "note_1" } });
+await generateNoteFlashcards(req, res);
+expect(res.status).toHaveBeenCalledWith(200);
+const json = res.json.mock.calls[0][0];
+expect(json.data.fallback).toBe(true);
+expect(json.data.fallbackReason).toMatch(/^validator:/);
+```
+
+**T163 suggestNoteTags ownership 404** (Security I2 fold-in):
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce(null);
+const { req, res } = mockReqRes({ params: { id: "note_other" } });
+await suggestNoteTags(req, res);
+expect(res.status).toHaveBeenCalledWith(404);
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other", userId: "user_1",
+});
+```
+
+**T164 suggestNoteTags quality gate 400** — content < 60 chars:
+```js
+prismaMock.note.findFirst.mockResolvedValueOnce({
+  id: "note_1", title: "T", contentMarkdown: "Short.", tags: [],
+});
+const { req, res } = mockReqRes({ params: { id: "note_1" } });
+await suggestNoteTags(req, res);
+expect(res.status).toHaveBeenCalledWith(400);
+expect(res.json.mock.calls[0][0].error.message).toMatch(/too thin for tag suggestions/i);
+```
 
 ### File 3 — `notes.stream.test.js` (T165-T167)
 
-**T165 streaming happy:**
+**T165 streaming happy + team-scope re-fetch on linked-entity** (Security I3 fold-in: pass `problemId` to exercise the `problem.findFirst` team-scope authz re-fetch):
 ```js
 prismaMock.note.findMany.mockResolvedValueOnce([
   { id: "note_t1", title: "Template", contentMarkdown: "Body content here." },
 ]);
+prismaMock.teamMembership.findMany.mockResolvedValueOnce([
+  { teamId: "team_1" }, { teamId: "team_2" },
+]);
+// Team-scope re-fetch — controller MUST re-authorize the problemId against
+// the caller's teamIds. A future refactor reading req.body.problemId raw
+// without this re-fetch would let a user attach their note to a problem
+// they can't access. This test pins the re-fetch.
+prismaMock.problem.findFirst.mockResolvedValueOnce({
+  id: "prob_1", title: "Two Sum", difficulty: "EASY", description: "...",
+});
 aiMock.aiStream.mockResolvedValueOnce(chunkStream([
   "# Hello\n\n",
   "This is the generated note body. ".repeat(5),  // total > MIN_OUTPUT_CHARS (60)
@@ -488,17 +766,27 @@ aiMock.aiStream.mockResolvedValueOnce(chunkStream([
 prismaMock.note.create.mockResolvedValueOnce({ id: "note_new", title: "Hello" });
 
 const { req, res, writes } = makeStreamingReqRes({
-  body: { templateNoteIds: ["note_t1"] },
+  body: { templateNoteIds: ["note_t1"], problemId: "prob_1" },
 });
 await generateNoteFromTemplates(req, res);
 
 const chunkLines = writes.filter((w) => "chunk" in w);
 expect(chunkLines.length).toBeGreaterThanOrEqual(2);
 
+// AUTHZ INVARIANT: the problem lookup must be team-scoped, not raw-by-id.
+expect(prismaMock.problem.findFirst).toHaveBeenCalledTimes(1);
+const probArg = prismaMock.problem.findFirst.mock.calls[0][0];
+expect(probArg.where.id).toBe("prob_1");
+expect(probArg.where.teamId).toEqual({ in: ["team_1", "team_2"] });
+
 expect(prismaMock.note.create).toHaveBeenCalledTimes(1);
 const createArg = prismaMock.note.create.mock.calls[0][0];
 expect(createArg.data.userId).toBe("user_1");
 expect(createArg.data.contentMarkdown).toMatch(/Hello[\s\S]*generated note body/);
+// Linked-entity snapshot inherits from the team-scope-validated row, NOT from req.body raw
+expect(createArg.data.linkedEntityType).toBe("PROBLEM");
+expect(createArg.data.linkedEntityId).toBe("prob_1");
+expect(createArg.data.linkedEntityTitle).toBe("Two Sum");
 
 expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledTimes(1);
 expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledWith("note_new");
@@ -508,17 +796,25 @@ expect(lastLine).toMatchObject({ done: true, noteId: "note_new" });
 expect(res.end).toHaveBeenCalled();
 ```
 
-**T166 client-disconnect bails persist:**
+**T166 client-disconnect bails persist** (Lead Engineer I1 fold-in: reorder declarations so the generator can reference `closeFn` correctly; add `await Promise.resolve()` for deterministic ordering):
 ```js
 prismaMock.note.findMany.mockResolvedValueOnce([
   { id: "note_t1", title: "Template", contentMarkdown: "Body" },
 ]);
-// Yield 1 chunk, then test code emits close before next iteration
+
+// Declare closeFn FIRST so the generator can capture it by reference at
+// definition time (Lead Engineer fold-in: avoids TDZ/hoisting fragility).
+let closeFn;
 let emittedClose = false;
 async function* disconnectStream() {
   yield { choices: [{ delta: { content: "# Partial\n" } }] };
+  // Microtask flush makes the close-handler timing deterministic — the
+  // controller's `for await` loop checks `clientGone` at the top of each
+  // iteration; we need the handler to fire AFTER yield 1 returns control
+  // and BEFORE yield 2 is consumed.
+  await Promise.resolve();
   if (!emittedClose) {
-    refs.emitClose();
+    closeFn();
     emittedClose = true;
   }
   yield { choices: [{ delta: { content: "more content" } }] };
@@ -526,8 +822,11 @@ async function* disconnectStream() {
 aiMock.aiStream.mockResolvedValueOnce(disconnectStream());
 
 const refs = makeStreamingReqRes({ body: { templateNoteIds: ["note_t1"] } });
+closeFn = refs.emitClose;  // wire after refs exists
 await generateNoteFromTemplates(refs.req, refs.res);
 
+// Note: chunk 1 IS written (controller's sendLine fires before the next
+// iteration's clientGone check). Only persist + scheduleNoteEmbedding bail.
 expect(prismaMock.note.create).not.toHaveBeenCalled();
 expect(notesEmbeddingMock.scheduleNoteEmbedding).not.toHaveBeenCalled();
 expect(refs.res.end).toHaveBeenCalled();
