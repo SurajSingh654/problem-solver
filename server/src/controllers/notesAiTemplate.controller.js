@@ -24,6 +24,7 @@ import { aiStream, AIError } from "../services/ai.service.js";
 import { AI_MODEL_PRIMARY } from "../config/env.js";
 import { noteFromTemplatesPrompt } from "../services/ai.prompts.js";
 import { scheduleNoteEmbedding } from "../services/notes.embedding.js";
+import { error } from "../utils/response.js";
 
 const MAX_TEMPLATES = 3;
 const MIN_OUTPUT_CHARS = 60; // a complete note is at least this long
@@ -63,12 +64,7 @@ export async function generateNoteFromTemplates(req, res) {
     templateNoteIds.length > MAX_TEMPLATES ||
     !templateNoteIds.every((id) => typeof id === "string" && id.length > 0)
   ) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        message: `templateNoteIds must be 1–${MAX_TEMPLATES} note IDs`,
-      },
-    });
+    return error(res, `templateNoteIds must be 1–${MAX_TEMPLATES} note IDs`, 400);
   }
 
   // Fetch templates (must all be owned by this user).
@@ -77,10 +73,7 @@ export async function generateNoteFromTemplates(req, res) {
     select: { id: true, title: true, contentMarkdown: true },
   });
   if (templates.length !== templateNoteIds.length) {
-    return res.status(404).json({
-      success: false,
-      error: { message: "One or more templates not found" },
-    });
+    return error(res, "One or more templates not found", 404);
   }
   // Preserve the order the user submitted (findMany doesn't guarantee it).
   const orderedTemplates = templateNoteIds.map((id) =>
@@ -92,10 +85,7 @@ export async function generateNoteFromTemplates(req, res) {
   let topicFocusClean = null;
   if (topicFocus != null) {
     if (typeof topicFocus !== "string") {
-      return res.status(400).json({
-        success: false,
-        error: { message: "topicFocus must be a string" },
-      });
+      return error(res, "topicFocus must be a string", 400);
     }
     const trimmed = topicFocus.trim();
     if (trimmed.length > 0) {
@@ -107,10 +97,7 @@ export async function generateNoteFromTemplates(req, res) {
   let problemSnapshot = null;
   if (problemId) {
     if (typeof problemId !== "string") {
-      return res.status(400).json({
-        success: false,
-        error: { message: "Invalid problemId" },
-      });
+      return error(res, "Invalid problemId", 400);
     }
     const teamIds = await userTeamIds(userId);
     const problem = await prisma.problem.findFirst({
@@ -118,10 +105,7 @@ export async function generateNoteFromTemplates(req, res) {
       select: { id: true, title: true, difficulty: true, description: true },
     });
     if (!problem) {
-      return res.status(404).json({
-        success: false,
-        error: { message: "Problem not found or not accessible" },
-      });
+      return error(res, "Problem not found or not accessible", 404);
     }
     problemSnapshot = problem;
   }
@@ -133,12 +117,7 @@ export async function generateNoteFromTemplates(req, res) {
   let aiReviewSnapshot = null;
   if (includeSubmission) {
     if (!problemSnapshot) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Pick a Problem first — your submission is tied to a problem.",
-        },
-      });
+      return error(res, "Pick a Problem first — your submission is tied to a problem.", 400);
     }
     const latestSolution = await prisma.solution.findFirst({
       where: { userId, problemId: problemSnapshot.id },
@@ -154,13 +133,7 @@ export async function generateNoteFromTemplates(req, res) {
       },
     });
     if (!latestSolution) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message:
-            "You haven't submitted a solution for this problem yet — uncheck \"Include my submission\" to generate without it, or submit a solution first.",
-        },
-      });
+      return error(res, "You haven't submitted a solution for this problem yet — uncheck \"Include my submission\" to generate without it, or submit a solution first.", 400);
     }
     solutionSnapshot = {
       code: latestSolution.code,
@@ -179,20 +152,14 @@ export async function generateNoteFromTemplates(req, res) {
   let folderId = null;
   if (targetFolderId) {
     if (typeof targetFolderId !== "string") {
-      return res.status(400).json({
-        success: false,
-        error: { message: "Invalid targetFolderId" },
-      });
+      return error(res, "Invalid targetFolderId", 400);
     }
     const folder = await prisma.noteFolder.findFirst({
       where: { id: targetFolderId, userId },
       select: { id: true },
     });
     if (!folder) {
-      return res.status(404).json({
-        success: false,
-        error: { message: "Target folder not found" },
-      });
+      return error(res, "Target folder not found", 404);
     }
     folderId = folder.id;
   }
