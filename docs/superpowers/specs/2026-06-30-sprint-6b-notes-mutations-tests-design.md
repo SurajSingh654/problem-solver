@@ -6,7 +6,11 @@
 **Branch:** `feat/notes-mutations-tests`
 **Layers on:** main, post Sprint 6a (`7c302df`)
 **Feature flag:** None — pure additive test work
-**Review history:** Project Owner + Business Analyst reviewed pre-implementation (both APPROVED WITH NOTES; all notes folded into this revision)
+**Review history (spec v3, plan v2):** Full 4-role panel reviewed the plan pre-implementation per the standing rule (`feedback_multi_agent_review_before_code.md`):
+- Project Owner — APPROVED WITH NOTES (security-divergence escalation tightened in plan)
+- Business Analyst — CHANGES REQUESTED → folded in (mock binding via `vi.hoisted` + `notesEmbeddingMock.X` refs; `toHaveBeenCalledTimes(1)` for embed assertions)
+- Security Manager — CHANGES REQUESTED → folded in (7 `where.userId` assertions added to ownership tests; userId-of-create payload asserted on createNote/duplicateNote happy paths)
+- Lead Engineer — CHANGES REQUESTED → folded in (mock binding fix corroborates BA's; createNote `include` clause note corrected — createNote has no include, duplicateNote does)
 
 ---
 
@@ -123,10 +127,16 @@ const prismaMock = vi.hoisted(() => ({
 }));
 vi.mock("../../src/lib/prisma.js", () => ({ default: prismaMock }));
 
-vi.mock("../../src/services/notes.embedding.js", () => ({
+// CRITICAL: hoist the embedding mock symbols so test assertions can reference
+// them. Plain `vi.mock(factory)` creates the mock fns inside the module registry
+// but doesn't expose them as bare identifiers — assertions like
+// `expect(scheduleNoteEmbedding).toHaveBeenCalled()` would throw ReferenceError.
+// Pattern matches existing `notes.delete-cancel.test.js`.
+const notesEmbeddingMock = vi.hoisted(() => ({
   scheduleNoteEmbedding: vi.fn(),
   cancelNoteEmbedding: vi.fn(),
 }));
+vi.mock("../../src/services/notes.embedding.js", () => notesEmbeddingMock);
 
 const {
   createNote,
@@ -169,6 +179,8 @@ beforeEach(() => {
   prismaMock.teachingSession.findFirst.mockReset();
   prismaMock.teamMembership.findMany.mockReset();
   prismaMock.teamMembership.findMany.mockResolvedValue([]);
+  notesEmbeddingMock.scheduleNoteEmbedding.mockReset();
+  notesEmbeddingMock.cancelNoteEmbedding.mockReset();
 });
 ```
 
@@ -191,7 +203,10 @@ const { req, res } = mockReqRes({ body: { title: "T" } });
 await createNote(req, res);
 expect(res.status).toHaveBeenCalledWith(201);
 expect(res.json.mock.calls[0][0].success).toBe(true);
-expect(scheduleNoteEmbedding).toHaveBeenCalledWith("note_new");
+// Authz: create payload carries the caller's userId — no anonymous-note path.
+expect(prismaMock.note.create.mock.calls[0][0].data.userId).toBe("user_1");
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledTimes(1);
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledWith("note_new");
 ```
 
 **T122 empty title 400**:
@@ -218,7 +233,7 @@ expect(json.error.requestId).toBe("req_test_6b");
 
 ### T124-T129 — `updateNote`
 
-**T124 ownership 404**:
+**T124 ownership 404** (Security Manager fold-in: assert `where.userId` filter, not just the 404 response):
 ```js
 prismaMock.note.findFirst.mockResolvedValueOnce(null);
 const { req, res } = mockReqRes({ params: { id: "note_other" }, body: { title: "X" } });
@@ -227,6 +242,11 @@ expect(res.status).toHaveBeenCalledWith(404);
 const json = res.json.mock.calls[0][0];
 expect(json.error.message).toBe("Note not found");
 expect(json.error.requestId).toBe("req_test_6b");
+// AUTHZ INVARIANT: ownership filter must be in the where clause.
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other",
+  userId: "user_1",
+});
 ```
 
 **T125 title change re-embeds**:
@@ -236,7 +256,8 @@ prismaMock.note.update.mockResolvedValueOnce({ id: "note_1", title: "X" });
 const { req, res } = mockReqRes({ params: { id: "note_1" }, body: { title: "X" } });
 await updateNote(req, res);
 expect(res.status).toHaveBeenCalledWith(200);
-expect(scheduleNoteEmbedding).toHaveBeenCalledWith("note_1");
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledTimes(1);
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledWith("note_1");
 ```
 
 **T126 contentMarkdown change re-embeds (BA fold-in — covers the `||` branch at L427-428)**:
@@ -246,7 +267,8 @@ prismaMock.note.update.mockResolvedValueOnce({ id: "note_1", contentMarkdown: "n
 const { req, res } = mockReqRes({ params: { id: "note_1" }, body: { contentMarkdown: "new body" } });
 await updateNote(req, res);
 expect(res.status).toHaveBeenCalledWith(200);
-expect(scheduleNoteEmbedding).toHaveBeenCalledWith("note_1");
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledTimes(1);
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledWith("note_1");
 ```
 
 **T127 tags-only does NOT re-embed (conditional re-embed negative arm)**:
@@ -256,7 +278,7 @@ prismaMock.note.update.mockResolvedValueOnce({ id: "note_1", tags: ["foo"] });
 const { req, res } = mockReqRes({ params: { id: "note_1" }, body: { tags: ["foo"] } });
 await updateNote(req, res);
 expect(res.status).toHaveBeenCalledWith(200);
-expect(scheduleNoteEmbedding).not.toHaveBeenCalled();
+expect(notesEmbeddingMock.scheduleNoteEmbedding).not.toHaveBeenCalled();
 ```
 
 **T128 link-detach regression (BA fold-in — covers L378-381)**:
@@ -276,10 +298,10 @@ expect(updateArg.data.linkedEntityType).toBeNull();
 expect(updateArg.data.linkedEntityId).toBeNull();
 expect(updateArg.data.linkedEntityTitle).toBeNull();
 // Detach is metadata-only → must NOT re-embed
-expect(scheduleNoteEmbedding).not.toHaveBeenCalled();
+expect(notesEmbeddingMock.scheduleNoteEmbedding).not.toHaveBeenCalled();
 ```
 
-**T129 folder reassignment ownership 404**:
+**T129 folder reassignment ownership 404** (Security Manager fold-in: assert `where.userId` on BOTH the note and folder ownership lookups):
 ```js
 prismaMock.note.findFirst.mockResolvedValueOnce({ id: "note_1" });
 prismaMock.noteFolder.findFirst.mockResolvedValueOnce(null);
@@ -289,17 +311,32 @@ expect(res.status).toHaveBeenCalledWith(404);
 const json = res.json.mock.calls[0][0];
 expect(json.error.message).toBe("Folder not found");
 expect(json.error.requestId).toBe("req_test_6b");
+// AUTHZ INVARIANT: note ownership filter
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_1",
+  userId: "user_1",
+});
+// AUTHZ INVARIANT: folder ownership filter — preventing cross-user folder attachment
+expect(prismaMock.noteFolder.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "fold_other",
+  userId: "user_1",
+});
 ```
 
 ### T130-T132 — `duplicateNote`
 
-**T130 ownership 404**:
+**T130 ownership 404** (Security Manager fold-in):
 ```js
 prismaMock.note.findFirst.mockResolvedValueOnce(null);
 const { req, res } = mockReqRes({ params: { id: "note_other" } });
 await duplicateNote(req, res);
 expect(res.status).toHaveBeenCalledWith(404);
 expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6b");
+// AUTHZ INVARIANT
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other",
+  userId: "user_1",
+});
 ```
 
 **T131 happy**:
@@ -325,7 +362,10 @@ expect(createArg.data.title).toBe("Copy of Original");
 expect(createArg.data.contentMarkdown).toBe("body");
 expect(createArg.data.tags).toEqual(["a", "b"]);
 expect(createArg.data.folderId).toBe("fold_1");
-expect(scheduleNoteEmbedding).toHaveBeenCalledWith("note_copy");
+// Authz: copy belongs to the caller, not the source-note owner
+expect(createArg.data.userId).toBe("user_1");
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledTimes(1);
+expect(notesEmbeddingMock.scheduleNoteEmbedding).toHaveBeenCalledWith("note_copy");
 ```
 
 **T132 link-reset regression**:
@@ -353,16 +393,22 @@ expect(createArg.data.archivedAt).toBeUndefined();
 
 ### T133-T134 — `archiveNote`
 
-**T133 ownership 404**:
+**T133 ownership 404** (Security Manager fold-in: assert `where.userId` even though `updateMany` returns count=0):
 ```js
 prismaMock.note.updateMany.mockResolvedValueOnce({ count: 0 });
 const { req, res } = mockReqRes({ params: { id: "note_other" } });
 await archiveNote(req, res);
 expect(res.status).toHaveBeenCalledWith(404);
 expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6b");
+// AUTHZ INVARIANT: updateMany must filter by userId — the where clause is the
+// only authz gate (no separate findFirst step).
+expect(prismaMock.note.updateMany.mock.calls[0][0].where).toMatchObject({
+  id: "note_other",
+  userId: "user_1",
+});
 ```
 
-**T134 auto-unpin regression**:
+**T134 auto-unpin regression** (already asserts `where.userId` per Sprint 5b precedent):
 ```js
 prismaMock.note.updateMany.mockResolvedValueOnce({ count: 1 });
 const { req, res } = mockReqRes({ params: { id: "note_1" } });
@@ -376,37 +422,50 @@ expect(arg.data.pinned).toBe(false);  // auto-unpin invariant
 
 ### T135-T136 — `restoreNote`
 
-**T135 ownership 404 (already-active)**:
+**T135 ownership 404 (already-active)** (Security Manager fold-in: assert `where.userId`):
 ```js
 prismaMock.note.updateMany.mockResolvedValueOnce({ count: 0 });
 const { req, res } = mockReqRes({ params: { id: "note_1" } });
 await restoreNote(req, res);
 expect(res.status).toHaveBeenCalledWith(404);
 expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6b");
+expect(prismaMock.note.updateMany.mock.calls[0][0].where).toMatchObject({
+  id: "note_1",
+  userId: "user_1",
+  archivedAt: { not: null },
+});
 ```
 
-**T136 happy**:
+**T136 happy** (Security Manager fold-in: assert `where.userId`):
 ```js
 prismaMock.note.updateMany.mockResolvedValueOnce({ count: 1 });
 const { req, res } = mockReqRes({ params: { id: "note_1" } });
 await restoreNote(req, res);
 const arg = prismaMock.note.updateMany.mock.calls[0][0];
-expect(arg.where.archivedAt).toEqual({ not: null });
+expect(arg.where).toMatchObject({
+  id: "note_1",
+  userId: "user_1",
+  archivedAt: { not: null },
+});
 expect(arg.data.archivedAt).toBeNull();
 expect(res.json.mock.calls[0][0].data.archived).toBe(false);
 ```
 
 ### T137-T138 — `deleteNotePermanent` (complements existing T26 cancel-wiring)
 
-**T137 ownership 404**:
+**T137 ownership 404** (Security Manager fold-in):
 ```js
 prismaMock.note.findFirst.mockResolvedValueOnce(null);
 const { req, res } = mockReqRes({ params: { id: "note_other" } });
 await deleteNotePermanent(req, res);
 expect(res.status).toHaveBeenCalledWith(404);
-expect(cancelNoteEmbedding).not.toHaveBeenCalled();
+expect(notesEmbeddingMock.cancelNoteEmbedding).not.toHaveBeenCalled();
 expect(prismaMock.note.delete).not.toHaveBeenCalled();
 expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6b");
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other",
+  userId: "user_1",
+});
 ```
 
 **T138 happy round-trip**:
@@ -417,23 +476,28 @@ const { req, res } = mockReqRes({ params: { id: "note_1" } });
 await deleteNotePermanent(req, res);
 expect(res.status).toHaveBeenCalledWith(200);
 expect(res.json.mock.calls[0][0].data.deleted).toBe(true);
-expect(cancelNoteEmbedding).toHaveBeenCalledWith("note_1");
+expect(notesEmbeddingMock.cancelNoteEmbedding).toHaveBeenCalledTimes(1);
+expect(notesEmbeddingMock.cancelNoteEmbedding).toHaveBeenCalledWith("note_1");
 expect(prismaMock.note.delete).toHaveBeenCalledWith({ where: { id: "note_1" } });
 // Cancel BEFORE delete invariant (cancel pre-empts the debounced embed):
-const cancelOrder = cancelNoteEmbedding.mock.invocationCallOrder[0];
+const cancelOrder = notesEmbeddingMock.cancelNoteEmbedding.mock.invocationCallOrder[0];
 const deleteOrder = prismaMock.note.delete.mock.invocationCallOrder[0];
 expect(cancelOrder).toBeLessThan(deleteOrder);
 ```
 
 ### T139-T142 — `togglePin`
 
-**T139 ownership 404**:
+**T139 ownership 404** (Security Manager fold-in):
 ```js
 prismaMock.note.findFirst.mockResolvedValueOnce(null);
 const { req, res } = mockReqRes({ params: { id: "note_other" } });
 await togglePin(req, res);
 expect(res.status).toHaveBeenCalledWith(404);
 expect(res.json.mock.calls[0][0].error.requestId).toBe("req_test_6b");
+expect(prismaMock.note.findFirst.mock.calls[0][0].where).toMatchObject({
+  id: "note_other",
+  userId: "user_1",
+});
 ```
 
 **T140 archived-pin rejection regression**:

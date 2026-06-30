@@ -14,7 +14,11 @@
 
 **Baseline test count:** 1339 (post Sprint 6a, commit `7c302df`). Capture exact in Task 0. Target after sprint: **1361** (+22).
 
-**Review history:** Project Owner + Business Analyst APPROVED WITH NOTES on spec v1; all notes folded into spec v2 (`f60532d`). This plan ALSO must pass the 4-role review panel (Project Owner + Business Analyst + Security Manager + Lead Engineer) BEFORE any implementer subagent is dispatched.
+**Review history:** Full 4-role panel completed pre-implementation:
+- Project Owner — APPROVED WITH NOTES → security-divergence escalation tightened in Task 1 Step 3 below
+- Business Analyst — CHANGES REQUESTED → `vi.hoisted` mock binding fix + `notesEmbeddingMock.X` assertion refs + `toHaveBeenCalledTimes(1)` folded into spec v3
+- Security Manager — CHANGES REQUESTED → 7 `where.userId` ownership-clause assertions added to spec v3
+- Lead Engineer — CHANGES REQUESTED → mock binding fix corroborated; createNote `include` clause note corrected
 
 ---
 
@@ -116,11 +120,18 @@ Expected: 22/22 pass.
 If any test fails:
 1. Read the failure carefully. Is the controller's actual behavior different from the spec's expectation? (Sprint 5a/5b surfaced 15 such divergences.)
 2. If a real divergence: record it in a divergence log (append to commit message body) with format `T<id>: <expected> vs <actual> — <decision>`.
-3. Decision tree: 
-   - Spec assumption was wrong → update test (record divergence)
+3. Decision tree:
+   - Spec assumption was wrong → update test (record divergence) — but see **security-critical override** below
    - Controller has a bug → STOP, escalate to user before fixing (out of 6b scope is "no production changes")
    - Mock pattern is off → fix the mock (not a divergence, just test correctness)
-4. Re-run until 22/22 pass OR all failures are documented divergences with user-approved decisions.
+4. **Security-critical override (PO fold-in)** — these tests assert authorization invariants. If ANY of T124, T128, T129, T130, T132, T133, T134, T135, T136, T137, T138, T139, T140 fail because the controller's actual behavior diverges from the spec, the implementer MUST stop and escalate — NOT auto-update the test under the "spec assumption wrong" branch. The set:
+   - T124, T130, T137, T139 — ownership-404 gates (the only authz vector for user-scoped notes)
+   - T129 — folder ownership filter (prevents cross-user folder attachment)
+   - T133, T134, T135, T136 — `updateMany` `where.userId` filter (sole authz gate for archive/restore)
+   - T138 — cancel-before-delete ordering (data-integrity invariant for the debounced embed pre-empt)
+   - T128, T132 — link state semantics (detach clears; duplicate resets)
+   - T140 — archived-pin rejection (prevents incoherent state)
+5. Re-run until 22/22 pass OR all failures are documented divergences with user-approved decisions.
 
 - [ ] **Step 4: Full server suite**
 
