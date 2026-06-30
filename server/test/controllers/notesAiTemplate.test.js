@@ -49,6 +49,12 @@ function mockReqRes({ body = {}, userId = "user_1" } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  prismaMock.note.findMany.mockReset();
+  prismaMock.note.create.mockReset();
+  prismaMock.problem.findFirst.mockReset();
+  prismaMock.solution.findFirst.mockReset();
+  prismaMock.noteFolder.findFirst.mockReset();
+  prismaMock.teamMembership.findMany.mockReset();
   prismaMock.teamMembership.findMany.mockResolvedValue([]);
 });
 
@@ -96,11 +102,10 @@ describe("generateNoteFromTemplates — H6 envelope fix regression guards", () =
   });
 
   it("test 118: rejects invalid problemId (type 400 + accessibility 404)", async () => {
-    prismaMock.note.findMany.mockResolvedValue([
+    // Sub-case A: problemId is not a string (line 110 in the source)
+    prismaMock.note.findMany.mockResolvedValueOnce([
       { id: "note_1", title: "T", contentMarkdown: "..." },
     ]);
-
-    // Sub-case A: problemId is not a string (line 110 in the source)
     {
       const { req, res } = mockReqRes({
         body: { templateNoteIds: ["note_1"], problemId: 42 },
@@ -112,6 +117,9 @@ describe("generateNoteFromTemplates — H6 envelope fix regression guards", () =
     }
 
     // Sub-case B: problemId is a string but not accessible (line 121 in source)
+    prismaMock.note.findMany.mockResolvedValueOnce([
+      { id: "note_1", title: "T", contentMarkdown: "..." },
+    ]);
     prismaMock.problem.findFirst.mockResolvedValueOnce(null);
     {
       const { req, res } = mockReqRes({
@@ -125,11 +133,10 @@ describe("generateNoteFromTemplates — H6 envelope fix regression guards", () =
   });
 
   it("test 119: includeSubmission rejects when no problem OR no submission exists", async () => {
-    prismaMock.note.findMany.mockResolvedValue([
+    // Sub-case A: includeSubmission without problemId (line 136)
+    prismaMock.note.findMany.mockResolvedValueOnce([
       { id: "note_1", title: "T", contentMarkdown: "..." },
     ]);
-
-    // Sub-case A: includeSubmission without problemId (line 136)
     {
       const { req, res } = mockReqRes({
         body: { templateNoteIds: ["note_1"], includeSubmission: true },
@@ -141,6 +148,9 @@ describe("generateNoteFromTemplates — H6 envelope fix regression guards", () =
     }
 
     // Sub-case B: includeSubmission with problem but no submission (line 157)
+    prismaMock.note.findMany.mockResolvedValueOnce([
+      { id: "note_1", title: "T", contentMarkdown: "..." },
+    ]);
     prismaMock.problem.findFirst.mockResolvedValueOnce({
       id: "prob_1", title: "Two Sum", difficulty: "EASY", description: "...",
     });
@@ -161,11 +171,10 @@ describe("generateNoteFromTemplates — H6 envelope fix regression guards", () =
   });
 
   it("test 120: rejects invalid targetFolderId (type 400 + accessibility 404)", async () => {
-    prismaMock.note.findMany.mockResolvedValue([
+    // Sub-case A: targetFolderId is not a string (line 182)
+    prismaMock.note.findMany.mockResolvedValueOnce([
       { id: "note_1", title: "T", contentMarkdown: "..." },
     ]);
-
-    // Sub-case A: targetFolderId is not a string (line 182)
     {
       const { req, res } = mockReqRes({
         body: { templateNoteIds: ["note_1"], targetFolderId: 99 },
@@ -177,6 +186,9 @@ describe("generateNoteFromTemplates — H6 envelope fix regression guards", () =
     }
 
     // Sub-case B: targetFolderId is a string but not owned (line 192)
+    prismaMock.note.findMany.mockResolvedValueOnce([
+      { id: "note_1", title: "T", contentMarkdown: "..." },
+    ]);
     prismaMock.noteFolder.findFirst.mockResolvedValueOnce(null);
     {
       const { req, res } = mockReqRes({
