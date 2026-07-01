@@ -1995,6 +1995,32 @@ model UsageTracking {
 }
 
 // ============================================================================
+// AI USAGE DAILY COUNTER — persisted per-user per-day request counter
+// ============================================================================
+//
+// Replaces the in-memory per-process counter in ai.service.js. Persisting
+// to Postgres means the daily cap is accurate across multiple replicas
+// (the in-memory version silently doubles at 2+ replicas).
+//
+// Key design decisions:
+// - Composite PK (userId, day) is the atomic UPSERT target; no extra id col.
+// - day is a "YYYY-MM-DD" string in UTC, matching the existing key format
+//   used by the in-memory rate limiter so migration is a drop-in swap.
+// - @@index([day]) supports the 2-day rolling prune sweep (delete rows
+//   where day < today - 1) without a full table scan.
+// ============================================================================
+model AiUsageDailyCounter {
+  userId    String
+  day       String   // "YYYY-MM-DD" UTC, matches existing rate-limiter key format
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, day])  // Composite PK — atomic UPSERT target
+  @@index([day])        // For 2-day prune sweep
+  @@map("ai_usage_daily_counter")
+}
+
+// ============================================================================
 // TEAM TEACHING SESSIONS — peer-to-peer knowledge sharing within a team
 // ============================================================================
 //
