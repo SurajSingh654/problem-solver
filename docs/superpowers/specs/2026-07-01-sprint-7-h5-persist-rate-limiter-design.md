@@ -6,7 +6,11 @@
 **Branch:** `feat/persist-ai-rate-limiter`
 **Layers on:** main, post Sprint 6c (`2cceab7`)
 **Feature flag:** `FEATURE_PERSIST_RATE_LIMITER` (env, default `"false"`)
-**Review history:** Will require the standing 4-role panel review (PO + BA + Security Manager + Lead Engineer) on the implementation plan BEFORE implementer dispatch, per `feedback_multi_agent_review_before_code.md`.
+**Review history (spec v2 + plan v2):** Full 4-role panel completed pre-implementation:
+- Project Owner — APPROVED WITH NOTES → folded (T176 flag-dispatch test, roadmap names Sprint 7b explicitly, migration rollback SQL note, strategic ask resolved by user: proceed)
+- Business Analyst — CHANGES REQUESTED → folded (missed caller sites in ai.middleware.js:27 + platform.controller.js:433 added to Task 4; drift-fix prompt replaced with `--create-only` + `deploy`; T177 null/undefined userId defensive test added; flag comparison robustified to `.toLowerCase()`)
+- Security Manager — CHANGES REQUESTED → folded (same missed caller sites; numeric burst bound documented; ops-handoff extended with atomicity spot-check + rollback-resets-counters note; data-classification note added; strict case-sensitivity backup docs)
+- Lead Engineer — APPROVED WITH NOTES → folded (Prisma 5.20 atomicity confirmed; explicit L314+L427 grep in plan; `_resetForTests` dropped from spec since existing test uses unique userId per run; T173 description clarified)
 
 ---
 
@@ -131,6 +135,20 @@ CREATE TABLE "ai_usage_daily_counter" (
 CREATE INDEX "ai_usage_daily_counter_day_idx" ON "ai_usage_daily_counter"("day");
 ```
 
+### Migration rollback (PO fold-in)
+
+If the additive CREATE TABLE ever needs to be undone (e.g., a follow-up sprint fully deletes the persistence path), the rollback SQL is:
+
+```sql
+DROP TABLE "ai_usage_daily_counter";
+```
+
+No data dependencies (no FKs to this table from other models; the counter is a leaf). Zero-risk rollback.
+
+### Data classification (Security Manager fold-in I5)
+
+`AiUsageDailyCounter` is **operational telemetry, non-PII**. The only user-linked field is `userId` (CUID), and the row is self-cleaning within 2 days via the prune sweep. No email, name, IP, or content is stored. Under GDPR data-minimization principles, 2-day retention is appropriate for transient operational state. Real per-user AI spend is tracked separately in `UsageTracking` (90-day retention, existing).
+
 ---
 
 ## Algorithm
@@ -174,12 +192,9 @@ export async function increment(userId) {
     }
   }
 }
-
-// Test-only reset (for existing test suite that hammers the counter).
-export function _resetForTests() {
-  rateLimitMap.clear();
-}
 ```
+
+**Lead Engineer fold-in:** dropped `_resetForTests` from spec v1. Verified via grep — existing test at `test/ai/service.test.js:363-386` isolates via unique userId per run (`` `rl-${Date.now()}` `` pattern). No reset needed; adding one would be dead API surface.
 
 ### `ai.rateLimiter.postgres.js` — new backend
 
@@ -240,7 +255,10 @@ import * as inMemLimiter from "./ai.rateLimiter.inMemory.js";
 import * as pgLimiter from "./ai.rateLimiter.postgres.js";
 
 function activeLimiter() {
-  return FEATURE_PERSIST_RATE_LIMITER === "true" ? pgLimiter : inMemLimiter;
+  // BA + LE fold-in: robustify comparison against ops-facing case-sensitivity
+  // typos ("True", "TRUE", "1" etc.). Trim + lowercase.
+  const flag = String(FEATURE_PERSIST_RATE_LIMITER ?? "").trim().toLowerCase();
+  return flag === "true" ? pgLimiter : inMemLimiter;
 }
 
 export async function checkRateLimit(userId) {
@@ -262,9 +280,11 @@ Prisma's `upsert` on Postgres compiles to `INSERT ... ON CONFLICT ("userId", "da
 
 ### TOCTOU on check-then-increment (soft cap, preserved)
 
-The current in-memory implementation has an identical race — between check and increment, a concurrent request can push over the cap. This is a **soft cost cap**, not a hard security boundary. Bursting by 1-2 requests over the cap is acceptable at the tail; the alternative (reserve-atomic upfront with rollback-on-failure) would consume slots for AI calls that later fail — worse UX for the same daily cost delta.
+The current in-memory implementation has an identical race — between check and increment, a concurrent request can push over the cap. This is a **soft cost cap**, not a hard security boundary.
 
-If future requirements convert this to a hard billing gate, switch to reserve-atomic. Not in Sprint 7 scope.
+**Numeric burst bound (Security Manager fold-in I2):** Worst-case burst is bounded by `~2 × N_replicas` requests at the cap-crossing moment. Under Node's single-threaded event loop each replica serializes its own concurrent checks; two replicas → at most 2 requests can pass check simultaneously per user. At `AI_DAILY_LIMIT=500` and typical ~$0.001/call, a 2-replica overrun is ~$0.02 per user per day at the tail — well within noise. If a 3-6 replica scale is projected, the worst-case scales linearly and is still <$0.10/user/day.
+
+If future requirements convert this to a hard billing gate, switch to reserve-atomic-with-rollback. Not in Sprint 7 scope.
 
 ### Fail-open on DB error
 
@@ -305,7 +325,7 @@ Default `"false"` on all environments until ops flips it in Railway. No client-s
 
 ---
 
-## Tests — 8 new (T168-T175)
+## Tests — 10 new (T168-T177)
 
 **File**: `server/test/services/ai.rateLimiter.postgres.test.js` (NEW)
 
@@ -417,6 +437,88 @@ expect(arg2.where.userId_day.day).toBe("2026-07-02");
 vi.useRealTimers();
 ```
 
+**T176 flag dispatch — routing to the right backend** (PO fold-in — targets the highest-risk regression flagged in the adversarial review; the flag comparison being wrong silently flips users to the untested path):
+
+This test lives in a SEPARATE file `server/test/services/ai.rateLimiter.dispatch.test.js` because it needs to mock BOTH backends and observe the wrapper's routing choice. Different mock surface from T168-T175.
+
+```js
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+const inMemMock = vi.hoisted(() => ({
+  check: vi.fn().mockResolvedValue({ allowed: true, remaining: 50, limit: 50 }),
+  increment: vi.fn().mockResolvedValue(undefined),
+}));
+const pgMock = vi.hoisted(() => ({
+  check: vi.fn().mockResolvedValue({ allowed: true, remaining: 50, limit: 50 }),
+  increment: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../../src/services/ai.rateLimiter.inMemory.js", () => inMemMock);
+vi.mock("../../src/services/ai.rateLimiter.postgres.js", () => pgMock);
+
+// Vary the flag via env mock per-test using `vi.doMock` + re-import pattern.
+describe("ai.service — rate-limiter flag dispatch", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    inMemMock.check.mockClear();
+    pgMock.check.mockClear();
+  });
+
+  it("test 176a: flag OFF (default) routes to in-memory backend", async () => {
+    vi.doMock("../../src/config/env.js", async (importOriginal) => {
+      const actual = await importOriginal();
+      return { ...actual, FEATURE_PERSIST_RATE_LIMITER: "false" };
+    });
+    const { checkRateLimit } = await import("../../src/services/ai.service.js");
+    await checkRateLimit("user_1");
+    expect(inMemMock.check).toHaveBeenCalledTimes(1);
+    expect(pgMock.check).not.toHaveBeenCalled();
+  });
+
+  it("test 176b: flag ON routes to postgres backend", async () => {
+    vi.doMock("../../src/config/env.js", async (importOriginal) => {
+      const actual = await importOriginal();
+      return { ...actual, FEATURE_PERSIST_RATE_LIMITER: "true" };
+    });
+    const { checkRateLimit } = await import("../../src/services/ai.service.js");
+    await checkRateLimit("user_1");
+    expect(pgMock.check).toHaveBeenCalledTimes(1);
+    expect(inMemMock.check).not.toHaveBeenCalled();
+  });
+
+  it("test 176c: flag with mixed case still routes to postgres (robustness)", async () => {
+    vi.doMock("../../src/config/env.js", async (importOriginal) => {
+      const actual = await importOriginal();
+      return { ...actual, FEATURE_PERSIST_RATE_LIMITER: "TRUE" };
+    });
+    const { checkRateLimit } = await import("../../src/services/ai.service.js");
+    await checkRateLimit("user_1");
+    // With the .toLowerCase() robustness in the wrapper, "TRUE" → "true" → pg.
+    expect(pgMock.check).toHaveBeenCalledTimes(1);
+    expect(inMemMock.check).not.toHaveBeenCalled();
+  });
+});
+```
+
+Counts as ONE test-ID (T176) but three `it()` blocks. Simpler variant: single `it()` with three sub-cases if the test count is easier to track that way. Either way, the test file adds 3 test executions to the suite count. Per convention, T176a/b/c = one logical test.
+
+**T177 null / undefined userId defensive behavior** (BA fold-in — currently undefined behavior; we document it as fail-open with a warning):
+
+Back in `ai.rateLimiter.postgres.test.js`:
+```js
+it("test 177: null/undefined userId propagates as authz-broken; fails open with warning", async () => {
+  // Prisma will reject the where clause with `userId: undefined`.
+  prismaMock.aiUsageDailyCounter.findUnique.mockRejectedValueOnce(
+    new Error("Argument userId: Expected String, got Undefined"),
+  );
+  const r = await check(undefined);
+  // Fail-open: an upstream auth bug that lets a null userId through
+  // should not also blow up the AI-service call path. The user still
+  // gets their request through (higher-layer auth will reject if broken).
+  expect(r).toEqual({ allowed: true, remaining: expect.any(Number), limit: expect.any(Number) });
+  // Warning is logged (spy on console.warn to verify).
+});
+```
+
 ### Existing test adaptations
 
 - **`test/ai/service.test.js:363-386`** (`"throws RATE_LIMITED before calling the client when the user is over the cap"`) — uses `checkRateLimit` synchronously. Now async → add `await`. Flag defaults to `false`, so this exercises the in-memory backend — behavior unchanged. The test's loop `while (r.allowed)` becomes `while ((r = await checkRateLimit(userId)).allowed)`.
@@ -425,9 +527,11 @@ vi.useRealTimers();
 ### Test count target
 
 - Baseline (post 6c): **1386**
-- New in Sprint 7: **+8**
+- New in Sprint 7: **+10** (T168-T175 in `ai.rateLimiter.postgres.test.js` = 8; T176a/b/c in `ai.rateLimiter.dispatch.test.js` counts as 3 `it()` calls; T177 in `ai.rateLimiter.postgres.test.js` = 1. But T176 counts as one logical test-ID with 3 executions.) → suite runner sees **+11** test executions, but the ID range is T168-T177.
 - Existing tests adapted (no count delta): 2
-- Target: **1394**
+- Target: **1397** (1386 + 11 test executions across 2 new files)
+
+If the implementer prefers to keep the count round and align with the T-ID scheme, they can collapse T176 to a single `it()` with three sub-`describe` runs or three assertion groups. Either way, the ID span is T168-T177 and the intent is 10 logical tests.
 
 ---
 
@@ -441,15 +545,25 @@ Ship code + migration + tests. Feature flag defaults to `"false"` → zero behav
 
 Ops flips `FEATURE_PERSIST_RATE_LIMITER=true` on Railway. Redeploy propagates. In-memory Map goes cold; Postgres becomes the source of truth. Watch `[rateLimiter:pg]` warning logs for 24-48h. If clean → **future sprint** deletes the in-memory path.
 
-**Rollback**: flip flag back to `"false"` in Railway; the deploy that follows uses in-memory again. No code revert needed. Full rollback in one env-var change, ~90s propagation.
+**Post-flip atomicity spot-check (SM I1 fold-in):** enable Prisma query logging temporarily on one replica (`DEBUG=prisma:query` or Railway env `PRISMA_QUERY_ENGINE_LOG=info`) and observe the emitted SQL for one `upsert` call. Confirm it produces:
+
+```sql
+INSERT INTO "ai_usage_daily_counter" (...) VALUES (...)
+ON CONFLICT ("userId", "day") DO UPDATE
+SET "count" = "ai_usage_daily_counter"."count" + 1, "updatedAt" = ...
+```
+
+If the emitted SQL diverges (e.g., a `SELECT` then `UPDATE`), the atomicity claim is broken and the Prisma version needs pinning. Prisma 5.20 (this project's version) is confirmed atomic — the spot-check is a defense against future major-version upgrades silently changing behavior.
+
+**Rollback (SM I4 fold-in):** flip flag back to `"false"` in Railway; the deploy that follows uses in-memory again. No code revert needed. Full rollback in one env-var change, ~90s propagation. **Data consequence:** the in-memory Map starts empty on every process — every user's daily count resets to zero when the rollback deploys. In the rollback window (~90s propagation + first-call increments), users can burst up to their full `AI_DAILY_LIMIT` again. At `AI_DAILY_LIMIT=500` × ~$0.001/call × active users (say 20), the worst-case cost overshoot during rollback is ~$10 in the flip hour. Acceptable given rollback is a last-resort operation.
 
 ---
 
 ## Done criteria
 
-- Migration applied locally; `prisma migrate status` clean; drift-fix prompt did NOT run (per CLAUDE.md workflow)
-- 8 new tests pass; 2 existing rate-limiter tests adapted for async signature and still pass
-- Full suite at **1394**
+- Migration applied locally via `--create-only` + `migrate deploy` (BA fold-in: avoids the interactive drift-fix prompt entirely; safer for non-interactive agent execution). `prisma migrate status` clean.
+- 10 new tests pass (T168-T177 across 2 files: `ai.rateLimiter.postgres.test.js` and `ai.rateLimiter.dispatch.test.js`); 2 existing rate-limiter tests adapted for async signature and still pass
+- Full suite at **1397** (1386 + 11 executions)
 - `npm run lint` (server + client) exit 0
 - Server + client audit exit 0
 - Client `npm run build` clean

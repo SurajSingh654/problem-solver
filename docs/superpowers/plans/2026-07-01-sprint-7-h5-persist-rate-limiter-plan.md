@@ -12,9 +12,16 @@
 
 **Branch:** `feat/persist-ai-rate-limiter` (already created; spec committed at `941b848`)
 
-**Baseline test count:** 1386 (post Sprint 6c, main commit `2cceab7`). Capture exact in Task 0. Target after sprint: **1394** (+8).
+**Baseline test count:** 1386 (post Sprint 6c, main commit `2cceab7`). Capture exact in Task 0. Target after sprint: **1397** (+11 test executions across T168-T177 spanning 2 new files).
 
-**Review history:** Pre-implementation 4-role panel review (PO + BA + Security Manager + Lead Engineer) runs on this plan BEFORE the implementer subagent is dispatched, per `feedback_multi_agent_review_before_code.md`. All CHANGES_REQUESTED fold-ins must land in spec/plan before Task 0.
+**Review history (plan v2):** Full 4-role panel completed pre-implementation. Fold-ins applied:
+- **BA + Security C1**: Two additional caller sites (`ai.middleware.js:27`, `platform.controller.js:433`) folded into Task 4 file map + steps
+- **BA B2**: Drift-fix prompt via non-interactive agent → switched Task 1 Step 3 to `--create-only` + `deploy` pattern
+- **PO T176 + BA T177**: 2 new tests added (10 total, T168-T177 across 2 files)
+- **PO roadmap**: Sprint 7b explicitly named for per-IP middleware
+- **LE**: explicit L259 + L314 + L397 + L427 grep sites in Task 4; `_resetForTests` dropped from spec
+- **BA + LE**: flag comparison robustified to `.toLowerCase()` (spec v2)
+- **Strategic ask resolved**: user approved proceeding with Sprint 7
 
 ---
 
@@ -24,12 +31,15 @@
 - `server/prisma/migrations/YYYYMMDD000000_add_ai_usage_daily_counter/migration.sql` — CREATE TABLE + index (exact timestamp determined at Task 1 time)
 - `server/src/services/ai.rateLimiter.inMemory.js` — extracted from `ai.service.js:69-96`
 - `server/src/services/ai.rateLimiter.postgres.js` — new Prisma-backed impl
-- `server/test/services/ai.rateLimiter.postgres.test.js` — 8 tests T168-T175
+- `server/test/services/ai.rateLimiter.postgres.test.js` — 9 tests: T168-T175 + T177
+- `server/test/services/ai.rateLimiter.dispatch.test.js` — 1 test with 3 sub-`it` blocks (T176a/b/c flag routing)
 
 **Modify:**
 - `server/prisma/schema.prisma` — add `AiUsageDailyCounter` model near `UsageTracking` (~line 1953)
 - `server/src/config/env.js` — add `FEATURE_PERSIST_RATE_LIMITER` (default `"false"`)
-- `server/src/services/ai.service.js` — replace L69-97 with flag-dispatch wrapper; keep call sites at L259 + L397 with `await`
+- `server/src/services/ai.service.js` — replace L69-97 with flag-dispatch wrapper; add `await` at ALL call sites: L259 (aiComplete check), L314 (aiComplete increment), L397 (aiStream check), L427 (aiStream increment)
+- `server/src/middleware/ai.middleware.js` — **(Security + BA fold-in)** convert `aiRateLimit(req, res, next)` to `async`; add `await` on the `checkRateLimit(userId)` call at ~L27. Express 4+ supports async middleware natively; unhandled rejections propagate to `errorHandler`.
+- `server/src/controllers/platform.controller.js` — **(Security + BA fold-in)** add `await` on the `checkRateLimit(req.user.id)` call at ~L433 inside `analyzePlatformHealth` (function is already async).
 - `server/src/services/ai.usageWriter.js` — extend prune fn with counter cleanup
 - `server/test/ai/service.test.js` — adapt L363-386 (add `await` on `checkRateLimit`)
 - `server/test/ai/smoke.test.js` — adapt L22-28 (add `await`)
@@ -57,12 +67,25 @@ git log --oneline -1
 ```
 Expected: branch `feat/persist-ai-rate-limiter`, latest commit `941b848` (spec). Working tree clean (or has 4-role panel fold-ins if applied).
 
-- [ ] **Step 2: Capture baseline test count**
+- [ ] **Step 2: Capture baseline test count + caller-site inventory**
 
 ```bash
 cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npm test 2>&1 | grep -E "Tests +[0-9]+" | tail -3
 ```
 Expected: `Tests 1386 passed`. If lower or higher, STOP and reconcile.
+
+**Also (Security fold-in)** — capture the caller-site count as a drift-detection baseline. Every one of these must gain `await` in Task 4:
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -rn "checkRateLimit\|incrementRateLimit" server/src
+```
+
+Expected callers (verified via BA + Security review):
+- `server/src/services/ai.service.js` — L259 (aiComplete check), L314 (aiComplete increment), L397 (aiStream check), L427 (aiStream increment) — 4 sites (2 pairs)
+- `server/src/middleware/ai.middleware.js:~27` — aiRateLimit middleware
+- `server/src/controllers/platform.controller.js:~433` — analyzePlatformHealth
+
+**Record the exact line numbers** you see. If any additional callers exist beyond this list, STOP and report — the panel review will be re-run if scope has drifted.
 
 - [ ] **Step 3: Pre-push gate sanity (each MUST exit 0)**
 
@@ -126,13 +149,15 @@ EOF
 echo "Created migration ${TIMESTAMP}_add_ai_usage_daily_counter"
 ```
 
-- [ ] **Step 3: Apply the migration**
+- [ ] **Step 3: Apply the migration** (BA fold-in — non-interactive path avoids the drift-fix prompt entirely)
+
+Use the CLAUDE.md alternative workflow — `migrate deploy` instead of `migrate dev`. This applies pre-existing migration files without triggering the interactive drift-fix prompt for pgvector placeholders:
 
 ```bash
-cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npm run db:migrate
+cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npx prisma migrate deploy
 ```
 
-**IMPORTANT** (CLAUDE.md gotcha): after applying your migration, Prisma will prompt "Enter a name for the new migration" — this is the drift-fix prompt for pgvector placeholders. **Press Ctrl+C.**
+`migrate deploy` is non-interactive by design — it applies un-applied migration files in order and exits. No prompt to Ctrl+C.
 
 Then verify:
 
@@ -141,6 +166,15 @@ cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npx prisma migr
 ```
 
 Expected: "Database schema is up to date!"
+
+**Fallback if `migrate deploy` doesn't apply the migration** (rare — usually means the migration filename is malformed or already-applied-but-partial): revert to `--create-only` + `deploy`:
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver/server && rm -rf prisma/migrations/*_add_ai_usage_daily_counter
+cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npx prisma migrate dev --create-only --name add_ai_usage_daily_counter
+# Manually edit the generated migration.sql to contain the CREATE TABLE from Step 2.
+cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npx prisma migrate deploy
+```
 
 - [ ] **Step 4: Regenerate Prisma Client**
 
@@ -209,11 +243,12 @@ cd /Users/surajsingh/Downloads/Projects/problem-solver && git add server/src/ser
 
 ---
 
-## Task 3: Postgres backend + 8 new tests
+## Task 3: Postgres backend + 10 new tests (T168-T177)
 
 **Files:**
 - Create: `server/src/services/ai.rateLimiter.postgres.js`
-- Create: `server/test/services/ai.rateLimiter.postgres.test.js`
+- Create: `server/test/services/ai.rateLimiter.postgres.test.js` — 9 tests (T168-T175 + T177)
+- Create: `server/test/services/ai.rateLimiter.dispatch.test.js` — 1 logical test with 3 sub-`it` blocks (T176a/b/c flag routing)
 
 ### Steps
 
@@ -250,7 +285,7 @@ Expected: 8/8 pass.
 cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npm test 2>&1 | grep -E "Tests +[0-9]+" | tail -3
 ```
 
-Expected: `Tests 1394 passed` (1386 + 8).
+Expected: `Tests 1397 passed` (1386 + 8).
 
 - [ ] **Step 5: Lint**
 
@@ -263,7 +298,7 @@ Expected: exit 0.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/surajsingh/Downloads/Projects/problem-solver && git add server/src/services/ai.rateLimiter.postgres.js server/test/services/ai.rateLimiter.postgres.test.js && git commit -m "Add Postgres AI rate-limiter backend + 8 regression tests (T168-T175)"
+cd /Users/surajsingh/Downloads/Projects/problem-solver && git add server/src/services/ai.rateLimiter.postgres.js server/test/services/ai.rateLimiter.postgres.test.js server/test/services/ai.rateLimiter.dispatch.test.js && git commit -m "Add Postgres AI rate-limiter backend + 10 regression tests (T168-T177)"
 ```
 
 ---
@@ -329,37 +364,71 @@ async function incrementRateLimit(userId) {
 
 Place these imports with the other imports at the top of the file. Place the function definitions in the same location as the old code (near L69).
 
-- [ ] **Step 4: Update the two caller sites** (`aiComplete` L259, `aiStream` L397)
+- [ ] **Step 4: Update ALL SIX caller sites** (BA + Security fold-in — the v1 plan missed 2 external callers)
 
-The current code at L259:
-```js
-const rateCheck = checkRateLimit(userId);
-```
-
-Becomes:
-```js
-const rateCheck = await checkRateLimit(userId);
-```
-
-Same at L397 in `aiStream`.
-
-The current code at L314 (after successful AI call in `aiComplete`):
-```js
-incrementRateLimit(userId);
-```
-
-Becomes:
-```js
-await incrementRateLimit(userId);
-```
-
-Same in `aiStream` — find the equivalent post-success increment line and add `await`.
-
-Use grep to verify no other call sites exist:
+Repo-wide grep to enumerate:
 
 ```bash
-cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -n "checkRateLimit\|incrementRateLimit" server/src/services/ai.service.js
+cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -rn "checkRateLimit\|incrementRateLimit" server/src
 ```
+
+Expected results (verified in Task 0 Step 2):
+
+1. **`server/src/services/ai.service.js:259`** (aiComplete check):
+   ```js
+   const rateCheck = checkRateLimit(userId);
+   // → becomes:
+   const rateCheck = await checkRateLimit(userId);
+   ```
+
+2. **`server/src/services/ai.service.js:314`** (aiComplete increment):
+   ```js
+   incrementRateLimit(userId);
+   // → becomes:
+   await incrementRateLimit(userId);
+   ```
+
+3. **`server/src/services/ai.service.js:397`** (aiStream check): same as #1
+
+4. **`server/src/services/ai.service.js:427`** (aiStream increment): same as #2
+
+5. **`server/src/middleware/ai.middleware.js:~27`** (BA + Security fold-in — MISSED in v1 plan) — the `aiRateLimit` middleware:
+   ```js
+   // BEFORE:
+   export function aiRateLimit(req, res, next) {
+     const userId = req.user?.id;
+     if (!userId) return next();
+     const check = checkRateLimit(userId);
+     if (!check.allowed) { /* return 429 */ }
+     next();
+   }
+
+   // AFTER — function becomes async; add await:
+   export async function aiRateLimit(req, res, next) {
+     const userId = req.user?.id;
+     if (!userId) return next();
+     const check = await checkRateLimit(userId);
+     if (!check.allowed) { /* return 429 */ }
+     next();
+   }
+   ```
+   Express 4+ supports async middleware natively. Any thrown error propagates to `errorHandler` via the promise-rejection chain (unhandled rejections in async middleware invoke `next(err)` in Express 5; for Express 4 you'd need explicit `.catch(next)`, but the middleware here should not throw — `checkRateLimit`'s pg backend fails open).
+
+6. **`server/src/controllers/platform.controller.js:~433`** (BA + Security fold-in — MISSED in v1 plan) — `analyzePlatformHealth`:
+   ```js
+   // BEFORE:
+   const rateCheck = checkRateLimit(req.user.id);
+   // AFTER (function is already async):
+   const rateCheck = await checkRateLimit(req.user.id);
+   ```
+
+**Verification after edits:**
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -rn "checkRateLimit\|incrementRateLimit" server/src | grep -v "await \|await$"
+```
+
+Expected: only the function definitions themselves (in `ai.service.js` wrapper + the two backend files). Any other match means a caller site was missed — STOP and add `await`.
 
 - [ ] **Step 5: Adapt `test/ai/service.test.js:363-386`**
 
@@ -408,7 +477,7 @@ try {
 cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npm test 2>&1 | grep -E "Tests +[0-9]+" | tail -3
 ```
 
-Expected: `Tests 1394 passed` (still). The 2 adapted tests should now pass under async. No regression in the rest of the suite.
+Expected: `Tests 1397 passed` (still). The 2 adapted tests should now pass under async. No regression in the rest of the suite.
 
 **Common failure mode**: if the two adapted tests fail with "expected object, got Promise", it means the caller forgot to `await`. Re-read the test's assertion lines and add `await` where the return value of `checkRateLimit`/`incrementRateLimit` is used.
 
@@ -423,7 +492,15 @@ Expected: exit 0.
 - [ ] **Step 10: Commit**
 
 ```bash
-cd /Users/surajsingh/Downloads/Projects/problem-solver && git add server/src/config/env.js server/src/services/ai.service.js server/src/services/ai.usageWriter.js server/test/ai/service.test.js server/test/ai/smoke.test.js && git commit -m "Wire flag-dispatch rate-limiter + extend prune + adapt existing tests"
+cd /Users/surajsingh/Downloads/Projects/problem-solver && git add \
+  server/src/config/env.js \
+  server/src/services/ai.service.js \
+  server/src/services/ai.usageWriter.js \
+  server/src/middleware/ai.middleware.js \
+  server/src/controllers/platform.controller.js \
+  server/test/ai/service.test.js \
+  server/test/ai/smoke.test.js && \
+  git commit -m "Wire flag-dispatch rate-limiter + async 6 caller sites + extend prune + adapt existing tests"
 ```
 
 If `.env.example` was modified, include it in the `git add`.
@@ -447,7 +524,7 @@ cd /Users/surajsingh/Downloads/Projects/problem-solver/client && npm audit --aud
 cd /Users/surajsingh/Downloads/Projects/problem-solver/client && npm run build
 ```
 
-Expected: 1394 passing, 0 vulnerabilities, schema up to date, client build clean.
+Expected: 1397 passing, 0 vulnerabilities, schema up to date, client build clean.
 
 - [ ] **Step 2: Push feature branch**
 
@@ -477,10 +554,11 @@ Find the existing Sprint 7 row (per the roadmap header at line 69):
 | 7 | Persist-rate-limiter migration ... | queued | — | — |
 ```
 
-Replace with (match the file's actual column count/alignment; adjust wording if the row template differs):
+Replace with TWO rows: Sprint 7 (shipped) + Sprint 7b (queued for the per-IP middleware carve-out, PO fold-in):
 
 ```markdown
-| 7 | H5 persist AI rate-limiter (Phase 1: code + migration + 8 tests T168-T175 shipped behind FEATURE_PERSIST_RATE_LIMITER=false; per-user daily counter atomic UPSERT in ai_usage_daily_counter; fail-open on DB error; middleware per-IP limiters carved to future sprint; 4-role panel reviewed pre-implementation. Phase 2 = ops flip in Railway) | ✅ shipped (Phase 1) | [`2026-07-01-sprint-7-h5-persist-rate-limiter-design.md`](../specs/2026-07-01-sprint-7-h5-persist-rate-limiter-design.md) | 2026-07-01 |
+| 7 | H5 persist AI rate-limiter — user-counter portion (Phase 1: code + migration + 10 tests T168-T177 shipped behind FEATURE_PERSIST_RATE_LIMITER=false; per-user daily counter atomic UPSERT in ai_usage_daily_counter; fail-open on DB error; 4-role panel reviewed pre-implementation; Phase 2 = ops flip in Railway) | ✅ shipped (Phase 1) | [`2026-07-01-sprint-7-h5-persist-rate-limiter-design.md`](../specs/2026-07-01-sprint-7-h5-persist-rate-limiter-design.md) | 2026-07-01 |
+| 7b | H5 middleware per-IP rate-limiter migration (auth/api/ai limiters in `rateLimit.middleware.js` currently in-memory via express-rate-limit; needs persistent-store adapter for full multi-replica readiness; different threat model — brute-force protection, not cost cap) | queued | — | — |
 ```
 
 - [ ] **Step 5: Commit + push roadmap**
@@ -503,12 +581,14 @@ Verify local HEAD == origin/main.
 
 Sprint 7 Phase 1 is done. Phase 2 requires a manual ops step:
 
-> To activate the Postgres rate-limiter in production:
+> **To activate the Postgres rate-limiter in production:**
 > 1. On Railway, set `FEATURE_PERSIST_RATE_LIMITER=true` on the server service
 > 2. Redeploy (auto-triggers on env-var change)
-> 3. Watch `[rateLimiter:pg]` warning logs for 24-48h
-> 4. If clean, schedule a future cleanup sprint to delete the in-memory path
-> 5. To roll back: flip `FEATURE_PERSIST_RATE_LIMITER=false` and redeploy (~90s)
+> 3. **Post-flip atomicity spot-check** (SM I1 fold-in): enable `DEBUG=prisma:query` on one replica temporarily and observe the SQL emitted for one `upsert` call. Confirm it produces `INSERT ... ON CONFLICT ... DO UPDATE SET "count" = "ai_usage_daily_counter"."count" + 1`. If it produces a `SELECT` then `UPDATE`, the atomicity claim is broken — Prisma version regressed; roll back immediately.
+> 4. Watch `[rateLimiter:pg]` warning logs for 24-48h
+> 5. If clean, schedule a future cleanup sprint to delete the in-memory path
+> 6. **To roll back**: flip `FEATURE_PERSIST_RATE_LIMITER=false` and redeploy (~90s propagation). **Data consequence** (SM I4 fold-in): in-memory Map starts empty on process restart, so every user's daily count effectively resets during the rollback window. Worst-case cost overshoot ~$5-25 in the flip hour depending on active-user count — acceptable for a rollback last resort.
+> 7. Flag comparison is CASE-INSENSITIVE per spec v2's robustness fold-in (`.toLowerCase()`). "true", "True", "TRUE" all activate the pg backend; anything else falls through to in-memory. Documented for ops safety.
 
 This handoff note should be surfaced to the user at end-of-sprint.
 
@@ -551,8 +631,8 @@ No "TBD" / "implement later". `YYYYMMDD000000` in the migration path is filled i
 ## Done criteria
 
 - Migration applied; `prisma migrate status` clean; drift-fix prompt did NOT run
-- 8 new tests pass; 2 existing rate-limiter tests adapted and passing
-- Full suite at **1394**
+- 10 new tests pass (T168-T177 across 2 files); 2 existing rate-limiter tests adapted and passing; 4 additional call sites (`ai.middleware.js`, `platform.controller.js`, `ai.service.js:314`, `ai.service.js:427`) updated for `await`
+- Full suite at **1397**
 - `npm run lint` (server + client) exit 0
 - Server + client audit exit 0
 - Client `npm run build` clean
