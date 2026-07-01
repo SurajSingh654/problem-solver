@@ -430,7 +430,7 @@ export async function analyzePlatformHealth(req, res) {
       return error(res, "AI features are not enabled.", 503);
     }
 
-    const rateCheck = checkRateLimit(req.user.id);
+    const rateCheck = await checkRateLimit(req.user.id);
     if (!rateCheck.allowed) {
       return error(
         res,

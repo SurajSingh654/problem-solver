@@ -18,13 +18,13 @@ export function requireAI(req, res, next) {
   next();
 }
 
-export function aiRateLimit(req, res, next) {
+export async function aiRateLimit(req, res, next) {
   const userId = req.user?.id;
   if (!userId) {
     return errorResponse(res, "Authentication required", 401);
   }
 
-  const check = checkRateLimit(userId);
+  const check = await checkRateLimit(userId);
 
   // Set rate limit headers
   res.set("X-AI-Limit", String(check.limit));

@@ -369,5 +369,16 @@ export const MCP_ALLOWED_ORIGINS = (
   ) || ''
 ).split(',').map((o) => o.trim()).filter(Boolean)
 
+// Per-user AI rate-limit persistence backend.
+//
+// When "true" (case-insensitive), per-user AI daily rate-limit reads/writes
+// go to Postgres (AiUsageDailyCounter table) instead of the in-process Map.
+// Unblocks multi-replica deployments — a flipped flag is a safe rollout step
+// once the code ships; default is "false" (zero behavior change on merge).
+//
+// Server-only flag — no client mirror needed (backend telemetry, not UI).
+export const FEATURE_PERSIST_RATE_LIMITER =
+  optional('FEATURE_PERSIST_RATE_LIMITER', 'false')
+
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

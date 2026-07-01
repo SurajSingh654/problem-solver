@@ -83,6 +83,20 @@ export function mountUsageWriter() {
                 `[ai.usageWriter] prune failed: ${err?.code || err?.message || err}`,
             );
         }
+
+        // Also prune stale ai_usage_daily_counter rows (2-day floor).
+        const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000)
+            .toISOString().split("T")[0];
+        try {
+            const { count: prunedCounters } = await prisma.aiUsageDailyCounter.deleteMany({
+                where: { day: { lt: twoDaysAgo } },
+            });
+            if (prunedCounters > 0) {
+                console.log(`[ai.usageWriter] pruned ${prunedCounters} rate-limit counters older than 2d`);
+            }
+        } catch (err) {
+            console.warn(`[ai.usageWriter] counter prune failed: ${err?.code || err?.message}`);
+        }
     };
     setTimeout(prune, 60_000);
     const interval = setInterval(prune, PRUNE_INTERVAL_MS);

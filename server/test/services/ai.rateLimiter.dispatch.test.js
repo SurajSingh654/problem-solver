@@ -5,9 +5,6 @@
 // Verifies that ai.service.js routes checkRateLimit() calls to the correct
 // backend based on the FEATURE_PERSIST_RATE_LIMITER env flag.
 //
-// SKIPPED until Task 4 wires the dispatcher into ai.service.js.
-// Remove the .skip annotation from the describe block when Task 4 lands.
-//
 // Sprint 7 H5 — persist-ai-rate-limiter
 // ============================================================================
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -24,8 +21,7 @@ vi.mock("../../src/services/ai.rateLimiter.inMemory.js", () => inMemMock);
 vi.mock("../../src/services/ai.rateLimiter.postgres.js", () => pgMock);
 
 // Vary the flag via env mock per-test using `vi.doMock` + re-import pattern.
-// describe.skip: removed in Task 4 when the flag-dispatch wrapper lands in ai.service.js.
-describe.skip("ai.service — rate-limiter flag dispatch (unskipped after Task 4 dispatcher lands)", () => {
+describe("ai.service — rate-limiter flag dispatch", () => {
   beforeEach(() => {
     vi.resetModules();
     inMemMock.check.mockClear();

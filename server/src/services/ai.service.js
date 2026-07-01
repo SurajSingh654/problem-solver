@@ -37,7 +37,10 @@ import {
     AI_DAILY_LIMIT,
     AI_MAX_TOKENS_HARD_CAP,
     AI_REQUEST_TIMEOUT_MS,
+    FEATURE_PERSIST_RATE_LIMITER,
 } from "../config/env.js";
+import * as inMemLimiter from "./ai.rateLimiter.inMemory.js";
+import * as pgLimiter from "./ai.rateLimiter.postgres.js";
 
 // ── Initialize OpenAI client (lazy singleton) ───────────────────────
 let openai = null;
@@ -66,34 +69,30 @@ export function _setClientForTests(mock) {
     openai = mock;
 }
 
-// ── Rate limiter (per user per day, in-memory) ──────────────────────
-const rateLimitMap = new Map();
+// ── Rate limiter dispatch (per-user per-day, backend selected by flag) ──
+//
+// FEATURE_PERSIST_RATE_LIMITER="true" (case-insensitive) → Postgres backend
+// (persists across replicas; source of truth). Otherwise → in-memory backend
+// (per-process Map; current default, works only at single-replica).
+//
+// Both backends expose async {check, increment} with identical semantics
+// and return shapes so callers don't care which one is active.
+//
+// AI_DAILY_LIMIT is still consumed inside each backend module directly.
+// The RATE_LIMIT alias below is preserved for the RATE_LIMITED error message.
 const RATE_LIMIT = AI_DAILY_LIMIT;
 
-function getRateLimitKey(userId) {
-    const today = new Date().toISOString().split("T")[0];
-    return `${userId}:${today}`;
+function activeLimiter() {
+    const flag = String(FEATURE_PERSIST_RATE_LIMITER ?? "").trim().toLowerCase();
+    return flag === "true" ? pgLimiter : inMemLimiter;
 }
 
-export function checkRateLimit(userId) {
-    const key = getRateLimitKey(userId);
-    const count = rateLimitMap.get(key) || 0;
-    if (count >= RATE_LIMIT) {
-        return { allowed: false, remaining: 0, limit: RATE_LIMIT };
-    }
-    return { allowed: true, remaining: RATE_LIMIT - count, limit: RATE_LIMIT };
+export async function checkRateLimit(userId) {
+    return activeLimiter().check(userId);
 }
 
-function incrementRateLimit(userId) {
-    const key = getRateLimitKey(userId);
-    const count = rateLimitMap.get(key) || 0;
-    rateLimitMap.set(key, count + 1);
-    if (Math.random() < 0.01) {
-        const today = new Date().toISOString().split("T")[0];
-        for (const [k] of rateLimitMap) {
-            if (!k.endsWith(today)) rateLimitMap.delete(k);
-        }
-    }
+async function incrementRateLimit(userId) {
+    return activeLimiter().increment(userId);
 }
 
 // ── Retry on transient errors ───────────────────────────────────────
@@ -256,7 +255,7 @@ export async function aiComplete({
     returnFullMessage = false,
     surface,
 }) {
-    const rateCheck = checkRateLimit(userId);
+    const rateCheck = await checkRateLimit(userId);
     if (!rateCheck.allowed) {
         throw new AIError(
             "RATE_LIMITED",
@@ -311,7 +310,7 @@ export async function aiComplete({
             model,
             surface || "complete",
         );
-        incrementRateLimit(userId);
+        await incrementRateLimit(userId);
 
         const message = response.choices?.[0]?.message;
         const content = message?.content;
@@ -394,7 +393,7 @@ export async function aiStream({
     toolChoice,
     surface,
 }) {
-    const rateCheck = checkRateLimit(userId);
+    const rateCheck = await checkRateLimit(userId);
     if (!rateCheck.allowed) {
         throw new AIError(
             "RATE_LIMITED",
@@ -424,7 +423,7 @@ export async function aiStream({
                 }),
             `${surface || "stream"}:${model}`,
         );
-        incrementRateLimit(userId);
+        await incrementRateLimit(userId);
         // Token counts aren't known at stream-open time; emit a lightweight
         // event recording the open. Subscribers that care about totals can
         // listen for downstream chunks themselves.

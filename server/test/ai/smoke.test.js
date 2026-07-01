@@ -21,7 +21,7 @@ describe('ai.service.js', () => {
 
     it('checkRateLimit returns the standard shape', async () => {
         const { checkRateLimit } = await import('../../src/services/ai.service.js')
-        const r = checkRateLimit('user-smoke-1')
+        const r = await checkRateLimit('user-smoke-1')
         expect(r).toHaveProperty('allowed')
         expect(r).toHaveProperty('remaining')
         expect(r).toHaveProperty('limit')

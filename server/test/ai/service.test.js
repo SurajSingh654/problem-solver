@@ -367,7 +367,7 @@ describe('aiComplete — rate limit', () => {
         _setClientForTests(mockClient(create))
         // Hammer until checkRateLimit reports not-allowed (50 per env default).
         for (let i = 0; i < 60; i++) {
-            const r = checkRateLimit(userId)
+            const r = await checkRateLimit(userId)
             if (!r.allowed) break
             await aiComplete({
                 systemPrompt: 's',
@@ -375,7 +375,7 @@ describe('aiComplete — rate limit', () => {
                 userId,
             })
         }
-        const r = checkRateLimit(userId)
+        const r = await checkRateLimit(userId)
         expect(r.allowed).toBe(false)
         // Next call must throw without invoking the client.
         const callsBefore = create.mock.calls.length
