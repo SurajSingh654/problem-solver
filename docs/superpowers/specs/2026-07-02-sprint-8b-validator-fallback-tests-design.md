@@ -6,7 +6,14 @@
 **Branch:** `feat/fallback-assertion-tests`
 **Layers on:** main, post Sprint 8a (`b0beb62`)
 **Feature flag:** None — pure additive test work
-**Review history:** Requires standing 4-role panel review before implementer dispatch, per `feedback_multi_agent_review_before_code.md`.
+**Review history (spec v2):** Full 4-role panel completed pre-implementation:
+- **PO** — APPROVED (no notes): 9-of-9 scope defensible; zero tautologies; escalation criterion complete
+- **Security Manager** — APPROVED (no notes): no info-leak surface; escalation criterion unambiguous
+- **Lead Engineer** — APPROVED (no notes): style matches existing patterns; auto-discovery confirmed; 18 fallback exports verified
+- **Business Analyst** — CHANGES REQUESTED → folded (3 spec bugs corrected in v2):
+  - **T228 reframed**: `buildFallbackNoteAutoTag` returns `{tags: [], _fallback: true}` INTENTIONALLY (per Sprint 6c "honest failure" design — empty is the signal, not garbage tags). The fallback deliberately FAILS `validateNoteAutoTag`'s 3-min-tags requirement. This isn't a bug — it's design. T228 reframed to LOCK IN this intentional-failure design: assert `validateNoteAutoTag(fb).valid === false` and `violations.some(v => v.startsWith("tags-count"))` — captures the intent.
+  - **T233 field-shape fix**: `buildFallbackNoteFromSolution` returns `{title, tags, whatYouGotRight, weakAreas, mistakes, howToOvercome, topicsExplained, betterApproachNextTime, _fallback}` — NOT `contentMarkdown`. Assertion targets corrected to `title, topicsExplained, tags, _fallback: true`.
+  - **T241 field-name fix**: `buildFallbackTeachingTopicCoverage` field is `coverageScore` not `score`. Assertion updated to `fb.coverageScore` in `[35, 74]`.
 
 ---
 
@@ -212,7 +219,21 @@ Panel note: this is a CONTRACT test, not a shape test. The function documents "r
 
 ### T227-T228 — buildFallbackNoteAutoTag
 - **T227**: exact match `{tags: [], _fallback: true}` — the no-pseudo-tags contract from Sprint 6c
-- **T228**: passes `validateNoteAutoTag(fb).valid === true` (validator must accept empty arrays)
+- **T228 (BA fold-in — reframed)**: The fallback intentionally FAILS its own validator. Empty tags array is the honest-failure signal (per source comment: "empty list with `_fallback` flag lets the UI render honest 'AI unavailable, retry' instead of polluting the tag set with garbage"). Assert `validateNoteAutoTag(fb).valid === false` AND `violations.some(v => v.startsWith("tags-count"))`. Locks in the intentional-design decision.
+
+```js
+it("test 228: validator INTENTIONALLY rejects (empty is honest-failure signal by design)", () => {
+  const fb = buildFallbackNoteAutoTag();
+  const result = validateNoteAutoTag(fb);
+  // The fallback deliberately fails its validator — empty array is the
+  // "AI unavailable, retry" signal, NOT a valid tag suggestion. If this
+  // test flips to .valid === true, someone has 'fixed' the fallback by
+  // adding placeholder tags — that reverts the Sprint 6c honest-failure
+  // decision. Lock in the intent.
+  expect(result.valid).toBe(false);
+  expect(result.violations.some((v) => v.startsWith("tags-count"))).toBe(true);
+});
+```
 
 ### T229-T230 — buildFallbackNoteFlashcards
 - **T229**: passes `validateNoteFlashcards(fb).valid === true`
@@ -223,7 +244,7 @@ Panel note: this is a CONTRACT test, not a shape test. The function documents "r
 - **T232**: input with 2 rawNotes → output has 2 `relatedNotes` entries, each with matching `id` from input and non-empty `rationale`
 
 ### T233-T234 — buildFallbackNoteFromSolution
-- **T233**: with `{problem, solution, aiReview}` inputs → produces valid Note-shape output (`title`, `contentMarkdown`, `tags`, `_fallback: true`)
+- **T233 (BA fold-in — corrected shape)**: with `{problem, solution, aiReview}` inputs → produces valid output shape `{title, tags, whatYouGotRight, weakAreas, mistakes, howToOvercome, topicsExplained, betterApproachNextTime, _fallback: true}`. Note: NO `contentMarkdown` field — BA-verified against source. Assertion targets: `expect(fb.title).toBeTruthy()`, `expect(fb.topicsExplained).toBeInstanceOf(Array)`, `expect(fb._fallback).toBe(true)`.
 - **T234**: `solution.patterns: ["Sliding Window", "Two Pointers"]` → `fb.tags` includes `"sliding-window"` and `"two-pointers"` (kebab-case sanitization regression guard)
 
 ### T235-T237 — buildFallbackTeachingSummary
@@ -237,7 +258,7 @@ Panel note: this is a CONTRACT test, not a shape test. The function documents "r
 
 ### T240-T242 — buildFallbackTeachingTopicCoverage
 - **T240**: passes `validateTeachingTopicCoverage(fb).valid === true`
-- **T241**: `fb.verdict === "PARTIAL"` AND `fb.score` in `[35, 74]` range (validator constraint for PARTIAL)
+- **T241 (BA fold-in — corrected field name)**: `fb.verdict === "PARTIAL"` AND `fb.coverageScore` (NOT `fb.score` — BA-verified) in `[35, 74]` range (validator constraint for PARTIAL)
 - **T242**: input `{topic: "redis caching", notesMarkdown: "We discussed redis at length"}` → token-based scoring reflects at least one hit (score > 0)
 
 ---
