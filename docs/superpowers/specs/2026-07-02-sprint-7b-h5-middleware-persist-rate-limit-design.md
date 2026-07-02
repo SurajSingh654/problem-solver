@@ -6,7 +6,11 @@
 **Branch:** `feat/persist-middleware-rate-limiter`
 **Layers on:** main, post Sprint 7 (`3327267`)
 **Feature flag:** `FEATURE_PERSIST_MIDDLEWARE_LIMITER` (env, default `"false"`)
-**Review history:** Will require the standing 4-role panel review (PO + BA + Security Manager + Lead Engineer) on the implementation plan BEFORE implementer dispatch, per `feedback_multi_agent_review_before_code.md`.
+**Review history (spec v2 + plan v2):** Full 4-role panel completed pre-implementation. All 4 verdicts: APPROVED WITH NOTES. Fold-ins applied:
+- **PO**: Task 3 post-refactor signature-drift grep; non-blocking integration-test suggestion for flag-ON path
+- **Security Manager**: Phase 2 alerting requirement (Railway log alert on `[rateLimitStore:auth]` warnings), `resetKey` safety comment, XFF Railway note, env.js `optional()` helper style
+- **Lead Engineer**: T181/T182 SQL-string assertion strengthening, T183 resetTime range check, T188 strict `expect(typeof storeFor).toBe("function")` guard, atomicity confirmed for Prisma 5.20 + express-rate-limit v8 interface completeness
+- **BA**: same T188 guard finding (independent corroboration), boot-smoke Done criterion, multi-replica canary caveat in ops handoff
 
 ---
 
@@ -116,6 +120,8 @@ model RateLimitCounter {
 - **Single-column PK on `key`**: express-rate-limit's Store interface always operates on a single string key per limiter. Per-limiter namespacing is achieved via a prefix (`"auth:"`, `"api:"`, `"ai:"`, `"export:"`) at the store level. A composite PK would over-engineer.
 - **`resetAt` (absolute Datetime)**, not `createdAt + windowMs`: makes the window-rollover check trivial in SQL (`resetAt < NOW()`). No client-side timer needed.
 - **No `User` back-relation**: this is per-IP, not per-user. Even users who don't exist yet (failed logins for missing accounts) count against the limit — that's the intended threat-model coverage.
+
+**Trust-proxy dependency note (Security Manager fold-in):** The IP that lands in `key` comes from `req.ip`, which respects `trust proxy: 1` set at `server/src/index.js:83`. This is safe on the assumption Railway strips downstream `X-Forwarded-For` before appending its own client-IP hop (industry-standard managed-proxy behavior). If deployment moves off Railway to a different infra provider, revalidate the trust-proxy setting — an attacker-forged `X-Forwarded-For` from beyond the trusted hop could otherwise be used to spread rate-limit consumption across spoofed IPs, effectively disabling per-IP limiting.
 
 ### Migration SQL
 
@@ -248,6 +254,13 @@ export class PrismaRateLimitStore {
     }
   }
 
+  // NOTE (Security Manager fold-in): never expose via HTTP — internal
+  // library use only. Exposing resetKey to an authenticated endpoint
+  // would create a bypass vector (an attacker with admin access could
+  // reset their own rate-limit counter). If a future feature needs an
+  // admin-facing "unblock this IP" flow, wire it through a separate
+  // gated admin endpoint that resets specific counters, not through
+  // this Store method directly.
   async resetKey(key) {
     const fullKey = this.fullKey(key);
     try {
@@ -458,7 +471,7 @@ store.init({ windowMs: 15 * 60 * 1000 });
 expect(store.windowMs).toBe(15 * 60 * 1000);
 ```
 
-**T181 `increment` first hit — return shape**:
+**T181 `increment` first hit — return shape + SQL contract** (Lead Engineer fold-in: assert on SQL strings to catch atomicity regressions):
 ```js
 prismaMock.$queryRaw.mockResolvedValueOnce([
   { totalHits: 1n, resetTime: new Date("2026-07-02T12:15:00Z") },
@@ -469,6 +482,16 @@ const result = await store.increment("1.2.3.4");
 expect(result.totalHits).toBe(1);           // BigInt coerced to Number
 expect(result.resetTime).toBeInstanceOf(Date);
 expect(result.resetTime.getTime()).toBe(new Date("2026-07-02T12:15:00Z").getTime());
+
+// SQL contract — atomicity regression guard. If a future refactor mutates
+// the CASE WHEN branch or drops ON CONFLICT, this test catches it.
+const call = prismaMock.$queryRaw.mock.calls[0];
+const sql = call[0].join("").replace(/\s+/g, " ");  // strings array + whitespace-tolerant
+expect(sql).toMatch(/ON CONFLICT \("key"\) DO UPDATE/i);
+expect(sql).toMatch(/CASE WHEN "rate_limit_counter"\."resetAt" < NOW\(\)/i);
+// Both CASE arms must set count and resetAt consistently
+expect(sql).toMatch(/THEN 1 ELSE "rate_limit_counter"\."count" \+ 1 END/i);
+expect(sql).toMatch(/RETURNING "count" AS "totalHits", "resetAt" AS "resetTime"/i);
 ```
 
 **T182 `increment` — prefix applied to key**:
@@ -483,16 +506,23 @@ const paramsPassed = call.slice(1); // first arg is the strings array
 expect(paramsPassed).toContain("auth:1.2.3.4");
 ```
 
-**T183 `increment` DB error — fails open**:
+**T183 `increment` DB error — fails open** (Lead Engineer fold-in: bound `resetTime` to catch a bug returning epoch):
 ```js
 prismaMock.$queryRaw.mockRejectedValueOnce(new Error("connection refused"));
 const store = new PrismaRateLimitStore({ prefix: "auth" });
-store.init({ windowMs: 900_000 });
+const windowMs = 900_000;
+store.init({ windowMs });
 const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 try {
+  const beforeMs = Date.now();
   const result = await store.increment("1.2.3.4");
+  const afterMs = Date.now();
   expect(result.totalHits).toBe(1);
   expect(result.resetTime).toBeInstanceOf(Date);
+  // Range check: fallback resetTime must be ~now + windowMs, NOT epoch or stale.
+  // A regression returning new Date(0) or missing the +windowMs offset fails here.
+  expect(result.resetTime.getTime()).toBeGreaterThanOrEqual(beforeMs + windowMs - 1000);
+  expect(result.resetTime.getTime()).toBeLessThanOrEqual(afterMs + windowMs + 1000);
   expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/rateLimitStore:auth.*failing open/));
 } finally {
   warnSpy.mockRestore();
@@ -575,12 +605,10 @@ describe("rateLimit.middleware — flag dispatch", () => {
     // export to verify.
     const module = await import("../../src/middleware/rateLimit.middleware.js");
     // If storeFor is exported, use it:
-    if (typeof module.storeFor === "function") {
-      expect(module.storeFor("auth")).toBeUndefined();
-    } else {
-      // Alternatively, inspect limiter internals — not stable across versions.
-      // Skip if storeFor isn't exported.
-    }
+    // Hard guard (LE + BA fold-in): without this, if storeFor is not exported
+    // the conditional-skip made T188 silently pass — flag dispatch untested.
+    expect(typeof module.storeFor).toBe("function");
+    expect(module.storeFor("auth")).toBeUndefined();
   });
 
   it("test 188b: flag ON (\"true\") → storeFor returns PrismaRateLimitStore instance", async () => {
@@ -592,9 +620,8 @@ describe("rateLimit.middleware — flag dispatch", () => {
     const { PrismaRateLimitStore } = await import(
       "../../src/middleware/rateLimit.prismaStore.js"
     );
-    if (typeof module.storeFor === "function") {
-      expect(module.storeFor("auth")).toBeInstanceOf(PrismaRateLimitStore);
-    }
+    expect(typeof module.storeFor).toBe("function");
+    expect(module.storeFor("auth")).toBeInstanceOf(PrismaRateLimitStore);
   });
 
   it("test 188c: flag with mixed case (\"TRUE\") → activates pg store (robustness)", async () => {
@@ -606,9 +633,8 @@ describe("rateLimit.middleware — flag dispatch", () => {
     const { PrismaRateLimitStore } = await import(
       "../../src/middleware/rateLimit.prismaStore.js"
     );
-    if (typeof module.storeFor === "function") {
-      expect(module.storeFor("auth")).toBeInstanceOf(PrismaRateLimitStore);
-    }
+    expect(typeof module.storeFor).toBe("function");
+    expect(module.storeFor("auth")).toBeInstanceOf(PrismaRateLimitStore);
   });
 });
 ```
@@ -630,6 +656,11 @@ To make T188 assertions clean, `rateLimit.middleware.js` should `export { storeF
 Ship code + migration + tests. `FEATURE_PERSIST_MIDDLEWARE_LIMITER` defaults `"false"` → zero behavior change on merge. All 4 limiters use the default `MemoryStore` until ops flips the flag.
 
 ### Phase 2 (ops step, out of sprint scope)
+
+**Pre-flip prerequisites (Security Manager + BA fold-ins):**
+
+- **BEFORE flipping**, set up a Railway log-based alert on `[rateLimitStore:auth]` warning volume (>5 in 5 minutes triggers page). Compensates for the currently-aspirational Sentry/JSON-log pipeline. This is a **hard prerequisite** for Phase 2 flip on `authLimiter` — without it, a DB blip silently disables brute-force protection with no visibility.
+- **Multi-replica canary rule**: if the deploy is running >1 replica at flip time, flip ONE replica first (set env var scoped to a single instance if possible, or scale to 1 → flip → scale back → observe). If Railway doesn't support single-replica env var scoping, keep the deploy at 1 replica during the flip window and scale back after 5-minute observation.
 
 **To activate the Postgres middleware rate-limiter:**
 
@@ -663,6 +694,7 @@ Ship code + migration + tests. `FEATURE_PERSIST_MIDDLEWARE_LIMITER` defaults `"f
 - Any divergences captured in commit body with `T<id>: <expected> vs <actual> — <decision>` format
 - 4-role panel review completed pre-implementation with all CHANGES_REQUESTED fold-ins applied before Task 0
 - Ops handoff note surfaced to user at sprint completion
+- **Boot-smoke check (BA fold-in)**: server starts cleanly with `FEATURE_PERSIST_MIDDLEWARE_LIMITER=true` locally (`FEATURE_PERSIST_MIDDLEWARE_LIMITER=true npm run dev` on a dev branch, run for 10 seconds, kill). Catches boot-time regressions unit tests miss.
 
 ---
 

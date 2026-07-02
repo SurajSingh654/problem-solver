@@ -14,7 +14,12 @@
 
 **Baseline test count:** 1398 (post Sprint 7, main commit `3327267`). Capture exact in Task 0. Target after sprint: **1411** (+13 test executions across 2 new files spanning 11 test IDs T178-T188).
 
-**Review history:** Pre-implementation 4-role panel review (PO + BA + Security Manager + Lead Engineer) runs on this plan BEFORE the implementer subagent is dispatched, per `feedback_multi_agent_review_before_code.md`. All CHANGES_REQUESTED fold-ins must land in spec/plan before Task 0.
+**Review history (plan v2):** Full 4-role panel completed pre-implementation. All 4: APPROVED WITH NOTES. Fold-ins applied:
+- **PO**: Task 3 post-refactor signature-drift grep
+- **Security Manager**: env.js `optional()` helper style; Phase 2 ops-handoff Railway log alert requirement; `resetKey` safety comment; XFF trust-proxy Railway note
+- **Lead Engineer**: T181/T182 SQL-string atomicity assertions; T183 resetTime range check; T188 strict `expect(typeof storeFor).toBe("function")` hard guard
+- **BA**: same T188 hard-guard fix (independent confirmation); boot-smoke Done criterion; multi-replica canary caveat in ops handoff
+- **Test count unchanged**: 11 tests, target 1411
 
 ---
 
@@ -316,14 +321,23 @@ Find the existing FEATURE_* pattern:
 cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -n "FEATURE_" server/src/config/env.js
 ```
 
-Add near the other FEATURE_* exports (specifically near `FEATURE_PERSIST_RATE_LIMITER` for topical grouping):
+Add near the other FEATURE_* exports (specifically near `FEATURE_PERSIST_RATE_LIMITER` for topical grouping). **Security Manager fold-in**: use the existing `optional(...)` helper for style consistency with the sibling flag from Sprint 7 (matches the pattern at `env.js:381`):
+
+```js
+export const FEATURE_PERSIST_MIDDLEWARE_LIMITER = optional(
+  "FEATURE_PERSIST_MIDDLEWARE_LIMITER",
+  "false",
+);
+```
+
+If `optional(...)` isn't used by the sibling FEATURE_* flags (verify via `grep -n "optional\|process.env.FEATURE_" server/src/config/env.js`), fall back to the raw-string pattern:
 
 ```js
 export const FEATURE_PERSIST_MIDDLEWARE_LIMITER =
   process.env.FEATURE_PERSIST_MIDDLEWARE_LIMITER ?? "false";
 ```
 
-Match the file's existing style (raw string return; case-insensitive comparison happens in `rateLimit.middleware.js`).
+Either way: raw string return (not pre-coerced to boolean) — case-insensitive comparison happens in `rateLimit.middleware.js` via `.toLowerCase()`.
 
 - [ ] **Step 2: Add flag to `.env.example` if applicable**
 
@@ -355,6 +369,14 @@ cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -n "storeFor\|sto
 ```
 
 Expected: 4 `store: storeFor("...")` lines + 1 `export function storeFor` + 1 `export { storeFor }` or equivalent.
+
+**PO fold-in — post-refactor signature-drift check** (catch silent caller-site drift, Sprint 7 taught us this matters):
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -rnE "apiLimiter|authLimiter|aiLimiter|exportLimiter" server/src | grep -v "middleware/rateLimit" | wc -l
+```
+
+Compare the count against the Task 0 Step 2 baseline. Numbers MUST match — same wire sites intact. If the count differs, a caller was accidentally added or removed; investigate before proceeding.
 
 - [ ] **Step 4: Extend prune in `ai.usageWriter.js`**
 
@@ -505,6 +527,10 @@ Sprint 7b Phase 1 code-complete. Phase 2 is a manual ops action on Railway:
 
 > **To activate the Postgres middleware rate-limiter (Sprint 7b Phase 2):**
 >
+> **Pre-flip prerequisites (Security + BA fold-ins):**
+> - **REQUIRED**: set up a Railway log-based alert on `[rateLimitStore:auth]` warning volume (>5 in 5 minutes triggers page). Compensates for absent Sentry/JSON-log pipeline. Without this, a DB blip silently disables brute-force protection with no visibility.
+> - **Multi-replica canary**: if deployed at >1 replica at flip time, flip ONE replica first and observe for 5 minutes before fleet-wide. If Railway doesn't support single-replica env-var scoping, scale to 1 → flip → observe → scale back. A full-fleet simultaneous flip means the first sign of trouble takes down rate-limiting for all traffic at once.
+>
 > 1. On Railway, set `FEATURE_PERSIST_MIDDLEWARE_LIMITER=true` on the server service
 > 2. Redeploy (auto-triggers on env-var change; ~90s propagation)
 > 3. **Post-flip atomicity spot-check**: enable `DEBUG=prisma:query` on one replica temporarily. Trigger an auth attempt (or any rate-limited route). Observe the SQL emitted for the store's `increment()` call. Confirm it produces:
@@ -579,3 +605,8 @@ No "TBD" / "implement later". `YYYYMMDD000000` in the migration path is filled i
 - Any divergences captured in commit body with `T<id>: <expected> vs <actual> — <decision>` format
 - 4-role panel review completed pre-implementation with all CHANGES_REQUESTED fold-ins applied before Task 0
 - Ops handoff note surfaced verbatim to user at sprint completion
+- **Boot-smoke check (BA fold-in)**: after Task 3 completes, run `FEATURE_PERSIST_MIDDLEWARE_LIMITER=true npm run dev` (from `server/`) for ~10 seconds. Verify:
+  - Process starts without exception
+  - Console shows the usual boot logs (no `[rateLimitStore:*]` errors before any request lands)
+  - Kill with Ctrl+C
+  This catches boot-time regressions unit tests miss (missing prefix arg, circular import, ESM resolution failure on the store class).
