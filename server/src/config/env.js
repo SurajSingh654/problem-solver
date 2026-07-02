@@ -380,5 +380,17 @@ export const MCP_ALLOWED_ORIGINS = (
 export const FEATURE_PERSIST_RATE_LIMITER =
   optional('FEATURE_PERSIST_RATE_LIMITER', 'false')
 
+// Express-level rate-limit persistence backend.
+//
+// When "true" (case-insensitive), the 4 express-rate-limit limiters persist
+// per-IP counters to Postgres via PrismaRateLimitStore (RateLimitCounter table)
+// instead of the in-process MemoryStore. Unblocks multi-replica deploys — a
+// flipped flag is a safe rollout step once the code ships; default is "false"
+// (zero behavior change on merge).
+//
+// Server-only flag — no client mirror needed (backend infra, not UI).
+export const FEATURE_PERSIST_MIDDLEWARE_LIMITER =
+  optional('FEATURE_PERSIST_MIDDLEWARE_LIMITER', 'false')
+
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null

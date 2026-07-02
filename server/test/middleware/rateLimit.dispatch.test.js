@@ -1,7 +1,6 @@
-// SKIPPED until Task 3 wires storeFor() in rateLimit.middleware.js
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-describe.skip("rateLimit.middleware — flag dispatch", () => {
+describe("rateLimit.middleware — flag dispatch", () => {
   beforeEach(() => {
     vi.resetModules();
   });

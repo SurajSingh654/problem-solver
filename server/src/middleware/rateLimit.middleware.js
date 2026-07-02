@@ -2,6 +2,8 @@
 // ProbSolver v3.0 — Rate Limiting
 // ============================================================================
 import rateLimit from "express-rate-limit";
+import { FEATURE_PERSIST_MIDDLEWARE_LIMITER } from "../config/env.js";
+import { PrismaRateLimitStore } from "./rateLimit.prismaStore.js";
 
 // ── Helper: create rate limit response with request ID ───
 function rateLimitResponse(message, code) {
@@ -17,12 +19,25 @@ function rateLimitResponse(message, code) {
   };
 }
 
+// ── Helper: is the persistence flag on? ──────────────────────────────────────
+function isPersistFlagOn() {
+  return FEATURE_PERSIST_MIDDLEWARE_LIMITER.toLowerCase() === "true";
+}
+
+// ── Helper: return PrismaRateLimitStore when flag is on, else undefined ───────
+// express-rate-limit uses its built-in MemoryStore when `store` is undefined.
+export function storeFor(prefix) {
+  if (!isPersistFlagOn()) return undefined;
+  return new PrismaRateLimitStore({ prefix });
+}
+
 // General API rate limit — 100 requests per 15 minutes per IP
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  store: storeFor("api"),
   handler: rateLimitResponse(
     "Too many requests. Please try again in a few minutes.",
     "RATE_LIMITED",
@@ -35,6 +50,7 @@ export const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  store: storeFor("auth"),
   handler: rateLimitResponse(
     "Too many authentication attempts. Please try again later.",
     "AUTH_RATE_LIMITED",
@@ -47,12 +63,12 @@ export const aiLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  store: storeFor("ai"),
   handler: rateLimitResponse(
     "AI rate limit reached. Please wait before making more AI requests.",
     "AI_RATE_LIMITED",
   ),
 });
-
 
 // Export rate limit — prevent abuse of expensive export operations (10 per 5 min)
 export const exportLimiter = rateLimit({
@@ -60,6 +76,7 @@ export const exportLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  store: storeFor("export"),
   handler: rateLimitResponse(
     "Export rate limit reached. Please wait before exporting again.",
     "EXPORT_RATE_LIMITED",

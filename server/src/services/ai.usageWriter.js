@@ -97,6 +97,23 @@ export function mountUsageWriter() {
         } catch (err) {
             console.warn(`[ai.usageWriter] counter prune failed: ${err?.code || err?.message}`);
         }
+
+        // Also prune stale RateLimitCounter rows (1-hour floor past resetAt).
+        try {
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            const { count: prunedLimiters } = await prisma.rateLimitCounter.deleteMany({
+                where: { resetAt: { lt: oneHourAgo } },
+            });
+            if (prunedLimiters > 0) {
+                console.log(
+                    `[ai.usageWriter] pruned ${prunedLimiters} rate-limit counters older than 1h past reset`,
+                );
+            }
+        } catch (err) {
+            console.warn(
+                `[ai.usageWriter] rate-limit prune failed: ${err?.code || err?.message}`,
+            );
+        }
     };
     setTimeout(prune, 60_000);
     const interval = setInterval(prune, PRUNE_INTERVAL_MS);
