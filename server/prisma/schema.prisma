@@ -2020,6 +2020,16 @@ model AiUsageDailyCounter {
   @@map("ai_usage_daily_counter")
 }
 
+model RateLimitCounter {
+  key       String    @id       // e.g., "auth:1.2.3.4" — prefix + IP
+  count     Int       @default(0)
+  resetAt   DateTime               // absolute reset moment
+  updatedAt DateTime  @updatedAt
+
+  @@index([resetAt])
+  @@map("rate_limit_counter")
+}
+
 // ============================================================================
 // TEAM TEACHING SESSIONS — peer-to-peer knowledge sharing within a team
 // ============================================================================
