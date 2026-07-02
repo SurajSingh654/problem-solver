@@ -14,7 +14,11 @@
 
 **Baseline test count:** 1411 (post Sprint 7b, main commit `8265286`). Capture exact in Task 0. Target after sprint: **1446** (+35).
 
-**Review history:** Pre-implementation 4-role panel review (PO + BA + Security Manager + Lead Engineer) runs on this plan BEFORE the implementer subagent is dispatched, per `feedback_multi_agent_review_before_code.md`. All CHANGES_REQUESTED fold-ins must land in spec/plan before Task 0.
+**Review history (plan v2):** Full 4-role panel completed. All 4 independently verified: 33 of 42 schemas across `auth`/`designStudio`/`feedback`/`quiz`/`team` files lack `.strict()`. Only `problem.schema.js` (5 schemas) and `solution.schema.js` (4 schemas) currently reject unknown keys. User chose option (a): expand Sprint 8a scope to ADD `.strict()` to all 33 non-strict schemas as a Task 1 production change, then write the 35 tests. Plan v2 adds a new Task 1 for the production hardening; original tasks renumbered accordingly.
+
+**Test count target unchanged at 35** — the schemas now all support `.strict()`, so tests can be written to assert desired behavior (rejection of unknown keys) without any `.skip()` markers.
+
+**Expected controller integration test breakage (per PO fold-in)**: 1-3 existing tests that currently pass extra fields through the middleware chain may 400 after the schema hardening. Task 1 Step 4 includes running the full suite to surface any breakage; fix inline as part of the sprint (either update the test's payload to remove the extra fields, or add legitimate fields to the schema if they were accidentally omitted).
 
 ---
 
@@ -29,13 +33,25 @@
 - `server/test/schemas/solution.schema.test.js` — T214-T218 (5 tests)
 - `server/test/schemas/team.schema.test.js` — T219-T223 (5 tests)
 
-**Modify (Task 3 only):**
-- `docs/superpowers/roadmaps/2026-06-20-refactor-redesign-sprint.md` — decompose Sprint 8 row into 8a (shipped) + 8b (queued) + 8c (queued)
+**Modify (Task 1 — NEW, production hardening per panel option (a)):**
+- `server/src/schemas/auth.schema.js` — add `.strict()` to 13 schemas
+- `server/src/schemas/designStudio.schema.js` — add `.strict()` to 9 schemas
+- `server/src/schemas/feedback.schema.js` — add `.strict()` to 3 schemas
+- `server/src/schemas/quiz.schema.js` — add `.strict()` to 1 schema
+- `server/src/schemas/team.schema.js` — add `.strict()` to 7 schemas
+
+Total: **33 schemas across 5 files** get `.strict()`.
+
+**Modify (Task 3 only — final gates task, was Task 2):**
+- `docs/superpowers/roadmaps/2026-06-20-refactor-redesign-sprint.md` — decompose Sprint 8 row into 8a (shipped, with note on strict-mode hardening) + 8b (queued) + 8c (queued)
+
+**Potentially modified inline during Task 1 Step 4 (integration test breakage fix):**
+- Any test files that break due to newly-strict schemas rejecting extra fields — fix the test payloads (remove unused/incorrect fields) OR extend the schema if the field is legitimate.
 
 **Unchanged (explicit):**
-- All schema files (read-only)
-- All production code
-- All existing tests
+- `problem.schema.js` and `solution.schema.js` (already have `.strict()`)
+- Controllers, middleware, routes, WebSocket
+- All existing tests except any that break due to strict-mode enforcement
 
 ---
 
@@ -78,7 +94,108 @@ NO commits in this task.
 
 ---
 
-## Task 1: Verify schema shapes + write all 7 test files
+## Task 1: Production hardening — add `.strict()` to 33 non-strict schemas
+
+**Files:**
+- Modify: `server/src/schemas/auth.schema.js` (13 schemas)
+- Modify: `server/src/schemas/designStudio.schema.js` (9 schemas)
+- Modify: `server/src/schemas/feedback.schema.js` (3 schemas)
+- Modify: `server/src/schemas/quiz.schema.js` (1 schema)
+- Modify: `server/src/schemas/team.schema.js` (7 schemas)
+
+Reference: `problem.schema.js` and `solution.schema.js` are already-hardened examples of the pattern (`.strict()` appended to each `.object({...})` declaration). Match their style verbatim.
+
+### Steps
+
+- [ ] **Step 1: Add `.strict()` to each schema in the 5 target files**
+
+Pattern per schema:
+```js
+// BEFORE
+export const registerSchema = z.object({
+  email: z.string().email(),
+  // ...
+});
+
+// AFTER
+export const registerSchema = z.object({
+  email: z.string().email(),
+  // ...
+}).strict();
+```
+
+For schemas that already end with `.refine(...)` (e.g., `onboardingSchema`), the `.strict()` goes on the underlying object BEFORE the `.refine()` — Zod pattern is `z.object({...}).strict().refine(...)`. Verify by checking existing `problem.schema.js:130` which does `.strict()` before other transforms.
+
+Add a file-header comment matching `problem.schema.js:41` / `solution.schema.js:29`:
+```js
+// `.strict()` everywhere so unknown keys produce a 400 instead of being
+// silently stripped by validate() middleware — audit M34 hardening
+// (Sprint 8a). See CLAUDE.md's "five touch points" for the recurring
+// silent-strip regression class this guards against.
+```
+
+- [ ] **Step 2: Verify all 33 schemas end with `.strict()`**
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver && grep -c "\.strict()" server/src/schemas/*.schema.js
+```
+
+Expected counts:
+- auth.schema.js: 13
+- designStudio.schema.js: 9
+- feedback.schema.js: 3
+- problem.schema.js: 5 (unchanged)
+- quiz.schema.js: 1
+- solution.schema.js: 4 (unchanged)
+- team.schema.js: 7
+
+Total: **42** `.strict()` calls across the schemas dir.
+
+- [ ] **Step 3: Boot smoke — server starts cleanly**
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver/server && timeout 5 npm run dev 2>&1 | head -30
+```
+
+Expected: normal startup logs, no Zod-related errors before the port bind. Kill via timeout.
+
+- [ ] **Step 4: Full suite — surface any integration test breakage**
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npm test 2>&1 | tail -30
+```
+
+**Expected**: 1-3 tests may break — any test that passes extra fields through a mutation payload will now 400 instead of persisting. For each broken test:
+
+1. **Read the failure carefully** — the failing test's payload will include extra fields the schema doesn't declare.
+2. **Determine the classification**:
+   - **Legit missing field** — the extra field IS a real DB column that should be in the schema. Add it to the schema. Uncommon (would mean the audit missed a five-touchpoint gap).
+   - **Test-only extra field** — the test was over-specifying the payload with fields that never go through the schema. Remove the extra fields from the test payload.
+   - **Intentional deprecated field** — the field is being deprecated and the test was probing the old behavior. Update the test to reflect the new strict boundary.
+3. **Escalate if uncertain** — if the classification isn't clear, STOP and report to user.
+
+- [ ] **Step 5: Lint**
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver/server && npm run lint
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver && git add server/src/schemas && git commit -m "Add .strict() to 33 Zod schemas across auth/designStudio/feedback/quiz/team (M34 hardening)"
+```
+
+If any test files were modified per Step 4:
+```bash
+cd /Users/surajsingh/Downloads/Projects/problem-solver && git add server/test && git commit -m "Adapt tests for strict-mode schemas: remove extra fields from payloads"
+```
+
+Standing rules: NO Co-Authored-By; single-line subject; separate commits for schema changes vs test-payload fixes for reviewability.
+
+---
+
+## Task 2: Verify schema shapes + write all 7 test files
 
 **Files created**: all 7 test files listed above.
 
@@ -239,7 +356,7 @@ EOF
 
 ---
 
-## Task 2: Final gates + push + FF-merge + roadmap
+## Task 3: Final gates + push + FF-merge + roadmap
 
 **Files:**
 - Modify: `docs/superpowers/roadmaps/2026-06-20-refactor-redesign-sprint.md`

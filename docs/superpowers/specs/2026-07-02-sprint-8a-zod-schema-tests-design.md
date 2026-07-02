@@ -6,7 +6,23 @@
 **Branch:** `feat/zod-schema-tests`
 **Layers on:** main, post Sprint 7b (`8265286`)
 **Feature flag:** None — pure additive test work
-**Review history:** Will require standing 4-role panel review (PO + BA + Security Manager + Lead Engineer) on the implementation plan BEFORE implementer dispatch, per `feedback_multi_agent_review_before_code.md`.
+**Review history (spec v2 + plan v2):** Full 4-role panel completed. Findings independently corroborated by all 4:
+- **PO — CHANGES REQUESTED** → resolved: scope expanded per PO's option (a)
+- **BA — APPROVED WITH NOTES** → spec bugs identified in T189/T195/T196 fixed
+- **Security Manager — APPROVED WITH NOTES** → all `.strict()` gaps enumerated with security impact
+- **Lead Engineer — APPROVED WITH NOTES** → Zod version + `.safeParse()` shape + test discovery all confirmed OK
+
+**Panel finding (all 4 concur):** 33 of 42 schemas across 5 files (`auth`, `designStudio`, `feedback`, `quiz`, `team`) lack `.strict()`. Only `problem.schema.js` (5 schemas) and `solution.schema.js` (4 schemas) currently reject unknown keys. Writing tests that assert current permissive behavior as expected would encode the audit bug into the test suite.
+
+**Scope decision (user chose option a):** Sprint 8a expands from "test foundation only" to "test foundation + strict-mode hardening on all 5 non-strict schema files." Adding `.strict()` to 33 schemas is minimal production code change (~33 lines); expected impact is 1-3 controller integration tests may break (any that pass extra fields today). Fix those inline.
+
+**Spec v2 changes:**
+1. New Task 1 in the plan: add `.strict()` to all 33 schemas across `auth`, `designStudio`, `feedback`, `quiz`, `team`
+2. Tests T189 field shape fix: `registerSchema` uses `{email, password, name}` not `{firstName, lastName}`
+3. Test T195 fix: `mode: "team"` (not `"join"`); refinement is `!joinCode && !teamName`
+4. Test T196 fix: `changePasswordSchema` has no cross-field refine — convert to happy-only positive test
+5. Test T217 fix: field is `confidence` (not `quality`); reframed as boundary test (0/6 rejected, 1/5 accepted) — verifies specific bounds, not native Zod
+6. All 35 tests will PASS after `.strict()` additions (option a); no `.skip()` markers needed
 
 ---
 
@@ -186,7 +202,7 @@ describe("changeMemberRoleSchema", () => {
 
 ### File 1 — `auth.schema.test.js` (T189-T198)
 
-**T189** `registerSchema` happy — canonical `{email, password, firstName, lastName}`.
+**T189** `registerSchema` happy — canonical `{email, password, name}` (panel verified: schema uses `name` as a single field, NOT `firstName`/`lastName`). Adjust to include any other required fields the actual schema demands (check `auth.schema.js:55-59`).
 
 **T190** `registerSchema` strict — `{...valid, unknownField: "x"}` → rejected with `unrecognized_keys` code.
 
@@ -198,9 +214,17 @@ describe("changeMemberRoleSchema", () => {
 
 **T194** `onboardingSchema` happy — `mode: "individual"` path (no joinCode needed).
 
-**T195** `onboardingSchema` refinement — `{mode: "join"}` without `joinCode` rejected; message about joinCode required for join mode. **Verify actual refinement exists in schema before writing** — if the refinement isn't there, escalate (this is a real gap).
+**T195** `onboardingSchema` refinement — panel-verified reality: `mode` enum is `"individual" | "team"` (NOT `"join"`); refinement fires when `mode === "team"` and both `joinCode` and `teamName` are missing. Write 3 assertions:
+- `{mode: "team"}` with no `joinCode` and no `teamName` → **rejected** (refinement fires)
+- `{mode: "team", joinCode: "ABC123"}` → **accepted**
+- `{mode: "team", teamName: "Acme"}` → **accepted**
 
-**T196** `changePasswordSchema` refinement — `currentPassword === newPassword` rejected. **Verify actual refinement exists** before writing.
+Assert on `issue.path.includes("joinCode")` or matching path — more robust than message-regex.
+
+**T196** `changePasswordSchema` — panel-verified reality: NO cross-field `.refine()` exists on this schema. The password-difference check lives in the controller, not the schema. Convert T196 to a HAPPY-only positive test:
+- `{currentPassword: "CurrentP@ss123", newPassword: "NewP@ss123"}` → **accepted**
+
+Document in the test comment: "Note: cross-field newPassword-differs-from-currentPassword check lives in the controller, NOT the schema. This test only verifies the schema accepts a well-formed payload."
 
 **T197** `switchTeamSchema` strict — unknown key rejected.
 
@@ -250,11 +274,11 @@ describe("changeMemberRoleSchema", () => {
 
 **T215** **`updateSolutionSchema` strict — unknown key rejected** ⭐ (audit-mentioned drift catcher; comment explicitly cites 5-touchpoint rule).
 
-**T216** `submitReviewSchema` happy — `{solutionId, quality: 4}` (or whatever the shape actually is).
+**T216** `submitReviewSchema` happy — panel-verified reality: schema is `{confidence: z.number().int().min(1).max(5)}.strict()`. Use `{confidence: 4}` — NO `solutionId` field (that's a URL param, not body). Assert accepted.
 
-**T217** `submitReviewSchema` — `quality: 6` (out of 1-5 range) rejected.
+**T217** `submitReviewSchema` boundary — `{confidence: 6}` rejected AND `{confidence: 0}` rejected. Panel note: this test verifies the SPECIFIC 1-5 bounds; a future change to `.min(0).max(10)` would break it. Not a pure Zod tautology since it locks the schema's specific numeric contract.
 
-**T218** `rateSolutionClaritySchema` — `rating: 0` and `rating: 6` both rejected; boundary `rating: 1` and `rating: 5` both accepted.
+**T218** `rateSolutionClaritySchema` — panel-verified: field is `rating` (or the actual name — verify per `solution.schema.js:95-99`). `rating: 0` and `rating: 6` both rejected; boundary `rating: 1` and `rating: 5` both accepted.
 
 ### File 7 — `team.schema.test.js` (T219-T223)
 
