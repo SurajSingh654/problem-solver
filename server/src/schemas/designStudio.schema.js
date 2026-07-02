@@ -16,6 +16,12 @@
  * 4. Scenario responses are validated as arrays of { scenarioId, response }
  *    pairs. AI generates the scenarios; the user only submits responses.
  */
+
+// `.strict()` everywhere so unknown keys produce a 400 instead of being
+// silently stripped by validate() middleware — audit M34 hardening
+// (Sprint 8a). See CLAUDE.md's "five touch points" for the recurring
+// silent-strip regression class this guards against.
+
 import { z } from "zod";
 
 // ── Create a new Design Studio session ───────────────────
@@ -27,7 +33,7 @@ export const createDesignSessionSchema = z.object({
     .max(200, "Title must be under 200 characters"),
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).default("MEDIUM"),
   problemId: z.string().optional().nullable(),
-});
+}).strict();
 
 // ── Save phase content (incremental auto-save) ───────────
 export const savePhaseSchema = z.object({
@@ -39,7 +45,7 @@ export const savePhaseSchema = z.object({
     .string()
     .max(50000, "Phase content too long — keep it under 50,000 characters")
     .default(""),
-});
+}).strict();
 
 // ── Save diagram data (Excalidraw state) ─────────────────
 export const saveDiagramSchema = z.object({
@@ -65,7 +71,7 @@ export const saveDiagramSchema = z.object({
     .max(5000, "Data flow description too long")
     .optional()
     .default(""),
-});
+}).strict();
 
 // ── AI coaching request ──────────────────────────────────
 // Three modes:
@@ -91,7 +97,7 @@ export const aiCoachingSchema = z.object({
       phaseId: z.string().min(1).max(50),
     })
     .optional(),
-});
+}).strict();
 
 // ── Submit scenario responses ────────────────────────────
 // After AI generates scenarios, user responds to each one.
@@ -101,7 +107,7 @@ export const submitScenarioResponseSchema = z.object({
     .string()
     .min(10, "Response must be at least 10 characters")
     .max(10000, "Response too long — keep it under 10,000 characters"),
-});
+}).strict();
 
 // ── Save flow simulation data ────────────────────────────
 export const saveFlowSimulationSchema = z.object({
@@ -118,7 +124,7 @@ export const saveFlowSimulationSchema = z.object({
     )
     .min(1, "At least one hop is required")
     .max(20, "Too many hops — max 20"),
-});
+}).strict();
 
 // ── Save scale analysis ──────────────────────────────────
 export const saveScaleAnalysisSchema = z.object({
@@ -126,7 +132,7 @@ export const saveScaleAnalysisSchema = z.object({
   tenX: z.string().max(5000).optional().default(""),
   hundredX: z.string().max(5000).optional().default(""),
   failureAtScale: z.string().max(5000).optional().default(""),
-});
+}).strict();
 
 // ── Update session timing ────────────────────────────────
 // Accepts optional currentPhase so the client can persist the user's
@@ -136,9 +142,9 @@ export const updateTimingSchema = z.object({
   totalTimeSpent: z.number().min(0).max(86400), // max 24 hours
   phaseTimings: z.record(z.string(), z.number().min(0).max(86400)).optional(),
   currentPhase: z.number().int().min(0).max(50).optional(),
-});
+}).strict();
 
 // ── Update session status ────────────────────────────────
 export const updateSessionStatusSchema = z.object({
   status: z.enum(["IN_PROGRESS", "VALIDATING", "COMPLETED", "ABANDONED"]),
-});
+}).strict();

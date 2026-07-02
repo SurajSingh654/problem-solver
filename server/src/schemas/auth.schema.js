@@ -21,6 +21,11 @@
 //
 // ============================================================================
 
+// `.strict()` everywhere so unknown keys produce a 400 instead of being
+// silently stripped by validate() middleware — audit M34 hardening
+// (Sprint 8a). See CLAUDE.md's "five touch points" for the recurring
+// silent-strip regression class this guards against.
+
 import { z } from "zod";
 
 // ── Reusable field schemas ───────────────────────────────────
@@ -56,7 +61,7 @@ export const registerSchema = z.object({
   email: emailField,
   password: passwordField,
   name: nameField,
-});
+}).strict();
 
 // ── Login ────────────────────────────────────────────────────
 
@@ -65,30 +70,30 @@ export const loginSchema = z.object({
   password: z
     .string({ required_error: "Password is required." })
     .min(1, "Password is required."),
-});
+}).strict();
 
 // ── Email verification ───────────────────────────────────────
 
 export const verifyEmailSchema = z.object({
   email: emailField,
   code: verificationCodeField,
-});
+}).strict();
 
 export const resendVerificationSchema = z.object({
   email: emailField,
-});
+}).strict();
 
 // ── Password reset ───────────────────────────────────────────
 
 export const forgotPasswordSchema = z.object({
   email: emailField,
-});
+}).strict();
 
 export const resetPasswordSchema = z.object({
   email: emailField,
   code: verificationCodeField,
   newPassword: passwordField,
-});
+}).strict();
 
 // ── Change password (logged in) ──────────────────────────────
 
@@ -97,7 +102,7 @@ export const changePasswordSchema = z.object({
     .string({ required_error: "Current password is required." })
     .min(1),
   newPassword: passwordField,
-});
+}).strict();
 
 // ── Email change ─────────────────────────────────────────────
 
@@ -106,18 +111,18 @@ export const requestEmailChangeSchema = z.object({
   password: z
     .string({ required_error: "Password is required for email changes." })
     .min(1),
-});
+}).strict();
 
 export const confirmEmailChangeSchema = z.object({
   code: verificationCodeField,
-});
+}).strict();
 
 // Pre-verification email update — user can't log in yet, so no password gate.
 // Both fields use emailField (z.string().email().max(255).transform(lowercase+trim)).
 export const updateUnverifiedEmailSchema = z.object({
   currentEmail: emailField,
   newEmail: emailField,
-});
+}).strict();
 
 // Team context switch — requires only the target teamId. Both the
 // existence check and membership check live in the controller.
@@ -125,7 +130,7 @@ export const switchTeamSchema = z.object({
   teamId: z
     .string({ required_error: "Team ID is required." })
     .min(1, "Team ID is required."),
-});
+}).strict();
 
 // ── Onboarding (post-registration team/individual choice) ────
 
@@ -158,6 +163,7 @@ export const onboardingSchema = z
       .transform((v) => v.trim())
       .optional(),
   })
+  .strict()
   .refine(
     (data) => {
       // If mode is 'team', must provide either joinCode or teamName
@@ -216,4 +222,4 @@ export const updateProfileSchema = z.object({
     })
     .optional()
     .nullable(),
-});
+}).strict();

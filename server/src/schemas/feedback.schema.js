@@ -1,6 +1,12 @@
 /**
  * FEEDBACK SCHEMAS — Zod validation for feedback report endpoints.
  */
+
+// `.strict()` everywhere so unknown keys produce a 400 instead of being
+// silently stripped by validate() middleware — audit M34 hardening
+// (Sprint 8a). See CLAUDE.md's "five touch points" for the recurring
+// silent-strip regression class this guards against.
+
 import { z } from "zod";
 
 export const createFeedbackSchema = z.object({
@@ -21,7 +27,7 @@ export const createFeedbackSchema = z.object({
   affectedArea: z.string().max(100).optional().nullable(),
 
   stepsToReproduce: z.string().max(2000).optional().nullable(),
-});
+}).strict();
 
 export const updateFeedbackStatusSchema = z.object({
   status: z.enum([
@@ -32,7 +38,7 @@ export const updateFeedbackStatusSchema = z.object({
     "WONT_FIX",
   ]),
   adminNote: z.string().max(1000).optional().nullable(),
-});
+}).strict();
 
 
 
@@ -104,4 +110,4 @@ export const exportFeedbackQuerySchema = z.object({
     .string()
     .optional()
     .refine((v) => !v || !isNaN(Date.parse(v)), "Invalid 'to' date"),
-});
+}).strict();

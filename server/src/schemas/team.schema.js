@@ -21,6 +21,11 @@
 //
 // ============================================================================
 
+// `.strict()` everywhere so unknown keys produce a 400 instead of being
+// silently stripped by validate() middleware — audit M34 hardening
+// (Sprint 8a). See CLAUDE.md's "five touch points" for the recurring
+// silent-strip regression class this guards against.
+
 import { z } from 'zod'
 
 // ── Create team ──────────────────────────────────────────────
@@ -44,7 +49,7 @@ export const createTeamSchema = z.object({
     .min(2, 'Team must allow at least 2 members.')
     .max(100, 'Team cannot exceed 100 members.')
     .optional(),
-})
+}).strict()
 
 // ── Update team (TEAM_ADMIN) ─────────────────────────────────
 
@@ -82,7 +87,7 @@ export const updateTeamSchema = z.object({
     targetCompanyStyle: z.string().max(50).optional(),
     problemsPerBatch: z.number().int().min(1).max(10).optional(),
   }).optional().nullable(),
-})
+}).strict()
 
 // ── Join team by code ────────────────────────────────────────
 
@@ -92,7 +97,7 @@ export const joinTeamSchema = z.object({
     .min(6, 'Join code must be at least 6 characters.')
     .max(12, 'Join code must be under 12 characters.')
     .transform((v) => v.toUpperCase().trim()),
-})
+}).strict()
 
 // ── Invite members (TEAM_ADMIN) ──────────────────────────────
 
@@ -105,7 +110,7 @@ export const inviteMembersSchema = z.object({
     .min(1, 'At least one email is required.')
     .max(10, 'Cannot invite more than 10 people at once.')
     .transform((arr) => arr.map((e) => e.toLowerCase().trim())),
-})
+}).strict()
 
 // ── Approve/reject team (SUPER_ADMIN) ────────────────────────
 
@@ -119,7 +124,7 @@ export const approveTeamSchema = z.object({
     .max(500, 'Reason must be under 500 characters.')
     .transform((v) => v.trim())
     .optional(),
-}).refine(
+}).strict().refine(
   (data) => {
     if (data.action === 'reject') {
       return !!data.rejectionReason && data.rejectionReason.length > 0
@@ -139,7 +144,7 @@ export const changeMemberRoleSchema = z.object({
     required_error: 'Role is required.',
     invalid_type_error: 'Role must be TEAM_ADMIN or MEMBER.',
   }),
-})
+}).strict()
 
 // ── Transfer ownership ───────────────────────────────────────
 
@@ -147,4 +152,4 @@ export const transferOwnershipSchema = z.object({
   newOwnerId: z
     .string({ required_error: 'New owner ID is required.' })
     .min(1, 'New owner ID is required.'),
-})
+}).strict()
