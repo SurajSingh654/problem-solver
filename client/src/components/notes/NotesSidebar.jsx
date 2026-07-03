@@ -24,6 +24,7 @@ import {
     useUpdateNoteFolder,
     useDeleteNoteFolder,
 } from "@hooks/useNoteFolders";
+import { useConfirm } from "@hooks/useConfirm";
 import FolderTreeNode from "./FolderTreeNode";
 import { cn } from "@utils/cn";
 
@@ -38,6 +39,7 @@ export default function NotesSidebar({ selection, onSelectionChange, onMoveNote 
     const createFolder = useCreateNoteFolder();
     const updateFolder = useUpdateNoteFolder();
     const deleteFolder = useDeleteNoteFolder();
+    const confirm = useConfirm();
 
     const [creatingRoot, setCreatingRoot] = useState(false);
     const [draftName, setDraftName] = useState("");
@@ -69,13 +71,15 @@ export default function NotesSidebar({ selection, onSelectionChange, onMoveNote 
         updateFolder.mutate({ id, name });
     }
 
-    function confirmDelete(node) {
-        if (
-            !window.confirm(
-                `Delete "${node.name}"? Subfolders are removed; notes inside become Uncategorized.`,
-            )
-        )
-            return;
+    async function confirmDelete(node) {
+        const ok = await confirm({
+            title: "Delete this folder?",
+            description: `"${node.name}" and its subfolders will be removed. Notes inside become Uncategorized.`,
+            confirmLabel: "Delete",
+            cancelLabel: "Cancel",
+            danger: true,
+        });
+        if (!ok) return;
         deleteFolder.mutate(node.id);
     }
 

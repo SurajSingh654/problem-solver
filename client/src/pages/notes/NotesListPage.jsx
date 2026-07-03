@@ -24,6 +24,7 @@ import {
     useRestoreNote,
     useDeleteNotePermanent,
 } from "@hooks/useNotes";
+import { useConfirm } from "@hooks/useConfirm";
 import { useQueryClient } from "@tanstack/react-query";
 import { notesApi } from "@services/notes.api";
 import { toast } from "@store/useUIStore";
@@ -260,6 +261,7 @@ function NoteCard({ note, onMove, showFolderBadge }) {
     const archive = useArchiveNote();
     const restore = useRestoreNote();
     const deletePermanent = useDeleteNotePermanent();
+    const confirm = useConfirm();
     const [moveOpen, setMoveOpen] = useState(false);
     const isArchived = Boolean(note.archivedAt);
 
@@ -282,14 +284,16 @@ function NoteCard({ note, onMove, showFolderBadge }) {
     function onPin(e) { stop(e); togglePin.mutate(note.id); }
     function onArchive(e) { stop(e); archive.mutate(note.id); }
     function onRestore(e) { stop(e); restore.mutate(note.id); }
-    function onDelete(e) {
+    async function onDelete(e) {
         stop(e);
-        if (
-            !window.confirm(
-                `Delete "${note.title}" permanently? This cannot be undone.`,
-            )
-        )
-            return;
+        const ok = await confirm({
+            title: "Permanently delete this note?",
+            description: `"${note.title || 'Untitled'}" cannot be recovered. The note and its embedding will be removed immediately.`,
+            confirmLabel: "Delete permanently",
+            cancelLabel: "Cancel",
+            danger: true,
+        });
+        if (!ok) return;
         deletePermanent.mutate(note.id);
     }
     function onOpenMove(e) {

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle, Info, Scale } from 'lucide-react'
 import { useReviewQueue, useSubmitReview } from '@hooks/useSolutions'
 import { useReviewHints, useReviewGrade } from '@hooks/useAI'
+import { useConfirm } from '@hooks/useConfirm'
 import { Button } from '@components/ui/Button'
 import { Badge } from '@components/ui/Badge'
 import { Spinner } from '@components/ui/Spinner'
@@ -273,6 +274,7 @@ function combineForGrader(time, space) {
 function ReviewModal({ solution, onClose, onSave, isSaving }) {
     const reviewHints = useReviewHints()
     const reviewGrade = useReviewGrade()
+    const confirm = useConfirm()
 
     // Phase: 'brief' (flag-gated) | 'recall' | 'reveal' | 'rate'
     const initialPhase = FEATURE_CANONICAL ? 'brief' : 'recall'
@@ -455,9 +457,16 @@ function ReviewModal({ solution, onClose, onSave, isSaving }) {
                         {/* Issue 4: always-available close. If user has typed
                             anything in the recall phase, confirm before discarding. */}
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 if ((phase === 'recall' || phase === 'reveal') && hasAnyRecall) {
-                                    if (!window.confirm('Close the review? Your typed recall will be discarded.')) return
+                                    const ok = await confirm({
+                                        title: 'Close this review?',
+                                        description: 'Your typed recall will be discarded.',
+                                        confirmLabel: 'Close',
+                                        cancelLabel: 'Continue reviewing',
+                                        danger: false,
+                                    })
+                                    if (!ok) return
                                 }
                                 onClose()
                             }}

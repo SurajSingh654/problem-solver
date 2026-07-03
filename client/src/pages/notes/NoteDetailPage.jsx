@@ -18,6 +18,7 @@ import {
     useTogglePinNote,
 } from "@hooks/useNotes";
 import { useNoteFolders } from "@hooks/useNoteFolders";
+import { useConfirm } from "@hooks/useConfirm";
 import MarkdownEditor from "@components/notes/MarkdownEditor";
 import EntityLinkPicker from "@components/notes/EntityLinkPicker";
 import TagInput from "@components/notes/TagInput";
@@ -39,6 +40,7 @@ export default function NoteDetailPage() {
     const deletePermanent = useDeleteNotePermanent();
     const restore = useRestoreNote();
     const togglePin = useTogglePinNote();
+    const confirm = useConfirm();
 
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
@@ -178,13 +180,15 @@ export default function NoteDetailPage() {
                             </Button>
                             <Button
                                 variant="ghost"
-                                onClick={() => {
-                                    if (
-                                        !window.confirm(
-                                            "Delete this note permanently? This cannot be undone.",
-                                        )
-                                    )
-                                        return;
+                                onClick={async () => {
+                                    const ok = await confirm({
+                                        title: "Permanently delete this note?",
+                                        description: "This cannot be undone. The note and its embedding will be removed immediately.",
+                                        confirmLabel: "Delete permanently",
+                                        cancelLabel: "Cancel",
+                                        danger: true,
+                                    });
+                                    if (!ok) return;
                                     deletePermanent.mutate(note.id, {
                                         onSuccess: () => navigate("/notes"),
                                     });
@@ -208,13 +212,15 @@ export default function NoteDetailPage() {
                             </Button>
                             <Button
                                 variant="ghost"
-                                onClick={() => {
-                                    if (
-                                        !window.confirm(
-                                            "Delete this note permanently? This cannot be undone. Use Archive if you might want it back.",
-                                        )
-                                    )
-                                        return;
+                                onClick={async () => {
+                                    const ok = await confirm({
+                                        title: "Permanently delete this note?",
+                                        description: "This cannot be undone. The note and its embedding will be removed immediately. Use Archive if you might want it back.",
+                                        confirmLabel: "Delete permanently",
+                                        cancelLabel: "Cancel",
+                                        danger: true,
+                                    });
+                                    if (!ok) return;
                                     deletePermanent.mutate(note.id, {
                                         onSuccess: () => navigate("/notes"),
                                     });
