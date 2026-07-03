@@ -5,7 +5,23 @@
 **Branch:** `feat/frontend-foundation-hardening`
 **Layers on:** main, post Sprint 8c (`513a3ce`)
 **Feature flag:** None — pure hardening, no user-facing feature toggle
-**Review history:** 4-role panel runs pre-implementation per `feedback_multi_agent_review_before_code.md`
+**Review history (spec v2):** 4-role panel completed pre-implementation. All 4 reviewers returned; 3 BLOCKERS + several real-gap findings folded in.
+- **PO** — APPROVED_WITH_NOTES → no-test-runner risk under-rated; smoke evidence must precede push; defensive check on hex composition
+- **BA** — CHANGES_REQUESTED → hex count is 24 not 15+; `useToastingMutation` prop is `errorPrefix` not `errorToast` (concatenates as `${errorPrefix} — ${serverMsg}`); 3 of 8 candidate hooks don't exist
+- **Security Manager** — APPROVED_WITH_NOTES → `tone` prop silently dropped (modal uses `danger: boolean`); regex-validate CSS-var value in `toMonacoHex`; code comment on `Toast.jsx` against unsafe-HTML fields
+- **Lead Engineer** — CHANGES_REQUESTED → `monacoRef.current` doesn't exist in current CodeEditor (must add `useRef` + assign in `handleMount` + initial-apply from `handleMount`); theme-detection wrong (actual `useUIStore.js:31-36` toggles only `dark`/`light`; correct check is `!contains("light")`)
+
+**Spec v2 changes (all fold-ins):**
+1. **Lead Eng F1 (BLOCKER):** Item 1 now requires adding `const monacoRef = useRef(null)` and assigning in `handleMount`; `applyThemes` fires from BOTH `handleMount` (initial paint) AND the observer callback (theme toggles). Effect cannot run before Monaco lazy-loads, so first paint depends on `handleMount`.
+2. **Lead Eng F7 (BLOCKER):** Theme detection uses `!document.documentElement.classList.contains("light")` — matches the actual `useUIStore.js:31-36` toggle semantics.
+3. **Lead Eng F2 / Security F1 (BLOCKER):** Item 2 migration uses `danger: true` (4 delete sites) / `danger: false` (ReviewQueue close-and-discard renders neutral border, acceptable trade-off). No `tone` string.
+4. **Lead Eng F3 / BA F5 (BLOCKER):** Item 3 migration uses `errorPrefix` not `errorToast`. Migrated copy accounts for the wrapper's `${errorPrefix} — ${serverMsg}` concatenation format (short verb-based prefixes, not full sentences).
+5. **BA F6 (BLOCKER):** Candidate hook list corrected. Actual hooks: `useSubmitSolution`, `useSubmitReview`, `useCreateNote`, `useUpdateNote`, `useDeleteNotePermanent`, `useCreateProblem`, `useUpdateProblem`, `useCreateNoteFolder` (or `useUpdateNoteFolder` / `useDeleteNoteFolder` as fallbacks). Dropped: `useRateSolutionClarity` (dormant per CLAUDE.md), `useSwitchTeam` (doesn't exist).
+6. **BA F3 (nit):** Hex count corrected to 24 chrome-drift values (dark `colors{}` = 15, light `colors{}` = 9), plus 12 additional syntax-rule hex values NOT migrated (deliberate identity colors).
+7. **Security F3 + PO F5 (nit):** `toMonacoHex` validates via `/^#?[0-9a-fA-F]{3,8}$/` and expands 3-digit shorthand to 6-digit before use.
+8. **Lead Eng F6 (nit):** Observer callback uses `queueMicrotask` debounce so `remove("dark") + add("light")` in `useUIStore.js:32-36` does not fire `applyThemes` twice per toggle.
+9. **Security F4 (nit):** Code comment added to `Toast.jsx` (documentation only; no code path change) documenting the "never introduce raw-HTML props here — server error messages flow through" invariant.
+10. **PO F3 (nit):** Done criteria and Task 4 gates now require smoke evidence captured in commit body BEFORE the FF-merge push. `useSubmitReview` smoke explicitly verifies 409/retry semantics survive the wrapper migration.
 
 ---
 
@@ -95,7 +111,9 @@ client/src/
 
 ### Current state
 
-`CodeEditor.jsx:44-98` defines two Monaco themes via `monaco.editor.defineTheme("probsolver-dark", ...)` and `"probsolver-light"`. Each theme's `colors` object contains 8-13 hex values for editor chrome (background, foreground, line highlight, selection, cursor, indent guide, scrollbar, bracket match). The `rules` array uses hex too, but token-syntax colors (`comment`, `keyword`, `string`) are intentionally saturated identity colors — those are NOT drift, they're deliberate.
+`client/src/components/ui/CodeEditor.jsx:44-98` defines two Monaco themes via `monaco.editor.defineTheme("probsolver-dark", ...)` and `"probsolver-light"`. **24 chrome-drift hex values** (dark `colors{}` L58-72 = 15; light `colors{}` L87-95 = 9) for background, foreground, line highlight, selection, cursor, indent guide, scrollbar, bracket match. The `rules[]` arrays (L50-55, L79-84) contain 12 additional hex values for token-syntax colors (`comment`, `keyword`, `string`) — those are deliberate identity colors and are NOT migrated in Sprint 9.
+
+**Handler shape (BA-verified):** `handleMount(editor, monaco)` at L125 receives the `monaco` instance but does NOT store it in a ref. Any effect that needs `monaco` post-mount must first introduce that ref.
 
 ### Design
 
@@ -111,11 +129,21 @@ function readCssVar(name, fallback) {
   return value || fallback;
 }
 
-// Convert var to Monaco-compatible hex (strip # if present, ensure # prefix)
+// Convert a CSS-var value to a Monaco-compatible 6-digit hex.
+// - Rejects malformed values (only 3/4/6/8 hex digits accepted, optionally prefixed)
+// - Expands 3-digit shorthand (#abc → #aabbcc) so downstream alpha concat is safe
+// - Falls back on any non-hex form (rgb(), hsl(), color(), keyword) — protects
+//   against CSS-var injection primitives (Security F3) and legacy shorthand.
 function toMonacoHex(value, fallback) {
-  const v = (value || "").trim();
-  if (!v) return fallback;
-  return v.startsWith("#") ? v : `#${v}`;
+  const raw = (value || "").trim().replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/.test(raw)) {
+    return fallback;
+  }
+  // Expand 3-digit shorthand.
+  if (raw.length === 3) {
+    return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`;
+  }
+  return `#${raw}`;
 }
 
 function buildTheme(mode) {
@@ -165,34 +193,60 @@ function buildTheme(mode) {
 
 ### Theme change reactivity
 
-The current file at L120 reads `document.documentElement.classList` synchronously in the component body to determine `isDark`. That's a hack that fires once at mount; if the user toggles theme afterward, the editor keeps its stale theme. Fix:
+The current file at L120 reads `document.documentElement.classList` synchronously in the component body to determine `isDark`. That's a hack that fires once at mount; if the user toggles theme afterward, the editor keeps its stale theme.
+
+**Lead Eng F1 (BLOCKER):** current file does NOT have a `monacoRef`. `handleMount(editor, monaco)` at L125 receives the `monaco` instance but never stores it. Sprint 9 must introduce the ref.
+
+**Lead Eng F7 (BLOCKER):** `useUIStore.js:31-36` toggles `dark` / `light` classes only — never `force-dark-theme`. Correct detection is `!document.documentElement.classList.contains("light")` (matches the existing L120 check pattern).
+
+**Fix pattern:**
 
 ```js
-// Inside the CodeEditor component:
+// New: add ref at component top
+const monacoRef = useRef(null);
+const themeAppliedRef = useRef(false);
+
+// Existing handleMount extended:
+function handleMount(editor, monaco) {
+  monacoRef.current = monaco;
+  applyThemes(monaco); // initial paint — must run here because effect fires
+                       // BEFORE Monaco lazy-loads; ref is null in effect body
+                       // on first mount.
+  themeAppliedRef.current = true;
+  // ...existing handleMount body if any
+}
+
+// Helper (module-level or component-scoped):
+function applyThemes(monaco) {
+  const isDark = !document.documentElement.classList.contains("light");
+  monaco.editor.defineTheme("probsolver-dark", buildTheme("dark"));
+  monaco.editor.defineTheme("probsolver-light", buildTheme("light"));
+  monaco.editor.setTheme(isDark ? "probsolver-dark" : "probsolver-light");
+}
+
+// New effect — watches theme class toggle
 useEffect(() => {
-  if (!monacoRef.current) return; // monaco loaded via `onMount`
-  const monaco = monacoRef.current;
-
-  const applyThemes = () => {
-    const isDark = document.documentElement.classList.contains("force-dark-theme")
-      || document.documentElement.classList.contains("dark");
-    monaco.editor.defineTheme("probsolver-dark", buildTheme("dark"));
-    monaco.editor.defineTheme("probsolver-light", buildTheme("light"));
-    monaco.editor.setTheme(isDark ? "probsolver-dark" : "probsolver-light");
-  };
-
-  applyThemes();
-
-  const observer = new MutationObserver(applyThemes);
+  // Debounce with queueMicrotask so `remove("dark") + add("light")` in
+  // useUIStore.js:32-36 batches into one applyThemes call, not two
+  // (Lead Eng F6).
+  let pending = false;
+  const observer = new MutationObserver(() => {
+    if (pending) return;
+    pending = true;
+    queueMicrotask(() => {
+      pending = false;
+      if (monacoRef.current) applyThemes(monacoRef.current);
+    });
+  });
   observer.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["class"],
   });
   return () => observer.disconnect();
-}, [/* no deps — mount once, cleanup on unmount */]);
+}, []);
 ```
 
-`monacoRef.current` is populated in the Monaco `onMount` callback (existing pattern in the component).
+**Why apply from `handleMount` AND effect:** the effect mounts before Monaco lazy-loads, so `monacoRef.current` is null on first fire; observer-only initialization would leave the editor with default `probsolver-dark` / `probsolver-light` themes on first paint (which don't exist unless `handleMount` defines them). Applying from `handleMount` ensures the themes exist at first paint. The effect's role is only reactivity to future class-toggle mutations.
 
 ### Risk
 
@@ -227,6 +281,8 @@ useEffect(() => {
 
 ### Design
 
+**Lead Eng F2 / Security F1 (BLOCKER):** `ConfirmModal.jsx:41-50` destructures the options as `{ title, description, confirmLabel, cancelLabel, danger }` — a boolean `danger`, NOT a string `tone`. Spec's original `tone: "danger"` shape would be silently dropped (spread into `...rest`). Correct migration uses `danger: true | false`.
+
 Uniform migration shape per site:
 
 ```jsx
@@ -242,7 +298,7 @@ function ComponentName() {
       description: "This can be undone within 30 days from Trash.",
       confirmLabel: "Delete",
       cancelLabel: "Cancel",
-      tone: "danger",
+      danger: true,  // renders red confirm button + danger-tone border
     });
     if (!ok) return;
 
@@ -251,15 +307,25 @@ function ComponentName() {
 }
 ```
 
-**Handler async-ness:** verify each of the 5 handlers is already inside an `async` function or convertible. Grep in advance:
+**Per-site `danger` value:**
 
-```bash
-grep -B 5 "window.confirm" <each site>
-```
+| # | Site | `danger` |
+|---|---|---|
+| 1 | NotesSidebar delete | `true` |
+| 2 | ReviewQueue close-and-discard | `false` (renders neutral border — best-fit with current `danger:boolean` API; adding a `warning` variant would be scope expansion) |
+| 3 | NotesList delete | `true` |
+| 4 | NoteDetail delete | `true` |
+| 5 | NoteDetail permanent-delete | `true` |
 
-If any handler is a synchronous event callback that can't easily become async (e.g., tied to a non-Promise-friendly API), leave it and document in commit body. Expected: all 5 are already async or trivially convertible.
+**Handler async-ness (Lead Eng F8 confirmed):** all 5 handlers are trivially convertible:
+- `NotesSidebar.jsx:73-81` `confirmDelete(node)` — currently sync; convert to `async`
+- `ReviewQueuePage.jsx:459-465` — inline `onClick={() => {...}}`; convert to `async () => {...}`
+- `NotesListPage.jsx:285-293` `onDelete(e)` — currently sync; `stop(e)` calls `e.stopPropagation() / preventDefault()` BEFORE the `await` (React 17+ event pooling gone, so this is safe as-ordered)
+- `NoteDetailPage.jsx:181-192, 211-223` — already `async` arrow handlers; just add `await`
 
-**Copy consistency:** each modal gets 4 props (`title`, `description`, `confirmLabel`, `tone`). Copy should match or upgrade the current native-confirm string — never regress information density.
+**Copy consistency:** each modal gets 4 props (`title`, `description`, `confirmLabel`, `danger`). Copy should match or upgrade the current native-confirm string — never regress information density.
+
+**Security F2 (documentation-only):** `title` and `description` props are rendered as JSX text children by React (auto-escaped). Do NOT refactor to raw-HTML-injecting props to allow bolding note names, etc. — that opens an XSS sink for user-controlled `note.title` values.
 
 ### Files touched
 
@@ -289,27 +355,38 @@ Total delta: ~50 lines across 4 files.
 
 ## Item 3 — `useToastingMutation` adoption on 8 high-traffic hooks
 
-### Candidate list (to verify against actual hook shapes)
+### Candidate list (BA-verified against actual hook files)
 
-The hooks below are the highest-traffic mutations by user-action frequency. During implementation, each will be inspected for:
+**BA F6 (BLOCKER):** 3 of 8 original candidates don't exist in `client/src/hooks/`:
+- `useRateSolutionClarity` — real name is `useRateSolution` (`useSolutions.js:125`), documented as **dormant** in CLAUDE.md (peer-rating UI deferred). Excluded.
+- `useDeleteNote` — real name is `useDeleteNotePermanent` (`useNotes.js:74`). Renamed in list below.
+- `useSwitchTeam` — does NOT exist under `client/src/hooks/`. Grep returns zero hits. Excluded.
+
+Corrected list (8 hooks, all verified to exist):
+
+| # | Hook | File:line | Trigger |
+|---|---|---|---|
+| 1 | `useSubmitSolution` | `useSolutions.js:59` | Problem Detail: submit code |
+| 2 | `useSubmitReview` | `useSolutions.js:102` | Review Queue: submit spaced-repetition confidence |
+| 3 | `useCreateNote` | `useNotes.js:38` | Notes: new note |
+| 4 | `useUpdateNote` | `useNotes.js:50` | Notes: save edit |
+| 5 | `useDeleteNotePermanent` | `useNotes.js:74` | Notes: permanent delete |
+| 6 | `useCreateProblem` | `useProblems.js:38` | Admin: create problem |
+| 7 | `useUpdateProblem` | (verify path during impl) | Admin: update problem |
+| 8 | `useCreateNoteFolder` | (`useNoteFolders.js`, verify) | Notes: new folder |
+
+**During implementation, each hook will be inspected for:**
 - (a) does it already re-implement `onError → toast` boilerplate?
 - (b) does its API surface fit `useToastingMutation`'s options cleanly?
 - (c) is it currently using `useToastingMutation` (skip if yes)?
 
-If (a) is false or (b) is false for any candidate, swap it for another hook and record the divergence in commit body.
+If (a) is false or (b) is false for any candidate, swap for `useUpdateNoteFolder` / `useDeleteNoteFolder` and record divergence in commit body.
 
-| # | Hook | Trigger |
-|---|---|---|
-| 1 | `useSubmitSolution` | Problem Detail: submit code |
-| 2 | `useSubmitReview` | Review Queue: submit spaced-repetition confidence |
-| 3 | `useCreateNote` | Notes: new note |
-| 4 | `useUpdateNote` | Notes: save edit |
-| 5 | `useDeleteNote` | Notes: delete |
-| 6 | `useRateSolutionClarity` | Solution feed: 1-5 clarity rating |
-| 7 | `useCreateProblem` | Admin: create problem |
-| 8 | `useSwitchTeam` | Team dropdown: switch context |
+**PO F3 emphasis:** `useSubmitReview` is prod-critical (SM-2 write path with interactive-transaction wrapper on server). Its migration must preserve 409/retry error semantics — smoke MUST verify a conflict response still surfaces to the user via toast (not swallowed).
 
 ### Migration shape
+
+**Lead Eng F3 / BA F5 (BLOCKER):** actual wrapper prop is `errorPrefix` (not `errorToast`), and it CONCATENATES rather than falls back — `${errorPrefix} — ${serverMsg}`. Migrated copy must use short verb-based prefixes (e.g., `"Save failed"`), not full sentences, otherwise toasts become verbose like `"Failed to create note — Team is full"`.
 
 ```js
 // Before
@@ -332,7 +409,7 @@ export function useCreateNote() {
   const qc = useQueryClient();
   return useToastingMutation({
     mutationFn: (payload) => api.notes.create(payload),
-    errorToast: "Failed to create note",  // wrapper handles extractErrorMessage fallback internally
+    errorPrefix: "Save failed",  // concatenated as "Save failed — <serverMsg>"
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["notes"] });
     },
@@ -340,9 +417,23 @@ export function useCreateNote() {
 }
 ```
 
-**What `useToastingMutation` handles (per wrapper source):**
-- Calls `toast.error(extractErrorMessage(err) || errorToastFallback)` on mutation error
-- Optionally shows success toast if `successToast` prop is set (string or function)
+**Per-hook errorPrefix strings (short, verb-based):**
+
+| # | Hook | `errorPrefix` |
+|---|---|---|
+| 1 | `useSubmitSolution` | `"Submit failed"` |
+| 2 | `useSubmitReview` | `"Review submit failed"` |
+| 3 | `useCreateNote` | `"Save failed"` |
+| 4 | `useUpdateNote` | `"Update failed"` |
+| 5 | `useDeleteNotePermanent` | `"Delete failed"` |
+| 6 | `useCreateProblem` | `"Create failed"` |
+| 7 | `useUpdateProblem` | `"Update failed"` |
+| 8 | `useCreateNoteFolder` | `"Folder create failed"` |
+
+**What `useToastingMutation` handles (per wrapper source at `useToastingMutation.js:35-76`):**
+- On error: `toast.error(\`${errorPrefix} — ${extractErrorMessage(err)}\`)` (concat, not fallback)
+- On success: shows `successMessage` toast if provided
+- Special-cases network errors and 409 conflicts (verify against wrapper source during implementation)
 - Preserves the full `useMutation` return shape so call sites don't need to change
 
 **What stays in each hook after migration:**
