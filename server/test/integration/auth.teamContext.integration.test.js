@@ -58,6 +58,11 @@ const state = vi.hoisted(() => ({
   // For buildUserResponse: returns the rich user shape on the
   // second user.findUnique call (with select.memberships set).
   buildUserResponseResult: null,
+  // $queryRaw recorder + call-ordered returns queue (for SELECT FOR
+  // UPDATE lock inside completeOnboarding's join-team transaction).
+  queryRawCalls: [],
+  queryRawReturns: [],
+  queryRawCallNumber: 0,
 }));
 
 // ── Module mocks ─────────────────────────────────────────────────────
@@ -182,6 +187,34 @@ vi.mock("../../src/lib/prisma.js", () => {
     return state.teamMembershipFindUniqueReturn;
   });
 
+  const queryRawFn = vi.fn(async (strings, ...values) => {
+    state.queryRawCallNumber++;
+    // Defensive: Prisma's tagged-template call passes a TemplateStringsArray
+    // + rest values. If a caller passes a plain string (Prisma also supports
+    // $queryRawUnsafe), fall back to that.
+    let sqlString;
+    if (
+      Array.isArray(strings) ||
+      (strings && typeof strings === "object" && "length" in strings)
+    ) {
+      sqlString = Array.from(strings).reduce(
+        (acc, s, i) => acc + s + (i < values.length ? `$${i + 1}` : ""),
+        "",
+      );
+    } else {
+      sqlString = String(strings);
+    }
+    state.queryRawCalls.push({ sqlString, values });
+    const idx = state.queryRawCallNumber - 1;
+    if (idx >= state.queryRawReturns.length) {
+      throw new Error(
+        `auth.teamContext.integration.test.js: $queryRaw call #${state.queryRawCallNumber} ` +
+          `has no fixture. Add an entry to state.queryRawReturns. SQL: ${sqlString}`,
+      );
+    }
+    return state.queryRawReturns[idx];
+  });
+
   return {
     default: {
       user: { findUnique: userFindUnique, update: userUpdate },
@@ -191,6 +224,7 @@ vi.mock("../../src/lib/prisma.js", () => {
         createMany: teamMembershipCreateMany,
         findUnique: teamMembershipFindUnique,
       },
+      $queryRaw: queryRawFn,
       $transaction: vi.fn(async (fn) => {
         // Share fn instances so tests can assert from either side.
         const tx = {
@@ -201,6 +235,7 @@ vi.mock("../../src/lib/prisma.js", () => {
             createMany: teamMembershipCreateMany,
             findUnique: teamMembershipFindUnique,
           },
+          $queryRaw: queryRawFn,
         };
         return await fn(tx);
       }),
@@ -250,6 +285,9 @@ beforeEach(() => {
   state.teamMembershipFindUniqueCalls.length = 0;
   state.teamMembershipFindUniqueReturn = null;
   state.buildUserResponseResult = null;
+  state.queryRawCalls.length = 0;
+  state.queryRawReturns = [];
+  state.queryRawCallNumber = 0;
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -376,6 +414,9 @@ describe("POST /auth/onboarding", () => {
           _count: { currentMembers: 5 },
         },
       ];
+      state.queryRawReturns = [
+        [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: 5 }],
+      ];
       state.buildUserResponseResult = makeFullUser({ id: "user_authed_1" });
 
       const { status, body } = await post(
@@ -406,6 +447,156 @@ describe("POST /auth/onboarding", () => {
         [personalTeamId, "team_real_1"].sort(),
       );
       expect(state.teamMembershipCreateManyCalls[0].skipDuplicates).toBe(true);
+
+      // T245 (fold-in): the transaction now takes SELECT FOR UPDATE
+      // exactly once on the target team row — regression guard against
+      // future refactors accidentally dropping the lock.
+      expect(state.queryRawCalls).toHaveLength(1);
+    });
+
+    it("test 243: takes SELECT FOR UPDATE on the team inside the transaction (race guard)", async () => {
+      state.userFindUniqueReturns = [
+        { id: "user_authed_1", name: "Bob", onboardingComplete: false },
+      ];
+      state.teamFindUniqueReturns = [
+        {
+          id: "team_real_1",
+          name: "Acme",
+          status: "ACTIVE",
+          maxMembers: 50,
+          createdById: "user_other",
+          _count: { currentMembers: 5 },
+        },
+      ];
+      state.queryRawReturns = [
+        [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: 5 }],
+      ];
+      state.buildUserResponseResult = makeFullUser({ id: "user_authed_1" });
+
+      const { status } = await post(
+        "/api/auth/onboarding",
+        { mode: "team", joinCode: "ABCDEF" },
+        authedHeaders,
+      );
+
+      expect(status).toBe(200);
+      expect(state.queryRawCalls).toHaveLength(1);
+      expect(state.queryRawCalls[0].sqlString).toMatch(/FOR UPDATE/i);
+      expect(state.queryRawCalls[0].sqlString).toMatch(/"teams"/);
+      expect(state.queryRawCalls[0].values).toContain("team_real_1");
+    });
+
+    describe("test 244: rejects with 400 when locked count >= maxMembers (race outcome)", () => {
+      it.each([
+        { name: "at boundary (50==50)", currentCount: 50 },
+        { name: "over cap (51>50) — admin-adjusted overflow", currentCount: 51 },
+      ])("$name", async ({ currentCount }) => {
+        state.userFindUniqueReturns = [
+          { id: "user_authed_1", name: "Bob", onboardingComplete: false },
+        ];
+        state.teamFindUniqueReturns = [
+          {
+            id: "team_real_1",
+            name: "Acme",
+            status: "ACTIVE",
+            maxMembers: 50,
+            createdById: "user_other",
+            _count: { currentMembers: 49 },
+          },
+        ];
+        state.queryRawReturns = [
+          [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: currentCount }],
+        ];
+
+        const { status, body } = await post(
+          "/api/auth/onboarding",
+          { mode: "team", joinCode: "ABCDEF" },
+          authedHeaders,
+        );
+
+        expect(status).toBe(400);
+        expect(body?.error?.message).toMatch(/team is full/i);
+        expect(state.teamMembershipCreateManyCalls).toHaveLength(0);
+      });
+    });
+
+    it("test 246: emits [completeOnboarding:overflow] warning on race-outcome rejection", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        state.userFindUniqueReturns = [
+          { id: "user_authed_1", name: "Bob", onboardingComplete: false },
+        ];
+        state.teamFindUniqueReturns = [
+          {
+            id: "team_real_1",
+            name: "Acme",
+            status: "ACTIVE",
+            maxMembers: 50,
+            createdById: "user_other",
+            _count: { currentMembers: 49 },
+          },
+        ];
+        state.queryRawReturns = [
+          [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: 50 }],
+        ];
+
+        await post(
+          "/api/auth/onboarding",
+          { mode: "team", joinCode: "ABCDEF" },
+          authedHeaders,
+        );
+
+        const overflowLog = warnSpy.mock.calls.find((c) =>
+          String(c[0]).includes("[completeOnboarding:overflow]"),
+        );
+        expect(overflowLog).toBeDefined();
+        expect(overflowLog[0]).toMatch(/teamId=team_real_1/);
+        expect(overflowLog[0]).toMatch(/attemptedCount=51/);
+        expect(overflowLog[0]).toMatch(/maxMembers=50/);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it("test 247: rejects with 400 when team status flips to PENDING under lock (status-flip race)", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        state.userFindUniqueReturns = [
+          { id: "user_authed_1", name: "Bob", onboardingComplete: false },
+        ];
+        state.teamFindUniqueReturns = [
+          {
+            id: "team_real_1",
+            name: "Acme",
+            status: "ACTIVE",
+            maxMembers: 50,
+            createdById: "user_other",
+            _count: { currentMembers: 5 },
+          },
+        ];
+        state.queryRawReturns = [
+          [{ id: "team_real_1", status: "PENDING", maxMembers: 50, current_count: 5 }],
+        ];
+
+        const { status, body } = await post(
+          "/api/auth/onboarding",
+          { mode: "team", joinCode: "ABCDEF" },
+          authedHeaders,
+        );
+
+        expect(status).toBe(400);
+        expect(body?.error?.message).toMatch(/not currently accepting members/i);
+        expect(state.teamMembershipCreateManyCalls).toHaveLength(0);
+
+        const flipLog = warnSpy.mock.calls.find((c) =>
+          String(c[0]).includes("[completeOnboarding:status_flip]"),
+        );
+        expect(flipLog).toBeDefined();
+        expect(flipLog[0]).toMatch(/teamId=team_real_1/);
+        expect(flipLog[0]).toMatch(/status=PENDING/);
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it("returns 404 for an invalid join code", async () => {

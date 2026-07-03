@@ -45,6 +45,13 @@ import {
 } from "../config/env.js";
 import { success, error } from "../utils/response.js";
 
+// Shared error message so the fast-path (pre-tx) reject and the
+// lock-path (post-SELECT FOR UPDATE) reject emit identical prose.
+// Keeping this as a const prevents future drift where one branch
+// gets rephrased and the other doesn't — the client's UX depends on
+// the same "team is full" copy for both concurrency outcomes.
+const TEAM_FULL_MESSAGE = "This team is full. Please contact the team admin.";
+
 // ── Helper: build complete user response with memberships ─────
 // Called by login, getMe, verifyEmail, switchTeam, completeOnboarding.
 // Always returns user with memberships[] for the sidebar switcher.
@@ -424,60 +431,115 @@ export async function completeOnboarding(req, res) {
         return error(res, "This team is not currently accepting members.", 400);
       }
       if (team._count.currentMembers >= team.maxMembers) {
-        return error(
-          res,
-          "This team is full. Please contact the team admin.",
-          400,
-        );
+        return error(res, TEAM_FULL_MESSAGE, 400);
       }
 
       // Determine correct role — preserve TEAM_ADMIN if user created this team
       const teamRole = team.createdById === userId ? "TEAM_ADMIN" : "MEMBER";
 
-      await prisma.$transaction(async (tx) => {
-        // Create personal space
-        const personalTeam = await tx.team.create({
-          data: {
-            name: `${user.name}'s Space`,
-            description: "Personal practice space",
-            isPersonal: true,
-            status: "ACTIVE",
-            createdById: userId,
-            maxMembers: 1,
-            aiProblemsEnabled: true,
-          },
-        });
+      try {
+        await prisma.$transaction(async (tx) => {
+          // Atomically lock the team row + re-check invariants (status
+          // AND maxMembers) under lock. Without this lock two concurrent
+          // onboarding requests with the same joinCode can both pass the
+          // fast-path check above and both commit, overflowing the team.
+          // Additionally, a team admin flipping status to PENDING between
+          // the outer read and the tx commit could let a new member slip
+          // into a paused team. Row-locking the Team serializes concurrent
+          // joins + status flips on this team without impacting other
+          // teams. Prisma maps Team → "teams" via @@map (see
+          // prisma/schema.prisma:430).
+          const lockedRows = await tx.$queryRaw`
+            SELECT
+              id,
+              status,
+              "maxMembers",
+              (SELECT COUNT(*)::int
+                 FROM "users"
+                 WHERE "currentTeamId" = ${team.id}
+                   AND "deletedAt" IS NULL) AS current_count
+            FROM "teams"
+            WHERE id = ${team.id}
+            FOR UPDATE
+          `;
 
-        // Update user — start in the real team context
-        await tx.user.update({
-          where: { id: userId },
-          data: {
-            personalTeamId: personalTeam.id,
-            currentTeamId: team.id,
-            teamRole,
-            onboardingComplete: true,
-          },
-        });
+          const locked = lockedRows?.[0];
+          if (!locked) {
+            const err = new Error("Team no longer exists.");
+            err.status = 404;
+            throw err;
+          }
+          if (locked.status !== "ACTIVE") {
+            console.warn(
+              `[completeOnboarding:status_flip] userId=${userId} ` +
+                `teamId=${team.id} status=${locked.status}`,
+            );
+            const err = new Error(
+              "This team is not currently accepting members.",
+            );
+            err.status = 400;
+            throw err;
+          }
+          if (locked.current_count >= locked.maxMembers) {
+            console.warn(
+              `[completeOnboarding:overflow] userId=${userId} ` +
+                `teamId=${team.id} attemptedCount=${locked.current_count + 1} ` +
+                `maxMembers=${locked.maxMembers}`,
+            );
+            const err = new Error(TEAM_FULL_MESSAGE);
+            err.status = 400;
+            throw err;
+          }
 
-        // Create TeamMembership records for both personal space and real team
-        await tx.teamMembership.createMany({
-          data: [
-            {
-              userId,
-              teamId: personalTeam.id,
-              role: "TEAM_ADMIN",
-              isActive: true,
+          // Create personal space
+          const personalTeam = await tx.team.create({
+            data: {
+              name: `${user.name}'s Space`,
+              description: "Personal practice space",
+              isPersonal: true,
+              status: "ACTIVE",
+              createdById: userId,
+              maxMembers: 1,
+              aiProblemsEnabled: true,
             },
-            {
-              userId,
-              teamId: team.id,
-              role: teamRole,
-              isActive: true,
+          });
+
+          // Update user — start in the real team context
+          await tx.user.update({
+            where: { id: userId },
+            data: {
+              personalTeamId: personalTeam.id,
+              currentTeamId: team.id,
+              teamRole,
+              onboardingComplete: true,
             },
-          ],
-          skipDuplicates: true,
+          });
+
+          // Create TeamMembership records for both personal space and real team
+          await tx.teamMembership.createMany({
+            data: [
+              {
+                userId,
+                teamId: personalTeam.id,
+                role: "TEAM_ADMIN",
+                isActive: true,
+              },
+              {
+                userId,
+                teamId: team.id,
+                role: teamRole,
+                isActive: true,
+              },
+            ],
+            skipDuplicates: true,
+          });
         });
-      });
+      } catch (err) {
+        if (err && err.status) {
+          return error(res, err.message, err.status);
+        }
+        throw err;
+      }
 
       const fullUser = await buildUserResponse(userId);
       const token = generateToken(fullUser);
