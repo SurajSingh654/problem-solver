@@ -6,7 +6,18 @@
 **Branch:** `feat/onboarding-race-fix`
 **Layers on:** main, post Sprint 8b (`ed649e0`)
 **Feature flag:** None — production bugfix + regression tests
-**Review history:** 4-role panel to run pre-implementation per `feedback_multi_agent_review_before_code.md`
+**Review history (spec v2):** 4-role panel completed pre-implementation. 2 of 4 reviewers returned before user continued:
+- **PO** — APPROVED_WITH_NOTES → folded (4 items)
+- **BA** — CHANGES_REQUESTED → folded (blocker F1 + 2 nits)
+- **Security Manager / Lead Engineer** — interrupted; findings deferred to inline self-review
+
+**Spec v2 changes:**
+1. **BA F1 (BLOCKER):** SQL `FROM "Team"` → `FROM "teams"` (Prisma maps `Team` model to `"teams"` at schema.prisma:430; verbatim v1 implementation would `ERROR: relation "Team" does not exist` at runtime). T243 assertion also updated to `/"teams"/`.
+2. **PO F3 (real gap):** ACTIVE→PENDING status flip mid-tx is a second race in the same function. Fix expanded to include `status` in the SELECT FOR UPDATE and re-check `status = 'ACTIVE'` under lock. New test T247 added.
+3. **PO F2 (real gap):** T244 boundary widened — cover both `current_count == maxMembers` AND `current_count > maxMembers` (admin-adjusted overflow) via a `it.each` table.
+4. **PO F1 (nit):** Extract `TEAM_FULL_MESSAGE` const at top of file so fast-path + lock-path emit identical error strings — prevents drift.
+5. **BA F2 (nit):** Test count target unified to **1474** (+4: T243, T244 (2 rows via `.each`), T246, T247; T245 folded into existing happy-path).
+6. **BA F3 (nit):** Divergence policy statement — advisory-lock refactor requires spec amendment, not test-side accommodation.
 
 ---
 
@@ -102,6 +113,9 @@ docs/superpowers/roadmaps/2026-06-20-refactor-redesign-sprint.md  [MODIFY — ma
 Extend the existing `$transaction` at L437 with a locking pre-check:
 
 ```js
+// At top of file (near imports):
+const TEAM_FULL_MESSAGE = "This team is full. Please contact the team admin.";
+
 // ── TEAM MODE: Join existing team via join code ────
 if (mode === "team" && joinCode) {
   const team = await prisma.team.findUnique({
@@ -125,27 +139,31 @@ if (mode === "team" && joinCode) {
   // Fast-path check — cheap short-circuit before opening the tx.
   // The authoritative check happens under lock inside the tx below.
   if (team._count.currentMembers >= team.maxMembers) {
-    return error(res, "This team is full. Please contact the team admin.", 400);
+    return error(res, TEAM_FULL_MESSAGE, 400);
   }
 
   const teamRole = team.createdById === userId ? "TEAM_ADMIN" : "MEMBER";
 
   try {
     await prisma.$transaction(async (tx) => {
-      // Atomically lock the team row + re-check the maxMembers invariant.
-      // Without this lock two concurrent onboarding requests with the same
-      // joinCode can both pass the fast-path check above and both commit,
-      // overflowing the team. Row-locking the Team serializes concurrent
-      // joins on this team without impacting joins to other teams.
+      // Atomically lock the team row + re-check the invariants (maxMembers
+      // AND status) under lock. Without this lock two concurrent onboarding
+      // requests with the same joinCode can both pass the fast-path check
+      // above and both commit, overflowing the team. Additionally, a team
+      // admin flipping status to PENDING between the outer read and the
+      // tx commit could let a new member slip into a paused team. Row-
+      // locking the Team serializes concurrent joins + status flips on
+      // this team without impacting other teams.
       const lockedRows = await tx.$queryRaw`
         SELECT
           id,
+          status,
           "maxMembers",
           (SELECT COUNT(*)::int
              FROM "users"
              WHERE "currentTeamId" = ${team.id}
                AND "deletedAt" IS NULL) AS current_count
-        FROM "Team"
+        FROM "teams"
         WHERE id = ${team.id}
         FOR UPDATE
       `;
@@ -156,13 +174,22 @@ if (mode === "team" && joinCode) {
         err.status = 404;
         throw err;
       }
+      if (locked.status !== "ACTIVE") {
+        console.warn(
+          `[completeOnboarding:status_flip] userId=${userId} ` +
+          `teamId=${team.id} status=${locked.status}`,
+        );
+        const err = new Error("This team is not currently accepting members.");
+        err.status = 400;
+        throw err;
+      }
       if (locked.current_count >= locked.maxMembers) {
         console.warn(
           `[completeOnboarding:overflow] userId=${userId} ` +
           `teamId=${team.id} attemptedCount=${locked.current_count + 1} ` +
           `maxMembers=${locked.maxMembers}`,
         );
-        const err = new Error("This team is full. Please contact the team admin.");
+        const err = new Error(TEAM_FULL_MESSAGE);
         err.status = 400;
         throw err;
       }
@@ -182,6 +209,8 @@ if (mode === "team" && joinCode) {
   // ... existing success response ...
 }
 ```
+
+**Table name note:** Prisma maps `Team` model to Postgres relation `"teams"` via `@@map("teams")` at `schema.prisma:430`. Similarly `User` maps to `"users"` at `schema.prisma:351`. The raw SQL must use lowercase-plural physical names, not model names.
 
 **Design choices:**
 - Fast-path outer check retained — no perf regression when team is not near capacity.
@@ -253,7 +282,7 @@ it("test 243: takes SELECT FOR UPDATE on the team inside the transaction (race g
     },
   ];
   state.queryRawReturns = [
-    [{ id: "team_real_1", maxMembers: 50, current_count: 5 }],
+    [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: 5 }],
   ];
   state.buildUserResponseResult = makeFullUser({ id: "user_authed_1" });
 
@@ -266,49 +295,53 @@ it("test 243: takes SELECT FOR UPDATE on the team inside the transaction (race g
   expect(status).toBe(200);
   expect(state.queryRawCalls).toHaveLength(1);
   expect(state.queryRawCalls[0].sqlString).toMatch(/FOR UPDATE/i);
-  expect(state.queryRawCalls[0].sqlString).toMatch(/"Team"/);
+  expect(state.queryRawCalls[0].sqlString).toMatch(/"teams"/);
   expect(state.queryRawCalls[0].values).toContain("team_real_1");
 });
 ```
 
-**What this locks in:** the fix must issue a raw SQL query containing `FOR UPDATE` against the `Team` table, interpolating the target team id. If a future refactor drops the lock or removes the team-id filter, this fails.
+**What this locks in:** the fix must issue a raw SQL query containing `FOR UPDATE` against the `"teams"` physical table (Prisma model `Team` maps to `@@map("teams")` at schema.prisma:430), interpolating the target team id. If a future refactor drops the lock or removes the team-id filter, this fails. An advisory-lock refactor (`pg_try_advisory_xact_lock`) would also fail this test — that's intentional; row locking keeps the invariant colocated with the data, and switching primitives requires a spec amendment rather than test-side accommodation.
 
-### T244 — Overflow rejection inside the tx (locked count == maxMembers)
+### T244 — Overflow rejection inside the tx (locked count >= maxMembers)
+
+Table-driven via `it.each` — covers both the `==` boundary (typical race outcome) AND the `>` case (admin-adjusted DB overflow — locked check must still reject, not accept-because-past-threshold):
 
 ```js
-it("test 244: rejects with 400 when locked count equals maxMembers (race outcome)", async () => {
-  state.userFindUniqueReturns = [
-    { id: "user_authed_1", name: "Bob", onboardingComplete: false },
-  ];
-  // Outer fast-path check passes (49 < 50)…
-  state.teamFindUniqueReturns = [
-    {
-      id: "team_real_1",
-      name: "Acme",
-      status: "ACTIVE",
-      maxMembers: 50,
-      createdById: "user_other",
-      _count: { currentMembers: 49 },
-    },
-  ];
-  // …but under lock the count is now 50 (another request slipped in).
-  state.queryRawReturns = [
-    [{ id: "team_real_1", maxMembers: 50, current_count: 50 }],
-  ];
+describe("test 244: rejects with 400 when locked count >= maxMembers (race outcome)", () => {
+  it.each([
+    { name: "at boundary (50==50)", currentCount: 50, expectedAttempt: 51 },
+    { name: "over cap (51>50) — admin-adjusted overflow", currentCount: 51, expectedAttempt: 52 },
+  ])("$name", async ({ currentCount }) => {
+    state.userFindUniqueReturns = [
+      { id: "user_authed_1", name: "Bob", onboardingComplete: false },
+    ];
+    // Outer fast-path check passes (49 < 50)…
+    state.teamFindUniqueReturns = [
+      {
+        id: "team_real_1",
+        name: "Acme",
+        status: "ACTIVE",
+        maxMembers: 50,
+        createdById: "user_other",
+        _count: { currentMembers: 49 },
+      },
+    ];
+    // …but under lock the count is >= maxMembers.
+    state.queryRawReturns = [
+      [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: currentCount }],
+    ];
 
-  const { status, body } = await post(
-    "/api/auth/onboarding",
-    { mode: "team", joinCode: "ABCDEF" },
-    authedHeaders,
-  );
+    const { status, body } = await post(
+      "/api/auth/onboarding",
+      { mode: "team", joinCode: "ABCDEF" },
+      authedHeaders,
+    );
 
-  expect(status).toBe(400);
-  expect(body?.error?.message).toMatch(/team is full/i);
-  // No memberships created — tx rolled back.
-  expect(state.teamMembershipCreateManyCalls).toHaveLength(0);
-  // Personal team creation was inside the tx and rolled back — no create call recorded either.
-  // (Note: our mock records the call attempt but the "commit" is conceptual.
-  // The important assertion is on membership.createMany which is downstream of the throw.)
+    expect(status).toBe(400);
+    expect(body?.error?.message).toMatch(/team is full/i);
+    // No memberships created — tx rolled back.
+    expect(state.teamMembershipCreateManyCalls).toHaveLength(0);
+  });
 });
 ```
 
@@ -319,7 +352,7 @@ Absorb into the existing "joins an existing team, creates personalTeam and TWO m
 ```js
 // Extend existing happy-path test:
 state.queryRawReturns = [
-  [{ id: "team_real_1", maxMembers: 50, current_count: 5 }],
+  [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: 5 }],
 ];
 // New assertion at the end:
 expect(state.queryRawCalls).toHaveLength(1); // lock was taken
@@ -347,7 +380,7 @@ it("test 246: emits [completeOnboarding:overflow] warning on race-outcome reject
       },
     ];
     state.queryRawReturns = [
-      [{ id: "team_real_1", maxMembers: 50, current_count: 50 }],
+      [{ id: "team_real_1", status: "ACTIVE", maxMembers: 50, current_count: 50 }],
     ];
 
     await post(
@@ -363,6 +396,53 @@ it("test 246: emits [completeOnboarding:overflow] warning on race-outcome reject
     expect(overflowLog[0]).toMatch(/teamId=team_real_1/);
     expect(overflowLog[0]).toMatch(/attemptedCount=51/);
     expect(overflowLog[0]).toMatch(/maxMembers=50/);
+  } finally {
+    warnSpy.mockRestore();
+  }
+});
+```
+
+### T247 — Status flip rejection inside the tx (ACTIVE→PENDING mid-flight)
+
+```js
+it("test 247: rejects with 400 when team status flips to PENDING under lock (status-flip race)", async () => {
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    state.userFindUniqueReturns = [
+      { id: "user_authed_1", name: "Bob", onboardingComplete: false },
+    ];
+    // Outer read sees ACTIVE (fast-path check passes)…
+    state.teamFindUniqueReturns = [
+      {
+        id: "team_real_1",
+        name: "Acme",
+        status: "ACTIVE",
+        maxMembers: 50,
+        createdById: "user_other",
+        _count: { currentMembers: 5 },
+      },
+    ];
+    // …but under lock the admin has flipped it to PENDING.
+    state.queryRawReturns = [
+      [{ id: "team_real_1", status: "PENDING", maxMembers: 50, current_count: 5 }],
+    ];
+
+    const { status, body } = await post(
+      "/api/auth/onboarding",
+      { mode: "team", joinCode: "ABCDEF" },
+      authedHeaders,
+    );
+
+    expect(status).toBe(400);
+    expect(body?.error?.message).toMatch(/not currently accepting members/i);
+    expect(state.teamMembershipCreateManyCalls).toHaveLength(0);
+
+    const flipLog = warnSpy.mock.calls.find((c) =>
+      String(c[0]).includes("[completeOnboarding:status_flip]"),
+    );
+    expect(flipLog).toBeDefined();
+    expect(flipLog[0]).toMatch(/teamId=team_real_1/);
+    expect(flipLog[0]).toMatch(/status=PENDING/);
   } finally {
     warnSpy.mockRestore();
   }
@@ -388,19 +468,24 @@ it("test 246: emits [completeOnboarding:overflow] warning on race-outcome reject
 ## Test count target
 
 - Baseline (post Sprint 8b): **1470**
-- New in Sprint 8c: **+4** (T243, T244, T246; T245 extends existing test)
-- Target: **1474**
+- New in Sprint 8c: **+5** (T243, T244 counted as 2 rows via `.each`, T246, T247; T245 extends existing test)
+- Target: **1475**
 
-Note: 3 new `it()` blocks + 1 test extension. Vitest reports each `it` as a test, so the count matches the +4 target only if T245 is a genuine new `it` block. **If T245 is folded into the existing test as an assertion extension, target is +3 → 1473**. The plan Task 1 will settle this — recommendation is +3 (fold T245 to avoid duplication).
+Breakdown:
+- T243 → 1 new `it` block
+- T244 → `describe(...)` with `it.each(...)` over 2 rows → 2 test entries in vitest report
+- T246 → 1 new `it` block
+- T247 → 1 new `it` block
+- T245 → assertion extension to the existing happy-path test (not a new `it`)
 
-**Final target: 1473** (1470 + 3 new `it` blocks).
+**Final target: 1475** (1470 + 5 new `it` entries).
 
 ---
 
 ## Done criteria
 
-- Production fix applied to `auth.controller.js` join-team transaction
-- 3 new `it` blocks (T243, T244, T246) + 1 assertion extension (T245) — full suite at **1473**
+- Production fix applied to `auth.controller.js` join-team transaction (SELECT FOR UPDATE + status re-check + count re-check + `TEAM_FULL_MESSAGE` const)
+- 4 new `it` blocks (T243, T244 with 2 `.each` rows, T246, T247) + 1 assertion extension (T245) — full suite at **1475**
 - `npm run lint` (server + client) + audits exit 0
 - `prisma migrate status` up to date (no schema change)
 - Client `npm run build` clean
