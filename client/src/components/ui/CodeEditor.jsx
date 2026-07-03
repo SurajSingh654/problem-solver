@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import { cn } from '@utils/cn'
 import { LANGUAGE_LABELS } from '@utils/constants'
@@ -41,60 +41,90 @@ export const SUBMIT_LANGUAGES = [
     'SQL',
 ]
 
-// ── Dark theme definition ──────────────────────────────
-function defineTheme(monaco) {
-    monaco.editor.defineTheme('probsolver-dark', {
-        base: 'vs-dark',
+// ── CSS-var readers ────────────────────────────────────
+// Read a CSS custom property from :root, returning fallback on empty/missing.
+function readCssVar(name, fallback) {
+    if (typeof document === 'undefined') return fallback
+    const value = getComputedStyle(document.documentElement)
+        .getPropertyValue(name)
+        .trim()
+    return value || fallback
+}
+
+// Convert a CSS-var value to a Monaco-compatible 6-digit hex.
+// - Rejects malformed values (only 3/6/8 hex digits accepted, optionally #-prefixed)
+// - Expands 3-digit shorthand (#abc → #aabbcc) so downstream alpha concat is safe
+// - Falls back on any non-hex form (rgb(), hsl(), keyword) — protects against
+//   CSS-var injection primitives + legacy shorthand.
+function toMonacoHex(value, fallback) {
+    const raw = (value || '').trim().replace(/^#/, '')
+    if (!/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/.test(raw)) {
+        return fallback
+    }
+    if (raw.length === 3) {
+        return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`
+    }
+    return `#${raw}`
+}
+
+// ── Theme factory ──────────────────────────────────────
+// Build a Monaco theme object from CSS-var reads.
+// - Chrome colors (background, fg, line highlight, cursor, indent, scrollbar,
+//   selection) source from CSS vars in src/styles/index.css.
+// - Syntax rule colors (comment/keyword/string/number/type/function) stay as
+//   deliberate identity hex values — those are design decisions, not tokens.
+// - Alpha-suffixed selection colors use the brand-500 CSS var + literal alpha
+//   suffix so a token change propagates cleanly.
+function buildTheme(mode) {
+    const brand = toMonacoHex(readCssVar('--brand-500'), '#7c6ff7')
+    const surface0 = toMonacoHex(readCssVar('--surface-0'), mode === 'dark' ? '#111118' : '#f0f0f5')
+    const surface1 = toMonacoHex(readCssVar('--surface-1'), mode === 'dark' ? '#18181f' : '#e8e8f0')
+    const surface2 = toMonacoHex(readCssVar('--surface-2'), mode === 'dark' ? '#202028' : '#dddde8')
+    const surface3 = toMonacoHex(readCssVar('--surface-3'), mode === 'dark' ? '#282832' : '#c9c9d4')
+    const fgPrimary = toMonacoHex(readCssVar('--fg-primary'), mode === 'dark' ? '#eeeef5' : '#0f0f1a')
+    const fgSecondary = toMonacoHex(readCssVar('--fg-secondary'), mode === 'dark' ? '#55556e' : '#6b6b8a')
+    const fgTertiary = toMonacoHex(readCssVar('--fg-tertiary'), mode === 'dark' ? '#35354a' : '#9999b0')
+
+    return {
+        base: mode === 'dark' ? 'vs-dark' : 'vs',
         inherit: true,
         rules: [
-            { token: 'comment', foreground: '55556e', fontStyle: 'italic' },
-            { token: 'keyword', foreground: '9d93f9' },
-            { token: 'string', foreground: '22c55e' },
-            { token: 'number', foreground: 'eab308' },
-            { token: 'type', foreground: '3b82f6' },
-            { token: 'function', foreground: '60a5fa' },
+            { token: 'comment', foreground: mode === 'dark' ? '55556e' : '6b6b8a', fontStyle: 'italic' },
+            { token: 'keyword', foreground: mode === 'dark' ? '9d93f9' : '6358d4' },
+            { token: 'string', foreground: mode === 'dark' ? '22c55e' : '16a34a' },
+            { token: 'number', foreground: mode === 'dark' ? 'eab308' : 'ca8a04' },
+            { token: 'type', foreground: mode === 'dark' ? '3b82f6' : '2563eb' },
+            { token: 'function', foreground: mode === 'dark' ? '60a5fa' : '3b82f6' },
         ],
         colors: {
-            'editor.background': '#111118',
-            'editor.foreground': '#eeeef5',
-            'editor.lineHighlightBackground': '#18181f',
-            'editor.selectionBackground': '#7c6ff730',
-            'editor.inactiveSelectionBackground': '#7c6ff715',
-            'editorLineNumber.foreground': '#35354a',
-            'editorLineNumber.activeForeground': '#55556e',
-            'editorCursor.foreground': '#7c6ff7',
-            'editorIndentGuide.background': '#202028',
-            'editorIndentGuide.activeBackground': '#282832',
-            'editor.selectionHighlightBackground': '#7c6ff720',
-            'editorBracketMatch.background': '#7c6ff725',
-            'editorBracketMatch.border': '#7c6ff750',
-            'scrollbarSlider.background': '#28283240',
-            'scrollbarSlider.hoverBackground': '#28283280',
+            'editor.background': surface0,
+            'editor.foreground': fgPrimary,
+            'editor.lineHighlightBackground': surface1,
+            'editorLineNumber.foreground': fgTertiary,
+            'editorLineNumber.activeForeground': fgSecondary,
+            'editorCursor.foreground': brand,
+            'editorIndentGuide.background': surface2,
+            'editorIndentGuide.activeBackground': surface3,
+            'editor.selectionBackground': `${brand}30`,
+            'editor.inactiveSelectionBackground': `${brand}15`,
+            'editor.selectionHighlightBackground': `${brand}20`,
+            'editorBracketMatch.background': `${brand}25`,
+            'editorBracketMatch.border': `${brand}50`,
+            'scrollbarSlider.background': `${surface3}40`,
+            'scrollbarSlider.hoverBackground': `${surface3}80`,
         },
-    })
-    monaco.editor.defineTheme('probsolver-light', {
-        base: 'vs',
-        inherit: true,
-        rules: [
-            { token: 'comment', foreground: '6b6b8a', fontStyle: 'italic' },
-            { token: 'keyword', foreground: '6358d4' },
-            { token: 'string', foreground: '16a34a' },
-            { token: 'number', foreground: 'ca8a04' },
-            { token: 'type', foreground: '2563eb' },
-            { token: 'function', foreground: '3b82f6' },
-        ],
-        colors: {
-            'editor.background': '#f0f0f5',
-            'editor.foreground': '#0f0f1a',
-            'editor.lineHighlightBackground': '#e8e8f0',
-            'editor.selectionBackground': '#7c6ff730',
-            'editorLineNumber.foreground': '#9999b0',
-            'editorLineNumber.activeForeground': '#6b6b8a',
-            'editorCursor.foreground': '#7c6ff7',
-            'editorIndentGuide.background': '#dddde8',
-            'scrollbarSlider.background': '#dddde840',
-        },
-    })
+    }
+}
+
+// Apply both themes + activate the current one based on `.light` class presence.
+// `useUIStore.js:31-36` toggles only `dark`/`light` classes on <html>, so
+// !contains("light") is the correct dark-mode signal (matches the store's
+// implicit "dark unless light is set" semantic).
+function applyThemes(monaco) {
+    const isDark = !document.documentElement.classList.contains('light')
+    monaco.editor.defineTheme('probsolver-dark', buildTheme('dark'))
+    monaco.editor.defineTheme('probsolver-light', buildTheme('light'))
+    monaco.editor.setTheme(isDark ? 'probsolver-dark' : 'probsolver-light')
 }
 
 // ── Main component ─────────────────────────────────────
@@ -116,15 +146,34 @@ export function CodeEditor({
     className,
 }) {
     const [copied, setCopied] = useState(false)
+    const monacoRef = useRef(null)
 
-    const isDark = typeof document !== 'undefined'
-        ? document.documentElement.classList.contains('dark') ||
-        !document.documentElement.classList.contains('light')
-        : true
+    // Reactively re-apply themes when the user toggles dark/light on <html>.
+    // Debounce via queueMicrotask so useUIStore.js:31-36's `remove(dark) + add(light)`
+    // batches into ONE applyThemes call, not two per toggle.
+    useEffect(() => {
+        let pending = false
+        const observer = new MutationObserver(() => {
+            if (pending) return
+            pending = true
+            queueMicrotask(() => {
+                pending = false
+                if (monacoRef.current) applyThemes(monacoRef.current)
+            })
+        })
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class'],
+        })
+        return () => observer.disconnect()
+    }, [])
 
     function handleMount(editor, monaco) {
-        defineTheme(monaco)
-        monaco.editor.setTheme(isDark ? 'probsolver-dark' : 'probsolver-light')
+        // Store monaco for the MutationObserver effect. The effect fires
+        // BEFORE Monaco lazy-loads, so we cannot rely on it for initial paint —
+        // applyThemes must run here at first mount too.
+        monacoRef.current = monaco
+        applyThemes(monaco)
         editor.updateOptions({
             fontSize: 13,
             fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace",
@@ -302,7 +351,9 @@ export function CodeEditor({
                         value={code}
                         onChange={val => onChange?.(val || '')}
                         onMount={handleMount}
-                        theme={isDark ? 'probsolver-dark' : 'probsolver-light'}
+                        // Static placeholder — applyThemes() in handleMount overwrites
+                        // this immediately with the correct theme based on classList.
+                        theme="probsolver-dark"
                         loading={
                             <div className="flex items-center justify-center h-full
                               text-xs text-text-tertiary gap-2">
