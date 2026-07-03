@@ -4,6 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notesApi } from "@services/notes.api";
 import { toast } from "@store/useUIStore";
+import { useToastingMutation } from "./useToastingMutation";
 
 const KEYS = {
     LIST: (params) => ["notes", "list", params],
@@ -37,25 +38,25 @@ export function useNote(id) {
 
 export function useCreateNote() {
     const qc = useQueryClient();
-    return useMutation({
+    return useToastingMutation({
         mutationFn: (data) => notesApi.create(data).then((r) => r.data.data.note),
+        successMessage: "Note created.",
+        errorPrefix: "Save failed",
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["notes"] });
-            toast.success("Note created.");
         },
-        onError: (err) => toast.error(pickError(err, "Failed to create note.")),
     });
 }
 
 export function useUpdateNote(id) {
     const qc = useQueryClient();
-    return useMutation({
+    return useToastingMutation({
         mutationFn: (data) => notesApi.update(id, data).then((r) => r.data.data.note),
+        errorPrefix: "Update failed",
         onSuccess: (note) => {
             qc.setQueryData(KEYS.ITEM(id), note);
             qc.invalidateQueries({ queryKey: ["notes", "list"] });
         },
-        onError: (err) => toast.error(pickError(err, "Failed to save note.")),
     });
 }
 
@@ -73,14 +74,13 @@ export function useArchiveNote() {
 
 export function useDeleteNotePermanent() {
     const qc = useQueryClient();
-    return useMutation({
+    return useToastingMutation({
         mutationFn: (id) => notesApi.deletePermanent(id),
+        successMessage: "Note deleted permanently.",
+        errorPrefix: "Delete failed",
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["notes"] });
-            toast.success("Note deleted permanently.");
         },
-        onError: (err) =>
-            toast.error(pickError(err, "Failed to delete note.")),
     });
 }
 

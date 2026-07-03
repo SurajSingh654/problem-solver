@@ -4,6 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@services/api";
 import { useTeamContext } from "./useTeamContext";
+import { useToastingMutation } from "./useToastingMutation";
 
 // Window in which we keep polling for the auto-review to land. Was 90s,
 // raised to 180s after users hit the previous ceiling on slower environments
@@ -59,9 +60,10 @@ export function useUserSolutions(userId, page = 1) {
 export function useSubmitSolution() {
   const queryClient = useQueryClient();
   const { teamQueryKey } = useTeamContext();
-  return useMutation({
+  return useToastingMutation({
     mutationFn: ({ problemId, data }) =>
       api.post(`/solutions/${problemId}`, data),
+    errorPrefix: "Submit failed",
     onSuccess: (_data, { problemId: _problemId }) => {
       queryClient.invalidateQueries({
         queryKey: [...teamQueryKey, "solutions"],
@@ -99,12 +101,21 @@ export function useUpdateSolution() {
 // 1. Different endpoint, different validation
 // 2. Review success invalidates the review queue and report (D6)
 // 3. Review response contains SM-2 state for UI feedback
+//
+// SM-2 write path — server wraps the update in an interactive
+// transaction with `SELECT ... FOR UPDATE`. On concurrent submissions,
+// the lock loser gets a 409. The `conflictMessage` opt-in below turns
+// that into a user-visible "your review was in flight..." toast instead
+// of silently swallowing the error (PO F3).
 export function useSubmitReview() {
   const queryClient = useQueryClient();
   const { teamQueryKey } = useTeamContext();
-  return useMutation({
+  return useToastingMutation({
     mutationFn: ({ solutionId, confidence, recallText, peeked }) =>
       api.post(`/solutions/${solutionId}/review`, { confidence, recallText, peeked }),
+    errorPrefix: "Review submit failed",
+    conflictMessage:
+      "Another review just landed for this solution — refresh and try again.",
     onSuccess: () => {
       // Invalidate review queue — item should disappear from due list
       queryClient.invalidateQueries({

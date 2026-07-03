@@ -4,6 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { noteFoldersApi } from "@services/noteFolders.api";
 import { toast } from "@store/useUIStore";
+import { useToastingMutation } from "./useToastingMutation";
 
 const KEY = ["note-folders"];
 
@@ -44,30 +45,28 @@ export function useNoteFolders() {
 
 export function useCreateNoteFolder() {
     const qc = useQueryClient();
-    return useMutation({
+    return useToastingMutation({
         mutationFn: (data) =>
             noteFoldersApi.create(data).then((r) => r.data.data.folder),
+        successMessage: "Folder created.",
+        errorPrefix: "Folder create failed",
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: KEY });
             qc.invalidateQueries({ queryKey: ["notes", "list"] });
-            toast.success("Folder created.");
         },
-        onError: (err) =>
-            toast.error(pickError(err, "Failed to create folder.")),
     });
 }
 
 export function useUpdateNoteFolder() {
     const qc = useQueryClient();
-    return useMutation({
+    return useToastingMutation({
         mutationFn: ({ id, ...data }) =>
             noteFoldersApi.update(id, data).then((r) => r.data.data.folder),
+        errorPrefix: "Folder update failed",
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: KEY });
             qc.invalidateQueries({ queryKey: ["notes", "list"] });
         },
-        onError: (err) =>
-            toast.error(pickError(err, "Failed to update folder.")),
     });
 }
 

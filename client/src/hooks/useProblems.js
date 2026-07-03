@@ -4,6 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@services/api'
 import { useTeamContext } from './useTeamContext'
+import { useToastingMutation } from './useToastingMutation'
 
 export function useProblems(filters = {}) {
   const { teamQueryKey } = useTeamContext()
@@ -49,8 +50,9 @@ export function useCreateProblem() {
 export function useUpdateProblem() {
   const queryClient = useQueryClient()
   const { teamQueryKey } = useTeamContext()
-  return useMutation({
+  return useToastingMutation({
     mutationFn: ({ problemId, data }) => api.put(`/problems/${problemId}`, data),
+    errorPrefix: 'Update failed',
     onSuccess: (_, { problemId }) => {
       queryClient.invalidateQueries({ queryKey: [...teamQueryKey, 'problems'] })
       queryClient.invalidateQueries({ queryKey: [...teamQueryKey, 'problem', problemId] })
