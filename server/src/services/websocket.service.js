@@ -10,6 +10,23 @@ const HEARTBEAT_INTERVAL = 30000;
 // can broadcast without holding a wss handle. Set on `setupWebSocket()`.
 let _wssRef = null;
 
+// Test-only override. When set via `_setWssRefForTest`, `_getWssRef()`
+// returns this instead of the real `_wssRef`. Do not use in production
+// code paths.
+let _wssRefForTest = null;
+
+// Helper: prefer the test-injected ref if present. Used by `sendToUser`
+// so unit tests can inject a fake `{ clients: Set<...> }` without spinning
+// up a real WebSocketServer.
+function _getWssRef() {
+  return _wssRefForTest ?? _wssRef;
+}
+
+// Test-only hook. Do not call outside vitest.
+export function _setWssRefForTest(fake) {
+  _wssRefForTest = fake;
+}
+
 // Close every connected ws cleanly during graceful shutdown. Used by the
 // SIGTERM handler in index.js so deploys don't drop active interview /
 // design / teaching sessions with ECONNRESET.
@@ -42,6 +59,26 @@ export function broadcastToTeam(teamId, message) {
   const payload = JSON.stringify(message);
   for (const ws of _wssRef.clients) {
     if (ws.readyState === ws.OPEN && ws.teamId === teamId) {
+      try {
+        ws.send(payload);
+      } catch {
+        // Drop quietly — a partial fan-out failure isn't fatal.
+      }
+    }
+  }
+}
+
+// Send a JSON message to every OPEN WebSocket belonging to `userId`.
+// Handles the multi-tab case (one user may have N sockets). Used for
+// per-user targeted events (e.g. `curriculum:review_ready`) where a
+// team-wide broadcast would leak the payload to teammates.
+// Safe no-op before setupWebSocket runs or when no matching socket is open.
+export function sendToUser(userId, message) {
+  const wssRef = _getWssRef();
+  if (!wssRef || !wssRef.clients || !userId) return;
+  const payload = JSON.stringify(message);
+  for (const ws of wssRef.clients) {
+    if (ws.userId === userId && ws.readyState === 1 /* WebSocket.OPEN */) {
       try {
         ws.send(payload);
       } catch {
