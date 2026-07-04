@@ -77,7 +77,9 @@ function readMultiFile(dir, labDirRoot) {
 }
 
 function extractTimeboxMinutes(md) {
-  const m = md.match(/time-?box[^:]*:\s*\**\s*(\d+)/i);
+  // Matches `**Time-box:** 20 minutes`, `**Time-box:** ~25-30 minutes`, `Timebox: 45min` etc.
+  // The `~?\s*` handles the "approximately" tilde; the first digit run is the answer.
+  const m = md.match(/time-?box[^:]*:\s*\**\s*~?\s*(\d+)/i);
   return m ? Number(m[1]) : null;
 }
 
