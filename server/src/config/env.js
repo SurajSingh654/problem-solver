@@ -89,6 +89,17 @@ export const AI_DAILY_LIMIT = parseInt(
   optional('AI_DAILY_LIMIT', process.env.AI_RATE_LIMIT_PER_DAY || '500'),
   10,
 )
+// Per-team daily AI request cap for curriculum-scoped AI surfaces
+// (content review, prompt-injection guardrails, lesson-review, etc.).
+// Independent from AI_DAILY_LIMIT — both gates fire; a request is only
+// allowed when BOTH the per-user AND per-team counters are under quota.
+// Backed by Postgres via the TeamAIUsage model, so it's multi-replica safe
+// from day one. Default 500 mirrors the per-user cap; typical team of 20
+// won't approach 500 curriculum AI calls per day.
+export const AI_TEAM_DAILY_LIMIT = parseInt(
+  optional('AI_TEAM_DAILY_LIMIT', '500'),
+  10,
+)
 // Per-call hard ceiling on max_tokens. Existing legitimate callers ask for up
 // to 8000 (batch problem generation); a misconfigured caller asking for 100k
 // would silently inflate cost. The clamp inside aiComplete/aiStream enforces
