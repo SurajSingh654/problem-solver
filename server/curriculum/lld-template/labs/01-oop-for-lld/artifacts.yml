@@ -1,0 +1,5 @@
+- "≥4 classes exist (BankAccount, SavingsAccount, CheckingAccount, Bank)"
+- "every field is private unless justified"
+- "Bank.applyMonthlyInterest() has zero `instanceof` checks"
+- "≥2 tests demonstrate: overdraw rejected, tiered interest correct"
+- "InterestStrategy pluggable — FlatRate / TieredRate / PromotionalRate exist"
