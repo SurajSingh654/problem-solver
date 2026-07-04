@@ -144,6 +144,14 @@ if (FEATURE_TEACHING_SESSIONS) {
   );
 }
 
+// ── 9. Curriculum content-review validator registrations ─────
+// Registers CURRICULUM_REVIEW / LESSON_REVIEW / CODE_REVIEW / CHECK_IN
+// validator specs into contentReview.service's registry. Must run before
+// any curriculum controller handler could reach runValidator(). Idempotent.
+import("./services/curriculum/registerValidators.js").then((m) =>
+  m.initCurriculumValidators(),
+);
+
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================

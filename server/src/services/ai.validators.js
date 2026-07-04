@@ -2000,3 +2000,64 @@ export function validateNoteFromSolution(out) {
 
   return { valid: violations.length === 0, violations };
 }
+
+// ============================================================================
+// Curriculum · content-review validators (Rules 18 + 22-curriculum).
+// ============================================================================
+// The curriculum-review AI emits a WORTH_LEARNING / WORTH_WITH_ADJUSTMENTS /
+// NOT_WORTH_TIME verdict on a Topic outline. Two deterministic rules gate
+// the WORTH_LEARNING verdict against AI hedging:
+//
+//   Rule 18 — WORTH_LEARNING must cite ≥1 outcome from `outcomes[]` inside
+//   `finalRecommendation` (substring match on the first 40 chars of the
+//   outcome). Mirrors Rules 8/9 (Pattern Mastery + Solution Depth) — a
+//   permissive verdict without a concrete grounded citation is unreliable.
+//
+//   Rule 22 (curriculum part) — WORTH_LEARNING requires `outcomes.length ≥ 4`.
+//   A permissive verdict with <4 outcomes indicates the AI didn't do the
+//   outcome-mapping work.
+//
+// Fallback (NOT_WORTH_TIME) fires on any rule throw — never a false-positive
+// WORTH_LEARNING.
+
+// Rule 18 — WORTH_LEARNING must cite ≥1 outcome in finalRecommendation.
+function checkRule18Curriculum(data) {
+  if (data.verdict !== "WORTH_LEARNING") return;
+  const rec = data.finalRecommendation.toLowerCase();
+  const hit = data.outcomes.some((outcome) => {
+    // Full outcome strings are too long to appear verbatim in a natural-
+    // language recommendation. Match on the first 40 chars as a keyword;
+    // skip too-short outcomes (would false-positive on generic words).
+    const keyword = outcome.toLowerCase().slice(0, 40);
+    if (keyword.length < 5) return false;
+    return rec.includes(keyword);
+  });
+  if (!hit) {
+    throw new Error(
+      "Rule 18 violation: WORTH_LEARNING verdict must cite at least one outcome in finalRecommendation.",
+    );
+  }
+}
+
+// Rule 22 (curriculum part) — structural sanity for WORTH_LEARNING.
+function checkRule22Curriculum(data) {
+  if (data.verdict === "WORTH_LEARNING" && data.outcomes.length < 4) {
+    throw new Error(
+      `Rule 22 violation: WORTH_LEARNING requires ≥4 outcomes, got ${data.outcomes.length}.`,
+    );
+  }
+}
+
+/**
+ * Validate a curriculum-review verdict against Rules 18 + 22-curriculum.
+ * Throws on rule violation. Returns validated data on success.
+ *
+ * Called by contentReview.service.js after Zod safeParse. On throw, the
+ * orchestrator falls back to buildFallbackCurriculumReview (NOT_WORTH_TIME).
+ */
+export function validateCurriculumReview(data, _sanitizedInputs) {
+  // Structural check first — cheaper than the substring scan.
+  checkRule22Curriculum(data);
+  checkRule18Curriculum(data);
+  return data;
+}

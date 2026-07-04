@@ -76,6 +76,60 @@ export const quizAnalysisSchema = z.object({
 });
 
 /**
+ * curriculumReviewSchema — verdict emitted by the curriculum-review AI validator.
+ *
+ * TEAM_ADMIN-triggered, TOPIC-level. Verdict decides whether the outlined
+ * curriculum is worth a learner's 20+ hour investment. Rule 18 (WORTH_LEARNING
+ * must cite ≥1 outcome in finalRecommendation) and Rule 22-curriculum
+ * (WORTH_LEARNING requires ≥4 outcomes) are enforced by validateCurriculumReview.
+ */
+export const curriculumReviewSchema = z
+  .object({
+    verdict: z.enum(["WORTH_LEARNING", "WORTH_WITH_ADJUSTMENTS", "NOT_WORTH_TIME"]),
+    oneLineSummary: z.string(),
+    outcomes: z.array(z.string()).min(0).max(20),
+    wontTeach: z.array(z.string()),
+    roi: z
+      .object({
+        time: z.string(),
+        interviewValue: z.string(),
+        jobValue: z.string(),
+        depthVsBreadth: z.string(),
+        verdict: z.enum(["HIGH", "MEDIUM", "LOW"]),
+      })
+      .strict(),
+    retention: z
+      .object({
+        signalsFor: z.array(z.string()),
+        signalsAgainst: z.array(z.string()),
+        verdict: z.enum(["HIGH", "MEDIUM", "LOW"]),
+      })
+      .strict(),
+    structuralSanity: z
+      .object({
+        moduleCount: z.number().int().nonnegative(),
+        titleSpecificity: z.enum(["STRONG", "OK", "WEAK"]),
+        capstoneConcreteness: z.enum(["STRONG", "OK", "WEAK", "MISSING"]),
+        dependencyChain: z.enum(["CLEAN", "MOSTLY_CLEAN", "TANGLED"]),
+      })
+      .strict(),
+    modulesNeedingWork: z.array(
+      z
+        .object({
+          conceptId: z.string(),
+          issue: z.string(),
+          suggestedFix: z.string(),
+        })
+        .strict(),
+    ),
+    missingCoverage: z.array(z.string()),
+    redundantModules: z.array(z.string()),
+    strong: z.array(z.string()),
+    finalRecommendation: z.string(),
+  })
+  .strict();
+
+/**
  * Validate AI response against a schema.
  * Returns { valid: true, data } or { valid: false, error }
  */

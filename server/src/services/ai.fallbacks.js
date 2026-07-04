@@ -1285,3 +1285,48 @@ export function buildFallbackNoteFromSolution({ problem, solution, aiReview }) {
     _fallback: true,
   };
 }
+
+// ============================================================================
+// Curriculum · content-review fallback.
+// ============================================================================
+/**
+ * Conservative fallback for the curriculum-review validator.
+ * Returns NOT_WORTH_TIME with a "validation failed" recommendation — never
+ * a false-positive WORTH_LEARNING. Shape passes curriculumReviewSchema
+ * (all required keys present, valid enum values).
+ */
+export function buildFallbackCurriculumReview(_input = {}) {
+  return {
+    verdict: "NOT_WORTH_TIME",
+    oneLineSummary:
+      "Automated review returned an invalid verdict (validation failed) — manual review required.",
+    outcomes: [],
+    wontTeach: [],
+    roi: {
+      time: "unknown",
+      interviewValue: "unknown",
+      jobValue: "unknown",
+      depthVsBreadth: "unknown",
+      verdict: "LOW",
+    },
+    retention: {
+      signalsFor: [],
+      signalsAgainst: [
+        "Fallback verdict — no retention signals evaluated.",
+      ],
+      verdict: "LOW",
+    },
+    structuralSanity: {
+      moduleCount: 0,
+      titleSpecificity: "WEAK",
+      capstoneConcreteness: "MISSING",
+      dependencyChain: "TANGLED",
+    },
+    modulesNeedingWork: [],
+    missingCoverage: [],
+    redundantModules: [],
+    strong: [],
+    finalRecommendation:
+      "Automated validation failed for this review — re-run or perform manual review. Do not publish based on this fallback verdict.",
+  };
+}
