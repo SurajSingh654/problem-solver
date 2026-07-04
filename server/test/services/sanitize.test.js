@@ -40,6 +40,14 @@ describe("sanitizeForPrompt", () => {
     expect(sanitizeForPrompt(undefined)).toBe(undefined);
     expect(sanitizeForPrompt("")).toBe("");
   });
+
+  it("handles nested/overlapping tokens via fixed-point strip", () => {
+    const input = "<sys<system>tem>";
+    const output = sanitizeForPrompt(input);
+    // After pass 1: "<system>" (the inner tag was matched)
+    // After pass 2: ""
+    expect(output).toBe("");
+  });
 });
 
 describe("sanitizeHtml", () => {
@@ -75,6 +83,33 @@ describe("sanitizeHtml", () => {
     expect(sanitizeHtml(undefined)).toBe(undefined);
     expect(sanitizeHtml("")).toBe("");
   });
+
+  it("strips class on non-code/pre tags", () => {
+    const dirty = '<p class="fixed inset-0 bg-red">hello</p>';
+    const clean = sanitizeHtml(dirty);
+    expect(clean).not.toContain("class");
+    expect(clean).toContain("<p>hello</p>");
+  });
+
+  it("preserves language-* class on code blocks", () => {
+    const dirty = '<pre><code class="language-java">public class Foo {}</code></pre>';
+    const clean = sanitizeHtml(dirty);
+    expect(clean).toContain('class="language-java"');
+  });
+
+  it("strips arbitrary class values on code, keeping only language-*", () => {
+    const dirty = '<code class="language-java fixed inset-0">x</code>';
+    const clean = sanitizeHtml(dirty);
+    expect(clean).toContain("language-java");
+    expect(clean).not.toContain("fixed");
+    expect(clean).not.toContain("inset-0");
+  });
+
+  it("strips data: URI on img.src", () => {
+    const dirty = '<img src="data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+">';
+    const clean = sanitizeHtml(dirty);
+    expect(clean).not.toMatch(/src=["']?data:/i);
+  });
 });
 
 describe("sanitizeMarkdownToHtml", () => {
@@ -107,5 +142,20 @@ describe("sanitizeMarkdownToHtml", () => {
     expect(sanitizeMarkdownToHtml("")).toBe("");
     expect(sanitizeMarkdownToHtml(null)).toBe("");
     expect(sanitizeMarkdownToHtml(undefined)).toBe("");
+  });
+
+  it("strips <img onerror> from markdown source", () => {
+    const html = sanitizeMarkdownToHtml('<img src=x onerror="alert(1)">');
+    expect(html).not.toMatch(/onerror/i);
+  });
+
+  it("strips javascript: URI from markdown link", () => {
+    const html = sanitizeMarkdownToHtml("[click](javascript:alert(1))");
+    expect(html).not.toMatch(/javascript:/i);
+  });
+
+  it("strips data: URI from markdown image", () => {
+    const html = sanitizeMarkdownToHtml("![evil](data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+)");
+    expect(html).not.toMatch(/data:/i);
   });
 });
