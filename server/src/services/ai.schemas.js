@@ -262,6 +262,44 @@ export const codeReviewSchema = z
   });
 
 /**
+ * checkInSchema — verdict emitted by the check-in AI validator.
+ *
+ * Learner-triggered, CONCEPT-level 3-question gate (recall / apply / build).
+ * Model = AI_MODEL_FAST. Not logged to ContentReviewLog (targetType: null in
+ * the registry) — check-ins persist to the ConceptCheckIn table directly at
+ * the controller layer. This validator only feeds the D10 calibration signal;
+ * no new Rules (18-22 don't apply here) — Zod .strict() + enums are the
+ * shape gate, and validateCheckInReview is an identity pass-through.
+ *
+ * `calibrationDelta` ∈ [0, 1] is the normalized
+ *   |preConfidence/5 − impliedScore/10|
+ * where impliedScore = mean of PASS/PARTIAL/FAIL → 100/50/0 across the three
+ * per-question verdicts. 0 = perfectly calibrated; 1 = maximally
+ * mis-calibrated. Feeds D10 Verification & Meta-cognition.
+ */
+const perQuestionSchema = z
+  .object({
+    verdict: z.enum(["PASS", "PARTIAL", "FAIL"]),
+    feedback: z.string(),
+  })
+  .strict();
+
+export const checkInSchema = z
+  .object({
+    perQuestion: z
+      .object({
+        recall: perQuestionSchema,
+        apply: perQuestionSchema,
+        build: perQuestionSchema,
+      })
+      .strict(),
+    overallVerdict: z.enum(["PASS", "PARTIAL", "FAIL"]),
+    calibrationDelta: z.number().min(0).max(1),
+    encouragement: z.string(),
+  })
+  .strict();
+
+/**
  * Validate AI response against a schema.
  * Returns { valid: true, data } or { valid: false, error }
  */

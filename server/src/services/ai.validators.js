@@ -2210,3 +2210,33 @@ export function validateCodeReview(data, _sanitizedInputs) {
   checkRule20(data);
   return data;
 }
+
+// ============================================================================
+// Curriculum · check-in validator (no Rules — identity pass).
+// ============================================================================
+// The check-in AI grades a 3-question gate (recall / apply / build) at
+// CONCEPT level, learner-triggered, on the fast model. Output is per-question
+// PASS/PARTIAL/FAIL verdicts plus an overallVerdict and a calibrationDelta
+// that feeds the D10 Verification & Meta-cognition dimension.
+//
+// Why no rules? Check-ins are NOT a publish gate (unlike Rules 18-22 on the
+// other three content-review validators). A bad check-in verdict doesn't
+// block anything downstream — the learner sees per-question feedback and the
+// calibrationDelta feeds an aggregate signal. Shape correctness is enforced
+// by checkInSchema's Zod .strict() + enums; nothing further is needed at the
+// validator layer. Keeping this as an explicit function (not omitted from
+// the registry) preserves the four-validator symmetry and gives future rules
+// a natural insertion point.
+
+/**
+ * Validate a check-in verdict. No Rule N — this validator only feeds D10
+ * calibration signal, not a publish gate. Returns data on success.
+ * Rely on Zod .strict() + enums for shape enforcement.
+ *
+ * Called by contentReview.service.js after Zod safeParse. On throw (only
+ * possible if a future rule is added and violated), the orchestrator falls
+ * back to buildFallbackCheckIn (all-PARTIAL, calibrationDelta 0.5).
+ */
+export function validateCheckInReview(data, _sanitizedInputs) {
+  return data;
+}

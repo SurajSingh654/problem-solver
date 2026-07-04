@@ -1427,3 +1427,34 @@ export function buildFallbackCodeReview(_input = {}) {
     codeReviewVerdict: "WEAK",
   };
 }
+
+// ============================================================================
+// Curriculum · check-in fallback.
+// ============================================================================
+/**
+ * Conservative fallback for the check-in validator.
+ * Returns PARTIAL for all three questions and overall — never a false-positive
+ * PASS (which would let the learner past the concept gate) or false-negative
+ * FAIL (which would demoralize a learner whose answers were never actually
+ * graded). Shape passes checkInSchema (all required keys present, valid enum
+ * values, calibrationDelta ∈ [0, 1]).
+ *
+ * `calibrationDelta = 0.5` is the neutral midpoint — the system deliberately
+ * makes NO calibration inference on fallback. Feeding a non-neutral value
+ * into D10 aggregation on a failed grading pass would bias the meta-signal.
+ */
+export function buildFallbackCheckIn(_input = {}) {
+  const genericFeedback =
+    "Automated grading failed. Please re-attempt or wait for manual review.";
+  return {
+    perQuestion: {
+      recall: { verdict: "PARTIAL", feedback: genericFeedback },
+      apply: { verdict: "PARTIAL", feedback: genericFeedback },
+      build: { verdict: "PARTIAL", feedback: genericFeedback },
+    },
+    overallVerdict: "PARTIAL",
+    calibrationDelta: 0.5,
+    encouragement:
+      "The system had trouble grading your answers. Try again in a moment.",
+  };
+}

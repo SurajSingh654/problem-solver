@@ -22,21 +22,25 @@ import {
     curriculumReviewSchema,
     lessonReviewSchema,
     codeReviewSchema,
+    checkInSchema,
 } from "../ai.schemas.js";
 import {
     validateCurriculumReview,
     validateLessonReview,
     validateCodeReview,
+    validateCheckInReview,
 } from "../ai.validators.js";
 import {
     buildFallbackCurriculumReview,
     buildFallbackLessonReview,
     buildFallbackCodeReview,
+    buildFallbackCheckIn,
 } from "../ai.fallbacks.js";
 import {
     buildCurriculumReviewPrompt,
     buildLessonReviewPrompt,
     buildCodeReviewPrompt,
+    buildCheckInPrompt,
 } from "../ai.prompts.js";
 
 let _initialized = false;
@@ -95,6 +99,26 @@ export function initCurriculumValidators() {
         validate: validateCodeReview,
         fallback: buildFallbackCodeReview,
         targetType: "LAB",
+        aiComplete,
+    });
+
+    // T6 — Check-in validator (Concept-level 3-question gate, LEARNER-triggered).
+    // Model: AI_MODEL_FAST (per-attempt cost must stay cheap — learners hit
+    // this per concept, sometimes twice). No Rules 18-22 equivalent: this
+    // validator only feeds the D10 calibration signal, not a publish gate;
+    // shape correctness is Zod-enforced and validateCheckInReview is an
+    // identity pass. `targetType: null` — check-ins are stored in the
+    // ConceptCheckIn table at the controller layer, NOT logged to
+    // ContentReviewLog (which is scoped to admin/learner-facing review
+    // verdicts, not per-question grading state). Fallback is all-PARTIAL
+    // with calibrationDelta 0.5 (neutral — no bias into D10 aggregation).
+    registerValidator("CHECK_IN", {
+        model: AI_MODEL_FAST,
+        buildPrompt: buildCheckInPrompt,
+        schema: checkInSchema,
+        validate: validateCheckInReview,
+        fallback: buildFallbackCheckIn,
+        targetType: null,
         aiComplete,
     });
 }
