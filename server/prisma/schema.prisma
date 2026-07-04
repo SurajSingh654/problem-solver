@@ -333,6 +333,11 @@ model User {
   topicEnrollments TopicEnrollment[]
   conceptMasteries ConceptMastery[]
 
+  // Curriculum Phase 1 — Lab attempts + Concept check-ins.
+  // User-scoped signals for the Lab exercise + 3-question gate flow.
+  labAttempts     LabAttempt[]     @relation("UserLabAttempts")
+  conceptCheckIns ConceptCheckIn[] @relation("UserConceptCheckIns")
+
   // MCP — Model Context Protocol read-only server. All tokens issued to
   // this user (active + revoked). Settings page reads this list.
   mcpTokens McpToken[] @relation("MCPTokenUser")
@@ -406,21 +411,22 @@ model Team {
   updatedAt DateTime @updatedAt
 
   // ── Relations ──────────────────────────────────────
-  currentMembers    User[]             @relation("CurrentTeamMembers")
-  personalOwner     User?              @relation("PersonalTeam")
-  invitations       TeamInvitation[]
-  problems          Problem[]
-  solutions         Solution[]
-  clarityRatings    ClarityRating[]
-  simSessions       SimSession[]
-  quizAttempts      QuizAttempt[]
-  interviewSessions InterviewSession[]
-  memberships       TeamMembership[]
-  verdictLogs       VerdictLog[]
-  usageEvents       UsageTracking[]
-  teachingSessions  TeachingSession[]
+  currentMembers     User[]             @relation("CurrentTeamMembers")
+  personalOwner      User?              @relation("PersonalTeam")
+  invitations        TeamInvitation[]
+  problems           Problem[]
+  solutions          Solution[]
+  clarityRatings     ClarityRating[]
+  simSessions        SimSession[]
+  quizAttempts       QuizAttempt[]
+  interviewSessions  InterviewSession[]
+  memberships        TeamMembership[]
+  verdictLogs        VerdictLog[]
+  usageEvents        UsageTracking[]
+  teachingSessions   TeachingSession[]
   curriculumTopics   Topic[]
   curriculumConcepts Concept[]
+  curriculumLabs     Lab[]              @relation("TeamLabs")
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -791,7 +797,7 @@ model Solution {
   // at the DB layer (see migration 20261011000000_add_solve_method). Used
   // by AI review prompt to discount confidence (SAW_APPROACH ⇒ heavy
   // discount) and by Coding Pattern Mastery to gate WORKING transitions.
-  solveMethod               String?
+  solveMethod String?
 
   // ── Per-tab metadata (BruteForce + Alternative tabs) ──
   // Schema initially had a single set of canonical metadata columns
@@ -1000,8 +1006,8 @@ model ReviewAttempt {
   recallText String?
 
   // ── Outcome ────────────────────────────────────────
-  confidence Int     // 1-5, user-reported
-  quality    Int     // 0-5, SM-2 quality derived from confidence
+  confidence Int // 1-5, user-reported
+  quality    Int // 0-5, SM-2 quality derived from confidence
   recalled   Boolean // quality >= 3
   peeked     Boolean @default(false) // true if user revealed answer before rating
 
@@ -2013,20 +2019,20 @@ model UsageTracking {
 // ============================================================================
 model AiUsageDailyCounter {
   userId    String
-  day       String   // "YYYY-MM-DD" UTC, matches existing rate-limiter key format
+  day       String // "YYYY-MM-DD" UTC, matches existing rate-limiter key format
   count     Int      @default(0)
   updatedAt DateTime @updatedAt
 
-  @@id([userId, day])  // Composite PK — atomic UPSERT target
-  @@index([day])        // For 2-day prune sweep
+  @@id([userId, day]) // Composite PK — atomic UPSERT target
+  @@index([day]) // For 2-day prune sweep
   @@map("ai_usage_daily_counter")
 }
 
 model RateLimitCounter {
-  key       String    @id       // e.g., "auth:1.2.3.4" — prefix + IP
-  count     Int       @default(0)
-  resetAt   DateTime               // absolute reset moment
-  updatedAt DateTime  @updatedAt
+  key       String   @id // e.g., "auth:1.2.3.4" — prefix + IP
+  count     Int      @default(0)
+  resetAt   DateTime // absolute reset moment
+  updatedAt DateTime @updatedAt
 
   @@index([resetAt])
   @@map("rate_limit_counter")
@@ -2232,7 +2238,7 @@ model Note {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   title           String
-  contentMarkdown String  @db.Text
+  contentMarkdown String   @db.Text
   tags            String[]
 
   // Optional folder — null = uncategorized. Folder lives in NoteFolder.
@@ -2339,18 +2345,18 @@ model Flashcard {
   concept   Concept? @relation("FlashcardConcepts", fields: [conceptId], references: [id], onDelete: SetNull)
 
   front String
-  back  String  @db.Text
+  back  String   @db.Text
   tags  String[]
 
   // ── SM-2 state (mirrors Solution) ──────────────────
-  sm2EasinessFactor Float    @default(2.5)
-  sm2Interval       Int      @default(1)
-  sm2Repetitions    Int      @default(0)
-  lapseCount        Int      @default(0)
+  sm2EasinessFactor Float     @default(2.5)
+  sm2Interval       Int       @default(1)
+  sm2Repetitions    Int       @default(0)
+  lapseCount        Int       @default(0)
   nextReviewDate    DateTime
-  reviewCount       Int      @default(0)
+  reviewCount       Int       @default(0)
   lastReviewedAt    DateTime?
-  reviewDates       Json     @default("[]")
+  reviewDates       Json      @default("[]")
 
   aiGenerated Boolean   @default(false)
   archivedAt  DateTime?
@@ -2472,12 +2478,12 @@ enum LabAttemptReviewStatus {
 }
 
 model Topic {
-  id          String         @id @default(cuid())
+  id          String        @id @default(cuid())
   slug        String
   name        String
-  description String         @db.Text
+  description String        @db.Text
   category    TopicCategory
-  status      ConceptStatus  @default(DRAFT)
+  status      ConceptStatus @default(DRAFT)
 
   // Team-scoped ownership. Every Topic belongs to exactly one team; the
   // curriculum surface is per-team so `slug` uniqueness is scoped by
@@ -2501,7 +2507,7 @@ model Topic {
   // ── Curriculum Phase 1 additions ───────────────────
   // Reviewer-authored HTML cheatsheet (rich content, sanitized server-side
   // before render). Null until the reviewer publishes one.
-  cheatsheetHtml String? @db.Text
+  cheatsheetHtml       String?   @db.Text
   // JSON snapshot of the most recent human review (rubric verdict +
   // reviewer notes). Shape defined by ContentReviewLog in Task 9.
   curriculumReview     Json?
@@ -2516,9 +2522,9 @@ model Topic {
   concepts    Concept[]
   enrollments TopicEnrollment[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  reviewedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  reviewedAt  DateTime?
   publishedAt DateTime?
 
   @@unique([teamId, slug])
@@ -2546,17 +2552,17 @@ model Concept {
   // The curated content. JSON for evolving fields; markdown for the
   // primer body. NEVER LLM-generated for user-facing exposure — admin
   // authors and reviews. The DRAFT status enforces this gate.
-  primerMarkdown    String  @db.Text
-  workedExample     String? @db.Text
+  primerMarkdown     String  @db.Text
+  workedExample      String? @db.Text
   // Shape: [{ title, url, type: "book"|"paper"|"blog"|"video"|"docs", author? }]
-  canonicalSources  Json    @default("[]")
+  canonicalSources   Json    @default("[]")
   // Shape: ["When would you use X over Y?", "What's the failure mode of …?", ...]
-  expectedQuestions Json    @default("[]")
+  expectedQuestions  Json    @default("[]")
   // Structured rubric for "did the user master this concept?". Used by
   // the Mentor's updateMastery() to score signals from quizzes, practice,
   // teaching transcripts, and mock interviews.
   // Shape: { quizThreshold: 0.8, practiceMin: 2, teachingExpected: bool }
-  assessmentCriteria Json   @default("{}")
+  assessmentCriteria Json    @default("{}")
 
   // ── Curriculum Phase 1 additions ───────────────────
   // Gate for whether the reviewer-authored rich HTML primer is exposed
@@ -2578,6 +2584,8 @@ model Concept {
   masteries        ConceptMastery[]
   teachingSessions TeachingSession[]   @relation("TeachingSessionConcepts")
   flashcards       Flashcard[]         @relation("FlashcardConcepts")
+  lab              Lab?
+  checkIns         ConceptCheckIn[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -2631,10 +2639,10 @@ model TopicEnrollment {
   // Shape: { score: 0-12, perConceptCorrectness: { [conceptSlug]: bool }, takenAt }
   calibration Json?
 
-  status      EnrollmentStatus @default(ACTIVE)
-  startedAt   DateTime         @default(now())
-  completedAt DateTime?
-  pausedAt    DateTime?
+  status       EnrollmentStatus @default(ACTIVE)
+  startedAt    DateTime         @default(now())
+  completedAt  DateTime?
+  pausedAt     DateTime?
   lastActiveAt DateTime?
 
   @@unique([userId, topicId])
@@ -2677,6 +2685,95 @@ model ConceptMastery {
   @@index([userId, nextReviewAt])
   @@index([conceptId])
   @@map("concept_masteries")
+}
+
+// ============================================================================
+// CURRICULUM PHASE 1 — LAB / LAB ATTEMPT / CONCEPT CHECK-IN
+// ============================================================================
+
+/// Hands-on lab exercise attached 1:1 to a Concept. Team-scoped for
+/// content isolation (teamId denormalized from Concept.teamId at write
+/// time). Reviewer-authored (never LLM-generated for user-facing
+/// exposure); DRAFT gate prevents unpublished labs from being served.
+model Lab {
+  id        String  @id @default(cuid())
+  conceptId String  @unique
+  concept   Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team    @relation("TeamLabs", fields: [teamId], references: [id], onDelete: Cascade)
+
+  title             String
+  taskMarkdown      String       @db.Text
+  timeboxMinutes    Int?
+  language          LabLanguage  @default(JAVA)
+  starterCode       String?      @db.Text
+  referenceSolution String       @db.Text
+  // Shape: [{ type: "file"|"diagram"|"note", name, description? }, ...]
+  expectedArtifacts Json         @default("[]")
+  status            LessonStatus @default(DRAFT)
+  sortOrder         Int          @default(0)
+
+  attempts LabAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId, status])
+  @@map("labs")
+}
+
+/// A user's submission against a Lab. attemptNumber increments per
+/// (userId, labId) so users can retry after AI code-review feedback.
+/// codeReview JSON matches the CodeReviewVerdict rubric schema.
+/// revealedReferenceAt tracks when the user unlocked the reference
+/// solution (used by mastery signal to discount premature reveals).
+model LabAttempt {
+  id     String @id @default(cuid())
+  labId  String
+  lab    Lab    @relation(fields: [labId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("UserLabAttempts", fields: [userId], references: [id], onDelete: Cascade)
+
+  attemptNumber       Int
+  code                String                 @db.Text
+  submittedAt         DateTime               @default(now())
+  reviewedAt          DateTime?
+  reviewStatus        LabAttemptReviewStatus @default(PENDING)
+  codeReviewVerdict   CodeReviewVerdict?
+  // Shape: { strengths: [...], gaps: [...], suggestions: [...], score }
+  codeReview          Json?
+  revealedReferenceAt DateTime?
+
+  @@unique([userId, labId, attemptNumber])
+  @@index([userId, labId, submittedAt])
+  @@map("lab_attempts")
+}
+
+/// 3-question concept mastery gate (recall / apply / build). Users can
+/// re-attempt (attemptNumber increments) after a PARTIAL or FAIL verdict.
+/// calibrationDelta = |preConfidence/5 - verdictScore/N| — feeds the D10
+/// verification/metacognition dimension.
+model ConceptCheckIn {
+  id        String  @id @default(cuid())
+  conceptId String
+  concept   Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation("UserConceptCheckIns", fields: [userId], references: [id], onDelete: Cascade)
+
+  attemptNumber    Int
+  recallAnswer     String         @db.Text
+  applyAnswer      String         @db.Text
+  buildAnswer      String         @db.Text
+  preConfidence    Int
+  aiVerdict        CheckInVerdict
+  // Shape: { perQuestion: [{ score, feedback }, ...], overall, followUps? }
+  aiFeedback       Json
+  calibrationDelta Float
+  completedAt      DateTime       @default(now())
+
+  @@unique([userId, conceptId, attemptNumber])
+  @@index([userId, conceptId, completedAt])
+  @@map("concept_check_ins")
 }
 
 /// MCP token registry. Tracks every MCP-scoped JWT issued — both ACTIVE
@@ -2757,15 +2854,15 @@ model McpToken {
 // the row up again.
 // ============================================================================
 model EmbeddingOutbox {
-  id           String   @id @default(cuid())
-  entityType   String   // "Solution" | "Problem" | "Note"
-  entityId     String
-  status       String   @default("PENDING") // PENDING | RUNNING | FAILED
-  attempts     Int      @default(0)
-  lastError    String?  // truncated to 500 chars at write time
-  nextRetryAt  DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  entityType  String // "Solution" | "Problem" | "Note"
+  entityId    String
+  status      String   @default("PENDING") // PENDING | RUNNING | FAILED
+  attempts    Int      @default(0)
+  lastError   String? // truncated to 500 chars at write time
+  nextRetryAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([entityType, entityId])
   @@index([status, nextRetryAt])
