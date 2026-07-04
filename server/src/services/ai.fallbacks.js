@@ -1330,3 +1330,66 @@ export function buildFallbackCurriculumReview(_input = {}) {
       "Automated validation failed for this review — re-run or perform manual review. Do not publish based on this fallback verdict.",
   };
 }
+
+// ============================================================================
+// Curriculum · lesson-review fallback.
+// ============================================================================
+/**
+ * Conservative fallback for the lesson-review validator.
+ * Returns NOT_READY with all-MISSING content quality and all-false
+ * seniorReadiness — never a false-positive READY. Shape passes
+ * lessonReviewSchema (all required keys present, valid enum values), and
+ * the NOT_READY verdict short-circuits Rules 19 + 22-lesson (both are
+ * READY-guarded, so all-false seniorReadiness is harmless).
+ */
+export function buildFallbackLessonReview(_input = {}) {
+  const MISSING = "MISSING";
+  const structuralSections = [
+    "learningObjectives",
+    "prerequisitesSetup",
+    "problemItSolves",
+    "mentalModel",
+    "coreConcept",
+    "workedExample",
+    "handsOnLab",
+    "referenceSolution",
+    "underTheHood",
+    "tradeoffs",
+    "productionConcerns",
+    "checkInQuestions",
+  ];
+  return {
+    verdict: "NOT_READY",
+    structuralCompleteness: structuralSections.map((section) => ({
+      section,
+      grade: MISSING,
+      justification: "Fallback verdict — no evaluation performed.",
+    })),
+    contentQuality: {
+      depthCalibration: MISSING,
+      fundamentalsFirst: MISSING,
+      progressiveLayering: MISSING,
+      concreteOverAcademic: MISSING,
+      tradeoffHonesty: MISSING,
+      productionReality: MISSING,
+      curation: MISSING,
+      lengthCalibration: MISSING,
+    },
+    seniorReadiness: {
+      explainToJunior: false,
+      sketchArchitecture: false,
+      buildFromScratch: false,
+      nameFailureModes: false,
+      compareAlternatives: false,
+      estimateCost: false,
+      blastRadius: false,
+      debugFromSymptoms: false,
+    },
+    seniorReadinessJustifications: {},
+    mustFix: ["Automated review failed validation. Re-run required."],
+    niceToHave: [],
+    strong: [],
+    nextStep:
+      "Do not publish. Re-run lesson review after fixing content, or perform manual review.",
+  };
+}

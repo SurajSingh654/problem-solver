@@ -17,11 +17,23 @@
 // ============================================================================
 import { registerValidator } from "./contentReview.service.js";
 import { aiComplete } from "../ai.service.js";
-import { AI_MODEL_PRIMARY } from "../../config/env.js";
-import { curriculumReviewSchema } from "../ai.schemas.js";
-import { validateCurriculumReview } from "../ai.validators.js";
-import { buildFallbackCurriculumReview } from "../ai.fallbacks.js";
-import { buildCurriculumReviewPrompt } from "../ai.prompts.js";
+import { AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../../config/env.js";
+import {
+    curriculumReviewSchema,
+    lessonReviewSchema,
+} from "../ai.schemas.js";
+import {
+    validateCurriculumReview,
+    validateLessonReview,
+} from "../ai.validators.js";
+import {
+    buildFallbackCurriculumReview,
+    buildFallbackLessonReview,
+} from "../ai.fallbacks.js";
+import {
+    buildCurriculumReviewPrompt,
+    buildLessonReviewPrompt,
+} from "../ai.prompts.js";
 
 let _initialized = false;
 
@@ -47,6 +59,21 @@ export function initCurriculumValidators() {
         validate: validateCurriculumReview,
         fallback: buildFallbackCurriculumReview,
         targetType: "TOPIC",
+        aiComplete,
+    });
+
+    // T4 — Lesson-review validator (Concept-level, TEAM_ADMIN-triggered).
+    // Model: AI_MODEL_FAST (per-concept, run frequently at author time).
+    // Enforces Rule 19 (READY needs ≥6/8 seniorReadiness true + justifications
+    // for false checks) + Rule 22-lesson (belt-and-suspenders codified check).
+    // Fallback is NOT_READY, all-MISSING content quality.
+    registerValidator("LESSON_REVIEW", {
+        model: AI_MODEL_FAST,
+        buildPrompt: buildLessonReviewPrompt,
+        schema: lessonReviewSchema,
+        validate: validateLessonReview,
+        fallback: buildFallbackLessonReview,
+        targetType: "CONCEPT",
         aiComplete,
     });
 }

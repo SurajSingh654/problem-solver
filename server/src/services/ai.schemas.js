@@ -130,6 +130,60 @@ export const curriculumReviewSchema = z
   .strict();
 
 /**
+ * lessonReviewSchema — verdict emitted by the lesson-review AI validator.
+ *
+ * TEAM_ADMIN-triggered, CONCEPT-level. Model = AI_MODEL_FAST. Grades ONE
+ * concept's teaching quality against the 8-check senior-engineer readiness
+ * rubric. Rule 19 (READY requires ≥6 of 8 seniorReadiness checks true; any
+ * false check needs a non-empty justification) and Rule 22-lesson (belt-
+ * and-suspenders codified check that READY has ≥6 seniorReadiness true) are
+ * enforced by validateLessonReview.
+ */
+export const lessonReviewSchema = z
+  .object({
+    verdict: z.enum(["READY", "POLISH", "NOT_READY"]),
+    structuralCompleteness: z.array(
+      z
+        .object({
+          section: z.string(),
+          grade: z.enum(["PASS", "WEAK", "MISSING"]),
+          justification: z.string(),
+        })
+        .strict(),
+    ),
+    contentQuality: z
+      .object({
+        depthCalibration: z.enum(["PASS", "WEAK", "MISSING"]),
+        fundamentalsFirst: z.enum(["PASS", "WEAK", "MISSING"]),
+        progressiveLayering: z.enum(["PASS", "WEAK", "MISSING"]),
+        concreteOverAcademic: z.enum(["PASS", "WEAK", "MISSING"]),
+        tradeoffHonesty: z.enum(["PASS", "WEAK", "MISSING"]),
+        productionReality: z.enum(["PASS", "WEAK", "MISSING"]),
+        curation: z.enum(["PASS", "WEAK", "MISSING"]),
+        lengthCalibration: z.enum(["PASS", "WEAK", "MISSING"]),
+      })
+      .strict(),
+    seniorReadiness: z
+      .object({
+        explainToJunior: z.boolean(),
+        sketchArchitecture: z.boolean(),
+        buildFromScratch: z.boolean(),
+        nameFailureModes: z.boolean(),
+        compareAlternatives: z.boolean(),
+        estimateCost: z.boolean(),
+        blastRadius: z.boolean(),
+        debugFromSymptoms: z.boolean(),
+      })
+      .strict(),
+    seniorReadinessJustifications: z.record(z.string(), z.string()).default({}),
+    mustFix: z.array(z.string()),
+    niceToHave: z.array(z.string()),
+    strong: z.array(z.string()),
+    nextStep: z.string(),
+  })
+  .strict();
+
+/**
  * Validate AI response against a schema.
  * Returns { valid: true, data } or { valid: false, error }
  */

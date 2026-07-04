@@ -2061,3 +2061,70 @@ export function validateCurriculumReview(data, _sanitizedInputs) {
   checkRule18Curriculum(data);
   return data;
 }
+
+// ============================================================================
+// Curriculum · lesson-review validators (Rules 19 + 22-lesson).
+// ============================================================================
+// The lesson-review AI emits a READY / POLISH / NOT_READY verdict on ONE
+// concept's teaching content. Two deterministic rules gate the READY verdict:
+//
+//   Rule 19 — READY requires ≥6 of 8 `seniorReadiness` checks true. Any
+//   `seniorReadiness` check that IS false must carry a non-empty
+//   `seniorReadinessJustifications[check]` string. Mirrors the pattern of
+//   Rules 8/9 — a permissive verdict without concrete grounding is unreliable.
+//
+//   Rule 22 (lesson part) — Belt-and-suspenders codified check that READY
+//   verdicts satisfy the ≥6/8 seniorReadiness threshold. Rule 19 covers this
+//   already; Rule 22-lesson makes it a named / greppable rule for reviewers
+//   who scan for the Rule-22 family across all four content-review types.
+//
+// Fallback (NOT_READY, all seniorReadiness false, all quality MISSING) fires
+// on any rule throw — never a false-positive READY.
+
+// Rule 19 — READY needs ≥6/8 true, false checks need justifications.
+function checkRule19(data) {
+  if (data.verdict !== "READY") return;
+  const readinessValues = Object.values(data.seniorReadiness);
+  const trueCount = readinessValues.filter(Boolean).length;
+  if (trueCount < 6) {
+    throw new Error(
+      `Rule 19 violation: READY requires ≥6 of 8 seniorReadiness checks true, got ${trueCount}.`,
+    );
+  }
+  // Any false check must have a non-empty justification string.
+  for (const [check, val] of Object.entries(data.seniorReadiness)) {
+    if (val === false) {
+      const j = data.seniorReadinessJustifications?.[check];
+      if (!j || j.trim().length === 0) {
+        throw new Error(
+          `Rule 19 violation: false seniorReadiness check "${check}" requires non-empty justification.`,
+        );
+      }
+    }
+  }
+}
+
+// Rule 22 (lesson part) — codified sibling of Rule 19's numeric threshold.
+function checkRule22Lesson(data) {
+  if (data.verdict !== "READY") return;
+  const trueCount = Object.values(data.seniorReadiness).filter(Boolean).length;
+  if (trueCount < 6) {
+    throw new Error(
+      `Rule 22 (lesson) violation: READY verdict must have ≥6 seniorReadiness checks true, got ${trueCount}.`,
+    );
+  }
+}
+
+/**
+ * Validate a lesson-review verdict against Rules 19 + 22-lesson.
+ * Throws on rule violation. Returns validated data on success.
+ *
+ * Called by contentReview.service.js after Zod safeParse. On throw, the
+ * orchestrator falls back to buildFallbackLessonReview (NOT_READY, all-MISSING).
+ */
+export function validateLessonReview(data, _sanitizedInputs) {
+  // Structural threshold first (cheap) — then the per-check justification scan.
+  checkRule22Lesson(data);
+  checkRule19(data);
+  return data;
+}
