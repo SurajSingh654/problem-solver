@@ -71,3 +71,25 @@ describe("curriculumSync — ConceptTemplate", () => {
     expect(c.readinessRubric.explainToJunior).toContain("60 seconds");
   }, 15000);
 });
+
+describe("curriculumSync — LabTemplate", () => {
+  beforeEach(async () => {
+    await prisma.topicTemplate.deleteMany({ where: { slug: "simple-topic" } });
+  });
+
+  it("syncs a LabTemplate 1:1 with its Concept", async () => {
+    await syncCurriculumTemplates({ root: FIXTURE_ROOT, dryRun: false });
+    const concept = await prisma.conceptTemplate.findFirst({
+      where: { slug: "01-first-concept" },
+      include: { lab: true },
+    });
+    expect(concept.lab).not.toBeNull();
+    expect(concept.lab.title).toBe("Lab 01 — First Concept");
+    expect(concept.lab.taskMarkdown).toContain("Build something small.");
+    expect(concept.lab.expectedArtifacts).toEqual(["class Foo exists", "at least 1 test passes"]);
+    expect(concept.lab.language).toBe("JAVA");
+    expect(concept.lab.referenceSolution).toContain("// File: Main.java");
+    expect(concept.lab.referenceSolution).toContain("public class Main");
+    expect(concept.lab.timeboxMinutes).toBe(20);
+  }, 15000);
+});
