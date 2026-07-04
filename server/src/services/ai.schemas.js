@@ -184,6 +184,84 @@ export const lessonReviewSchema = z
   .strict();
 
 /**
+ * codeReviewSchema — verdict emitted by the code-review AI validator.
+ *
+ * Learner-triggered, LAB-level (targetType = "LAB"). Model = AI_MODEL_PRIMARY.
+ * Grades ONE Lab attempt against a teaching-lens rubric: correctness,
+ * conceptApplication, designQuality, idiomaticStyle, robustness, testing.
+ *
+ * The Zod `.superRefine` enforces Rule 21 at schema-parse time: STRONG or
+ * ADEQUATE verdicts must have nextStep = READY_FOR_REFERENCE. Defense in
+ * depth — Rule 21 is ALSO enforced imperatively inside validateCodeReview
+ * so a future refactor that removes the .superRefine still gets caught.
+ *
+ * Rule 20 (STRONG requires ≥1 non-empty lineRef in whatYouGotRight) and
+ * Rule 22-code (STRONG or ADEQUATE requires whatYouGotRight.length ≥ 1) are
+ * enforced by validateCodeReview (not the schema — Rule 20's substring
+ * check is not naturally expressible in Zod).
+ */
+export const codeReviewSchema = z
+  .object({
+    overall: z.string(),
+    correctness: z.enum(["STRONG", "ADEQUATE", "WEAK", "MISSING"]),
+    conceptApplication: z.enum(["STRONG", "ADEQUATE", "WEAK", "MISSING"]),
+    designQuality: z.enum(["STRONG", "ADEQUATE", "WEAK", "MISSING"]),
+    idiomaticStyle: z.enum(["STRONG", "ADEQUATE", "WEAK", "MISSING"]),
+    robustness: z.enum(["STRONG", "ADEQUATE", "WEAK", "MISSING"]),
+    testing: z.enum(["STRONG", "ADEQUATE", "WEAK", "MISSING"]),
+    mentalModelSignal: z.string(),
+    whatYouGotRight: z.array(
+      z
+        .object({
+          item: z.string(),
+          lineRef: z.string().nullable().optional(),
+        })
+        .strict(),
+    ),
+    thingsToImprove: z.array(
+      z
+        .object({
+          what: z.string(),
+          whyItMatters: z.string(),
+          how: z.string(),
+          lineRef: z.string().nullable().optional(),
+        })
+        .strict(),
+    ),
+    bugs: z.array(
+      z
+        .object({
+          what: z.string(),
+          whyItMatters: z.string(),
+          how: z.string(),
+          lineRef: z.string().nullable().optional(),
+        })
+        .strict(),
+    ),
+    nextStep: z.enum(["ADDRESS_AND_RESUBMIT", "READY_FOR_REFERENCE", "MINI_DRILL"]),
+    codeReviewVerdict: z.enum(["STRONG", "ADEQUATE", "WEAK"]),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    // Rule 21 at the schema layer — cross-field enforcement. A STRONG or
+    // ADEQUATE verdict paired with MINI_DRILL / ADDRESS_AND_RESUBMIT is
+    // internally contradictory (the verdict says "good", the next step
+    // says "not yet"). Zod rejects at parse time; the imperative Rule 21
+    // in validateCodeReview is defense-in-depth for future refactors.
+    if (
+      (data.codeReviewVerdict === "STRONG" ||
+        data.codeReviewVerdict === "ADEQUATE") &&
+      data.nextStep !== "READY_FOR_REFERENCE"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `codeReviewVerdict ${data.codeReviewVerdict} requires nextStep = READY_FOR_REFERENCE`,
+        path: ["nextStep"],
+      });
+    }
+  });
+
+/**
  * Validate AI response against a schema.
  * Returns { valid: true, data } or { valid: false, error }
  */

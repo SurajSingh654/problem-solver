@@ -21,18 +21,22 @@ import { AI_MODEL_PRIMARY, AI_MODEL_FAST } from "../../config/env.js";
 import {
     curriculumReviewSchema,
     lessonReviewSchema,
+    codeReviewSchema,
 } from "../ai.schemas.js";
 import {
     validateCurriculumReview,
     validateLessonReview,
+    validateCodeReview,
 } from "../ai.validators.js";
 import {
     buildFallbackCurriculumReview,
     buildFallbackLessonReview,
+    buildFallbackCodeReview,
 } from "../ai.fallbacks.js";
 import {
     buildCurriculumReviewPrompt,
     buildLessonReviewPrompt,
+    buildCodeReviewPrompt,
 } from "../ai.prompts.js";
 
 let _initialized = false;
@@ -74,6 +78,23 @@ export function initCurriculumValidators() {
         validate: validateLessonReview,
         fallback: buildFallbackLessonReview,
         targetType: "CONCEPT",
+        aiComplete,
+    });
+
+    // T5 — Code-review validator (Lab-attempt-level, LEARNER-triggered).
+    // Model: AI_MODEL_PRIMARY (learner-facing quality bar; per-attempt cost
+    // is acceptable). Enforces Rule 20 (STRONG needs ≥1 non-empty lineRef in
+    // whatYouGotRight), Rule 21 (STRONG/ADEQUATE requires READY_FOR_REFERENCE;
+    // also enforced at Zod .superRefine layer), and Rule 22-code (STRONG/
+    // ADEQUATE requires whatYouGotRight.length ≥ 1). Fallback is WEAK +
+    // ADDRESS_AND_RESUBMIT with all-MISSING dimensions.
+    registerValidator("CODE_REVIEW", {
+        model: AI_MODEL_PRIMARY,
+        buildPrompt: buildCodeReviewPrompt,
+        schema: codeReviewSchema,
+        validate: validateCodeReview,
+        fallback: buildFallbackCodeReview,
+        targetType: "LAB",
         aiComplete,
     });
 }

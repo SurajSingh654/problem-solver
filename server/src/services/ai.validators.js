@@ -2128,3 +2128,85 @@ export function validateLessonReview(data, _sanitizedInputs) {
   checkRule19(data);
   return data;
 }
+
+// ============================================================================
+// Curriculum · code-review validators (Rules 20, 21, 22-code).
+// ============================================================================
+// The code-review AI emits a STRONG / ADEQUATE / WEAK verdict on ONE Lab
+// attempt from a learner. Three deterministic rules gate STRONG/ADEQUATE
+// against AI over-praise and internally contradictory outputs:
+//
+//   Rule 20 — STRONG requires ≥1 non-empty `lineRef` inside `whatYouGotRight`.
+//   Ungrounded STRONG verdicts ("great job!" with no specific citation) don't
+//   teach — the learner should be able to point at exactly what was praised.
+//
+//   Rule 21 — STRONG or ADEQUATE verdicts must have nextStep = READY_FOR_REFERENCE.
+//   MINI_DRILL / ADDRESS_AND_RESUBMIT contradicts the verdict ("code is good,
+//   but go redo it") — either mistake reveals the model hallucinated the
+//   verdict. Belt-and-suspenders: codeReviewSchema's `.superRefine` catches
+//   this at parse time; this imperative check catches it if a future refactor
+//   removes the `.superRefine`. Both fire on contradictory input.
+//
+//   Rule 22 (code part) — STRONG or ADEQUATE requires whatYouGotRight.length ≥ 1.
+//   A verdict of "good" with an empty positive-feedback list is structurally
+//   incoherent — same family as Rules 22-curriculum / 22-lesson.
+//
+// Fallback (WEAK + ADDRESS_AND_RESUBMIT) fires on any rule throw — never a
+// false-positive STRONG.
+
+// Rule 20 — STRONG must cite at least one non-empty lineRef.
+function checkRule20(data) {
+  if (data.codeReviewVerdict !== "STRONG") return;
+  const hasLineRef = data.whatYouGotRight.some(
+    (item) => item.lineRef && item.lineRef.trim().length > 0,
+  );
+  if (!hasLineRef) {
+    throw new Error(
+      "Rule 20 violation: STRONG code-review must include ≥1 non-empty lineRef in whatYouGotRight.",
+    );
+  }
+}
+
+// Rule 21 — STRONG or ADEQUATE verdicts require READY_FOR_REFERENCE nextStep.
+// This is a codified redundancy for the Zod .superRefine on codeReviewSchema.
+// A future refactor that removes the .superRefine still gets caught here.
+function checkRule21(data) {
+  const strongVerdict =
+    data.codeReviewVerdict === "STRONG" || data.codeReviewVerdict === "ADEQUATE";
+  const badNextStep =
+    data.nextStep === "MINI_DRILL" || data.nextStep === "ADDRESS_AND_RESUBMIT";
+  if (strongVerdict && badNextStep) {
+    throw new Error(
+      `Rule 21 violation: codeReviewVerdict ${data.codeReviewVerdict} with nextStep ${data.nextStep} is contradictory.`,
+    );
+  }
+}
+
+// Rule 22 (code part) — STRONG or ADEQUATE requires ≥1 whatYouGotRight entry.
+function checkRule22Code(data) {
+  const goodVerdict =
+    data.codeReviewVerdict === "STRONG" || data.codeReviewVerdict === "ADEQUATE";
+  if (goodVerdict && data.whatYouGotRight.length === 0) {
+    throw new Error(
+      `Rule 22 (code) violation: ${data.codeReviewVerdict} verdict requires whatYouGotRight.length ≥ 1, got 0.`,
+    );
+  }
+}
+
+/**
+ * Validate a code-review verdict against Rules 20 + 21 + 22-code.
+ * Throws on rule violation. Returns validated data on success.
+ *
+ * Called by contentReview.service.js after Zod safeParse. On throw, the
+ * orchestrator falls back to buildFallbackCodeReview (WEAK, ADDRESS_AND_RESUBMIT).
+ *
+ * Order: cheapest structural check (22-code) → cross-field consistency (21) →
+ * substring/grounded-citation scan (20). All three fire on contradictory
+ * inputs, but ordering makes the error message stable across releases.
+ */
+export function validateCodeReview(data, _sanitizedInputs) {
+  checkRule22Code(data);
+  checkRule21(data);
+  checkRule20(data);
+  return data;
+}

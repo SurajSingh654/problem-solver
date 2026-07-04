@@ -1393,3 +1393,37 @@ export function buildFallbackLessonReview(_input = {}) {
       "Do not publish. Re-run lesson review after fixing content, or perform manual review.",
   };
 }
+
+// ============================================================================
+// Curriculum · code-review fallback.
+// ============================================================================
+/**
+ * Conservative fallback for the code-review validator.
+ * Returns WEAK + ADDRESS_AND_RESUBMIT — never a false-positive STRONG or
+ * ADEQUATE. Shape passes codeReviewSchema (including the .superRefine
+ * cross-field check, since WEAK is compatible with any nextStep) AND
+ * validateCodeReview (WEAK short-circuits Rules 20 and 22-code; the
+ * combination WEAK + ADDRESS_AND_RESUBMIT is Rule-21-compatible).
+ *
+ * The mentalModelSignal field is intentionally explicit that this is a
+ * fallback — never let the learner think a mental-model claim was made.
+ */
+export function buildFallbackCodeReview(_input = {}) {
+  return {
+    overall:
+      "Automated review failed validation. Please re-submit or wait for manual review.",
+    correctness: "MISSING",
+    conceptApplication: "MISSING",
+    designQuality: "MISSING",
+    idiomaticStyle: "MISSING",
+    robustness: "MISSING",
+    testing: "MISSING",
+    mentalModelSignal:
+      "Fallback verdict — automated review failed. No inference about your mental model was made.",
+    whatYouGotRight: [],
+    thingsToImprove: [],
+    bugs: [],
+    nextStep: "ADDRESS_AND_RESUBMIT",
+    codeReviewVerdict: "WEAK",
+  };
+}
