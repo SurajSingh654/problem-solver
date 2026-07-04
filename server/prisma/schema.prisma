@@ -342,6 +342,10 @@ model User {
   // this user (active + revoked). Settings page reads this list.
   mcpTokens McpToken[] @relation("MCPTokenUser")
 
+  // Curriculum Phase 1 — SUPER_ADMIN override audit trail. Only rows
+  // where this user was the actor of an admin override.
+  curriculumAudits CurriculumAdminAuditLog[] @relation("CurriculumAuditActor")
+
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
   @@index([currentTeamId, activityStatus])
@@ -427,6 +431,11 @@ model Team {
   curriculumTopics   Topic[]
   curriculumConcepts Concept[]
   curriculumLabs     Lab[]              @relation("TeamLabs")
+
+  // Curriculum Phase 1 — per-team, per-day AI request counter. Backs the
+  // team-level rate limiter for curriculum AI calls (Mentor, code review,
+  // etc.). Rows are upserted on (teamId, date).
+  aiUsage TeamAIUsage[] @relation("TeamAIUsage")
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -2507,16 +2516,18 @@ model Topic {
   // ── Curriculum Phase 1 additions ───────────────────
   // Reviewer-authored HTML cheatsheet (rich content, sanitized server-side
   // before render). Null until the reviewer publishes one.
-  cheatsheetHtml       String?   @db.Text
+  cheatsheetHtml       String?        @db.Text
   // JSON snapshot of the most recent human review (rubric verdict +
   // reviewer notes). Shape defined by ContentReviewLog in Task 9.
   curriculumReview     Json?
   lastReviewedAt       DateTime?
-  // Nullable link back to the TopicTemplate this Topic was forked from
-  // (template model lands in Task 9). Column is added here so the fork
-  // flow can persist provenance without a second migration; the FK
-  // constraint itself is added in Task 9 once `topic_templates` exists.
+  // Nullable link back to the TopicTemplate this Topic was forked from.
+  // Column was added in the earlier teamId-backfill migration; the FK
+  // constraint is added by migration 20260704000300 once `topic_templates`
+  // exists. `onDelete: SetNull` — deleting the template detaches forks
+  // rather than cascading (fork lineage is informational, not load-bearing).
   forkedFromTemplateId String?
+  forkedFromTemplate   TopicTemplate? @relation("TopicForkedFromTemplate", fields: [forkedFromTemplateId], references: [id], onDelete: SetNull)
   forkedAt             DateTime?
 
   concepts    Concept[]
@@ -2867,4 +2878,159 @@ model EmbeddingOutbox {
   @@unique([entityType, entityId])
   @@index([status, nextRetryAt])
   @@map("embedding_outbox")
+}
+
+// ============================================================================
+// CURRICULUM TEMPLATE LIBRARY — Global (non-team-scoped) source of truth
+// ============================================================================
+//
+// TopicTemplate / ConceptTemplate / LabTemplate mirror Topic / Concept / Lab
+// but WITHOUT teamId — they're the canonical library SUPER_ADMIN populates via
+// the repo sync. Teams "fork" a TopicTemplate to instantiate a team-owned
+// Topic; the fork records provenance via Topic.forkedFromTemplateId. Templates
+// stay authoritative for base content; forks may diverge (team-local edits).
+// ============================================================================
+
+/// Global TopicTemplate — the canonical version SUPER_ADMIN ships via the
+/// curriculum repo sync. Teams fork this into a per-team Topic. Slug is
+/// globally unique (no teamId scoping); the concept sub-tree lives under
+/// this template row.
+model TopicTemplate {
+  id                      String            @id @default(cuid())
+  slug                    String            @unique
+  name                    String
+  description             String            @db.Text
+  category                TopicCategory
+  estimatedHoursToMastery Int?
+  cheatsheetHtml          String?           @db.Text
+  templateStatus          LessonStatus      @default(DRAFT)
+  // Path in the curriculum source repo the sync pipeline pulled this
+  // template from. Used to reconcile deletes and detect content drift.
+  sourcePath              String
+  concepts                ConceptTemplate[]
+  // Back-relation for Topics that were forked from this template.
+  topicsForkedFrom        Topic[]           @relation("TopicForkedFromTemplate")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("topic_templates")
+}
+
+/// Global ConceptTemplate — child of TopicTemplate. Mirrors Concept but with
+/// no team scoping. Slug is unique within a parent TopicTemplate. Cascade
+/// delete: dropping a TopicTemplate drops its concepts (labs cascade further).
+model ConceptTemplate {
+  id              String        @id @default(cuid())
+  topicTemplateId String
+  topicTemplate   TopicTemplate @relation(fields: [topicTemplateId], references: [id], onDelete: Cascade)
+
+  slug               String
+  name               String
+  order              Int
+  primerMarkdown     String       @db.Text
+  primerHtml         String?      @db.Text
+  workedExample      String?      @db.Text
+  canonicalSources   Json         @default("[]")
+  expectedQuestions  Json         @default("[]")
+  assessmentCriteria Json         @default("{}")
+  readinessRubric    Json?
+  cheatsheetMarkdown String?      @db.Text
+  sourcePath         String
+  templateStatus     LessonStatus @default(DRAFT)
+
+  lab LabTemplate?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([topicTemplateId, slug])
+  @@map("concept_templates")
+}
+
+/// Global LabTemplate — 1:1 with ConceptTemplate. The canonical Lab shipped
+/// by the sync pipeline; team-scoped Lab rows are forked from this.
+model LabTemplate {
+  id                String          @id @default(cuid())
+  conceptTemplateId String          @unique
+  conceptTemplate   ConceptTemplate @relation(fields: [conceptTemplateId], references: [id], onDelete: Cascade)
+
+  title             String
+  taskMarkdown      String       @db.Text
+  timeboxMinutes    Int?
+  language          LabLanguage  @default(JAVA)
+  starterCode       String?      @db.Text
+  referenceSolution String       @db.Text
+  expectedArtifacts Json         @default("[]")
+  sourcePath        String
+  templateStatus    LessonStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lab_templates")
+}
+
+// ============================================================================
+// AUDIT LOGS — Polymorphic append-only content review + admin overrides
+// ============================================================================
+
+/// Append-only log of AI + human content-review verdicts against any curriculum
+/// artifact (Topic / Concept / Lab). Polymorphic via (targetType, targetId);
+/// no FK enforcement because targets can be deleted while the audit trail must
+/// survive. Query pattern is always "latest N for this target" — the descending
+/// createdAt in the composite index is load-bearing.
+model ContentReviewLog {
+  id            String                  @id @default(cuid())
+  targetType    ContentReviewTargetType
+  targetId      String
+  verdict       String
+  body          Json
+  rawPrompt     String?                 @db.Text
+  reviewerModel String
+
+  createdAt DateTime @default(now())
+
+  @@index([targetType, targetId, createdAt(sort: Desc)])
+  @@map("content_review_logs")
+}
+
+/// SUPER_ADMIN override audit trail. Every cross-team admin action (writing
+/// into a team the admin isn't a member of) writes a row here. `actorRole`
+/// is denormalized (String, not enum) because the role at the moment of
+/// action matters, not the role now. `targetTeamId` is a bare String — no FK
+/// so team deletions don't cascade-delete the audit trail.
+model CurriculumAdminAuditLog {
+  id           String @id @default(cuid())
+  actorUserId  String
+  actor        User   @relation("CurriculumAuditActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  actorRole    String
+  targetTeamId String
+  action       String
+  payload      Json
+
+  createdAt DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([targetTeamId, createdAt])
+  @@map("curriculum_admin_audit_logs")
+}
+
+// ============================================================================
+// TEAM AI USAGE — per-team daily AI request counter
+// ============================================================================
+//
+// Postgres-backed replacement for the in-memory per-user daily rate limiter
+// used elsewhere (AiUsageDailyCounter is per-user; this is per-team). Rows
+// are upserted on (teamId, date). Old rows can be pruned by a scheduled job;
+// no retention requirement for auditing beyond current-day rate enforcement.
+model TeamAIUsage {
+  id     String   @id @default(cuid())
+  teamId String
+  team   Team     @relation("TeamAIUsage", fields: [teamId], references: [id], onDelete: Cascade)
+  date   DateTime @db.Date
+  count  Int      @default(0)
+
+  @@unique([teamId, date])
+  @@map("team_ai_usage")
 }
