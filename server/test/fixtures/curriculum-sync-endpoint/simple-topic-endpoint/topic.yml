@@ -1,0 +1,4 @@
+slug: simple-topic-endpoint
+name: "Simple Topic (endpoint fixture)"
+category: LOW_LEVEL_DESIGN
+estimatedHoursToMastery: 3

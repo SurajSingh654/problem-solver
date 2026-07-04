@@ -69,6 +69,7 @@ import notesRoutes from "./routes/notes.routes.js";
 import flashcardsRoutes from "./routes/flashcards.routes.js";
 import topicsRoutes from "./routes/topics.routes.js";
 import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
+import curriculumTemplatesRoutes from "./routes/curriculumTemplates.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
 import {
@@ -259,6 +260,13 @@ function mountRoutes(prefix) {
   // ── Topic admin (SuperAdmin) — authoring + publishing ──
   // Sees ALL rows regardless of status. Publish-time gate for content.
   app.use(`${prefix}/admin/learning`, apiLimiter, topicsAdminRoutes);
+
+  // ── Curriculum templates (SuperAdmin) — sync endpoint + CLI backer ──
+  // aiLimiter for parity with the other SuperAdmin heavyweight endpoints
+  // (`/platform/health/analyze`, `/admin/*`); this one hits the filesystem
+  // + a Prisma $transaction rather than OpenAI, but the same "protect admin
+  // surface from accidental hammering" rationale applies.
+  app.use(`${prefix}/super-admin`, aiLimiter, curriculumTemplatesRoutes);
 }
 
 // Canonical versioned routes

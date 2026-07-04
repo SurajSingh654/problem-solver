@@ -23,7 +23,9 @@
     "lint": "eslint src test eval --max-warnings 0",
     "lint:fix": "eslint src test eval --fix",
     "eval:notes": "node eval/scripts/eval-note-summary.js",
-    "eval:diff": "node eval/scripts/eval-diff.js"
+    "eval:diff": "node eval/scripts/eval-diff.js",
+    "curriculum:sync": "node scripts/curriculum-sync.js",
+    "curriculum:sync:dry": "node scripts/curriculum-sync.js --dry-run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
