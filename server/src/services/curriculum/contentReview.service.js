@@ -42,6 +42,24 @@ export function _resetValidatorsForTest() {
 }
 
 /**
+ * Test-only helper — merge a partial spec into an existing validator so a
+ * single field (usually `aiComplete`) can be swapped for a mock without
+ * re-registering the whole spec. Returns the ORIGINAL spec so tests can
+ * restore state in afterEach. Do not use outside vitest.
+ *
+ * Used by the prompt-injection integration test (W2.T7) to feed the real
+ * orchestrator adversarial "AI output" strings and assert the validator +
+ * fallback chain reject them.
+ */
+export function _overrideValidatorSpec(type, patch) {
+    const existing = VALIDATORS.get(type);
+    if (!existing) throw new Error(`No validator registered for ${type}`);
+    const original = { ...existing };
+    VALIDATORS.set(type, { ...existing, ...patch });
+    return original;
+}
+
+/**
  * Run a content-review validator end-to-end.
  *
  * Order of operations:
