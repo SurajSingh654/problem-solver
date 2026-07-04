@@ -1,3 +1,11 @@
+// Integration test: exercises the real Prisma client + Postgres roundtrip
+// for curriculumSync. Every other test in the suite mocks Prisma; this file
+// is the exception because we're specifically testing the compound-unique
+// upsert + sanitize.service.js integration path, and mocking Prisma would
+// hide the exact class of bugs (schema drift, unique-constraint violations)
+// that this test is meant to catch.
+//
+// Run: cd server && npx vitest run test/integration/curriculumSync.integration.test.js
 import { describe, it, expect, beforeEach } from "vitest";
 import path from "path";
 import prisma from "../../src/lib/prisma.js";
