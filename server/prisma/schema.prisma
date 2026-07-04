@@ -419,6 +419,8 @@ model Team {
   verdictLogs       VerdictLog[]
   usageEvents       UsageTracking[]
   teachingSessions  TeachingSession[]
+  curriculumTopics   Topic[]
+  curriculumConcepts Concept[]
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -2081,6 +2083,14 @@ model TeachingSession {
   externalMeetingLink String?
   capacity            Int     @default(20)
 
+  // Optional link to a curriculum Concept — when set, the teaching
+  // session counts as a signal against that Concept's mastery. Nullable
+  // so ad-hoc teaching sessions (no curriculum tie-in) still work; SET
+  // NULL on Concept delete so a concept revamp doesn't nuke historical
+  // sessions.
+  conceptId String?
+  concept   Concept? @relation("TeachingSessionConcepts", fields: [conceptId], references: [id], onDelete: SetNull)
+
   // ── Lifecycle ──────────────────────────────────────
   status      TeachingStatus @default(SCHEDULED)
   scheduledAt DateTime
@@ -2124,6 +2134,8 @@ model TeachingSession {
   @@index([status, scheduledAt])
   // Host page — "my sessions".
   @@index([hostId, status, scheduledAt])
+  // Curriculum lookup — "sessions taught for this Concept".
+  @@index([conceptId])
   @@map("teaching_sessions")
 }
 
@@ -2320,6 +2332,12 @@ model Flashcard {
   noteId String?
   note   Note?   @relation(fields: [noteId], references: [id], onDelete: SetNull)
 
+  // Optional link to a curriculum Concept — feeds Concept mastery via
+  // the flashcard review path. Nullable so free-form flashcards still
+  // work; SET NULL on Concept delete preserves review history.
+  conceptId String?
+  concept   Concept? @relation("FlashcardConcepts", fields: [conceptId], references: [id], onDelete: SetNull)
+
   front String
   back  String  @db.Text
   tags  String[]
@@ -2342,6 +2360,7 @@ model Flashcard {
 
   @@index([userId, archivedAt, nextReviewDate])
   @@index([userId, noteId])
+  @@index([conceptId])
   @@map("flashcards")
 }
 
@@ -2454,11 +2473,19 @@ enum LabAttemptReviewStatus {
 
 model Topic {
   id          String         @id @default(cuid())
-  slug        String         @unique
+  slug        String
   name        String
   description String         @db.Text
   category    TopicCategory
   status      ConceptStatus  @default(DRAFT)
+
+  // Team-scoped ownership. Every Topic belongs to exactly one team; the
+  // curriculum surface is per-team so `slug` uniqueness is scoped by
+  // team, not global. See migration
+  // 20260704000100_curriculum_topic_concept_teamid_backfill for the
+  // backfill and constraint swap.
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   // Maps to the existing Mock Interview ProblemCategory so the VALIDATE
   // stage can route into the right rubric. Stored as String (not the
@@ -2471,6 +2498,21 @@ model Topic {
   // size the path.
   estimatedHoursToMastery Int?
 
+  // ── Curriculum Phase 1 additions ───────────────────
+  // Reviewer-authored HTML cheatsheet (rich content, sanitized server-side
+  // before render). Null until the reviewer publishes one.
+  cheatsheetHtml String? @db.Text
+  // JSON snapshot of the most recent human review (rubric verdict +
+  // reviewer notes). Shape defined by ContentReviewLog in Task 9.
+  curriculumReview     Json?
+  lastReviewedAt       DateTime?
+  // Nullable link back to the TopicTemplate this Topic was forked from
+  // (template model lands in Task 9). Column is added here so the fork
+  // flow can persist provenance without a second migration; the FK
+  // constraint itself is added in Task 9 once `topic_templates` exists.
+  forkedFromTemplateId String?
+  forkedAt             DateTime?
+
   concepts    Concept[]
   enrollments TopicEnrollment[]
 
@@ -2479,6 +2521,8 @@ model Topic {
   reviewedAt DateTime?
   publishedAt DateTime?
 
+  @@unique([teamId, slug])
+  @@index([teamId, status])
   @@index([status, category])
   @@map("topics")
 }
@@ -2487,6 +2531,12 @@ model Concept {
   id      String @id @default(cuid())
   topicId String
   topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  // Denormalized copy of the parent Topic's teamId. Kept in-sync at
+  // write time (Concept.teamId === Topic.teamId is an invariant). Lets
+  // team-scoped queries against Concept avoid a Topic join.
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   slug   String
   name   String
@@ -2508,9 +2558,26 @@ model Concept {
   // Shape: { quizThreshold: 0.8, practiceMin: 2, teachingExpected: bool }
   assessmentCriteria Json   @default("{}")
 
-  prerequisites ConceptDependency[] @relation("ConceptPrereq")
-  unlocks       ConceptDependency[] @relation("ConceptUnlocks")
-  masteries     ConceptMastery[]
+  // ── Curriculum Phase 1 additions ───────────────────
+  // Gate for whether the reviewer-authored rich HTML primer is exposed
+  // to users; when false, the surface falls back to `primerMarkdown`.
+  // Defaults to true so new content ships with the rich viewer.
+  richHtmlEnabled    Boolean @default(true)
+  // JSON rubric for "did the user meet the readiness bar?" — feeds
+  // Mentor's readiness classifier. Shape defined by ContentReviewLog
+  // in Task 9.
+  readinessRubric    Json?
+  // Reviewer-authored cheatsheet (raw markdown, rendered client-side).
+  cheatsheetMarkdown String? @db.Text
+  // Reviewer-authored HTML primer (sanitized server-side, rendered when
+  // `richHtmlEnabled` is true).
+  primerHtml         String? @db.Text
+
+  prerequisites    ConceptDependency[] @relation("ConceptPrereq")
+  unlocks          ConceptDependency[] @relation("ConceptUnlocks")
+  masteries        ConceptMastery[]
+  teachingSessions TeachingSession[]   @relation("TeachingSessionConcepts")
+  flashcards       Flashcard[]         @relation("FlashcardConcepts")
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -2519,6 +2586,7 @@ model Concept {
 
   @@unique([topicId, slug])
   @@index([topicId, status, order])
+  @@index([teamId, status])
   @@map("concepts")
 }
 
