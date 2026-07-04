@@ -394,3 +394,35 @@ export const FEATURE_PERSIST_MIDDLEWARE_LIMITER =
 
 // -- Feedback notification email (optional) ─────────────────────────────────────────
 export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMAIL || null
+
+// Curriculum · Learn+Teach (Phase 1). Orchestrates Track / Topic / Concept /
+// Lab surfaces on top of existing Notes + Teaching Sessions primitives.
+// Hard-depends on FEATURE_TEACHING_SESSIONS and FEATURE_NOTES_ENABLED —
+// enabling curriculum without them yields dead links / half-rendered pages.
+// The dependency is enforced at startup by assertCurriculumDependencies()
+// (fail-fast beats degraded runtime). Client mirror:
+// VITE_FEATURE_CURRICULUM (also declare ARG/ENV in client/Dockerfile).
+export const FEATURE_CURRICULUM = optional('FEATURE_CURRICULUM', 'false') === 'true'
+
+/**
+ * Startup dependency check for the Curriculum feature.
+ *
+ * Reads `process.env` at call time (not the module-level constants) so
+ * tests that spin `process.env` between imports observe the current
+ * values. If FEATURE_CURRICULUM is off, this is a no-op. If it is on but
+ * either dependency flag is off, throws with the missing flag names —
+ * callers wire this into index.js so the server aborts before serving
+ * any requests. Fail fast is safer than a half-mounted curriculum.
+ */
+export function assertCurriculumDependencies() {
+  if (process.env.FEATURE_CURRICULUM !== 'true') return
+  const missing = []
+  if (process.env.FEATURE_TEACHING_SESSIONS !== 'true') missing.push('FEATURE_TEACHING_SESSIONS')
+  if (process.env.FEATURE_NOTES_ENABLED !== 'true') missing.push('FEATURE_NOTES_ENABLED')
+  if (missing.length) {
+    throw new Error(
+      `FEATURE_CURRICULUM=true requires: ${missing.join(', ')}. ` +
+        `Either enable those flags or set FEATURE_CURRICULUM=false.`,
+    )
+  }
+}

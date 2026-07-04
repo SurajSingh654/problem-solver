@@ -71,7 +71,17 @@ import topicsRoutes from "./routes/topics.routes.js";
 import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
-import { FEATURE_TEACHING_SESSIONS, FEATURE_NOTES_ENABLED } from "./config/env.js";
+import {
+  FEATURE_TEACHING_SESSIONS,
+  FEATURE_NOTES_ENABLED,
+  assertCurriculumDependencies,
+} from "./config/env.js";
+
+// Curriculum (Learn+Teach) requires Teaching Sessions + Notes to be on.
+// Fail fast at startup instead of half-mounting the feature — a running
+// server with FEATURE_CURRICULUM=true but its deps off would render
+// dead links + empty pages in the client.
+assertCurriculumDependencies();
 
 // ============================================================================
 // APP SETUP
