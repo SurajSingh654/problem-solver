@@ -2210,6 +2210,7 @@ enum NoteEntityType {
   DESIGN_SESSION
   TEACHING_SESSION
   CUSTOM
+  CONCEPT
 }
 
 model Note {
@@ -2392,6 +2393,63 @@ enum EnrollmentStatus {
   PAUSED
   COMPLETED
   ABANDONED
+}
+
+// ============================================================================
+// Curriculum · Learn+Teach — Phase 1 enums
+// ============================================================================
+// Prerequisite enums for the Lab / LabAttempt / ConceptCheckIn / *Template /
+// ContentReviewLog models added in Tasks 7-9. Extracted into their own
+// migration so downstream model migrations don't have to fight enum-creation
+// ordering.
+//
+// Note: LessonStatus mirrors ConceptStatus's values (DRAFT | REVIEWED |
+// PUBLISHED) intentionally — spec §14 calls for independent evolution of the
+// Lab/Template lifecycle vs the Topic/Concept lifecycle.
+
+/// Status gate for Lab + template models. User-facing endpoints filter to
+/// PUBLISHED; admin endpoints can see DRAFT and REVIEWED.
+enum LessonStatus {
+  DRAFT
+  REVIEWED
+  PUBLISHED
+}
+
+/// Supported languages for Lab exercises. Phase 1 ships JAVA only; add
+/// members here as new tracks come online.
+enum LabLanguage {
+  JAVA
+}
+
+/// AI code-review outcome for a Lab attempt. STRONG passes without follow-up,
+/// ADEQUATE passes with notes, WEAK requires resubmission.
+enum CodeReviewVerdict {
+  STRONG
+  ADEQUATE
+  WEAK
+}
+
+/// Concept check-in grading. PASS advances mastery, PARTIAL keeps status quo,
+/// FAIL triggers re-review of the concept.
+enum CheckInVerdict {
+  PASS
+  PARTIAL
+  FAIL
+}
+
+/// Discriminator for the `ContentReviewLog` polymorphic target.
+enum ContentReviewTargetType {
+  TOPIC
+  CONCEPT
+  LAB
+}
+
+/// Async pipeline state for the AI code-review of a Lab attempt.
+enum LabAttemptReviewStatus {
+  PENDING
+  REVIEWING
+  COMPLETED
+  ERROR
 }
 
 model Topic {
