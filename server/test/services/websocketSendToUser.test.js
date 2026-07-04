@@ -16,6 +16,7 @@ describe("sendToUser WS primitive", () => {
   const makeSocket = ({ userId, readyState = 1 /* OPEN */ }) => ({
     userId,
     readyState,
+    OPEN: 1,
     send: vi.fn(),
   });
 

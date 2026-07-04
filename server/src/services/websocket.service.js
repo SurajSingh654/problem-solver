@@ -78,7 +78,7 @@ export function sendToUser(userId, message) {
   if (!wssRef || !wssRef.clients || !userId) return;
   const payload = JSON.stringify(message);
   for (const ws of wssRef.clients) {
-    if (ws.userId === userId && ws.readyState === 1 /* WebSocket.OPEN */) {
+    if (ws.userId === userId && ws.readyState === ws.OPEN) {
       try {
         ws.send(payload);
       } catch {
