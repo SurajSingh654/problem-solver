@@ -24,6 +24,12 @@ import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { runValidator } from "../services/curriculum/contentReview.service.js";
+import {
+  recordLabSignal,
+  recordCheckInSignal,
+  recordPrimerReadSignal,
+} from "../services/curriculum/conceptMastery.service.js";
+import { sendToUser } from "../services/websocket.service.js";
 
 /**
  * GET /curriculum/topics
@@ -413,7 +419,7 @@ async function allocateAttempt({ userId, labId, code }) {
 
 async function onReviewCompleted(attemptId, result) {
   try {
-    await prisma.labAttempt.update({
+    const updated = await prisma.labAttempt.update({
       where: { id: attemptId },
       data: {
         reviewStatus: "COMPLETED",
@@ -421,8 +427,38 @@ async function onReviewCompleted(attemptId, result) {
         codeReviewVerdict: result.body.codeReviewVerdict,
         codeReview: result.body,
       },
+      include: {
+        // Need conceptId to route the signal write to the right ConceptMastery
+        // row. Cheaper than a follow-up findUnique on the Lab.
+        lab: { select: { conceptId: true } },
+      },
     });
-    // W4.T4 will add sendToUser + mastery signal writer here.
+
+    // Best-effort mastery signal write. Failing here (e.g. concept row
+    // vanished, transient DB blip) must NOT prevent the WS event from
+    // firing — the client still needs to know the review resolved.
+    try {
+      await recordLabSignal({
+        userId: updated.userId,
+        conceptId: updated.lab.conceptId,
+        codeReviewVerdict: result.body.codeReviewVerdict,
+        attemptId,
+      });
+    } catch (signalErr) {
+      console.warn(
+        `[curriculum:attempt] Failed to record lab signal for ${attemptId}:`,
+        signalErr?.message ?? signalErr,
+      );
+    }
+
+    // WS event to the attempt owner — the polling fallback still works, but
+    // this trims the perceived latency to sub-second.
+    sendToUser(updated.userId, {
+      type: "curriculum:review_ready",
+      attemptId,
+      reviewStatus: "COMPLETED",
+      verdict: result.body.codeReviewVerdict,
+    });
   } catch (err) {
     console.warn(
       `[curriculum:attempt] Failed to update attempt ${attemptId} to COMPLETED:`,
@@ -437,14 +473,20 @@ async function onReviewFailed(attemptId, err) {
     err?.message ?? err,
   );
   try {
-    await prisma.labAttempt.update({
+    const updated = await prisma.labAttempt.update({
       where: { id: attemptId },
       data: {
         reviewStatus: "ERROR",
         reviewedAt: new Date(),
       },
     });
-    // W4.T4 will add sendToUser here.
+    // No signal write on ERROR — verdict is null and we can't map it to a
+    // mastery value. The user retries; a successful retry logs the signal.
+    sendToUser(updated.userId, {
+      type: "curriculum:review_ready",
+      attemptId,
+      reviewStatus: "ERROR",
+    });
   } catch (updateErr) {
     console.warn(
       `[curriculum:attempt] Failed to update attempt ${attemptId} to ERROR:`,
@@ -672,7 +714,25 @@ export async function submitCheckIn(req, res) {
     calibrationDelta,
   });
 
-  // W4.T4 will add recordCheckInSignal here (feeds D10 calibration).
+  // Best-effort mastery signal write. `updateMastery` owns its own
+  // $transaction so we can't atomically compose with the ConceptCheckIn
+  // insert above — if the signal write fails, the check-in is still
+  // persisted and the user sees their AI verdict. `calibrationDelta` is
+  // preserved on the signal evidence for D10 aggregation.
+  try {
+    await recordCheckInSignal({
+      userId: req.user.id,
+      conceptId: concept.id,
+      aiVerdict: verdict,
+      calibrationDelta,
+      checkInId: checkIn.id,
+    });
+  } catch (signalErr) {
+    console.warn(
+      `[curriculum:checkin] Failed to record checkin signal for ${checkIn.id}:`,
+      signalErr?.message ?? signalErr,
+    );
+  }
 
   return success(
     res,
@@ -767,4 +827,58 @@ export async function getAttempt(req, res) {
   }
 
   return success(res, { attempt });
+}
+
+// ============================================================================
+// MARK PRIMER READ — engagement signal (W4.T4)
+// ============================================================================
+//
+// POST /curriculum/concepts/:slug/mark-primer-read
+//
+// Fires a low-weight `primer_read` signal into ConceptMastery so the mentor
+// orchestrator knows the user has at least SEEN the primer. Weight 0 in
+// SIGNAL_WEIGHTS → does NOT move the score; the mentor uses the presence
+// of the signal in INTAKE routing so a re-read isn't required.
+//
+// Dedup: `recordPrimerReadSignal` skips the write if a primer_read signal
+// exists for this (user, concept) within the last 24h. Prevents spam.
+// Response is intentionally lightweight — the caller doesn't need the
+// updated mastery row.
+// ============================================================================
+
+/**
+ * POST /curriculum/concepts/:slug/mark-primer-read
+ * Team-scoped + PUBLISHED-only. Best-effort signal write — failures are
+ * logged and the endpoint still returns 200 (the signal isn't user-critical).
+ */
+export async function markPrimerRead(req, res) {
+  const { slug } = req.params;
+
+  const concept = await prisma.concept.findFirst({
+    where: {
+      slug,
+      teamId: req.teamId,
+      status: "PUBLISHED",
+      topic: { status: "PUBLISHED" },
+    },
+    select: { id: true },
+  });
+  if (!concept) {
+    return error(res, "Concept not found", 404, "CONCEPT_NOT_FOUND");
+  }
+
+  try {
+    await recordPrimerReadSignal({
+      userId: req.user.id,
+      conceptId: concept.id,
+    });
+  } catch (err) {
+    // Signal write failure is not user-facing — log and continue.
+    console.warn(
+      `[curriculum:primer-read] failed for user=${req.user.id} concept=${concept.id}:`,
+      err?.message ?? err,
+    );
+  }
+
+  return success(res, { ok: true });
 }

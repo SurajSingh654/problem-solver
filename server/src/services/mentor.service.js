@@ -50,11 +50,19 @@ const STAGE_MINUTES = {
 // Quiz is a reasonable but gameable signal; practice + mock are the
 // solid middle. These are the v1.2 weights; future versions may
 // per-topic tune them.
+//
+// `checkin` is the 3-question grader (recall / apply / build). Weighted
+// alongside `practice` (0.30) — a completed check-in is a first-class
+// signal of concept mastery (Karpicke & Roediger 2008 retrieval-practice
+// research). `primer_read` is engagement-only and does NOT contribute
+// to the score; kept in the weight table with weight 0 so it passes
+// VALID_SIGNAL_SOURCES gating without leaking into the numerator.
 const SIGNAL_WEIGHTS = {
   quiz: 0.20,
   practice: 0.30,
   teaching: 0.30,
   mock: 0.20,
+  checkin: 0.30,
   // Reading the primer is logged but does NOT contribute to the mastery
   // score — knowledge isn't proven by reading. The mentor uses the
   // presence of this signal as a "skip in INTAKE" marker so the user
@@ -298,7 +306,8 @@ export async function detectStuck(userId, topicId) {
  * the score. Idempotent — same signal recorded twice is just two entries
  * in the log; the score reflects whatever is currently logged.
  *
- * Signal shape: { source: 'quiz'|'practice'|'teaching'|'mock', value: 0-100, evidence?: any }
+ * Signal shape: { source: 'quiz'|'practice'|'teaching'|'mock'|'checkin'|'primer_read',
+ *                  value: 0-100, evidence?: any }
  *
  * @returns {Promise<ConceptMastery>}
  */

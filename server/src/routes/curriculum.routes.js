@@ -30,6 +30,7 @@ import {
   getAttempt,
   revealReference,
   submitCheckIn,
+  markPrimerRead,
 } from "../controllers/curriculum.controller.js";
 
 const router = Router();
@@ -72,5 +73,10 @@ router.post(
   aiTeamLimiter,
   submitCheckIn,
 );
+
+// ── Primer-read engagement signal (W4.T4) ──────────────────────────
+// No AI, small write, dedup'd 24h server-side. Parent apiLimiter is
+// sufficient — this endpoint is spammable-safe by design (dedup).
+router.post("/concepts/:slug/mark-primer-read", markPrimerRead);
 
 export default router;
