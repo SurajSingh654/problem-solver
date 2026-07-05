@@ -20,8 +20,10 @@
 // learners — only PUBLISHED content is visible.
 // ============================================================================
 
+import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import { runValidator } from "../services/curriculum/contentReview.service.js";
 
 /**
  * GET /curriculum/topics
@@ -264,4 +266,225 @@ export async function getConceptDetail(req, res) {
   delete shaped.masteries;
 
   return success(res, { concept: shaped });
+}
+
+// ============================================================================
+// Lab attempts — async 202 pattern (W4.T2)
+// ============================================================================
+//
+// POST /curriculum/labs/:id/attempts
+//   1. Zod-validate body ({ code: <=100KB }).
+//   2. Verify Lab is PUBLISHED under a PUBLISHED Concept + PUBLISHED Topic and
+//      belongs to the caller's team — otherwise 404.
+//   3. Allocate an attemptNumber via MAX+1 inside a transaction. Retry on
+//      P2002 unique-constraint conflicts (concurrent submits by the same
+//      user race here); uniqueness is enforced on (userId, labId,
+//      attemptNumber).
+//   4. Fire-and-forget `runValidator("CODE_REVIEW", ...)` — the async
+//      .then() chain PATCHes the LabAttempt row on completion. Errors are
+//      swallowed into reviewStatus=ERROR so the poller always converges.
+//   5. Return 202 immediately with { attemptId, reviewStatus: "PENDING",
+//      attemptNumber }.
+//
+// GET /curriculum/labs/:id/attempts/:attemptId
+//   Private to the submitter (findFirst with userId filter). Team-scoped
+//   defense-in-depth so a cross-team probe with a valid attemptId still 404s.
+// ============================================================================
+
+// Zod cap on submission — per Security m2 (100 KB limit).
+const submitAttemptSchema = z
+  .object({
+    code: z.string().min(1).max(100_000),
+  })
+  .strict();
+
+/**
+ * POST /curriculum/labs/:id/attempts
+ * Submit a code attempt. Returns 202 immediately; fires an unawaited
+ * CODE_REVIEW validator that updates the LabAttempt row on completion.
+ */
+export async function submitAttempt(req, res) {
+  const { id: labId } = req.params;
+
+  const parsed = submitAttemptSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return error(res, "Invalid attempt body", 400, "INVALID_BODY", {
+      issues: parsed.error.issues,
+    });
+  }
+  const { code } = parsed.data;
+
+  // Ownership check — Lab must be PUBLISHED, team-scoped, parent Concept +
+  // Topic PUBLISHED. DRAFT/REVIEWED content is not attempt-submittable.
+  const lab = await prisma.lab.findFirst({
+    where: {
+      id: labId,
+      teamId: req.teamId,
+      status: "PUBLISHED",
+      concept: { status: "PUBLISHED", topic: { status: "PUBLISHED" } },
+    },
+    include: {
+      concept: {
+        select: { id: true, slug: true, name: true, primerMarkdown: true },
+      },
+    },
+  });
+  if (!lab) return error(res, "Lab not found", 404, "LAB_NOT_FOUND");
+
+  // Allocate attemptNumber via MAX+1 inside a transaction. On P2002 unique
+  // conflict (concurrent submit by the same user), retry up to 3 times.
+  const attempt = await allocateAttempt({
+    userId: req.user.id,
+    labId,
+    code,
+  });
+
+  // Fire-and-forget CODE_REVIEW. Async .then() chain updates the LabAttempt
+  // row when the AI review completes; on throw, .catch() flips to ERROR.
+  // Never awaited — the 202 must return immediately.
+  runValidator("CODE_REVIEW", {
+    targetId: labId,
+    lab: {
+      title: lab.title,
+      taskMarkdown: lab.taskMarkdown,
+      expectedArtifacts: lab.expectedArtifacts,
+      language: lab.language,
+    },
+    concept: {
+      name: lab.concept.name,
+      primerExcerpt: (lab.concept.primerMarkdown ?? "").slice(0, 4000),
+    },
+    attempt: {
+      code,
+      attemptNumber: attempt.attemptNumber,
+    },
+  })
+    .then((result) => onReviewCompleted(attempt.id, result))
+    .catch((err) => onReviewFailed(attempt.id, err));
+
+  return success(
+    res,
+    {
+      attemptId: attempt.id,
+      reviewStatus: attempt.reviewStatus,
+      attemptNumber: attempt.attemptNumber,
+    },
+    202,
+  );
+}
+
+/**
+ * Allocate a new LabAttempt with attemptNumber = MAX+1. On P2002 race
+ * (concurrent submits collide on the (userId, labId, attemptNumber) unique
+ * key), retry up to MAX_RETRIES times.
+ */
+async function allocateAttempt({ userId, labId, code }) {
+  const MAX_RETRIES = 3;
+  for (let retry = 0; retry < MAX_RETRIES; retry++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const maxRow = await tx.labAttempt.aggregate({
+          where: { userId, labId },
+          _max: { attemptNumber: true },
+        });
+        const attemptNumber = (maxRow._max.attemptNumber ?? 0) + 1;
+        return tx.labAttempt.create({
+          data: {
+            labId,
+            userId,
+            attemptNumber,
+            code,
+            reviewStatus: "PENDING",
+          },
+        });
+      });
+    } catch (err) {
+      if (err?.code === "P2002" && retry < MAX_RETRIES - 1) {
+        // Race — another attempt inserted at the same attemptNumber. Retry.
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(
+    "Failed to allocate LabAttempt.attemptNumber after retries",
+  );
+}
+
+async function onReviewCompleted(attemptId, result) {
+  try {
+    await prisma.labAttempt.update({
+      where: { id: attemptId },
+      data: {
+        reviewStatus: "COMPLETED",
+        reviewedAt: new Date(),
+        codeReviewVerdict: result.body.codeReviewVerdict,
+        codeReview: result.body,
+      },
+    });
+    // W4.T4 will add sendToUser + mastery signal writer here.
+  } catch (err) {
+    console.warn(
+      `[curriculum:attempt] Failed to update attempt ${attemptId} to COMPLETED:`,
+      err.message,
+    );
+  }
+}
+
+async function onReviewFailed(attemptId, err) {
+  console.warn(
+    `[curriculum:attempt] Review failed for attempt ${attemptId}:`,
+    err?.message ?? err,
+  );
+  try {
+    await prisma.labAttempt.update({
+      where: { id: attemptId },
+      data: {
+        reviewStatus: "ERROR",
+        reviewedAt: new Date(),
+      },
+    });
+    // W4.T4 will add sendToUser here.
+  } catch (updateErr) {
+    console.warn(
+      `[curriculum:attempt] Failed to update attempt ${attemptId} to ERROR:`,
+      updateErr.message,
+    );
+  }
+}
+
+/**
+ * GET /curriculum/labs/:id/attempts/:attemptId
+ * Poll for the attempt's review result. Private to the attempt owner.
+ * findFirst with userId filter → cross-user probes return null → 404.
+ */
+export async function getAttempt(req, res) {
+  const { id: labId, attemptId } = req.params;
+
+  const attempt = await prisma.labAttempt.findFirst({
+    where: {
+      id: attemptId,
+      labId,
+      userId: req.user.id, // Private — only the submitter can poll.
+      lab: { teamId: req.teamId }, // Team-scoped defense-in-depth.
+    },
+    select: {
+      id: true,
+      labId: true,
+      attemptNumber: true,
+      code: true,
+      submittedAt: true,
+      reviewedAt: true,
+      reviewStatus: true,
+      codeReviewVerdict: true,
+      codeReview: true,
+      revealedReferenceAt: true,
+    },
+  });
+
+  if (!attempt) {
+    return error(res, "Attempt not found", 404, "ATTEMPT_NOT_FOUND");
+  }
+
+  return success(res, { attempt });
 }

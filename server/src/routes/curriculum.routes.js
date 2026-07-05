@@ -19,11 +19,15 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requireTeamContext } from "../middleware/team.middleware.js";
+import { aiLimiter } from "../middleware/rateLimit.middleware.js";
+import { aiTeamLimiter } from "../middleware/aiTeamLimiter.middleware.js";
 import {
   listTopics,
   getTopicDetail,
   enrollInTopic,
   getConceptDetail,
+  submitAttempt,
+  getAttempt,
 } from "../controllers/curriculum.controller.js";
 
 const router = Router();
@@ -39,5 +43,18 @@ router.post("/topics/:slug/enroll", enrollInTopic);
 
 // ── Concept detail (no reference solution / starter code leak) ─────
 router.get("/concepts/:slug", getConceptDetail);
+
+// ── Lab attempts (W4.T2 — async 202 pattern) ───────────────────────
+// POST is AI-backed (fires runValidator("CODE_REVIEW", ...) in the
+// background) so it chains the per-user aiLimiter + per-team
+// aiTeamLimiter on top of the mount-level apiLimiter. GET is a plain
+// DB poll — apiLimiter (chained at mount) is sufficient.
+router.post(
+  "/labs/:id/attempts",
+  aiLimiter,
+  aiTeamLimiter,
+  submitAttempt,
+);
+router.get("/labs/:id/attempts/:attemptId", getAttempt);
 
 export default router;
