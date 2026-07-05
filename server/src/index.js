@@ -71,6 +71,7 @@ import topicsRoutes from "./routes/topics.routes.js";
 import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
 import curriculumTemplatesRoutes from "./routes/curriculumTemplates.routes.js";
 import curriculumAdminRoutes from "./routes/curriculumAdmin.routes.js";
+import curriculumRoutes from "./routes/curriculum.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
 import {
@@ -280,7 +281,18 @@ function mountRoutes(prefix) {
   // ── Curriculum admin (TEAM_ADMIN) — team-scoped Topic CRUD + fork ──
   // Team-scoped authoring surface. Pure CRUD + a Prisma $transaction for
   // the fork endpoint — no OpenAI calls — so `apiLimiter` is appropriate.
+  //
+  // IMPORTANT: admin (`/curriculum/admin`) MUST be registered BEFORE the
+  // learner router at `/curriculum` below — Express matches app.use()
+  // prefixes in registration order, and the more-specific admin prefix
+  // has to win over the shorter learner prefix.
   app.use(`${prefix}/curriculum/admin`, apiLimiter, curriculumAdminRoutes);
+
+  // ── Curriculum learner (any team member) — team's PUBLISHED topics,
+  //     concept detail, enrollment (W4.T1). All routes filter by
+  //     req.teamId. NO referenceSolution / starterCode leak on
+  //     `/concepts/:slug` — that's gated by W4.T3 reveal-reference.
+  app.use(`${prefix}/curriculum`, apiLimiter, curriculumRoutes);
 }
 
 // Canonical versioned routes
