@@ -59,6 +59,7 @@ export default defineConfig({
           forms: ["react-hook-form", "@hookform/resolvers", "zod"],
           highlight: ["highlight.js"],
           excalidraw: ["@excalidraw/excalidraw"],
+          mdEditor: ["@uiw/react-md-editor"],
         },
       },
     },
