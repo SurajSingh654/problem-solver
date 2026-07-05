@@ -70,6 +70,7 @@ import flashcardsRoutes from "./routes/flashcards.routes.js";
 import topicsRoutes from "./routes/topics.routes.js";
 import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
 import curriculumTemplatesRoutes from "./routes/curriculumTemplates.routes.js";
+import curriculumAdminRoutes from "./routes/curriculumAdmin.routes.js";
 
 // ── Feature flags ────────────────────────────────────────────
 import {
@@ -275,6 +276,11 @@ function mountRoutes(prefix) {
   // + a Prisma $transaction rather than OpenAI, but the same "protect admin
   // surface from accidental hammering" rationale applies.
   app.use(`${prefix}/super-admin`, aiLimiter, curriculumTemplatesRoutes);
+
+  // ── Curriculum admin (TEAM_ADMIN) — team-scoped Topic CRUD + fork ──
+  // Team-scoped authoring surface. Pure CRUD + a Prisma $transaction for
+  // the fork endpoint — no OpenAI calls — so `apiLimiter` is appropriate.
+  app.use(`${prefix}/curriculum/admin`, apiLimiter, curriculumAdminRoutes);
 }
 
 // Canonical versioned routes
