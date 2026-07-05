@@ -60,6 +60,11 @@ export async function requireTeamContext(req, res, next) {
       });
     }
 
+    // Default: not a SUPER_ADMIN override. Set explicitly so downstream
+    // audit-log helpers (e.g. curriculumAdmin's auditIfSuperAdminOverride)
+    // can rely on the boolean being present on every request.
+    req.superAdminOverride = false;
+
     // ── SUPER_ADMIN team override ────────────────────────
     if (req.user.globalRole === "SUPER_ADMIN") {
       const overrideTeamId = req.query.teamId || req.headers["x-team-id"];
@@ -79,6 +84,11 @@ export async function requireTeamContext(req, res, next) {
 
         req.teamId = team.id;
         req.teamStatus = team.status;
+        // Flag the request as a SUPER_ADMIN cross-team override IFF the
+        // resolved team differs from the SUPER_ADMIN's own currentTeamId.
+        // Passing `?teamId=<my-own-team>` is not an override — it's a
+        // no-op — and shouldn't flood the audit log.
+        req.superAdminOverride = team.id !== req.user.currentTeamId;
         return next();
       }
 

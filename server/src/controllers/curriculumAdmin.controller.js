@@ -41,6 +41,58 @@ import {
   latestVerdictFor,
 } from "../services/curriculum/contentReview.service.js";
 
+// ============================================================================
+// SUPER_ADMIN override audit log (W3.T5)
+// ============================================================================
+//
+// When a SUPER_ADMIN overrides team context via `?teamId=` / `X-Team-Id`
+// to write into a team they aren't part of, we log a CurriculumAdminAuditLog
+// row. Regular TEAM_ADMIN writes are NOT logged — they'd flood the log with
+// normal operations. `req.superAdminOverride` is set by `requireTeamContext`
+// (server/src/middleware/team.middleware.js) and is `true` only when the
+// resolved `req.teamId` differs from the SUPER_ADMIN's own currentTeamId.
+//
+// Log-write failures are non-fatal — the underlying write has already
+// succeeded, so a broken audit-log insert must not roll it back or return
+// an error to the client. Failure is surfaced via console.warn so ops
+// notices in dashboards.
+//
+// Payload shape: keep it small (ids, slugs, verdicts, changed-field keys).
+// NEVER store full request bodies — markdown content can be hundreds of KB
+// and CurriculumAdminAuditLog is a hot-write append-only table.
+// ============================================================================
+
+/**
+ * Write a CurriculumAdminAuditLog row iff this request is a SUPER_ADMIN
+ * cross-team override. Called at the END of a successful write path
+ * (create/update/publish/review).
+ *
+ * @param {import('express').Request} req
+ * @param {string} action  Canonical action name (e.g. "TOPIC_CREATE").
+ * @param {object} payload Small JSON blob for post-hoc auditing.
+ */
+async function auditIfSuperAdminOverride(req, action, payload) {
+  if (!req.superAdminOverride) return;
+  try {
+    await prisma.curriculumAdminAuditLog.create({
+      data: {
+        actorUserId: req.user.id,
+        actorRole: "SUPER_ADMIN",
+        targetTeamId: req.teamId,
+        action,
+        payload,
+      },
+    });
+  } catch (err) {
+    // Non-fatal — the underlying write already succeeded. Surface as a
+    // warning so ops sees the failure without failing the user's request.
+    console.warn(
+      `[curriculumAdmin:audit] Failed to write audit log for action ${action}:`,
+      err?.message ?? err,
+    );
+  }
+}
+
 /**
  * GET /curriculum/admin/topics
  * List the team's topics with concept counts. Ordering: DRAFT first (most
@@ -92,6 +144,10 @@ export async function createTopic(req, res) {
         status: "DRAFT",
         teamId: req.teamId,
       },
+    });
+    await auditIfSuperAdminOverride(req, "TOPIC_CREATE", {
+      topicId: topic.id,
+      slug: topic.slug,
     });
     return success(res, { topic }, 201);
   } catch (err) {
@@ -159,6 +215,10 @@ export async function updateTopic(req, res) {
       where: { id },
       data,
     });
+    await auditIfSuperAdminOverride(req, "TOPIC_UPDATE", {
+      topicId: id,
+      changedFields: Object.keys(data),
+    });
     return success(res, { topic });
   } catch (err) {
     console.error("updateTopic:", err);
@@ -189,6 +249,12 @@ export async function forkFromTemplate(req, res) {
     const topic = await prisma.topic.findUnique({
       where: { id: result.topicId },
       include: { _count: { select: { concepts: true } } },
+    });
+    await auditIfSuperAdminOverride(req, "TOPIC_FORK", {
+      topicId: topic.id,
+      templateSlug: req.params.templateSlug,
+      conceptCount: result.conceptCount,
+      labCount: result.labCount,
     });
     return success(
       res,
@@ -350,6 +416,11 @@ export async function createConcept(req, res) {
           cheatsheetMarkdown: cheatsheetMarkdown ?? null,
         },
       });
+      await auditIfSuperAdminOverride(req, "CONCEPT_CREATE", {
+        conceptId: concept.id,
+        topicId,
+        slug,
+      });
       return success(res, { concept }, 201);
     } catch (err) {
       if (err?.code === "P2002") {
@@ -429,6 +500,10 @@ export async function updateConcept(req, res) {
     if (richHtmlEnabled !== undefined) data.richHtmlEnabled = richHtmlEnabled;
 
     const concept = await prisma.concept.update({ where: { id }, data });
+    await auditIfSuperAdminOverride(req, "CONCEPT_UPDATE", {
+      conceptId: id,
+      changedFields: Object.keys(data),
+    });
     return success(res, { concept });
   } catch (err) {
     console.error("updateConcept:", err);
@@ -513,6 +588,10 @@ export async function createLab(req, res) {
           sortOrder: 0,
         },
       });
+      await auditIfSuperAdminOverride(req, "LAB_CREATE", {
+        labId: lab.id,
+        conceptId,
+      });
       return success(res, { lab }, 201);
     } catch (err) {
       if (err?.code === "P2002") {
@@ -575,6 +654,10 @@ export async function updateLab(req, res) {
     if (sortOrder !== undefined) data.sortOrder = sortOrder;
 
     const lab = await prisma.lab.update({ where: { id }, data });
+    await auditIfSuperAdminOverride(req, "LAB_UPDATE", {
+      labId: id,
+      changedFields: Object.keys(data),
+    });
     return success(res, { lab });
   } catch (err) {
     console.error("updateLab:", err);
@@ -660,6 +743,12 @@ export async function reviewTopic(req, res) {
       },
     });
 
+    await auditIfSuperAdminOverride(req, "TOPIC_REVIEW_RUN", {
+      topicId: topic.id,
+      verdict: result.verdict,
+      logId: result.logId,
+    });
+
     return success(res, {
       verdict: result.verdict,
       body: result.body,
@@ -710,6 +799,12 @@ export async function reviewConcept(req, res) {
     };
 
     const result = await runValidator("LESSON_REVIEW", input);
+
+    await auditIfSuperAdminOverride(req, "CONCEPT_REVIEW_RUN", {
+      conceptId: concept.id,
+      verdict: result.verdict,
+      logId: result.logId,
+    });
 
     return success(res, {
       verdict: result.verdict,
@@ -894,6 +989,10 @@ export async function publishTopic(req, res) {
       },
     });
 
+    await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH", {
+      topicId: topic.id,
+    });
+
     return success(res, { topic: published, gates });
   } catch (err) {
     console.error("publishTopic:", err);
@@ -977,6 +1076,10 @@ export async function publishConcept(req, res) {
         status: "PUBLISHED",
         publishedAt: new Date(),
       },
+    });
+
+    await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH", {
+      conceptId: concept.id,
     });
 
     return success(res, { concept: published, gates });
