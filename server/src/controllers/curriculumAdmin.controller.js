@@ -30,7 +30,7 @@
 
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
-import { sanitizeHtml } from "../services/sanitize.service.js";
+import { sanitizeHtml, sanitizeMarkdownToHtml } from "../services/sanitize.service.js";
 import {
   forkTopicTemplate,
   ForkDuplicateError,
@@ -246,5 +246,334 @@ export async function getTemplateStatus(req, res) {
   } catch (err) {
     console.error("getTemplateStatus:", err);
     return error(res, "Failed to fetch template status.", 500);
+  }
+}
+
+// ============================================================================
+// CONCEPT — create + update (W3.T3)
+// ============================================================================
+//
+// A Concept always lives under a Topic. The Topic is the ownership root that
+// carries `teamId`; Concept.teamId is a denormalized copy the schema keeps in
+// sync (see schema.prisma:2552-2555). This controller enforces the invariant
+// on WRITE — every create resolves the parent Topic's teamId (scoped to
+// req.teamId, so cross-team probes fall out as 404) and copies it onto the
+// row rather than trusting a client-supplied teamId. There is no route that
+// exposes teamId as patchable.
+//
+// Cross-team access returns 404 (not 403) to avoid leaking existence via a
+// probing side-channel — same rationale as updateTopic.
+// ============================================================================
+
+/**
+ * POST /curriculum/admin/concepts
+ * Body: {
+ *   topicId, slug, name, order, primerMarkdown,
+ *   workedExample?, canonicalSources?, expectedQuestions?,
+ *   assessmentCriteria?, readinessRubric?, cheatsheetMarkdown?
+ * }
+ *
+ * Status is forced to DRAFT — publish transitions live on W3.T4's review
+ * route. primerHtml is compiled from primerMarkdown via the sanitizing
+ * markdown pipeline so we never persist unsanitized HTML.
+ *
+ * 404 TOPIC_NOT_FOUND if the parent Topic is in another team.
+ * 409 DUPLICATE_SLUG on `(topicId, slug)` collision (schema.prisma:2606).
+ */
+export async function createConcept(req, res) {
+  try {
+    const {
+      topicId,
+      slug,
+      name,
+      order,
+      primerMarkdown,
+      workedExample,
+      canonicalSources,
+      expectedQuestions,
+      assessmentCriteria,
+      readinessRubric,
+      cheatsheetMarkdown,
+    } = req.body ?? {};
+
+    if (
+      !topicId ||
+      !slug ||
+      !name ||
+      order === undefined ||
+      primerMarkdown === undefined
+    ) {
+      return error(
+        res,
+        "Missing required fields: topicId, slug, name, order, primerMarkdown",
+        400,
+        "MISSING_FIELDS",
+      );
+    }
+
+    // Ownership check — the parent Topic must exist AND belong to this
+    // team. Filtering on (id, teamId) collapses "not found" and "cross-
+    // team" into the same 404 response, so an attacker cannot enumerate
+    // topic ids across teams by probing.
+    const parentTopic = await prisma.topic.findFirst({
+      where: { id: topicId, teamId: req.teamId },
+      select: { id: true, teamId: true },
+    });
+    if (!parentTopic) {
+      return error(res, "Topic not found", 404, "TOPIC_NOT_FOUND");
+    }
+
+    const primerHtml = primerMarkdown
+      ? sanitizeMarkdownToHtml(primerMarkdown)
+      : null;
+
+    try {
+      const concept = await prisma.concept.create({
+        data: {
+          topicId,
+          teamId: parentTopic.teamId, // Invariant: Concept.teamId === Topic.teamId
+          slug,
+          name,
+          order,
+          status: "DRAFT",
+          primerMarkdown,
+          primerHtml,
+          workedExample: workedExample ?? null,
+          canonicalSources: canonicalSources ?? [],
+          expectedQuestions: expectedQuestions ?? [],
+          assessmentCriteria: assessmentCriteria ?? {},
+          readinessRubric: readinessRubric ?? null,
+          cheatsheetMarkdown: cheatsheetMarkdown ?? null,
+        },
+      });
+      return success(res, { concept }, 201);
+    } catch (err) {
+      if (err?.code === "P2002") {
+        return error(
+          res,
+          `Concept with slug "${slug}" already exists in this topic`,
+          409,
+          "DUPLICATE_SLUG",
+          { topicId, slug },
+        );
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error("createConcept:", err);
+    return error(res, "Failed to create concept.", 500);
+  }
+}
+
+/**
+ * PATCH /curriculum/admin/concepts/:id
+ * Updatable fields: name, order, primerMarkdown, workedExample, canonicalSources,
+ *                   expectedQuestions, assessmentCriteria, readinessRubric,
+ *                   cheatsheetMarkdown, richHtmlEnabled.
+ *
+ * If primerMarkdown changes, primerHtml is recompiled through the sanitizing
+ * pipeline. status, teamId, topicId, slug are NOT patchable via this route
+ * — status transitions live on W3.T4's review route; teamId is immutable
+ * (it's the tenancy root); topicId and slug together form the uniqueness
+ * key, and changing either would break the URL contract for downstream
+ * references (masteries, dependencies, teaching sessions).
+ */
+export async function updateConcept(req, res) {
+  try {
+    const { id } = req.params;
+
+    // Ownership + existence in one query. Cross-team returns 404, not 403.
+    const existing = await prisma.concept.findFirst({
+      where: { id, teamId: req.teamId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return error(res, "Concept not found", 404, "CONCEPT_NOT_FOUND");
+    }
+
+    const {
+      name,
+      order,
+      primerMarkdown,
+      workedExample,
+      canonicalSources,
+      expectedQuestions,
+      assessmentCriteria,
+      readinessRubric,
+      cheatsheetMarkdown,
+      richHtmlEnabled,
+    } = req.body ?? {};
+
+    const data = {};
+    if (name !== undefined) data.name = name;
+    if (order !== undefined) data.order = order;
+    if (primerMarkdown !== undefined) {
+      data.primerMarkdown = primerMarkdown;
+      // Recompile HTML on every markdown change — the two fields must
+      // never drift. Empty markdown → empty HTML (not null, so the client
+      // renders an empty state deterministically).
+      data.primerHtml = primerMarkdown
+        ? sanitizeMarkdownToHtml(primerMarkdown)
+        : null;
+    }
+    if (workedExample !== undefined) data.workedExample = workedExample;
+    if (canonicalSources !== undefined) data.canonicalSources = canonicalSources;
+    if (expectedQuestions !== undefined) data.expectedQuestions = expectedQuestions;
+    if (assessmentCriteria !== undefined) data.assessmentCriteria = assessmentCriteria;
+    if (readinessRubric !== undefined) data.readinessRubric = readinessRubric;
+    if (cheatsheetMarkdown !== undefined) data.cheatsheetMarkdown = cheatsheetMarkdown;
+    if (richHtmlEnabled !== undefined) data.richHtmlEnabled = richHtmlEnabled;
+
+    const concept = await prisma.concept.update({ where: { id }, data });
+    return success(res, { concept });
+  } catch (err) {
+    console.error("updateConcept:", err);
+    return error(res, "Failed to update concept.", 500);
+  }
+}
+
+// ============================================================================
+// LAB — create + update (W3.T3)
+// ============================================================================
+//
+// A Lab is 1:1 with a Concept (schema.prisma:2711 — `conceptId String @unique`).
+// The Lab.teamId column is denormalized from Concept.teamId at write time.
+// The 1:1 constraint bubbles up as P2002 on `conceptId` and surfaces to the
+// client as 409 DUPLICATE_LAB — reviewers who fork a template that already
+// has a Lab and then try to attach another get a clear signal instead of a
+// vague database error. HTTP-level sanitization for Lab is not required
+// (taskMarkdown/starterCode/referenceSolution are rendered code-fenced on
+// the client; there is no primerHtml equivalent to compile).
+// ============================================================================
+
+/**
+ * POST /curriculum/admin/labs
+ * Body: {
+ *   conceptId, title, taskMarkdown, timeboxMinutes?,
+ *   language, starterCode?, referenceSolution, expectedArtifacts?
+ * }
+ *
+ * 404 CONCEPT_NOT_FOUND if the parent Concept is in another team.
+ * 409 DUPLICATE_LAB if the concept already has a lab (P2002 on conceptId).
+ */
+export async function createLab(req, res) {
+  try {
+    const {
+      conceptId,
+      title,
+      taskMarkdown,
+      timeboxMinutes,
+      language,
+      starterCode,
+      referenceSolution,
+      expectedArtifacts,
+    } = req.body ?? {};
+
+    if (
+      !conceptId ||
+      !title ||
+      !taskMarkdown ||
+      !language ||
+      !referenceSolution
+    ) {
+      return error(
+        res,
+        "Missing required fields: conceptId, title, taskMarkdown, language, referenceSolution",
+        400,
+        "MISSING_FIELDS",
+      );
+    }
+
+    // Ownership check — parent Concept must exist AND belong to this team.
+    const parentConcept = await prisma.concept.findFirst({
+      where: { id: conceptId, teamId: req.teamId },
+      select: { id: true, teamId: true },
+    });
+    if (!parentConcept) {
+      return error(res, "Concept not found", 404, "CONCEPT_NOT_FOUND");
+    }
+
+    try {
+      const lab = await prisma.lab.create({
+        data: {
+          conceptId,
+          teamId: parentConcept.teamId, // Invariant: Lab.teamId === Concept.teamId
+          title,
+          taskMarkdown,
+          timeboxMinutes: timeboxMinutes ?? null,
+          language,
+          starterCode: starterCode ?? null,
+          referenceSolution,
+          expectedArtifacts: expectedArtifacts ?? [],
+          status: "DRAFT",
+          sortOrder: 0,
+        },
+      });
+      return success(res, { lab }, 201);
+    } catch (err) {
+      if (err?.code === "P2002") {
+        return error(
+          res,
+          "Concept already has a lab (Lab is 1:1 with Concept)",
+          409,
+          "DUPLICATE_LAB",
+          { conceptId },
+        );
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error("createLab:", err);
+    return error(res, "Failed to create lab.", 500);
+  }
+}
+
+/**
+ * PATCH /curriculum/admin/labs/:id
+ * Updatable fields: title, taskMarkdown, timeboxMinutes, language,
+ *                   starterCode, referenceSolution, expectedArtifacts, sortOrder.
+ *
+ * status, teamId, conceptId are NOT patchable — status transitions live on
+ * the review route (W3.T4); teamId/conceptId are immutable structural keys
+ * (changing them would break the 1:1 with Concept and the tenancy invariant).
+ */
+export async function updateLab(req, res) {
+  try {
+    const { id } = req.params;
+
+    const existing = await prisma.lab.findFirst({
+      where: { id, teamId: req.teamId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return error(res, "Lab not found", 404, "LAB_NOT_FOUND");
+    }
+
+    const {
+      title,
+      taskMarkdown,
+      timeboxMinutes,
+      language,
+      starterCode,
+      referenceSolution,
+      expectedArtifacts,
+      sortOrder,
+    } = req.body ?? {};
+
+    const data = {};
+    if (title !== undefined) data.title = title;
+    if (taskMarkdown !== undefined) data.taskMarkdown = taskMarkdown;
+    if (timeboxMinutes !== undefined) data.timeboxMinutes = timeboxMinutes;
+    if (language !== undefined) data.language = language;
+    if (starterCode !== undefined) data.starterCode = starterCode;
+    if (referenceSolution !== undefined) data.referenceSolution = referenceSolution;
+    if (expectedArtifacts !== undefined) data.expectedArtifacts = expectedArtifacts;
+    if (sortOrder !== undefined) data.sortOrder = sortOrder;
+
+    const lab = await prisma.lab.update({ where: { id }, data });
+    return success(res, { lab });
+  } catch (err) {
+    console.error("updateLab:", err);
+    return error(res, "Failed to update lab.", 500);
   }
 }

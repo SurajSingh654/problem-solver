@@ -25,6 +25,10 @@ import {
   updateTopic,
   forkFromTemplate,
   getTemplateStatus,
+  createConcept,
+  updateConcept,
+  createLab,
+  updateLab,
 } from "../controllers/curriculumAdmin.controller.js";
 
 const router = Router();
@@ -43,5 +47,17 @@ router.post("/topics/from-template/:templateSlug", forkFromTemplate);
 
 // Drift indicator for the "template updated" chip.
 router.get("/topics/:id/template-status", getTemplateStatus);
+
+// ── Concept CRUD (W3.T3) ────────────────────────────────────────────
+// Team scope enforced via parent Topic ownership check inside the
+// controller — the router itself doesn't need to know about tenancy.
+router.post("/concepts", createConcept);
+router.patch("/concepts/:id", updateConcept);
+
+// ── Lab CRUD (W3.T3) ────────────────────────────────────────────────
+// 1:1 with Concept; DUPLICATE_LAB (409) on second attach. Team scope
+// bubbles up from the parent Concept.
+router.post("/labs", createLab);
+router.patch("/labs/:id", updateLab);
 
 export default router;
