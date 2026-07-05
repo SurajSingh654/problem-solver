@@ -60,6 +60,14 @@ export default defineConfig({
           highlight: ["highlight.js"],
           excalidraw: ["@excalidraw/excalidraw"],
           mdEditor: ["@uiw/react-md-editor"],
+          // W3.T8 — curriculum admin (TEAM_ADMIN). Bundled together because
+          // both pages depend on the same hook file + the shared
+          // @components/curriculum primitives; splitting them further would
+          // dedupe the shared subset into a common chunk anyway.
+          curriculumAdmin: [
+            "/src/pages/team-admin/curriculum/CurriculumAdminPage.jsx",
+            "/src/pages/team-admin/curriculum/TemplateBrowserPage.jsx",
+          ],
         },
       },
     },

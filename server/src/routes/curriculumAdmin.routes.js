@@ -22,6 +22,7 @@ import {
 import { aiLimiter } from "../middleware/rateLimit.middleware.js";
 import { aiTeamLimiter } from "../middleware/aiTeamLimiter.middleware.js";
 import {
+  listTemplates,
   listTopics,
   createTopic,
   updateTopic,
@@ -41,6 +42,11 @@ import {
 const router = Router();
 
 router.use(authenticate, requireTeamContext, requireTeamAdmin);
+
+// ── Template library (read-only from TEAM_ADMIN) ─────────────────────
+// The list is small (a few dozen PUBLISHED templates at most) so no
+// pagination — client renders them as a cards grid.
+router.get("/templates", listTemplates);
 
 // List + create — team's topic collection.
 router.get("/topics", listTopics);

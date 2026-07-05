@@ -84,6 +84,9 @@ const DesignReferencesAdmin = lazy(() => import('@pages/admin/DesignReferencesAd
 const EditProblemPage = lazy(() => import('@pages/admin/EditProblemPage'))
 const ProductHealthPage = lazy(() => import('@pages/admin/ProductHealthPage'))
 const ShowcasePage = lazy(() => import('@pages/admin/showcase/ShowcasePage'))
+// ── Curriculum admin (lazy — TEAM_ADMIN, gated by VITE_FEATURE_CURRICULUM) ─
+const CurriculumAdminPage = lazy(() => import('@pages/team-admin/curriculum/CurriculumAdminPage'))
+const TemplateBrowserPage = lazy(() => import('@pages/team-admin/curriculum/TemplateBrowserPage'))
 // ── Docs (lazy — rarely accessed) ────────────────────────────
 const ReadmePage = lazy(() => import('@pages/docs/ReadmePage'))
 const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
@@ -346,6 +349,33 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/* ── Curriculum Admin (TEAM_ADMIN, gated) ─────────────── */}
+            {/* Feature-flag gate: FF-OFF → routes are not registered → 404.
+                Server also gates the /curriculum/admin/* API surface behind
+                FEATURE_CURRICULUM, so a hand-typed URL with the flag off
+                would also fail at the network layer. Note: a SUPER_ADMIN
+                template-curation surface will land in Phase 2; today the
+                SYNC endpoint is admin-only via CLI (npm run curriculum:sync). */}
+            {import.meta.env.VITE_FEATURE_CURRICULUM === 'true' && (
+              <>
+                <Route
+                  path="admin/curriculum"
+                  element={
+                    <ProtectedRoute requireTeamAdmin>
+                      <Lazy><CurriculumAdminPage /></Lazy>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/curriculum/templates"
+                  element={
+                    <ProtectedRoute requireTeamAdmin>
+                      <Lazy><TemplateBrowserPage /></Lazy>
+                    </ProtectedRoute>
+                  }
+                />
+              </>
+            )}
             {/* ── Documentation (lazy) ──────────────────────────────── */}
             <Route path="docs/readme" element={<Lazy><ReadmePage /></Lazy>} />
             <Route path="docs/setup" element={<Lazy><SetupPage /></Lazy>} />

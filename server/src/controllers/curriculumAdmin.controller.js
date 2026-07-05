@@ -94,6 +94,45 @@ async function auditIfSuperAdminOverride(req, action, payload) {
 }
 
 /**
+ * GET /curriculum/admin/templates
+ * List global TopicTemplates available for forking by TEAM_ADMIN.
+ *
+ * Only PUBLISHED templates are returned — DRAFT / REVIEWED templates aren't
+ * ready for teams to fork. The TemplateBrowserPage on the client is the sole
+ * consumer today; kept read-only + list-only (no per-slug detail here) — the
+ * fork endpoint already returns the concept/lab counts on success, so a
+ * "preview the template" UI can defer to Phase 2 when SUPER_ADMIN gets an
+ * inline template-editing surface.
+ *
+ * The SUPER_ADMIN counterpart lives at `/super-admin/curriculum/templates`
+ * (curriculumTemplates.routes.js) and exposes SYNC + all-status listing —
+ * this endpoint intentionally does neither.
+ */
+export async function listTemplates(req, res) {
+  try {
+    const templates = await prisma.topicTemplate.findMany({
+      where: { templateStatus: "PUBLISHED" },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        description: true,
+        category: true,
+        estimatedHoursToMastery: true,
+        templateStatus: true,
+        updatedAt: true,
+        _count: { select: { concepts: true } },
+      },
+    });
+    return success(res, { templates });
+  } catch (err) {
+    console.error("listTemplates:", err);
+    return error(res, "Failed to list templates.", 500);
+  }
+}
+
+/**
  * GET /curriculum/admin/topics
  * List the team's topics with concept counts. Ordering: DRAFT first (most
  * likely to need reviewer attention), then most-recently-updated within
