@@ -60,13 +60,21 @@ export default defineConfig({
           highlight: ["highlight.js"],
           excalidraw: ["@excalidraw/excalidraw"],
           mdEditor: ["@uiw/react-md-editor"],
-          // W3.T8 — curriculum admin (TEAM_ADMIN). Bundled together because
-          // both pages depend on the same hook file + the shared
+          // W3.T8 + W3.T9 — curriculum admin (TEAM_ADMIN). Bundled together
+          // because every page depends on the same hook file + the shared
           // @components/curriculum primitives; splitting them further would
-          // dedupe the shared subset into a common chunk anyway.
+          // dedupe the shared subset into a common chunk anyway. Reviewers
+          // typically move between the landing page, template browser, and
+          // topic authoring page in a single session so pre-fetching them
+          // together is fine.
           curriculumAdmin: [
             "/src/pages/team-admin/curriculum/CurriculumAdminPage.jsx",
             "/src/pages/team-admin/curriculum/TemplateBrowserPage.jsx",
+            "/src/pages/team-admin/curriculum/TopicAuthoringPage.jsx",
+            "/src/pages/team-admin/curriculum/TopicMetadataTab.jsx",
+            "/src/pages/team-admin/curriculum/ConceptsListTab.jsx",
+            "/src/pages/team-admin/curriculum/CurriculumReviewTab.jsx",
+            "/src/pages/team-admin/curriculum/PublishTab.jsx",
           ],
         },
       },

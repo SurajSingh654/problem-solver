@@ -313,6 +313,38 @@ export async function forkFromTemplate(req, res) {
 }
 
 /**
+ * GET /curriculum/admin/topics/:id
+ * Returns a topic + its ordered concepts + each concept's Lab (or null).
+ * The authoring UI (W3.T9) uses this single call to seed every tab —
+ * metadata, concepts list, curriculum-review cache, publish gate hints.
+ *
+ * Cross-team access returns 404 (not 403) — same rationale as
+ * updateTopic: enumeration probes must not distinguish "exists elsewhere"
+ * from "doesn't exist."
+ */
+export async function getTopicDetail(req, res) {
+  try {
+    const { id } = req.params;
+    const topic = await prisma.topic.findFirst({
+      where: { id, teamId: req.teamId },
+      include: {
+        concepts: {
+          orderBy: { order: "asc" },
+          include: { lab: true },
+        },
+      },
+    });
+    if (!topic) {
+      return error(res, "Topic not found", 404, "TOPIC_NOT_FOUND");
+    }
+    return success(res, { topic });
+  } catch (err) {
+    console.error("getTopicDetail:", err);
+    return error(res, "Failed to fetch topic.", 500);
+  }
+}
+
+/**
  * GET /curriculum/admin/topics/:id/template-status
  * Returns whether the source template has been updated since this Topic
  * was forked. Drives the "template updated — pull latest?" chip in the

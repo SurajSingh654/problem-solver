@@ -391,6 +391,108 @@ describe("POST /curriculum/admin/topics", () => {
   );
 });
 
+describe("GET /curriculum/admin/topics/:id", () => {
+  it(
+    "returns the topic + ordered concepts + each concept's lab",
+    async () => {
+      const topic = await prisma.topic.create({
+        data: {
+          slug: "detail-topic",
+          name: "Detail Topic",
+          description: "For detail-view test.",
+          category: "LOW_LEVEL_DESIGN",
+          status: "DRAFT",
+          teamId: TEAM_A_ID,
+        },
+      });
+      // Two concepts, out-of-order in insertion — response must sort by
+      // `order` ascending, not by creation time.
+      const conceptB = await prisma.concept.create({
+        data: {
+          topicId: topic.id,
+          teamId: TEAM_A_ID,
+          slug: "b-second",
+          name: "Second",
+          order: 2,
+          status: "DRAFT",
+          primerMarkdown: "# B",
+        },
+      });
+      const conceptA = await prisma.concept.create({
+        data: {
+          topicId: topic.id,
+          teamId: TEAM_A_ID,
+          slug: "a-first",
+          name: "First",
+          order: 1,
+          status: "DRAFT",
+          primerMarkdown: "# A",
+        },
+      });
+      // A lab on concept A only — B has no lab, so the include must yield
+      // { lab: null } for it.
+      await prisma.lab.create({
+        data: {
+          conceptId: conceptA.id,
+          teamId: TEAM_A_ID,
+          title: "Lab A",
+          taskMarkdown: "Do it.",
+          language: "JAVA",
+          referenceSolution: "// go",
+          expectedArtifacts: [],
+          status: "DRAFT",
+          sortOrder: 0,
+        },
+      });
+
+      const { status, body } = await req(
+        "GET",
+        `/api/v1/curriculum/admin/topics/${topic.id}`,
+        { token: adminAToken },
+      );
+      expect(status).toBe(200);
+      expect(body.data.topic.id).toBe(topic.id);
+      expect(body.data.topic.slug).toBe("detail-topic");
+      const orderedSlugs = body.data.topic.concepts.map((c) => c.slug);
+      expect(orderedSlugs).toEqual(["a-first", "b-second"]);
+      // Lab shape passes through — non-null on A, null on B.
+      const aConcept = body.data.topic.concepts.find((c) => c.slug === "a-first");
+      const bConcept = body.data.topic.concepts.find((c) => c.slug === "b-second");
+      expect(aConcept.lab?.title).toBe("Lab A");
+      expect(bConcept.lab).toBeNull();
+
+      // Ensure we didn't leave stale rows for the next test.
+      await prisma.lab.deleteMany({ where: { conceptId: conceptA.id } });
+      await prisma.concept.deleteMany({ where: { topicId: topic.id } });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "returns 404 TOPIC_NOT_FOUND for a topic in another team",
+    async () => {
+      const teamBTopic = await prisma.topic.create({
+        data: {
+          slug: "b-detail",
+          name: "B Detail",
+          description: "B only",
+          category: "LOW_LEVEL_DESIGN",
+          status: "DRAFT",
+          teamId: TEAM_B_ID,
+        },
+      });
+      const { status, body } = await req(
+        "GET",
+        `/api/v1/curriculum/admin/topics/${teamBTopic.id}`,
+        { token: adminAToken },
+      );
+      expect(status).toBe(404);
+      expect(body?.error?.code).toBe("TOPIC_NOT_FOUND");
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
 describe("PATCH /curriculum/admin/topics/:id", () => {
   it(
     "returns 404 TOPIC_NOT_FOUND when a TEAM_ADMIN attempts to update another team's topic",

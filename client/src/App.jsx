@@ -87,6 +87,7 @@ const ShowcasePage = lazy(() => import('@pages/admin/showcase/ShowcasePage'))
 // ── Curriculum admin (lazy — TEAM_ADMIN, gated by VITE_FEATURE_CURRICULUM) ─
 const CurriculumAdminPage = lazy(() => import('@pages/team-admin/curriculum/CurriculumAdminPage'))
 const TemplateBrowserPage = lazy(() => import('@pages/team-admin/curriculum/TemplateBrowserPage'))
+const TopicAuthoringPage  = lazy(() => import('@pages/team-admin/curriculum/TopicAuthoringPage'))
 // ── Docs (lazy — rarely accessed) ────────────────────────────
 const ReadmePage = lazy(() => import('@pages/docs/ReadmePage'))
 const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
@@ -371,6 +372,14 @@ export default function App() {
                   element={
                     <ProtectedRoute requireTeamAdmin>
                       <Lazy><TemplateBrowserPage /></Lazy>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/curriculum/topics/:id"
+                  element={
+                    <ProtectedRoute requireTeamAdmin>
+                      <Lazy><TopicAuthoringPage /></Lazy>
                     </ProtectedRoute>
                   }
                 />

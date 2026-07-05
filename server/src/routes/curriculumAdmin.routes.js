@@ -25,6 +25,7 @@ import {
   listTemplates,
   listTopics,
   createTopic,
+  getTopicDetail,
   updateTopic,
   forkFromTemplate,
   getTemplateStatus,
@@ -51,6 +52,14 @@ router.get("/templates", listTemplates);
 // List + create — team's topic collection.
 router.get("/topics", listTopics);
 router.post("/topics", createTopic);
+
+// Detail (single-topic + ordered concepts + each concept's lab). Drives the
+// authoring page (W3.T9) — every tab reads from this single fetch.
+// Must be declared BEFORE any deeper `/topics/:id/*` route so Express's
+// left-to-right matcher doesn't shadow it. (Order is fine here — this
+// param route sits above template-status/review/publish, all of which have
+// an additional suffix segment.)
+router.get("/topics/:id", getTopicDetail);
 
 // Update metadata. Slug + teamId are immutable via this route by design.
 router.patch("/topics/:id", updateTopic);
