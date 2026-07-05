@@ -407,7 +407,7 @@ describe("GET /curriculum/admin/topics/:id", () => {
       });
       // Two concepts, out-of-order in insertion — response must sort by
       // `order` ascending, not by creation time.
-      const conceptB = await prisma.concept.create({
+      const _conceptB = await prisma.concept.create({
         data: {
           topicId: topic.id,
           teamId: TEAM_A_ID,
