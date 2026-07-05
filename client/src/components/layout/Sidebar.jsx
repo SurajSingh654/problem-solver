@@ -28,6 +28,7 @@ import { BrandMark } from '@components/ui/BrandMark'
 function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl }) {
     const featureTeaching = import.meta.env.VITE_FEATURE_TEACHING_SESSIONS === 'true'
     const featureNotes = import.meta.env.VITE_FEATURE_NOTES_ENABLED === 'true'
+    const featureCurriculum = import.meta.env.VITE_FEATURE_CURRICULUM === 'true'
     const sections = []
 
     if (isSuperAdmin) {
@@ -82,18 +83,21 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
     }
 
     // Team members & individuals
+    const practiceItems = [
+        { to: '/dashboard', icon: '📊', label: 'Dashboard', end: true },
+        { to: '/problems', icon: '📋', label: 'Problems' },
+        { to: '/review', icon: '🧠', label: 'Review Queue' },
+        { to: '/quizzes', icon: '🧩', label: 'Quizzes' },
+        { to: '/mock-interview', icon: '💬', label: 'Mock Interview' },
+        { to: '/design-studio', icon: '🏗️', label: 'Design Studio' },
+    ]
+    if (featureCurriculum) {
+        practiceItems.push({ to: '/learn', icon: '🎓', label: 'Learn' })
+    }
     sections.push({
         id: 'practice',
         label: 'Practice',
-        items: [
-            { to: '/dashboard', icon: '📊', label: 'Dashboard', end: true },
-            { to: '/problems', icon: '📋', label: 'Problems' },
-            { to: '/review', icon: '🧠', label: 'Review Queue' },
-            { to: '/quizzes', icon: '🧩', label: 'Quizzes' },
-            { to: '/mock-interview', icon: '💬', label: 'Mock Interview' },
-            { to: '/design-studio', icon: '🏗️', label: 'Design Studio' },
-            { to: '/learn', icon: '🎓', label: 'Learn' },
-        ],
+        items: practiceItems,
     })
 
     const progressItems = [

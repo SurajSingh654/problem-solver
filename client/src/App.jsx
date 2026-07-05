@@ -282,11 +282,20 @@ export default function App() {
                 <Route path="notes/:id" element={<Lazy><NoteDetailPage /></Lazy>} />
               </>
             )}
-            {/* ── Topic Mastery Tracks (v1 scaffold) ────────────────── */}
-            <Route path="learn" element={<Lazy><LearnPage /></Lazy>} />
-            <Route path="learn/:slug" element={<Lazy><TopicDetailPage /></Lazy>} />
-            <Route path="learn/:slug/calibration" element={<Lazy><CalibrationPage /></Lazy>} />
-            <Route path="learn/:slug/concepts/:conceptSlug" element={<Lazy><ConceptPage /></Lazy>} />
+            {/* ── Learn — team-scoped published curricula (gated) ────
+                Whole `/learn/*` subtree registers only when
+                VITE_FEATURE_CURRICULUM === 'true'. Server responses are
+                team-scoped + PUBLISHED-only; if a team has no published
+                topics the catalog renders an empty state without error.
+                Flag OFF → routes drop out → hand-typed URL 404s. */}
+            {import.meta.env.VITE_FEATURE_CURRICULUM === 'true' && (
+              <>
+                <Route path="learn" element={<Lazy><LearnPage /></Lazy>} />
+                <Route path="learn/:slug" element={<Lazy><TopicDetailPage /></Lazy>} />
+                <Route path="learn/:slug/calibration" element={<Lazy><CalibrationPage /></Lazy>} />
+                <Route path="learn/:slug/concepts/:conceptSlug" element={<Lazy><ConceptPage /></Lazy>} />
+              </>
+            )}
             {/* ── Leaderboard ───────────────────────────────────────── */}
             <Route path="leaderboard" element={<LeaderboardPage />} />
             {/* ── Intelligence Report ───────────────────────────────── */}

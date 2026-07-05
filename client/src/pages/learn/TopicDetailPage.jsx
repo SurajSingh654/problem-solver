@@ -1,500 +1,448 @@
 // ============================================================================
-// Learn — Topic Detail (v1 scaffold)
+// TopicDetailPage — single-topic overview + concept tree (W4.T6)
 // ============================================================================
 //
-// Renders the published concept graph for a Topic + the user's enrollment
-// state and per-concept mastery scores. v1 = read-only graph view +
-// enrollment lifecycle. The Mentor Orchestrator (planNextAction, mentor
-// chat, calibration quiz) lands in a follow-up commit.
+// Reads `useTopicDetail(slug)` (W4.T5) which returns the shaped topic —
+// { ...topic, concepts: [{ ...c, mastery, lab }], enrollment: {...}|null }.
+// Server filters to PUBLISHED concepts under a PUBLISHED topic; no DRAFT
+// content leaks here.
+//
+// Enrollment UX:
+//   - Not enrolled  → target-outcome select + primary Enroll button.
+//     `useEnrollInTopic` is an idempotent upsert; sending only preferences
+//     is enough (server defaults status to ACTIVE).
+//   - Enrolled      → shows the current targetOutcome + Change-goal
+//     affordance (an inline select + save) + Continue CTA that navigates
+//     to the next-pending concept (first row with mastery.score null or
+//     < 80). No pause/resume — W4.T5 doesn't expose that mutation; the
+//     scaffold's status-transition UI is dropped.
 // ============================================================================
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft, BookOpen, Clock, GitFork } from 'lucide-react'
 import { Spinner } from '@components/ui/Spinner'
 import { Button } from '@components/ui/Button'
-import { useTopic, useTopicState, useEnrollInTopic, useUpdateEnrollment } from '@hooks/useTopics'
-import { toast } from '@store/useUIStore'
+import { VerdictBadge } from '@components/curriculum'
+import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
+import { useTopicDetail, useEnrollInTopic } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
+
+// TargetOutcome enum lifted from the plan spec (matches the server-side
+// `TopicEnrollment.preferences.targetOutcome` values documented in the
+// controller). Kept inline — this is the sole consumer.
+const TARGET_OUTCOMES = [
+    { value: 'INTERVIEW_PASS',   label: 'Pass an interview' },
+    { value: 'TEACH_TO_TEAM',    label: 'Teach my team' },
+    { value: 'BUILD_PRODUCTION', label: 'Build production systems' },
+    { value: 'RESEARCH',         label: 'Deep research' },
+]
+
+const DEFAULT_TARGET = 'INTERVIEW_PASS'
+
+// Score → tone for the per-concept mastery pill. Mirrors the palette in
+// VerdictBadge (semantic *-soft / *-fg / *-line tokens) so light+dark both
+// pass WCAG. `null` (untouched) uses the neutral gray tokens.
+function masteryTone(score) {
+    if (score == null)  return 'bg-surface-3 text-text-tertiary border-border-default'
+    if (score >= 80)    return 'bg-success-soft text-success-fg border-success-line'
+    if (score >= 50)    return 'bg-warning-soft text-warning-fg border-warning-line'
+    return 'bg-danger-soft text-danger-fg border-danger-line'
+}
+
+function humanTargetLabel(value) {
+    return TARGET_OUTCOMES.find((t) => t.value === value)?.label ?? value
+}
 
 export default function TopicDetailPage() {
     const { slug } = useParams()
     const navigate = useNavigate()
-    const topicQ = useTopic(slug)
-    const stateQ = useTopicState(slug)
+    const topicQ = useTopicDetail(slug)
 
-    // Hook order is invariant — compute the mastery map up front so the
-    // early returns below don't trip the rules-of-hooks linter. `masteries`
-    // may be undefined while loading; the memo handles that.
-    const masteryByConcept = useMemo(() => {
-        const m = new Map()
-        for (const row of stateQ.data?.masteries ?? []) m.set(row.conceptId, row)
-        return m
-    }, [stateQ.data?.masteries])
+    // Compute the "next pending" concept up front — memoized so it's stable
+    // across re-renders and the memo runs regardless of loading state
+    // (rules-of-hooks). The `concepts` array may be undefined during
+    // loading; the reducer handles that safely.
+    const nextPendingConcept = useMemo(() => {
+        const concepts = topicQ.data?.concepts ?? []
+        return concepts.find((c) => {
+            const score = c.mastery?.score
+            return score == null || score < 80
+        }) ?? concepts[0] ?? null
+    }, [topicQ.data?.concepts])
 
-    if (topicQ.isLoading || stateQ.isLoading) {
-        return <div className="p-6 flex justify-center"><Spinner size="lg" /></div>
+    if (topicQ.isLoading) {
+        return (
+            <div className="flex items-center justify-center py-24">
+                <Spinner size="lg" />
+            </div>
+        )
     }
+
     if (topicQ.isError || !topicQ.data) {
         return (
-            <div className="p-6 max-w-3xl mx-auto">
+            <div className="p-6 max-w-3xl mx-auto space-y-4">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/learn')}>
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to Learn
+                </Button>
                 <div className="bg-danger-soft border border-danger-line rounded-xl p-4 text-sm text-danger-fg">
-                    Topic not found. <button className="underline" onClick={() => navigate('/learn')}>Back to topics</button>
+                    Topic not found or no longer published.
                 </div>
             </div>
         )
     }
 
-    const { topic, concepts } = topicQ.data
-    const { enrolled, enrollment, nextAction, stuck, progress } = stateQ.data ?? {}
+    const topic = topicQ.data
+    const concepts = topic.concepts ?? []
+    const enrollment = topic.enrollment
+    const enrolled = !!enrollment
 
     return (
-        <div className="p-6 max-w-[1100px] mx-auto space-y-6">
-            <button
-                type="button"
-                onClick={() => navigate('/learn')}
-                className="text-xs font-semibold text-text-tertiary hover:text-text-primary transition-colors flex items-center gap-1"
-            >
-                ← All topics
-            </button>
+        <div className="p-6 sm:p-8 max-w-5xl mx-auto space-y-8">
+            {/* Back nav */}
+            <Button variant="ghost" size="sm" onClick={() => navigate('/learn')}>
+                <ArrowLeft className="w-4 h-4" />
+                Back to Learn
+            </Button>
 
-            <header className="space-y-2">
-                <h1 className="text-2xl font-extrabold text-text-primary">{topic.name}</h1>
-                <p className="text-sm text-text-tertiary leading-relaxed max-w-3xl">
-                    {topic.description}
-                </p>
-                <div className="flex items-center gap-3 text-[11px] text-text-disabled">
-                    <span>📖 {concepts.length} concepts published</span>
-                    {topic.estimatedHoursToMastery != null && (
-                        <span>⏱ ~{topic.estimatedHoursToMastery}h to mastery</span>
-                    )}
-                    {topic.mockInterviewCategory && (
-                        <span>🎯 Validates via {topic.mockInterviewCategory.replace(/_/g, ' ')} Mock Interview</span>
-                    )}
+            {/* Header — name + description + category badge */}
+            <header className="space-y-3">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
+                            {topic.name}
+                        </h1>
+                        <p className="text-xs font-mono text-text-tertiary">
+                            {topic.slug}
+                        </p>
+                    </div>
+                    <VerdictBadge verdict={topic.category} />
                 </div>
+                {topic.description && (
+                    <MarkdownRenderer
+                        content={topic.description}
+                        size="sm"
+                        className="max-w-3xl"
+                    />
+                )}
             </header>
 
-            {!enrolled ? (
-                <EnrollPanel slug={slug} />
-            ) : (
-                <>
-                    {stuck?.stuck && <StuckBanner stuck={stuck} />}
-                    {nextAction && <NextActionTile action={nextAction} />}
-                    {progress && <ProgressBar progress={progress} />}
-                    <EnrollmentPanel slug={slug} enrollment={enrollment} />
-                </>
-            )}
+            {/* Enrollment card */}
+            <EnrollmentCard
+                slug={slug}
+                enrollment={enrollment}
+                onContinue={() => {
+                    if (nextPendingConcept) {
+                        navigate(`/learn/${slug}/concepts/${nextPendingConcept.slug}`)
+                    }
+                }}
+                canContinue={enrolled && !!nextPendingConcept}
+            />
 
+            {/* Concept tree */}
             <section className="space-y-3">
-                <h2 className="text-xs font-bold text-text-disabled uppercase tracking-widest">
-                    Concept graph
-                </h2>
+                <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider">
+                        Concepts
+                    </h2>
+                    <p className="text-xs text-text-tertiary">
+                        {concepts.length} published
+                    </p>
+                </div>
+
                 {concepts.length === 0 ? (
-                    <div className="bg-surface-1 border border-border-default rounded-2xl p-8 text-center text-sm text-text-tertiary">
-                        No published concepts yet — admin needs to review and publish DRAFT content.
+                    <div className="rounded-2xl border border-border-default bg-surface-2 p-8 text-center text-sm text-text-tertiary">
+                        No concepts published yet for this topic. Check back
+                        after your team admin publishes the first one.
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 gap-2">
+                    <div className="flex flex-col gap-2">
                         {concepts.map((c, i) => (
                             <ConceptRow
                                 key={c.id}
+                                topicSlug={slug}
                                 concept={c}
                                 index={i}
-                                mastery={masteryByConcept.get(c.id)}
+                                enrolled={enrolled}
                             />
                         ))}
                     </div>
                 )}
             </section>
-        </div>
-    )
-}
 
-// ── Enroll panel — shown when not yet enrolled ───────────────────────
-
-// ── Next-action tile (Mentor Orchestrator output) ───────────────────
-
-const STAGE_META = {
-    CALIBRATION: { icon: '🎯', tone: 'bg-warning-soft border-warning-line text-warning-fg', cta: 'Take calibration' },
-    INTAKE:      { icon: '📖', tone: 'bg-brand-soft border-brand-line text-brand-fg-soft',  cta: 'Read primer' },
-    EXPLORE:     { icon: '🔬', tone: 'bg-info-soft border-info-line text-info-fg',          cta: 'Practice' },
-    REFLECT:     { icon: '✍️', tone: 'bg-info-soft border-info-line text-info-fg',          cta: 'Reflect' },
-    TEACH:       { icon: '🎓', tone: 'bg-success-soft border-success-line text-success-fg', cta: 'Schedule teaching session' },
-    VALIDATE:    { icon: '✅', tone: 'bg-success-soft border-success-line text-success-fg', cta: 'Run mock interview' },
-    COMPLETE:    { icon: '🏆', tone: 'bg-purple-400/10 border-purple-400/25 text-purple-300', cta: null },
-}
-
-function buildSurfaceUrl(surface) {
-    if (!surface?.route) return null
-    const params = surface.params ?? {}
-    const qs = Object.entries(params)
-        .filter(([, v]) => v != null && v !== '')
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-        .join('&')
-    return qs ? `${surface.route}?${qs}` : surface.route
-}
-
-function NextActionTile({ action }) {
-    const navigate = useNavigate()
-    const meta = STAGE_META[action.stage] ?? STAGE_META.INTAKE
-    const url = buildSurfaceUrl(action.surface)
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn('border rounded-2xl p-5 space-y-3', meta.tone)}
-        >
-            <div className="flex items-start gap-3">
-                <span className="text-2xl">{meta.icon}</span>
-                <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
-                        Today · {action.stage} · ~{action.minutes} min
-                    </p>
-                    <h3 className="text-base font-bold text-text-primary mt-0.5">
-                        {action.concept?.name ??
-                            (action.stage === 'VALIDATE' ? 'Topic-wide validation' :
-                                action.stage === 'COMPLETE' ? 'Track complete' :
-                                    action.stage === 'CALIBRATION' ? 'Calibration quiz' : '—')}
-                    </h3>
-                    <p className="text-xs text-text-tertiary leading-relaxed mt-1">
-                        {action.reason}
-                    </p>
-                </div>
-                {meta.cta && url && (
-                    <Button variant="primary" size="sm" onClick={() => navigate(url)}>
-                        {meta.cta}
-                    </Button>
+            {/* Info footer */}
+            <footer className="rounded-2xl border border-border-subtle bg-surface-1 p-4 flex items-center gap-4 flex-wrap text-xs text-text-tertiary">
+                {topic.estimatedHoursToMastery != null && (
+                    <span className="inline-flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        ~{topic.estimatedHoursToMastery}h to mastery
+                    </span>
                 )}
-            </div>
-        </motion.div>
-    )
-}
-
-// ── Stuck banner ─────────────────────────────────────────────────────
-
-function StuckBanner({ stuck }) {
-    if (!stuck.recommendation) return null
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-warning-soft border border-warning-line rounded-2xl p-4 flex items-start gap-3"
-        >
-            <span className="text-xl">⚠️</span>
-            <div className="flex-1">
-                <p className="text-xs font-bold text-warning-fg uppercase tracking-widest mb-0.5">
-                    Mentor noticed something
-                </p>
-                <p className="text-xs text-text-secondary leading-relaxed">
-                    {stuck.recommendation.message}
-                </p>
-            </div>
-        </motion.div>
-    )
-}
-
-// ── Progress bar ─────────────────────────────────────────────────────
-
-function ProgressBar({ progress }) {
-    const { totalConcepts, mastered, inProgress, untouched } = progress
-    if (totalConcepts === 0) return null
-
-    const masteredPct = (mastered / totalConcepts) * 100
-    const inProgressPct = (inProgress / totalConcepts) * 100
-
-    return (
-        <div className="bg-surface-1 border border-border-default rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-bold text-text-disabled uppercase tracking-widest">
-                    Progress
-                </p>
-                <p className="text-[10px] text-text-disabled font-mono">
-                    {mastered} mastered · {inProgress} in progress · {untouched} untouched
-                </p>
-            </div>
-            <div className="h-2 bg-surface-3 rounded-full overflow-hidden flex">
-                <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${masteredPct}%` }}
-                    transition={{ duration: 0.5 }}
-                    className="h-full bg-success"
-                />
-                <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${inProgressPct}%` }}
-                    transition={{ duration: 0.5, delay: 0.1 }}
-                    className="h-full bg-warning"
-                />
-            </div>
+                <span className="inline-flex items-center gap-1">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    {concepts.length} concept{concepts.length === 1 ? '' : 's'}
+                </span>
+                {topic.publishedAt && (
+                    <span>
+                        Published {new Date(topic.publishedAt).toLocaleDateString()}
+                    </span>
+                )}
+                {topic.forkedFromTemplate && (
+                    <span className="inline-flex items-center gap-1">
+                        <GitFork className="w-3.5 h-3.5" />
+                        Forked from template
+                    </span>
+                )}
+            </footer>
         </div>
     )
 }
 
-function EnrollPanel({ slug }) {
-    const [open, setOpen] = useState(false)
-    return (
-        <div className="bg-brand-soft/30 border border-brand-line rounded-2xl p-5 space-y-3">
-            <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-soft border border-brand-line flex items-center justify-center text-xl">
-                    🚀
-                </div>
-                <div className="flex-1">
-                    <h3 className="text-sm font-bold text-text-primary">Start this track</h3>
-                    <p className="text-xs text-text-tertiary leading-relaxed">
-                        Tell the mentor your goal and timeline. The path personalizes to
-                        your skill baseline (Day-1 calibration quiz coming in v2) and
-                        your target companies.
+// ────────────────────────────────────────────────────────────────
+// Enrollment card — pre-enroll + post-enroll variants
+// ────────────────────────────────────────────────────────────────
+
+function EnrollmentCard({ slug, enrollment, onContinue, canContinue }) {
+    const enroll = useEnrollInTopic(slug)
+    const enrolled = !!enrollment
+    const currentTarget = enrollment?.preferences?.targetOutcome ?? DEFAULT_TARGET
+    const [target, setTarget] = useState(currentTarget)
+    const [editingGoal, setEditingGoal] = useState(false)
+
+    async function handleEnroll() {
+        try {
+            await enroll.mutateAsync({ preferences: { targetOutcome: target } })
+        } catch {
+            /* toast already fired */
+        }
+    }
+
+    async function handleSaveGoal() {
+        try {
+            await enroll.mutateAsync({ preferences: { targetOutcome: target } })
+            setEditingGoal(false)
+        } catch {
+            /* toast already fired */
+        }
+    }
+
+    if (!enrolled) {
+        return (
+            <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl border border-brand-line bg-brand-soft/30 p-5 space-y-4"
+            >
+                <div className="space-y-1">
+                    <h3 className="text-base font-bold text-text-primary">
+                        Start this track
+                    </h3>
+                    <p className="text-sm text-text-secondary">
+                        Pick your target outcome. You can change it any time.
                     </p>
                 </div>
-                {!open && (
-                    <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+                    <label className="block flex-1">
+                        <span className="block text-[10px] font-bold text-text-tertiary uppercase tracking-widest mb-1">
+                            Target outcome
+                        </span>
+                        <select
+                            className="w-full bg-surface-2 border border-border-default rounded-lg text-sm text-text-primary px-3 py-2 focus:outline-none focus:border-brand-400"
+                            value={target}
+                            onChange={(e) => setTarget(e.target.value)}
+                        >
+                            {TARGET_OUTCOMES.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                    {o.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <Button
+                        variant="primary"
+                        size="md"
+                        loading={enroll.isPending}
+                        onClick={handleEnroll}
+                    >
                         Enroll
                     </Button>
-                )}
-            </div>
-            {open && <EnrollForm slug={slug} onCancel={() => setOpen(false)} />}
-        </div>
-    )
-}
-
-const DEFAULT_PREFERENCES = {
-    targetOutcome: 'INTERVIEW_PASS',
-    timelineWeeks: 12,
-    hoursPerWeek: 7,
-    targetCompanies: [],
-    targetLevels: [],
-    learningStyle: ['reading'],
-    energyBudget: 'MEDIUM',
-    frictionTolerance: 'HIGH',
-}
-
-function EnrollForm({ slug, onCancel }) {
-    const enroll = useEnrollInTopic()
-    const [prefs, setPrefs] = useState(DEFAULT_PREFERENCES)
-    const [companiesInput, setCompaniesInput] = useState('')
-    const [levelsInput, setLevelsInput] = useState('')
-
-    function update(patch) {
-        setPrefs((p) => ({ ...p, ...patch }))
-    }
-
-    async function handleSubmit() {
-        const preferences = {
-            ...prefs,
-            targetCompanies: companiesInput
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
-            targetLevels: levelsInput
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
-        }
-        try {
-            await enroll.mutateAsync({ slug, preferences })
-            toast.success('Enrolled. Path is personalizing to you.')
-        } catch (err) {
-            const message = err?.response?.data?.error?.message || 'Enrollment failed.'
-            toast.error(message)
-        }
-    }
-
-    return (
-        <div className="space-y-3 pt-3 border-t border-brand-line/50">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Target outcome">
-                    <select
-                        className="w-full bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary px-2 py-1.5"
-                        value={prefs.targetOutcome}
-                        onChange={(e) => update({ targetOutcome: e.target.value })}
-                    >
-                        <option value="INTERVIEW_PASS">Pass an interview</option>
-                        <option value="TEACH_TO_TEAM">Teach my team</option>
-                        <option value="BUILD_PRODUCTION">Build production systems</option>
-                        <option value="RESEARCH">Deep research</option>
-                    </select>
-                </Field>
-                <Field label="Energy budget">
-                    <select
-                        className="w-full bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary px-2 py-1.5"
-                        value={prefs.energyBudget}
-                        onChange={(e) => update({ energyBudget: e.target.value })}
-                    >
-                        <option value="HIGH">High (push me)</option>
-                        <option value="MEDIUM">Medium (steady)</option>
-                        <option value="LOW">Low (gentle)</option>
-                    </select>
-                </Field>
-                <Field label="Timeline (weeks)">
-                    <input
-                        type="number" min={1} max={104}
-                        className="w-full bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary px-2 py-1.5"
-                        value={prefs.timelineWeeks}
-                        onChange={(e) => update({ timelineWeeks: Number(e.target.value) })}
-                    />
-                </Field>
-                <Field label="Hours per week">
-                    <input
-                        type="number" min={1} max={80}
-                        className="w-full bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary px-2 py-1.5"
-                        value={prefs.hoursPerWeek}
-                        onChange={(e) => update({ hoursPerWeek: Number(e.target.value) })}
-                    />
-                </Field>
-                <Field label="Target companies (comma-separated)">
-                    <input
-                        type="text"
-                        placeholder="Google, Stripe"
-                        className="w-full bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary px-2 py-1.5"
-                        value={companiesInput}
-                        onChange={(e) => setCompaniesInput(e.target.value)}
-                    />
-                </Field>
-                <Field label="Target levels (comma-separated)">
-                    <input
-                        type="text"
-                        placeholder="L4, Senior"
-                        className="w-full bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary px-2 py-1.5"
-                        value={levelsInput}
-                        onChange={(e) => setLevelsInput(e.target.value)}
-                    />
-                </Field>
-                <Field label="Friction tolerance">
-                    <select
-                        className="w-full bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary px-2 py-1.5"
-                        value={prefs.frictionTolerance}
-                        onChange={(e) => update({ frictionTolerance: e.target.value })}
-                    >
-                        <option value="HIGH">High (hard problems early)</option>
-                        <option value="LOW">Low (more scaffolding)</option>
-                    </select>
-                </Field>
-            </div>
-            <div className="flex items-center gap-2 justify-end pt-2">
-                <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-                <Button variant="primary" size="sm" loading={enroll.isPending} onClick={handleSubmit}>
-                    Enroll
-                </Button>
-            </div>
-        </div>
-    )
-}
-
-function Field({ label, children }) {
-    return (
-        <label className="block">
-            <span className="block text-[10px] font-bold text-text-disabled uppercase tracking-widest mb-1">
-                {label}
-            </span>
-            {children}
-        </label>
-    )
-}
-
-// ── Enrollment panel — shown when already enrolled ───────────────────
-
-function EnrollmentPanel({ slug, enrollment }) {
-    const update = useUpdateEnrollment()
-    const status = enrollment.status
-    const prefs = enrollment.preferences || {}
-
-    async function transition(nextStatus) {
-        try {
-            await update.mutateAsync({ slug, status: nextStatus })
-            toast.success(`Track ${nextStatus.toLowerCase()}.`)
-        } catch (err) {
-            const message = err?.response?.data?.error?.message || 'Update failed.'
-            toast.error(message)
-        }
-    }
-
-    return (
-        <div className="bg-surface-1 border border-border-default rounded-2xl p-5 space-y-3">
-            <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-success-soft border border-success-line flex items-center justify-center text-xl">
-                    🎓
                 </div>
-                <div className="flex-1">
+            </motion.div>
+        )
+    }
+
+    // Enrolled path — show current stats + change-goal affordance.
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-success-line bg-success-soft/40 p-5 space-y-4"
+        >
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-text-primary">Enrolled</h3>
-                        <span className={cn(
-                            'text-[10px] font-bold px-2 py-0.5 rounded-full border',
-                            status === 'ACTIVE'    && 'bg-success-soft text-success-fg border-success-line',
-                            status === 'PAUSED'    && 'bg-warning-soft text-warning-fg border-warning-line',
-                            status === 'COMPLETED' && 'bg-purple-400/10 text-purple-300 border-purple-400/25',
-                            status === 'ABANDONED' && 'bg-surface-3 text-text-disabled border-border-default',
-                        )}>
-                            {status}
+                        <h3 className="text-base font-bold text-text-primary">
+                            Enrolled
+                        </h3>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-success-soft text-success-fg border-success-line">
+                            Active
                         </span>
                     </div>
-                    <p className="text-xs text-text-tertiary mt-0.5">
-                        Goal: {prefs.targetOutcome?.replace(/_/g, ' ').toLowerCase() || '—'} ·
-                        {' '}{prefs.timelineWeeks || '—'}w timeline ·
-                        {' '}{prefs.hoursPerWeek || '—'}h/week
-                        {prefs.targetCompanies?.length > 0 && (
-                            <> · targeting {prefs.targetCompanies.join(', ')}</>
-                        )}
+                    <p className="text-sm text-text-secondary">
+                        Goal:{' '}
+                        <span className="font-semibold text-text-primary">
+                            {humanTargetLabel(currentTarget)}
+                        </span>
                     </p>
+                    {enrollment?.startedAt && (
+                        <p className="text-xs text-text-tertiary">
+                            Started {new Date(enrollment.startedAt).toLocaleDateString()}
+                        </p>
+                    )}
                 </div>
-                {status === 'ACTIVE' && (
-                    <Button variant="ghost" size="sm" onClick={() => transition('PAUSED')}>
-                        Pause
+                <div className="flex items-center gap-2">
+                    {!editingGoal && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingGoal(true)}
+                        >
+                            Change goal
+                        </Button>
+                    )}
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={!canContinue}
+                        onClick={onContinue}
+                    >
+                        Continue
                     </Button>
-                )}
-                {status === 'PAUSED' && (
-                    <Button variant="primary" size="sm" onClick={() => transition('ACTIVE')}>
-                        Resume
-                    </Button>
-                )}
+                </div>
             </div>
-            <p className="text-[11px] text-text-disabled italic">
-                Mentor orchestration (next-action, calibration quiz, mentor chat,
-                mastery graph) lands in v2.
-            </p>
-        </div>
+
+            {editingGoal && (
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-end pt-3 border-t border-success-line/40">
+                    <label className="block flex-1">
+                        <span className="block text-[10px] font-bold text-text-tertiary uppercase tracking-widest mb-1">
+                            Target outcome
+                        </span>
+                        <select
+                            className="w-full bg-surface-2 border border-border-default rounded-lg text-sm text-text-primary px-3 py-2 focus:outline-none focus:border-brand-400"
+                            value={target}
+                            onChange={(e) => setTarget(e.target.value)}
+                        >
+                            {TARGET_OUTCOMES.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                    {o.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="ghost"
+                            size="md"
+                            onClick={() => {
+                                setTarget(currentTarget)
+                                setEditingGoal(false)
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="md"
+                            loading={enroll.isPending}
+                            onClick={handleSaveGoal}
+                        >
+                            Save
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+        </motion.div>
     )
 }
 
-// ── Concept row — minimal v1 ─────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
+// Concept row
+// ────────────────────────────────────────────────────────────────
 
-function ConceptRow({ concept, index, mastery }) {
-    const score = mastery?.score
-    const tone =
-        score == null            ? 'text-text-disabled' :
-        score >= 80              ? 'text-success-fg'    :
-        score >= 50              ? 'text-warning-fg'    :
-                                   'text-danger-fg'
+function ConceptRow({ topicSlug, concept, index, enrolled }) {
+    // Mastery score may be null when only `primer_read` signals exist (per
+    // W4.T4: primer_read has weight 0 — reading is logged but does not
+    // move the score). Render null as "untouched".
+    const score = concept.mastery?.score
+    const teachingReady = concept.mastery?.teachingReady
+    const scoreLabel = score == null ? 'Untouched' : `${Math.round(score)}%`
+
+    // Progress bar width: 0-100 clamped. null → 0.
+    const barWidth = Math.max(0, Math.min(100, score ?? 0))
 
     return (
         <motion.div
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.02 }}
-            className="bg-surface-1 border border-border-default rounded-xl p-4"
+            transition={{ delay: Math.min(index * 0.02, 0.3) }}
         >
-            <div className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-surface-3 flex items-center justify-center text-[10px] font-bold text-text-tertiary flex-shrink-0">
-                    {concept.order}
-                </div>
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-bold text-text-primary">{concept.name}</h4>
-                        <span className={cn('text-[10px] font-bold font-mono', tone)}>
-                            {score == null ? 'untouched' : `${score}/100`}
-                        </span>
-                        {mastery?.teachingReady && (
-                            <span className="text-[9px] font-bold px-1.5 py-px rounded-full border bg-purple-400/10 text-purple-300 border-purple-400/25">
-                                ready to teach
-                            </span>
+            <Link
+                to={`/learn/${topicSlug}/concepts/${concept.slug}`}
+                className={cn(
+                    'block rounded-xl border border-border-default bg-surface-2 p-4',
+                    'transition-all hover:border-brand-400 hover:-translate-y-px',
+                    'focus:outline-none focus-visible:border-brand-400',
+                )}
+            >
+                <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 rounded-full bg-surface-3 border border-border-default flex items-center justify-center text-xs font-bold text-text-secondary shrink-0">
+                        {concept.order ?? index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-bold text-text-primary">
+                                {concept.name}
+                            </h4>
+                            {enrolled && (
+                                <span
+                                    className={cn(
+                                        'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
+                                        masteryTone(score),
+                                    )}
+                                >
+                                    {scoreLabel}
+                                </span>
+                            )}
+                            {teachingReady && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-brand-soft text-brand-fg-soft border-brand-line">
+                                    Ready to teach
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Progress bar — visible only when enrolled and we have
+                            a score signal. Untouched concepts get nothing (a
+                            zero-width bar would look like a bug). */}
+                        {enrolled && score != null && (
+                            <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${barWidth}%` }}
+                                    transition={{ duration: 0.4, delay: 0.1 }}
+                                    className={cn(
+                                        'h-full',
+                                        score >= 80 ? 'bg-success' :
+                                            score >= 50 ? 'bg-warning' :
+                                                'bg-danger',
+                                    )}
+                                />
+                            </div>
                         )}
                     </div>
-                    {concept.canonicalSources?.length > 0 && (
-                        <p className="text-[10px] text-text-disabled mt-1">
-                            {concept.canonicalSources.length} canonical source{concept.canonicalSources.length === 1 ? '' : 's'}
-                        </p>
-                    )}
                 </div>
-            </div>
+            </Link>
         </motion.div>
     )
 }
