@@ -28,6 +28,8 @@ import {
   getConceptDetail,
   submitAttempt,
   getAttempt,
+  revealReference,
+  submitCheckIn,
 } from "../controllers/curriculum.controller.js";
 
 const router = Router();
@@ -56,5 +58,19 @@ router.post(
   submitAttempt,
 );
 router.get("/labs/:id/attempts/:attemptId", getAttempt);
+
+// ── Reveal reference solution (struggle-first gate, W4.T3) ─────────
+// Deterministic DB check — no AI. Parent-level apiLimiter is sufficient.
+router.post("/labs/:id/reveal-reference", revealReference);
+
+// ── Concept check-in submit (3-question grader, W4.T3) ─────────────
+// AI-backed (CHECK_IN validator, AI_MODEL_FAST). Chain aiLimiter +
+// aiTeamLimiter on top of the mount-level apiLimiter.
+router.post(
+  "/concepts/:slug/checkin",
+  aiLimiter,
+  aiTeamLimiter,
+  submitCheckIn,
+);
 
 export default router;
