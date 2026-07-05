@@ -5,6 +5,12 @@
 // hide the exact class of bugs (schema drift, unique-constraint violations)
 // that this test is meant to catch.
 //
+// Slug prefix: `test_sync_` is used on every fixture slug (topic + concept +
+// lab subdirectory) to isolate this test's writes from
+// `curriculum.sync.integration.test.js` (which uses `simple-topic-endpoint`).
+// Without the prefix, cleanup `startsWith: "simple-topic"` matched BOTH
+// fixtures and produced intermittent parallel-worker flakes. See W3.T10.
+//
 // Run: cd server && npx vitest run test/integration/curriculumSync.integration.test.js
 import { describe, it, expect, beforeEach } from "vitest";
 import path from "path";
@@ -12,23 +18,37 @@ import prisma from "../../src/lib/prisma.js";
 import { syncCurriculumTemplates } from "../../src/services/curriculumSync.service.js";
 
 const FIXTURE_ROOT = path.resolve("test/fixtures/curriculum-sync");
+const TOPIC_SLUG = "test_sync_simple-topic";
+const CONCEPT_SLUG = "test_sync_01-first-concept";
+
+// Cleanup includes both the current prefix AND the historical `simple-topic`
+// prefix, so a machine with leftover rows from before this rename gets
+// scrubbed on the first run after the fix.
+async function cleanupTopicTemplates() {
+  await prisma.topicTemplate.deleteMany({
+    where: { slug: { startsWith: "test_sync_" } },
+  });
+  await prisma.topicTemplate.deleteMany({
+    where: { slug: { in: ["simple-topic"] } },
+  });
+}
 
 describe("curriculumSync.service — TopicTemplate", () => {
   beforeEach(async () => {
-    await prisma.topicTemplate.deleteMany({ where: { slug: { startsWith: "simple-topic" } } });
+    await cleanupTopicTemplates();
   });
 
   it("upserts a TopicTemplate from topic.yml + description.md", async () => {
     const result = await syncCurriculumTemplates({ root: FIXTURE_ROOT, dryRun: false });
-    expect(result.added.topics).toContain("simple-topic");
+    expect(result.added.topics).toContain(TOPIC_SLUG);
 
-    const row = await prisma.topicTemplate.findUnique({ where: { slug: "simple-topic" } });
+    const row = await prisma.topicTemplate.findUnique({ where: { slug: TOPIC_SLUG } });
     expect(row).toBeTruthy();
     expect(row.name).toBe("Simple Topic (test fixture)");
     expect(row.category).toBe("LOW_LEVEL_DESIGN");
     expect(row.estimatedHoursToMastery).toBe(5);
     expect(row.description).toContain("test topic description");
-    expect(row.sourcePath).toBe("simple-topic");
+    expect(row.sourcePath).toBe(TOPIC_SLUG);
   }, 15000);
 
   it("is idempotent — second run yields empty diff", async () => {
@@ -41,27 +61,27 @@ describe("curriculumSync.service — TopicTemplate", () => {
 
   it("dryRun does not write", async () => {
     const result = await syncCurriculumTemplates({ root: FIXTURE_ROOT, dryRun: true });
-    expect(result.added.topics).toContain("simple-topic");
-    const row = await prisma.topicTemplate.findUnique({ where: { slug: "simple-topic" } });
+    expect(result.added.topics).toContain(TOPIC_SLUG);
+    const row = await prisma.topicTemplate.findUnique({ where: { slug: TOPIC_SLUG } });
     expect(row).toBeNull();
   }, 15000);
 });
 
 describe("curriculumSync — ConceptTemplate", () => {
   beforeEach(async () => {
-    await prisma.topicTemplate.deleteMany({ where: { slug: "simple-topic" } });
+    await cleanupTopicTemplates();
   });
 
   it("syncs a ConceptTemplate from a frontmatter markdown file", async () => {
     await syncCurriculumTemplates({ root: FIXTURE_ROOT, dryRun: false });
-    const topic = await prisma.topicTemplate.findUnique({ where: { slug: "simple-topic" } });
+    const topic = await prisma.topicTemplate.findUnique({ where: { slug: TOPIC_SLUG } });
     const concepts = await prisma.conceptTemplate.findMany({
       where: { topicTemplateId: topic.id },
       orderBy: { order: "asc" },
     });
     expect(concepts).toHaveLength(1);
     const c = concepts[0];
-    expect(c.slug).toBe("01-first-concept");
+    expect(c.slug).toBe(CONCEPT_SLUG);
     expect(c.name).toBe("First Concept");
     expect(c.order).toBe(1);
     expect(c.primerMarkdown).toContain("Body content.");
@@ -74,13 +94,13 @@ describe("curriculumSync — ConceptTemplate", () => {
 
 describe("curriculumSync — LabTemplate", () => {
   beforeEach(async () => {
-    await prisma.topicTemplate.deleteMany({ where: { slug: "simple-topic" } });
+    await cleanupTopicTemplates();
   });
 
   it("syncs a LabTemplate 1:1 with its Concept", async () => {
     await syncCurriculumTemplates({ root: FIXTURE_ROOT, dryRun: false });
     const concept = await prisma.conceptTemplate.findFirst({
-      where: { slug: "01-first-concept" },
+      where: { slug: CONCEPT_SLUG },
       include: { lab: true },
     });
     expect(concept.lab).not.toBeNull();

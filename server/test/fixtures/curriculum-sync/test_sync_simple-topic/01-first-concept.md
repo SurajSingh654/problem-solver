@@ -1,5 +1,5 @@
 ---
-slug: 01-first-concept
+slug: test_sync_01-first-concept
 name: "First Concept"
 order: 1
 estimatedMinutes: 45
