@@ -36,6 +36,10 @@ import {
   ForkDuplicateError,
   ForkTemplateNotFoundError,
 } from "../services/curriculum/curriculumFork.service.js";
+import {
+  runValidator,
+  latestVerdictFor,
+} from "../services/curriculum/contentReview.service.js";
 
 /**
  * GET /curriculum/admin/topics
@@ -575,5 +579,409 @@ export async function updateLab(req, res) {
   } catch (err) {
     console.error("updateLab:", err);
     return error(res, "Failed to update lab.", 500);
+  }
+}
+
+// ============================================================================
+// REVIEW TRIGGERS — Topic + Concept + Lab (W3.T4)
+// ============================================================================
+//
+// Topic + Concept reviews call the curriculum-review / lesson-review AI
+// validators (routed through `runValidator`, which handles Zod parse, rule-
+// based validate, fallback, and ContentReviewLog write). Lab review is a
+// deterministic shape-check — no AI involved and no audit log written
+// (deterministic checks don't need one; the DB state is the audit).
+//
+// Routes at the router layer chain `aiLimiter + aiTeamLimiter` for the two
+// AI-backed reviews. The lab review is a pure DB read and rides the parent
+// `apiLimiter` only.
+// ============================================================================
+
+/**
+ * POST /curriculum/admin/topics/:id/review
+ * Triggers the curriculum-review AI validator on this Topic + its concepts + labs.
+ * Writes ContentReviewLog (via runValidator). Updates the Topic's
+ * lastReviewedAt + curriculumReview cache so the authoring UI can render the
+ * latest verdict without re-fetching the log row.
+ */
+export async function reviewTopic(req, res) {
+  try {
+    const { id } = req.params;
+
+    const topic = await prisma.topic.findFirst({
+      where: { id, teamId: req.teamId },
+      include: {
+        concepts: {
+          orderBy: { order: "asc" },
+          include: { lab: true },
+        },
+      },
+    });
+    if (!topic) {
+      return error(res, "Topic not found", 404, "TOPIC_NOT_FOUND");
+    }
+
+    // Assemble validator input per the curriculum-review prompt spec.
+    // Primer excerpts are truncated at 2000 chars so prompts stay under
+    // the ~8KB rawPrompt-log threshold for topics with many concepts.
+    const input = {
+      targetId: topic.id,
+      topic: {
+        name: topic.name,
+        category: topic.category,
+        estimatedHoursToMastery: topic.estimatedHoursToMastery,
+      },
+      concepts: topic.concepts.map((c) => ({
+        slug: c.slug,
+        name: c.name,
+        order: c.order,
+        primerExcerpt: (c.primerMarkdown ?? "").slice(0, 2000),
+        expectedQuestions: c.expectedQuestions ?? [],
+      })),
+      labs: topic.concepts
+        .filter((c) => c.lab)
+        .map((c) => ({
+          conceptSlug: c.slug,
+          taskSummary: (c.lab.taskMarkdown ?? "").slice(0, 500),
+          expectedArtifacts: c.lab.expectedArtifacts ?? [],
+        })),
+    };
+
+    // runValidator never throws (fallback is its explicit failure mode).
+    const result = await runValidator("CURRICULUM_REVIEW", input);
+
+    // Cache the verdict onto Topic so the authoring UI can render the
+    // latest verdict without re-fetching the log row.
+    await prisma.topic.update({
+      where: { id: topic.id },
+      data: {
+        lastReviewedAt: new Date(),
+        curriculumReview: result.body,
+      },
+    });
+
+    return success(res, {
+      verdict: result.verdict,
+      body: result.body,
+      logId: result.logId,
+      usedFallback: result.usedFallback,
+    });
+  } catch (err) {
+    console.error("reviewTopic:", err);
+    return error(res, "Failed to run curriculum review.", 500);
+  }
+}
+
+/**
+ * POST /curriculum/admin/concepts/:id/review
+ * Triggers the lesson-review AI validator on this Concept + its lab.
+ * Writes ContentReviewLog via runValidator.
+ */
+export async function reviewConcept(req, res) {
+  try {
+    const { id } = req.params;
+
+    const concept = await prisma.concept.findFirst({
+      where: { id, teamId: req.teamId },
+      include: { lab: true },
+    });
+    if (!concept) {
+      return error(res, "Concept not found", 404, "CONCEPT_NOT_FOUND");
+    }
+
+    const input = {
+      targetId: concept.id,
+      concept: {
+        name: concept.name,
+        primerMarkdown: concept.primerMarkdown ?? "",
+        workedExample: concept.workedExample ?? null,
+        expectedQuestions: concept.expectedQuestions ?? [],
+        canonicalSources: concept.canonicalSources ?? [],
+        assessmentCriteria: concept.assessmentCriteria ?? {},
+        readinessRubric: concept.readinessRubric ?? null,
+      },
+      lab: concept.lab
+        ? {
+            title: concept.lab.title,
+            taskMarkdown: concept.lab.taskMarkdown ?? "",
+            expectedArtifacts: concept.lab.expectedArtifacts ?? [],
+          }
+        : null,
+    };
+
+    const result = await runValidator("LESSON_REVIEW", input);
+
+    return success(res, {
+      verdict: result.verdict,
+      body: result.body,
+      logId: result.logId,
+      usedFallback: result.usedFallback,
+    });
+  } catch (err) {
+    console.error("reviewConcept:", err);
+    return error(res, "Failed to run lesson review.", 500);
+  }
+}
+
+/**
+ * POST /curriculum/admin/labs/:id/review
+ * Deterministic shape-check on a Lab (no AI). Verifies:
+ *   - taskMarkdown ≥ 100 chars (substantive task description).
+ *   - referenceSolution is non-empty.
+ *   - expectedArtifacts has ≥ 1 entry.
+ *
+ * Returns a verdict-shaped payload so the authoring UI can render this the
+ * same way it renders AI-backed reviews. Does NOT write ContentReviewLog —
+ * deterministic checks don't need an audit trail (the Lab row itself is
+ * the source of truth for its shape).
+ */
+export async function reviewLab(req, res) {
+  try {
+    const { id } = req.params;
+
+    const lab = await prisma.lab.findFirst({
+      where: { id, teamId: req.teamId },
+    });
+    if (!lab) {
+      return error(res, "Lab not found", 404, "LAB_NOT_FOUND");
+    }
+
+    const issues = [];
+    const strengths = [];
+
+    if (!lab.taskMarkdown || lab.taskMarkdown.trim().length < 100) {
+      issues.push(
+        "taskMarkdown must be at least 100 characters describing the exercise.",
+      );
+    } else {
+      strengths.push("Task description present with sufficient detail.");
+    }
+
+    if (!lab.referenceSolution || lab.referenceSolution.trim().length === 0) {
+      issues.push("referenceSolution is empty.");
+    } else {
+      strengths.push("Reference solution present.");
+    }
+
+    const artifacts = Array.isArray(lab.expectedArtifacts)
+      ? lab.expectedArtifacts
+      : [];
+    if (artifacts.length === 0) {
+      issues.push("expectedArtifacts must contain at least one item.");
+    } else {
+      strengths.push(`${artifacts.length} expected artifact(s) declared.`);
+    }
+
+    const verdict = issues.length === 0 ? "PASS" : "FAIL";
+
+    return success(res, {
+      verdict,
+      body: { verdict, issues, strengths },
+      labShapeCheck: true,
+    });
+  } catch (err) {
+    console.error("reviewLab:", err);
+    return error(res, "Failed to run lab shape check.", 500);
+  }
+}
+
+// ============================================================================
+// PUBLISH GATES — Topic + Concept (W3.T4)
+// ============================================================================
+//
+// Publish transitions are gate-enforced:
+//   - Topic:   latest curriculum-review verdict = WORTH_LEARNING
+//              AND every child Concept.status = PUBLISHED.
+//   - Concept: latest lesson-review verdict = READY
+//              AND Concept.readinessRubric is non-null.
+//
+// Failure returns 400 with a `PUBLISH_GATE_BLOCKED` code and a
+// `details.gates[]` array — one entry per gate — so the client
+// <PublishGateChecklist> can render each row's PASS/FAIL state with the
+// specific reason. Shape defined by spec §5.2.
+//
+// No AI is involved here — publish gates read cached verdicts from
+// ContentReviewLog via `latestVerdictFor`. `apiLimiter` at the router level
+// is sufficient; no rate-limit chaining needed.
+// ============================================================================
+
+/**
+ * POST /curriculum/admin/topics/:id/publish
+ * Enforces the two Topic publish gates and flips Topic.status → PUBLISHED
+ * (sets publishedAt = now()) when both pass. Race between two team-admins
+ * publishing the same Topic simultaneously is not explicitly locked; if
+ * this becomes a real concern add `SELECT ... FOR UPDATE` in Phase 2.
+ */
+export async function publishTopic(req, res) {
+  try {
+    const { id } = req.params;
+
+    const topic = await prisma.topic.findFirst({
+      where: { id, teamId: req.teamId },
+      include: {
+        concepts: { select: { id: true, slug: true, status: true } },
+      },
+    });
+    if (!topic) {
+      return error(res, "Topic not found", 404, "TOPIC_NOT_FOUND");
+    }
+
+    const gates = [];
+
+    // Gate 1: latest curriculum-review verdict must be WORTH_LEARNING.
+    const reviewLog = await latestVerdictFor("TOPIC", topic.id);
+    if (!reviewLog) {
+      gates.push({
+        id: "curriculum_review_verdict",
+        label: "Curriculum review verdict",
+        status: "FAIL",
+        message: "No curriculum review has been run for this topic yet.",
+      });
+    } else if (reviewLog.verdict !== "WORTH_LEARNING") {
+      gates.push({
+        id: "curriculum_review_verdict",
+        label: "Curriculum review verdict",
+        status: "FAIL",
+        message: `Latest verdict is ${reviewLog.verdict}. Required: WORTH_LEARNING.`,
+      });
+    } else {
+      gates.push({
+        id: "curriculum_review_verdict",
+        label: "Curriculum review verdict",
+        status: "PASS",
+        message: "WORTH_LEARNING",
+      });
+    }
+
+    // Gate 2: every child Concept.status must be PUBLISHED.
+    const concepts = topic.concepts;
+    const unpublished = concepts.filter((c) => c.status !== "PUBLISHED");
+    if (concepts.length === 0) {
+      gates.push({
+        id: "concepts_all_published",
+        label: "All concepts PUBLISHED",
+        status: "FAIL",
+        message: "Topic has no concepts.",
+      });
+    } else if (unpublished.length > 0) {
+      gates.push({
+        id: "concepts_all_published",
+        label: "All concepts PUBLISHED",
+        status: "FAIL",
+        message: `${concepts.length - unpublished.length} of ${concepts.length} published; missing: ${unpublished.map((c) => c.slug).join(", ")}`,
+      });
+    } else {
+      gates.push({
+        id: "concepts_all_published",
+        label: "All concepts PUBLISHED",
+        status: "PASS",
+        message: `All ${concepts.length} concept(s) published.`,
+      });
+    }
+
+    const failed = gates.filter((g) => g.status === "FAIL");
+    if (failed.length > 0) {
+      return error(res, "Publish blocked", 400, "PUBLISH_GATE_BLOCKED", {
+        gates,
+      });
+    }
+
+    const published = await prisma.topic.update({
+      where: { id: topic.id },
+      data: {
+        status: "PUBLISHED",
+        publishedAt: new Date(),
+      },
+    });
+
+    return success(res, { topic: published, gates });
+  } catch (err) {
+    console.error("publishTopic:", err);
+    return error(res, "Failed to publish topic.", 500);
+  }
+}
+
+/**
+ * POST /curriculum/admin/concepts/:id/publish
+ * Enforces the two Concept publish gates and flips Concept.status → PUBLISHED
+ * (sets publishedAt = now()) when both pass.
+ */
+export async function publishConcept(req, res) {
+  try {
+    const { id } = req.params;
+
+    const concept = await prisma.concept.findFirst({
+      where: { id, teamId: req.teamId },
+      select: { id: true, readinessRubric: true },
+    });
+    if (!concept) {
+      return error(res, "Concept not found", 404, "CONCEPT_NOT_FOUND");
+    }
+
+    const gates = [];
+
+    // Gate 1: latest lesson-review verdict must be READY.
+    const reviewLog = await latestVerdictFor("CONCEPT", concept.id);
+    if (!reviewLog) {
+      gates.push({
+        id: "lesson_review_verdict",
+        label: "Lesson review verdict",
+        status: "FAIL",
+        message: "No lesson review has been run for this concept yet.",
+      });
+    } else if (reviewLog.verdict !== "READY") {
+      gates.push({
+        id: "lesson_review_verdict",
+        label: "Lesson review verdict",
+        status: "FAIL",
+        message: `Latest verdict is ${reviewLog.verdict}. Required: READY.`,
+      });
+    } else {
+      gates.push({
+        id: "lesson_review_verdict",
+        label: "Lesson review verdict",
+        status: "PASS",
+        message: "READY",
+      });
+    }
+
+    // Gate 2: readinessRubric must be non-null. The rubric feeds Mentor's
+    // readiness classifier — publishing without it means the concept ships
+    // with no way to score learner readiness.
+    if (!concept.readinessRubric) {
+      gates.push({
+        id: "readiness_rubric_present",
+        label: "Readiness rubric present",
+        status: "FAIL",
+        message: "Concept.readinessRubric is required for publish.",
+      });
+    } else {
+      gates.push({
+        id: "readiness_rubric_present",
+        label: "Readiness rubric present",
+        status: "PASS",
+        message: "Rubric defined.",
+      });
+    }
+
+    const failed = gates.filter((g) => g.status === "FAIL");
+    if (failed.length > 0) {
+      return error(res, "Publish blocked", 400, "PUBLISH_GATE_BLOCKED", {
+        gates,
+      });
+    }
+
+    const published = await prisma.concept.update({
+      where: { id: concept.id },
+      data: {
+        status: "PUBLISHED",
+        publishedAt: new Date(),
+      },
+    });
+
+    return success(res, { concept: published, gates });
+  } catch (err) {
+    console.error("publishConcept:", err);
+    return error(res, "Failed to publish concept.", 500);
   }
 }

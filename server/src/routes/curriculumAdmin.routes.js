@@ -19,6 +19,8 @@ import {
   requireTeamContext,
   requireTeamAdmin,
 } from "../middleware/team.middleware.js";
+import { aiLimiter } from "../middleware/rateLimit.middleware.js";
+import { aiTeamLimiter } from "../middleware/aiTeamLimiter.middleware.js";
 import {
   listTopics,
   createTopic,
@@ -29,6 +31,11 @@ import {
   updateConcept,
   createLab,
   updateLab,
+  reviewTopic,
+  reviewConcept,
+  reviewLab,
+  publishTopic,
+  publishConcept,
 } from "../controllers/curriculumAdmin.controller.js";
 
 const router = Router();
@@ -59,5 +66,20 @@ router.patch("/concepts/:id", updateConcept);
 // bubbles up from the parent Concept.
 router.post("/labs", createLab);
 router.patch("/labs/:id", updateLab);
+
+// ── Review triggers (W3.T4) ─────────────────────────────────────────
+// Topic + Concept reviews are AI-backed — chain aiLimiter (per-user
+// 15-min) + aiTeamLimiter (per-team daily) before the controller so
+// both quotas fire independently. Lab review is deterministic and
+// rides the parent apiLimiter only.
+router.post("/topics/:id/review", aiLimiter, aiTeamLimiter, reviewTopic);
+router.post("/concepts/:id/review", aiLimiter, aiTeamLimiter, reviewConcept);
+router.post("/labs/:id/review", reviewLab);
+
+// ── Publish gates (W3.T4) ───────────────────────────────────────────
+// Pure DB reads (latest ContentReviewLog verdict + child-state check).
+// No AI, no rate-limiter chaining beyond the parent apiLimiter.
+router.post("/topics/:id/publish", publishTopic);
+router.post("/concepts/:id/publish", publishConcept);
 
 export default router;
