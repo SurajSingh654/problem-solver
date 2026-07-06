@@ -23,6 +23,7 @@ import { computePressurePerformanceStats } from "../utils/pressurePerformanceSta
 import { computeRetentionStats } from "../utils/retentionStats.js";
 import { computeTeachingStats } from "../utils/teachingStats.js";
 import { computeDesignAptitudeStats } from "../utils/designAptitudeStats.js";
+import { mapLabAttemptsToDesignSessions } from "../utils/designAptitude.curriculum.js";
 import { computeBehavioralPerformanceStats } from "../utils/behavioralPerformanceStats.js";
 import { computeVerificationStats } from "../utils/verificationStats.js";
 import {
@@ -936,6 +937,11 @@ export async function get6DReport(req, res) {
       // D8 Design Aptitude — completed DesignSessions with eval. Only
       // fetched when FEATURE_DESIGN_APTITUDE is on; [] otherwise.
       designSessionsCompleted,
+      // D8 Design Aptitude (W5.T6) — curriculum LabAttempts on
+      // LOW_LEVEL_DESIGN / SYSTEM_DESIGN concepts, adapted into the same
+      // shape `computeDesignAptitudeStats` expects. Merges with the
+      // DesignSession rows above so lab-only users still activate D8.
+      curriculumLabDesignSessions,
     ] = await Promise.all([
       prisma.interviewSession.findMany({
         where: { userId, teamId, status: "COMPLETED" },
@@ -1055,6 +1061,12 @@ export async function get6DReport(req, res) {
               },
             },
           })
+        : Promise.resolve([]),
+      // W5.T6: curriculum-lab design attempts adapted into DesignSession
+      // shape. Gated by the same FEATURE_DESIGN_APTITUDE flag; returns []
+      // when off.
+      FEATURE_DESIGN_APTITUDE
+        ? mapLabAttemptsToDesignSessions({ userId, teamId })
         : Promise.resolve([]),
     ]);
 
@@ -2353,16 +2365,25 @@ export async function get6DReport(req, res) {
     // (or 6D) reports — no D8 axis, no widened CI denominator.
     let d8Score = null;
     let designAptitude = null; // v1 stats object — null when flag off OR no sessions
-    // Discoverability: when flag is on but user has zero design sessions,
-    // render an inactive placeholder with a CTA. Same reasoning as D7.
-    if (FEATURE_DESIGN_APTITUDE && (!Array.isArray(designSessionsCompleted) || designSessionsCompleted.length === 0)) {
+    // W5.T6: merge curriculum-lab design attempts with Design Studio
+    // sessions BEFORE the empty-guard, so a user with only curriculum-lab
+    // evidence still activates D8. Both sources feed
+    // `computeDesignAptitudeStats` via the same shape.
+    const mergedDesignSessions = [
+      ...(Array.isArray(designSessionsCompleted) ? designSessionsCompleted : []),
+      ...(Array.isArray(curriculumLabDesignSessions) ? curriculumLabDesignSessions : []),
+    ];
+    // Discoverability: when flag is on but user has zero design sessions
+    // (from either source), render an inactive placeholder with a CTA.
+    // Same reasoning as D7.
+    if (FEATURE_DESIGN_APTITUDE && (!Array.isArray(mergedDesignSessions) || mergedDesignSessions.length === 0)) {
       d8Score = inactiveDim(
         "designAptitude",
         "Complete a Design Studio session (System Design or LLD) to unlock this dimension — AI evaluates phases + scenarios.",
         0,
       );
-    } else if (FEATURE_DESIGN_APTITUDE && Array.isArray(designSessionsCompleted) && designSessionsCompleted.length > 0) {
-      designAptitude = computeDesignAptitudeStats({ sessions: designSessionsCompleted });
+    } else if (FEATURE_DESIGN_APTITUDE && Array.isArray(mergedDesignSessions) && mergedDesignSessions.length > 0) {
+      designAptitude = computeDesignAptitudeStats({ sessions: mergedDesignSessions });
       if (!designAptitude.active) {
         // Has DesignSession rows but none with completed evaluation.
         d8Score = inactiveDim(
