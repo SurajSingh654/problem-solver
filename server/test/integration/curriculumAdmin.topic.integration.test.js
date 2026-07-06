@@ -32,7 +32,7 @@ import { generateToken } from "../../src/lib/jwt.js";
 import curriculumAdminRouter from "../../src/routes/curriculumAdmin.routes.js";
 import { errorHandler } from "../../src/middleware/error.middleware.js";
 
-const TEST_PREFIX = "test_curradm_";
+const TEST_PREFIX = "test_curradm_t_";
 const TEAM_A_ID = `${TEST_PREFIX}team_a`;
 const TEAM_B_ID = `${TEST_PREFIX}team_b`;
 const ADMIN_A_USER_ID = `${TEST_PREFIX}admin_a`;
