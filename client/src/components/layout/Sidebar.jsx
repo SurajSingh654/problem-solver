@@ -48,9 +48,21 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
             items: [
                 { to: '/super-admin/showcase', icon: '🎪', label: 'Showcase' },
                 { to: '/super-admin/roadmap', icon: '🗺️', label: 'Roadmap' },
-                { to: '/super-admin/learning', icon: '🎓', label: 'Learning Content' },
+                // 📓 (notebook) instead of 🎓 to avoid icon collision with
+                // the new `/learn` curriculum surface — sidebar-polish 2026-07-07.
+                { to: '/super-admin/learning', icon: '📓', label: 'Learning Content' },
             ],
         })
+        if (featureCurriculum) {
+            sections.push({
+                id: 'curriculum',
+                label: 'Curriculum',
+                items: [
+                    { to: '/admin/curriculum', icon: '📖', label: 'Curriculum Admin' },
+                    { to: '/admin/curriculum/templates', icon: '📚', label: 'Templates' },
+                ],
+            })
+        }
         sections.push({
             id: 'health',
             label: 'Health & Audit',
@@ -118,16 +130,21 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
     }
 
     if (isTeamAdmin) {
+        const adminItems = [
+            { to: '/admin', icon: '👑', label: 'Overview' },
+            { to: '/admin/add-problem', icon: '➕', label: 'Add Problem' },
+            { to: '/admin/design-references', icon: '🧭', label: 'References' },
+            { to: '/admin/analytics', icon: '📊', label: 'Analytics' },
+        ]
+        if (featureCurriculum) {
+            adminItems.push({ to: '/admin/curriculum', icon: '📖', label: 'Curriculum' })
+            adminItems.push({ to: '/admin/curriculum/templates', icon: '📚', label: 'Templates' })
+        }
         sections.push({
             id: 'admin',
             label: 'Team Admin',
             adminAccent: true,
-            items: [
-                { to: '/admin', icon: '👑', label: 'Overview' },
-                { to: '/admin/add-problem', icon: '➕', label: 'Add Problem' },
-                { to: '/admin/design-references', icon: '🧭', label: 'References' },
-                { to: '/admin/analytics', icon: '📊', label: 'Analytics' },
-            ],
+            items: adminItems,
         })
     }
 

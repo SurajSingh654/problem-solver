@@ -892,6 +892,19 @@ export const ROADMAP_ITEMS = [
     },
 
     {
+        id: 'sidebar-polish',
+        phase: 'NEXT',
+        theme: 'UX Polish',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'Sidebar polish — Learn grouping, Learning Content overlap, Notes flag coverage, Teaching admin gap',
+        impact: 'Three MINORs surfaced during the Sidebar review on 2026-07-07. Not urgent, but each one is a small clarity or consistency win that reduces future confusion when new roles or flags land.',
+        description: '(1) `Learn` (`/learn`) is currently grouped under `Practice` in the MEMBER sidebar — arguable UX call. Practice = "solve problems you already know"; Learn = "acquire new knowledge." Consider promoting Learn to its own section OR keeping the bundle as a deliberate pedagogy decision. (2) `/super-admin/learning` (Learning Content) and `/learn` (Curriculum) semantically overlap — both are "educational content." Decide whether Learning Content should be sunsetted, repurposed as the SUPER_ADMIN curriculum authoring surface, or kept as a distinct curated-library concept. (3) `VITE_FEATURE_NOTES_ENABLED` gating is asymmetric — checked for MEMBER progressItems but never for SUPER_ADMIN. Same class of asymmetry curriculum had before W6.T-sidebar; fix by extracting one `featureNotes` const and using it consistently across role branches. (4) TEAM_ADMIN admin section has no teaching-admin surface (e.g., configure who can host teaching sessions, view team-level teaching-flag summary). Could be a real gap or by design — audit teaching.controller for admin routes that lack sidebar exposure.',
+        why: 'Deferred from the 2026-07-07 sidebar review that unblocked the curriculum walkthrough. Fixing these now would derail the Phase 1 rollout finalization; batching them into a small future sweep is cheaper.',
+        technicalNotes: 'client/src/components/layout/Sidebar.jsx — buildSections() function. Practice items array at line ~86-101 (Learn placement decision). SUPER_ADMIN Content section line ~45-56 (Learning Content overlap). `featureNotes` extracted at line ~30 but only used in MEMBER branch (~107-110) — thread through SUPER_ADMIN + TEAM_ADMIN. TEAM_ADMIN admin items ~121-132 — teaching-admin surface audit. Rough estimate: 1-2 hours if all four MINORs are addressed together.',
+    },
+
+    {
         id: 'curriculum-lab-multi-file',
         phase: 'NEXT',
         theme: 'Learning Science',
