@@ -1,272 +1,247 @@
 // ============================================================================
-// Topic Mastery Tracks — Concept Primer Reader
+// ConceptPage — curriculum learner 5-tab shell (W4.T7)
 // ============================================================================
 //
-// Full-page reader for a single concept. Renders:
-//   - the curated primerMarkdown (admin-authored, source-grounded)
-//   - canonical sources sidebar (clickable links)
-//   - expectedQuestions as Socratic self-check prompts
-//   - prereq satisfaction advisory if relevant
-//   - "Mark as read" CTA that records a primer_read signal (weight 0 —
-//     reading is logged, but does NOT inflate mastery score)
+// Reads `useConceptDetail(conceptSlug)` (W4.T5) which returns the shaped
+// concept — { ...concept, topic, lab, latestAttempt, mastery }. Server
+// filters to PUBLISHED concepts under a PUBLISHED topic; no DRAFT content
+// leaks here.
 //
-// Honesty principle: reading is the start of learning, not proof of it.
-// The mark-read action only advances the mentor's INTAKE pointer; mastery
-// score still requires real signals (quiz, practice, teaching, mock).
+// Layout: sticky-ish page header + pill-style tab bar (5 tabs) with tab
+// state URL-synced via `?tab=` so deep-links land on the right tab and
+// browser back/forward flip tabs. Follows the inline-TabBar pattern from
+// W3.T9's TopicAuthoringPage (deliberately not extracted to a shared
+// component until a third callsite justifies it — YAGNI).
+//
+// Tab contents live in `./tabs/Concept<Name>Tab.jsx` — each keeps its own
+// hooks + local state so the page-level render stays a light shell.
+//
+// The URL param `slug` is the TOPIC slug (route
+// `/learn/:slug/concepts/:conceptSlug`); we call the concept API with
+// `conceptSlug`. Back-nav uses the topic slug.
 // ============================================================================
-
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useMemo } from 'react'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { ArrowLeft } from 'lucide-react'
 import { Spinner } from '@components/ui/Spinner'
 import { Button } from '@components/ui/Button'
-import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
-import { useConcept, useMarkConceptRead } from '@hooks/useTopics'
+import { VerdictBadge } from '@components/curriculum'
+import { useConceptDetail } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
+import ConceptPrimerTab from './tabs/ConceptPrimerTab'
+import ConceptLabTab from './tabs/ConceptLabTab'
+import ConceptCheckInTab from './tabs/ConceptCheckInTab'
+import ConceptNotesTab from './tabs/ConceptNotesTab'
+import ConceptTeachTab from './tabs/ConceptTeachTab'
+
+const TABS = [
+    { id: 'primer',  label: 'Primer'   },
+    { id: 'lab',     label: 'Lab'      },
+    { id: 'checkin', label: 'Check-in' },
+    { id: 'notes',   label: 'Notes'    },
+    { id: 'teach',   label: 'Teach'    },
+]
+
+const VALID_TAB_IDS = new Set(TABS.map((t) => t.id))
+
+// ────────────────────────────────────────────────────────────────
+// TabBar — pill-style tab picker with optional badge suffix. Same
+// visual grammar as TopicAuthoringPage (W3.T9); copied inline rather
+// than extracted (see file header — YAGNI until 3rd callsite).
+// ────────────────────────────────────────────────────────────────
+function TabBar({ active, onChange, tabs }) {
+    return (
+        <div
+            role="tablist"
+            className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1 overflow-x-auto"
+        >
+            {tabs.map((t) => (
+                <button
+                    key={t.id}
+                    role="tab"
+                    aria-selected={active === t.id}
+                    onClick={() => onChange(t.id)}
+                    className={cn(
+                        'px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap',
+                        'flex items-center gap-2',
+                        active === t.id
+                            ? 'bg-brand-soft text-brand-fg-soft'
+                            : 'text-text-tertiary hover:text-text-primary',
+                    )}
+                >
+                    <span>{t.label}</span>
+                    {t.badge && (
+                        <span
+                            aria-hidden="true"
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-success-soft text-success-fg border border-success-line"
+                        >
+                            {t.badge}
+                        </span>
+                    )}
+                </button>
+            ))}
+        </div>
+    )
+}
+
+// Score → tone for the header mastery pill. Mirrors TopicDetailPage.
+function masteryTone(score) {
+    if (score == null)  return 'bg-surface-3    text-text-tertiary  border-border-default'
+    if (score >= 80)    return 'bg-success-soft text-success-fg     border-success-line'
+    if (score >= 50)    return 'bg-warning-soft text-warning-fg     border-warning-line'
+    return                     'bg-danger-soft  text-danger-fg      border-danger-line'
+}
 
 export default function ConceptPage() {
-    const { slug, conceptSlug } = useParams()
+    // Route: /learn/:slug/concepts/:conceptSlug — `slug` is the TOPIC slug,
+    // used for back-nav; `conceptSlug` drives the concept detail query.
+    const { slug: topicSlug, conceptSlug } = useParams()
     const navigate = useNavigate()
+    const [searchParams, setSearchParams] = useSearchParams()
 
-    const conceptQ = useConcept(slug, conceptSlug)
-    const markRead = useMarkConceptRead(slug, conceptSlug)
+    // Tab state URL-synced. Falls back to 'primer' when the ?tab= param
+    // is missing OR contains a value we don't recognise (guards against
+    // typos + link-rot from renamed tabs).
+    const requestedTab = searchParams.get('tab')
+    const activeTab = requestedTab && VALID_TAB_IDS.has(requestedTab)
+        ? requestedTab
+        : 'primer'
+
+    const setActiveTab = (tabId) => {
+        const next = new URLSearchParams(searchParams)
+        next.set('tab', tabId)
+        setSearchParams(next, { replace: true })
+    }
+
+    const conceptQ = useConceptDetail(conceptSlug)
+
+    // Tab-list decoration: check-in tab gets a ✓ badge when the user
+    // has reached teachingReady (mastery gate cleared). Memoised so the
+    // TabBar prop identity is stable across renders.
+    const tabsWithBadges = useMemo(() => {
+        const teachingReady = conceptQ.data?.mastery?.teachingReady === true
+        return TABS.map((t) =>
+            t.id === 'checkin' && teachingReady ? { ...t, badge: '✓' } : t,
+        )
+    }, [conceptQ.data?.mastery?.teachingReady])
 
     if (conceptQ.isLoading) {
         return (
-            <div className="p-6 flex justify-center">
+            <div className="flex items-center justify-center py-24">
                 <Spinner size="lg" />
             </div>
         )
     }
 
-    if (conceptQ.isError) {
+    if (conceptQ.isError || !conceptQ.data) {
         const status = conceptQ.error?.response?.status
         const message =
             status === 404
                 ? "This concept isn't available yet — it may not be published, or you may not be enrolled."
                 : 'Failed to load concept. Try again in a moment.'
         return (
-            <div className="p-6 max-w-[600px] mx-auto text-center space-y-3">
-                <p className="text-sm text-text-secondary">{message}</p>
-                <Link
-                    to={`/learn/${slug}`}
-                    className="inline-block text-xs font-bold text-brand-fg-soft hover:text-text-primary transition-colors"
-                >
-                    ← Back to topic
-                </Link>
+            <div className="p-6 max-w-3xl mx-auto space-y-4">
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/learn/${topicSlug}`)}>
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to topic
+                </Button>
+                <div className="bg-danger-soft border border-danger-line rounded-xl p-4 text-sm text-danger-fg">
+                    {message}
+                </div>
             </div>
         )
     }
 
-    const { topic, concept, mastery, prereqs } = conceptQ.data
-
-    const handleMarkRead = async () => {
-        const result = await markRead.mutateAsync()
-        const next = result?.data?.data?.nextAction
-        // Deep-link to the next stage if the mentor produced one; otherwise
-        // bounce back to the topic page.
-        const url = next?.surface?.route ?? `/learn/${slug}`
-        navigate(url)
-    }
-
-    const fragilePrereqs = prereqs.filter((p) => (p.score ?? 0) < 50)
+    const concept = conceptQ.data
+    const mastery = concept.mastery
+    // Prefer the concept's own topic.slug (server-provided) — falls back to
+    // the URL param only if the payload is missing it. This makes the back
+    // link resilient to route-shape changes.
+    const backTopicSlug = concept.topic?.slug ?? topicSlug
 
     return (
-        <div className="p-6 max-w-[860px] mx-auto pb-24 space-y-6">
-            {/* ── Breadcrumb ──────────────────────────────────────────── */}
+        <div className="p-6 sm:p-8 max-w-6xl mx-auto space-y-6">
+            {/* Breadcrumb + back nav ──────────────────────────────── */}
             <nav className="text-xs text-text-tertiary flex items-center gap-2">
-                <Link
-                    to="/learn"
-                    className="hover:text-text-primary transition-colors"
-                >
+                <Link to="/learn" className="hover:text-text-primary transition-colors">
                     Learn
                 </Link>
                 <span>/</span>
                 <Link
-                    to={`/learn/${topic.slug}`}
+                    to={`/learn/${backTopicSlug}`}
                     className="hover:text-text-primary transition-colors"
                 >
-                    {topic.name}
+                    {concept.topic?.name ?? 'Topic'}
                 </Link>
                 <span>/</span>
                 <span className="text-text-secondary">{concept.name}</span>
             </nav>
 
-            {/* ── Header ──────────────────────────────────────────────── */}
-            <header className="space-y-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary font-mono">
-                        Concept {concept.order}
-                    </span>
-                    {mastery.primerRead && (
-                        <span className="text-[9px] font-bold px-1.5 py-px rounded-full border bg-success-soft text-success-fg border-success-line">
-                            primer read
-                        </span>
-                    )}
-                    {mastery.score != null && (
+            {/* Header ─────────────────────────────────────────────── */}
+            <header className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
+                            {concept.name}
+                        </h1>
+                        <VerdictBadge verdict={concept.status} />
+                    </div>
+                    <p className="text-xs text-text-secondary">
+                        Part of{' '}
+                        <Link
+                            to={`/learn/${backTopicSlug}`}
+                            className="font-semibold hover:text-text-primary transition-colors"
+                        >
+                            {concept.topic?.name ?? 'this topic'}
+                        </Link>
+                    </p>
+                </div>
+
+                {mastery?.score != null && (
+                    <div className="flex items-center gap-2">
                         <span
                             className={cn(
-                                'text-[9px] font-bold px-1.5 py-px rounded-full border font-mono',
-                                mastery.score >= 80
-                                    ? 'bg-success-soft text-success-fg border-success-line'
-                                    : mastery.score >= 50
-                                        ? 'bg-warning-soft text-warning-fg border-warning-line'
-                                        : 'bg-danger-soft text-danger-fg border-danger-line',
+                                'text-xs font-bold px-2 py-0.5 rounded-full border font-mono',
+                                masteryTone(mastery.score),
                             )}
                         >
-                            {mastery.score}/100
+                            Mastery {Math.round(mastery.score)}%
                         </span>
-                    )}
-                </div>
-                <h1 className="text-2xl font-extrabold text-text-primary">
-                    {concept.name}
-                </h1>
+                        {mastery.teachingReady && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-success-soft text-success-fg border-success-line">
+                                teaching-ready
+                            </span>
+                        )}
+                    </div>
+                )}
             </header>
 
-            {/* ── Prereq advisory ─────────────────────────────────────── */}
-            {fragilePrereqs.length > 0 && (
-                <motion.div
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-warning-soft border border-warning-line rounded-xl p-4 flex items-start gap-3"
-                >
-                    <span className="text-lg">💡</span>
-                    <div className="space-y-1">
-                        <p className="text-xs font-bold text-warning-fg uppercase tracking-widest">
-                            Heads up
-                        </p>
-                        <p className="text-xs text-text-secondary leading-relaxed">
-                            This concept builds on{' '}
-                            {fragilePrereqs
-                                .map((p) => (
-                                    <Link
-                                        key={p.slug}
-                                        to={`/learn/${slug}/concepts/${p.slug}`}
-                                        className="font-bold text-warning-fg hover:underline"
-                                    >
-                                        {p.name}
-                                    </Link>
-                                ))
-                                .reduce((acc, el, i) => (i === 0 ? [el] : [...acc, ', ', el]), [])}
-                            . You're below developing on{' '}
-                            {fragilePrereqs.length === 1 ? 'it' : 'them'} — consider revisiting first.
-                        </p>
-                    </div>
-                </motion.div>
-            )}
+            {/* Tab bar ────────────────────────────────────────────── */}
+            <TabBar
+                active={activeTab}
+                onChange={setActiveTab}
+                tabs={tabsWithBadges}
+            />
 
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_240px] gap-8">
-                {/* ── Primer body ─────────────────────────────────── */}
-                <article>
-                    <MarkdownRenderer content={concept.primerMarkdown} />
-
-                    {concept.workedExample && (
-                        <section className="mt-8 space-y-3">
-                            <h2 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                                Worked example
-                            </h2>
-                            <div className="bg-surface-2 border border-border-default rounded-xl p-4">
-                                <MarkdownRenderer content={concept.workedExample} size="sm" />
-                            </div>
-                        </section>
-                    )}
-
-                    {concept.expectedQuestions?.length > 0 && (
-                        <section className="mt-8 space-y-3">
-                            <h2 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                                Check yourself
-                            </h2>
-                            <p className="text-xs text-text-tertiary leading-relaxed">
-                                If you can answer these without re-reading, you've understood the
-                                surface. Mastery shows up in practice and teaching, not reading.
-                            </p>
-                            <ol className="space-y-2">
-                                {concept.expectedQuestions.map((q, i) => (
-                                    <li
-                                        key={i}
-                                        className="bg-surface-1 border border-border-default rounded-xl p-3 flex items-start gap-3"
-                                    >
-                                        <span className="text-[10px] font-bold font-mono text-text-tertiary shrink-0 mt-0.5">
-                                            Q{i + 1}
-                                        </span>
-                                        <p className="text-xs text-text-secondary leading-relaxed">
-                                            {q}
-                                        </p>
-                                    </li>
-                                ))}
-                            </ol>
-                        </section>
-                    )}
-                </article>
-
-                {/* ── Sources sidebar ─────────────────────────────── */}
-                <aside className="space-y-4 md:sticky md:top-6 md:self-start">
-                    {concept.canonicalSources?.length > 0 && (
-                        <section className="space-y-2">
-                            <h2 className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">
-                                Canonical sources
-                            </h2>
-                            <ul className="space-y-2">
-                                {concept.canonicalSources.map((src, i) => (
-                                    <li key={i}>
-                                        <a
-                                            href={src.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block bg-surface-1 border border-border-default rounded-lg p-3 hover:bg-surface-2 transition-colors"
-                                        >
-                                            <p className="text-xs font-bold text-text-primary leading-snug">
-                                                {src.title}
-                                            </p>
-                                            {src.type && (
-                                                <p className="text-[10px] text-text-tertiary mt-0.5 font-mono uppercase">
-                                                    {src.type}
-                                                </p>
-                                            )}
-                                        </a>
-                                    </li>
-                                ))}
-                            </ul>
-                        </section>
-                    )}
-
-                    <section className="space-y-2 text-[10px] text-text-tertiary leading-relaxed">
-                        <p>
-                            Reading is logged but doesn't bump your mastery score. Score moves on
-                            real signals: quiz, practice, teaching, mock.
-                        </p>
-                    </section>
-                </aside>
-            </div>
-
-            {/* ── Mark-as-read CTA ───────────────────────────────────── */}
-            <div className="border-t border-border-default pt-6 flex items-center justify-between gap-4">
-                <Link
-                    to={`/learn/${slug}`}
-                    className="text-xs text-text-tertiary hover:text-text-primary transition-colors"
-                >
-                    ← Back to topic
-                </Link>
-                <Button
-                    variant="primary"
-                    size="md"
-                    onClick={handleMarkRead}
-                    disabled={markRead.isPending}
-                >
-                    {mastery.primerRead
-                        ? markRead.isPending
-                            ? 'Continuing…'
-                            : 'Continue →'
-                        : markRead.isPending
-                            ? 'Saving…'
-                            : 'Mark as read & continue →'}
-                </Button>
-            </div>
-            {markRead.isError && (
-                <p className="text-xs text-danger-fg text-right">
-                    {markRead.error?.response?.data?.error?.message ??
-                        'Failed to save. Try again.'}
-                </p>
-            )}
+            {/* Active tab body ────────────────────────────────────── */}
+            <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+            >
+                {activeTab === 'primer'  && (
+                    <ConceptPrimerTab
+                        concept={concept}
+                        onGoToLab={() => setActiveTab('lab')}
+                    />
+                )}
+                {activeTab === 'lab'     && <ConceptLabTab     concept={concept} />}
+                {activeTab === 'checkin' && <ConceptCheckInTab concept={concept} onGoToLab={() => setActiveTab('lab')} />}
+                {activeTab === 'notes'   && <ConceptNotesTab   concept={concept} />}
+                {activeTab === 'teach'   && <ConceptTeachTab   concept={concept} onGoToLab={() => setActiveTab('lab')} onGoToCheckIn={() => setActiveTab('checkin')} />}
+            </motion.div>
         </div>
     )
 }
