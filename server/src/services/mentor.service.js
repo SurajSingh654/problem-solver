@@ -4,8 +4,8 @@
 //
 // Three pure functions over the Topic Mastery Tracks data model:
 //
-//   planNextAction(userId, topicId) → { stage, concept, surface, minutes, reason }
-//   detectStuck(userId, topicId)    → { stuck, signals[], recommendation }
+//   planNextAction(userId, topicId, teamId) → { stage, concept, surface, minutes, reason }
+//   detectStuck(userId, topicId, teamId)    → { stuck, signals[], recommendation }
 //   updateMastery(userId, conceptId, signal) → updated ConceptMastery row
 //
 // v1.2 = hand-coded rules. The shape of these functions is locked here so
@@ -18,6 +18,15 @@
 //     will retrieve over the curated KB, never improvise.)
 //   - Stage signals (INTAKE / EXPLORE / REFLECT / TEACH / VALIDATE) map
 //     1:1 to existing ProbSolver surfaces — no new evaluation pipelines.
+//
+// TENANCY (W6.T1):
+//   - `planNextAction`, `detectStuck`, and the internal `loadTopicState`
+//     REQUIRE a `teamId` argument and throw when it is missing. The team
+//     filter is threaded into every Prisma `concept.findMany` and
+//     `conceptMastery.findMany` clause so a user who is a member of two
+//     teams cannot have Team A evidence bleed into Team B decisions.
+//     Callers MUST NOT read `req.user.currentTeamId` — see CLAUDE.md
+//     multi-tenancy invariants.
 // ============================================================================
 
 import prisma from "../lib/prisma.js";
@@ -91,6 +100,8 @@ const SIGNAL_FRESHNESS_DAYS = 90;
  *
  * @param {string} userId
  * @param {string} topicId
+ * @param {string} teamId — required. Scopes every concept + mastery read so
+ *   a member of two teams can't have Team A signals influence Team B planning.
  * @returns {Promise<{
  *   stage: string,
  *   concept: { id, slug, name } | null,
@@ -99,7 +110,8 @@ const SIGNAL_FRESHNESS_DAYS = 90;
  *   reason: string,
  * } | null>}
  */
-export async function planNextAction(userId, topicId) {
+export async function planNextAction(userId, topicId, teamId) {
+  if (!teamId) throw new Error("planNextAction: teamId required");
   const enrollment = await prisma.topicEnrollment.findUnique({
     where: { userId_topicId: { userId, topicId } },
     select: { status: true, calibration: true },
@@ -121,7 +133,11 @@ export async function planNextAction(userId, topicId) {
     };
   }
 
-  const { topic, concepts, masteryById } = await loadTopicState(userId, topicId);
+  const { topic, concepts, masteryById } = await loadTopicState(
+    userId,
+    topicId,
+    teamId,
+  );
   if (concepts.length === 0) {
     return {
       stage: "COMPLETE",
@@ -231,7 +247,8 @@ export async function planNextAction(userId, topicId) {
  *   recommendation: { action: string, message: string } | null,
  * }>}
  */
-export async function detectStuck(userId, topicId) {
+export async function detectStuck(userId, topicId, teamId) {
+  if (!teamId) throw new Error("detectStuck: teamId required");
   const enrollment = await prisma.topicEnrollment.findUnique({
     where: { userId_topicId: { userId, topicId } },
     select: { status: true, lastActiveAt: true, startedAt: true },
@@ -253,8 +270,14 @@ export async function detectStuck(userId, topicId) {
 
   // Per-concept signal: 2+ consecutive practice failures (score < 40).
   // Loaded directly from the signals JSON log on ConceptMastery.
+  // Defense-in-depth: filter by BOTH the concept's topicId AND its teamId
+  // so a Team A concept can't leak into a Team B detectStuck call even if
+  // callers accidentally passed the wrong topicId.
   const masteries = await prisma.conceptMastery.findMany({
-    where: { userId, concept: { topicId } },
+    where: {
+      userId,
+      concept: { topicId, teamId },
+    },
     select: { conceptId: true, signals: true, score: true },
   });
   for (const m of masteries) {
@@ -370,8 +393,14 @@ async function topicSlugFor(topicId) {
 /**
  * Load the topic + its published concepts + the user's mastery rows in
  * one round-trip. Returns concepts with prerequisites pre-joined.
+ *
+ * Tenancy: `teamId` is required. Both the concept query and the mastery
+ * query filter by it so a user with membership in two teams can never
+ * pull Team A rows into a Team B planning decision — even in the presence
+ * of a caller-side bug that passed a mismatched topicId.
  */
-async function loadTopicState(userId, topicId) {
+async function loadTopicState(userId, topicId, teamId) {
+  if (!teamId) throw new Error("loadTopicState: teamId required");
   const topic = await prisma.topic.findUnique({
     where: { id: topicId },
     select: {
@@ -383,7 +412,7 @@ async function loadTopicState(userId, topicId) {
     },
   });
   const concepts = await prisma.concept.findMany({
-    where: { topicId, status: "PUBLISHED" },
+    where: { topicId, teamId, status: "PUBLISHED" },
     orderBy: { order: "asc" },
     include: {
       prerequisites: { select: { prereqId: true } },
@@ -393,6 +422,7 @@ async function loadTopicState(userId, topicId) {
     where: {
       userId,
       conceptId: { in: concepts.map((c) => c.id) },
+      concept: { teamId },
     },
   });
   const masteryById = new Map(masteries.map((m) => [m.conceptId, m]));

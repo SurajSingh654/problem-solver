@@ -222,7 +222,7 @@ export async function getTopicState(req, res) {
 
     const topic = await prisma.topic.findUnique({
       where: { slug },
-      select: { id: true, status: true },
+      select: { id: true, status: true, teamId: true },
     });
     if (!topic || topic.status !== "PUBLISHED") {
       return error(res, "Topic not found.", 404);
@@ -238,7 +238,7 @@ export async function getTopicState(req, res) {
     const masteries = await prisma.conceptMastery.findMany({
       where: {
         userId,
-        concept: { topicId: topic.id },
+        concept: { topicId: topic.id, teamId: topic.teamId },
       },
       select: {
         conceptId: true,
@@ -252,10 +252,14 @@ export async function getTopicState(req, res) {
     // Mentor Orchestrator outputs — what to do next, whether the user is
     // stuck, and a small progress summary for the UI. Computed in parallel
     // because the two operations don't share state.
+    // W6.T1: pass topic.teamId so mentor.service scopes every read to the
+    // topic's owning team — see mentor.service.js header for tenancy note.
     const [nextAction, stuck, totalConcepts] = await Promise.all([
-      planNextAction(userId, topic.id),
-      detectStuck(userId, topic.id),
-      prisma.concept.count({ where: { topicId: topic.id, status: "PUBLISHED" } }),
+      planNextAction(userId, topic.id, topic.teamId),
+      detectStuck(userId, topic.id, topic.teamId),
+      prisma.concept.count({
+        where: { topicId: topic.id, teamId: topic.teamId, status: "PUBLISHED" },
+      }),
     ]);
 
     const progress = summarizeProgress(masteries, totalConcepts);
@@ -426,7 +430,7 @@ export async function submitTopicCalibration(req, res) {
 
     const topic = await prisma.topic.findUnique({
       where: { slug },
-      select: { id: true },
+      select: { id: true, teamId: true },
     });
     if (!topic) return error(res, "Topic not found.", 404);
 
@@ -469,9 +473,10 @@ export async function submitTopicCalibration(req, res) {
     });
 
     // Recompute next action so the result screen can deep-link.
+    // W6.T1: pass topic.teamId — mentor.service throws on missing teamId.
     let nextAction = null;
     try {
-      nextAction = await planNextAction(userId, topic.id);
+      nextAction = await planNextAction(userId, topic.id, topic.teamId);
     } catch (err) {
       // Non-fatal — frontend can refetch /state if this fails.
       console.error("submitTopicCalibration: planNextAction failed:", err);
@@ -592,21 +597,27 @@ export async function markConceptRead(req, res) {
 
     const topic = await prisma.topic.findFirst({
       where: { slug, status: "PUBLISHED" },
-      select: { id: true },
+      select: { id: true, teamId: true },
     });
     if (!topic) return error(res, "Topic not found.", 404);
 
     const concept = await prisma.concept.findFirst({
-      where: { topicId: topic.id, slug: conceptSlug, status: "PUBLISHED" },
+      where: {
+        topicId: topic.id,
+        teamId: topic.teamId,
+        slug: conceptSlug,
+        status: "PUBLISHED",
+      },
       select: { id: true },
     });
     if (!concept) return error(res, "Concept not found.", 404);
 
     await updateMastery(userId, concept.id, { source: "primer_read", value: 0 });
 
+    // W6.T1: pass topic.teamId — mentor.service throws on missing teamId.
     let nextAction = null;
     try {
-      nextAction = await planNextAction(userId, topic.id);
+      nextAction = await planNextAction(userId, topic.id, topic.teamId);
     } catch (err) {
       console.error("markConceptRead: planNextAction failed:", err);
     }
