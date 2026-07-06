@@ -1159,3 +1159,90 @@ export async function publishConcept(req, res) {
     return error(res, "Failed to publish concept.", 500);
   }
 }
+
+/**
+ * POST /curriculum/admin/labs/:id/publish
+ * Enforces the deterministic Lab publish gate (no AI — shape-check only) and
+ * flips Lab.status → PUBLISHED. Gate follows master plan §Week 3:
+ * starter files present, reference solution present, timebox present.
+ */
+export async function publishLab(req, res) {
+  try {
+    const { id } = req.params;
+
+    const lab = await prisma.lab.findFirst({
+      where: { id, teamId: req.teamId },
+      select: {
+        id: true,
+        starterCode: true,
+        referenceSolution: true,
+        timeboxMinutes: true,
+      },
+    });
+    if (!lab) {
+      return error(res, "Lab not found", 404, "LAB_NOT_FOUND");
+    }
+
+    const gates = [];
+
+    // Gate 1: reference solution non-empty (the reveal payload must exist).
+    if (!lab.referenceSolution || lab.referenceSolution.trim().length === 0) {
+      gates.push({
+        id: "reference_solution_present",
+        label: "Reference solution present",
+        status: "FAIL",
+        message: "Lab.referenceSolution is required for publish.",
+      });
+    } else {
+      gates.push({
+        id: "reference_solution_present",
+        label: "Reference solution present",
+        status: "PASS",
+        message: "Reference solution defined.",
+      });
+    }
+
+    // Gate 2: timebox present. The lab UI depends on a countdown.
+    if (!lab.timeboxMinutes || lab.timeboxMinutes <= 0) {
+      gates.push({
+        id: "timebox_present",
+        label: "Timebox present",
+        status: "FAIL",
+        message: "Lab.timeboxMinutes must be a positive integer.",
+      });
+    } else {
+      gates.push({
+        id: "timebox_present",
+        label: "Timebox present",
+        status: "PASS",
+        message: `${lab.timeboxMinutes} min.`,
+      });
+    }
+
+    // Note: starterCode is intentionally NOT gated. The learner surface
+    // withholds starterCode along with referenceSolution (see W4 design
+    // decision documented in curriculum.controller.js:198), so an empty
+    // starterCode is acceptable — the learner starts from a blank editor.
+
+    const failed = gates.filter((g) => g.status === "FAIL");
+    if (failed.length > 0) {
+      return error(res, "Publish blocked", 400, "PUBLISH_GATE_BLOCKED", {
+        gates,
+      });
+    }
+
+    const published = await prisma.lab.update({
+      where: { id: lab.id },
+      data: {
+        status: "PUBLISHED",
+      },
+    });
+
+    await auditIfSuperAdminOverride(req, "LAB_PUBLISH", { labId: lab.id });
+
+    return success(res, { lab: published, gates });
+  } catch (err) {
+    console.error("publishLab:", err);
+    return error(res, "Failed to publish lab.", 500);
+  }
+}

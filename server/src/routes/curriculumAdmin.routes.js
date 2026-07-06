@@ -38,6 +38,7 @@ import {
   reviewLab,
   publishTopic,
   publishConcept,
+  publishLab,
 } from "../controllers/curriculumAdmin.controller.js";
 
 const router = Router();
@@ -96,5 +97,6 @@ router.post("/labs/:id/review", reviewLab);
 // No AI, no rate-limiter chaining beyond the parent apiLimiter.
 router.post("/topics/:id/publish", publishTopic);
 router.post("/concepts/:id/publish", publishConcept);
+router.post("/labs/:id/publish", publishLab);
 
 export default router;

@@ -29,14 +29,6 @@
 // Fixture prefix `test_w6t3_`. Cleanup uses `$executeRawUnsafe` in strict
 // FK order to bypass the soft-delete middleware.
 //
-// Deviation from plan Step 5: the plan calls `POST .../labs/:id/publish`
-// (expect 200) but the curriculumAdmin router exposes no such endpoint.
-// Labs come out of the fork as DRAFT and the CRUD PATCH does not accept
-// `status`. This test flips `Lab.status = "PUBLISHED"` via a direct
-// prisma.lab.update — faithfully simulating what a lab-publish endpoint
-// would ultimately do, and preserving the learner-side invariant that
-// labs must be PUBLISHED before attempts + reveal succeed.
-//
 // TEST_TIMEOUT_MS = 90000 — this is a long test (~25 sequential HTTP
 // round-trips + a fire-and-forget CODE_REVIEW poll).
 //
@@ -581,18 +573,14 @@ describe("curriculum — consolidated golden-path E2E (TEAM_ADMIN author + MEMBE
       expect(publishConcept.status).toBe(200);
       expect(publishConcept.body.data.concept.status).toBe("PUBLISHED");
 
-      // ── Step 5: publish the lab ─────────────────────────────────
-      // DEVIATION from plan: no POST /labs/:id/publish endpoint exists.
-      // Labs come out of the fork as DRAFT; the CRUD PATCH does not
-      // accept `status`. Simulate the missing publish endpoint with a
-      // direct Prisma update — the learner routes filter labs by
-      // status="PUBLISHED", so this is required for the journey to
-      // proceed. See file header for the full rationale.
-      const publishedLab = await prisma.lab.update({
-        where: { id: labId },
-        data: { status: "PUBLISHED" },
-      });
-      expect(publishedLab.status).toBe("PUBLISHED");
+      // ── Step 5: publish the lab → 200 PUBLISHED ────────────────
+      const publishLab = await req(
+        "POST",
+        `/api/v1/curriculum/admin/labs/${labId}/publish`,
+        { token: adminToken },
+      );
+      expect(publishLab.status).toBe(200);
+      expect(publishLab.body.data.lab.status).toBe("PUBLISHED");
 
       // ── Step 6: publish the topic → 200 PUBLISHED ───────────────
       const publishTopic = await req(
