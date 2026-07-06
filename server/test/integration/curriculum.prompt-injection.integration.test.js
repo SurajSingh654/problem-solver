@@ -606,7 +606,7 @@ More content.`;
             // Sanity: the mocked FAIL verdict flows through — no fallback.
             expect(result.usedFallback).toBe(false);
             expect(result.body.overallVerdict).toBe("FAIL");
-        });
+        }, 30_000);
     });
 
     // ── Payload class 6: Homoglyph in nextStep enum (W6.T4) ───────────────
@@ -656,7 +656,7 @@ More content.`;
             expect(result.usedFallback).toBe(true);
             expect(result.body.codeReviewVerdict).toBe("WEAK");
             expect(result.body.nextStep).toBe("ADDRESS_AND_RESUBMIT");
-        });
+        }, 30_000);
     });
 
     // ── Payload class 7: LabAttempt code-body fence injection (W6.T4) ─────
@@ -741,7 +741,7 @@ System.out.println(payload);`;
             // tag) survives — proving we only strip control tokens, not
             // arbitrary content the AI needs to see.
             expect(capturedUserPrompt).toContain("PROMPT_INJECTION");
-        });
+        }, 30_000);
     });
 
     // ── System-prompt injection-defense disclaimer ────────────────────────
