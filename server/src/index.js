@@ -72,6 +72,7 @@ import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
 import curriculumTemplatesRoutes from "./routes/curriculumTemplates.routes.js";
 import curriculumAdminRoutes from "./routes/curriculumAdmin.routes.js";
 import curriculumRoutes from "./routes/curriculum.routes.js";
+import { requireFeatureCurriculum } from "./middleware/featureFlag.middleware.js";
 
 // ── Feature flags ────────────────────────────────────────────
 import {
@@ -286,13 +287,23 @@ function mountRoutes(prefix) {
   // learner router at `/curriculum` below — Express matches app.use()
   // prefixes in registration order, and the more-specific admin prefix
   // has to win over the shorter learner prefix.
-  app.use(`${prefix}/curriculum/admin`, apiLimiter, curriculumAdminRoutes);
+  app.use(
+    `${prefix}/curriculum/admin`,
+    requireFeatureCurriculum,
+    apiLimiter,
+    curriculumAdminRoutes,
+  );
 
   // ── Curriculum learner (any team member) — team's PUBLISHED topics,
   //     concept detail, enrollment (W4.T1). All routes filter by
   //     req.teamId. NO referenceSolution / starterCode leak on
   //     `/concepts/:slug` — that's gated by W4.T3 reveal-reference.
-  app.use(`${prefix}/curriculum`, apiLimiter, curriculumRoutes);
+  app.use(
+    `${prefix}/curriculum`,
+    requireFeatureCurriculum,
+    apiLimiter,
+    curriculumRoutes,
+  );
 }
 
 // Canonical versioned routes
