@@ -1,36 +1,58 @@
 // ============================================================================
-// ConceptLabTab — minimal lab surface (W4.T7)
+// ConceptLabTab — Monaco lab surface (W5.T4)
 // ============================================================================
 //
-// This is intentionally a *shell* — the Monaco editor + submit flow lands
-// in Week 5. For W4 the tab surfaces:
+// Rewired from the W4 shell to the full attempt loop:
 //
-//   - The lab task markdown + timebox + language + expectedArtifacts
-//   - A disabled "Open Lab (Week 5)" CTA (tooltip explains why)
-//   - The user's latest attempt (id / attemptNumber / submittedAt / verdict)
-//     — pulled from `concept.latestAttempt` on the concept detail payload.
-//     No code body, no full history: those come with the Monaco flow in W5.
-//   - A "Reveal reference solution" button gated by the same rules the
-//     server enforces. The client can only pre-check the verdict — the
-//     server also checks `codeReview.nextStep === READY_FOR_REFERENCE`,
-//     which the concept-detail response does NOT expose. So the button
-//     may be enabled and still hit a 403 REVEAL_BLOCKED_NEXT_STEP; the
-//     toast surfaces the reason. This is fine — click-then-block is an
-//     accepted trade for a smaller API surface here.
+//   - Task markdown + timebox + language chips (unchanged from W4)
+//   - MonacoLabEditor bound to a local `code` state, seeded from the
+//     autosave draft in localStorage on mount (falls back to "" — the
+//     concept detail payload deliberately withholds `starterCode` behind
+//     the same reveal gate that protects `referenceSolution`, so we have
+//     nothing scaffold-like to show pre-reveal). Draft is cleared on
+//     successful submit.
+//   - Submit → useSubmitAttempt → 202 { attemptId }. We track the id and
+//     mount useAttempt(labId, attemptId) which polls every 3s until the
+//     server flips reviewStatus to COMPLETED / ERROR. In parallel we open
+//     a WS via useCurriculumReviewReady — either channel invalidates the
+//     attempt query so the poll's next tick pulls the fresh row.
+//   - When reviewStatus === "COMPLETED" and attempt.codeReview is present
+//     we render <CodeReviewResult review={attempt.codeReview} />.
+//   - The reveal button remains but now handleReveal stashes the returned
+//     referenceSolution into local state. When BOTH revealedReferenceAt
+//     is stamped AND we have the reference string in memory, we render
+//     <ReferenceDiff> in a modal. On a page refresh after reveal, the
+//     revealedReferenceAt persists but the reference string does NOT (it's
+//     only returned by the reveal endpoint). The button then acts as
+//     "View reference solution" and re-calls the idempotent endpoint.
 //
-// On success the reveal call returns the referenceSolution string; we
-// render it in an inline modal (framer AnimatePresence + backdrop click
-// = close). Not extracted to a shared Modal component because this is
-// the only reveal surface in the app.
+// CRITICAL invariant (from the four-role PO review of the T4 plan):
+// <ReferenceDiff userCode={...}> MUST bind to the SUBMITTED attempt.code,
+// not the live editor `code` state. If a user edits the editor after
+// submitting and then reveals, they should see their submitted snapshot
+// diffed against the reference — not their in-progress edits. The polled
+// getAttempt endpoint returns `attempt.code`; concept.latestAttempt does
+// NOT include it, so `useAttempt` is the only source of truth here.
 // ============================================================================
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { Button } from '@components/ui/Button'
 import { EmptyState } from '@components/ui/EmptyState'
 import { VerdictBadge } from '@components/curriculum'
-import { useRevealReference } from '@hooks/useCurriculumLearn'
+import MonacoLabEditor, {
+    loadDraft,
+    clearDraft,
+} from '@components/curriculum/MonacoLabEditor'
+import CodeReviewResult from '@components/curriculum/CodeReviewResult'
+import ReferenceDiff from '@components/curriculum/ReferenceDiff'
+import {
+    useAttempt,
+    useCurriculumReviewReady,
+    useRevealReference,
+    useSubmitAttempt,
+} from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
 
 // Client-side gate for the reveal button. Mirrors part of the server
@@ -65,10 +87,11 @@ function computeRevealGate(attempt) {
     return { canReveal: true, message: null }
 }
 
-// Reference-solution modal — plain textual code block (no syntax high-
-// lighting — this is a "here's the answer" reveal, not editable).
-// AnimatePresence lives in the caller so exit animations run.
-function ReferenceModal({ code, onClose }) {
+// Reference-diff modal — hosts the Monaco DiffEditor so the user sees
+// their SUBMITTED code (attempt.code, NOT the live editor state) side-by-
+// side with the reference. AnimatePresence lives in the caller so exit
+// animations run.
+function ReferenceDiffModal({ language, userCode, referenceCode, onClose }) {
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -86,8 +109,8 @@ function ReferenceModal({ code, onClose }) {
                 onClick={(e) => e.stopPropagation()}
                 role="dialog"
                 aria-modal="true"
-                aria-label="Reference solution"
-                className="bg-surface-1 border border-border-default rounded-2xl w-full max-w-3xl shadow-2xl max-h-[80vh] flex flex-col"
+                aria-label="Reference solution diff"
+                className="bg-surface-1 border border-border-default rounded-2xl w-full max-w-6xl shadow-2xl max-h-[90vh] flex flex-col"
             >
                 <div className="p-5 border-b border-border-subtle flex items-center justify-between">
                     <div>
@@ -95,7 +118,9 @@ function ReferenceModal({ code, onClose }) {
                             Reference solution
                         </h2>
                         <p className="text-xs text-text-tertiary mt-0.5">
-                            One canonical answer — your own solution may look different and still be correct.
+                            Your submitted attempt on the left, one canonical
+                            reference on the right. Different structure can still
+                            be correct — read for insight, not conformance.
                         </p>
                     </div>
                     <button
@@ -107,10 +132,12 @@ function ReferenceModal({ code, onClose }) {
                         <X className="w-4 h-4" />
                     </button>
                 </div>
-                <div className="flex-1 overflow-auto">
-                    <pre className="bg-surface-2 p-4 text-sm font-mono leading-relaxed whitespace-pre-wrap">
-                        <code>{code}</code>
-                    </pre>
+                <div className="flex-1 overflow-auto p-4">
+                    <ReferenceDiff
+                        language={language}
+                        userCode={userCode}
+                        referenceCode={referenceCode}
+                    />
                 </div>
             </motion.div>
         </motion.div>
@@ -118,11 +145,96 @@ function ReferenceModal({ code, onClose }) {
 }
 
 export default function ConceptLabTab({ concept }) {
-    const [referenceOpen, setReferenceOpen] = useState(false)
-    const [reference, setReference] = useState(null)
-    const reveal = useRevealReference(concept.lab?.id, concept.slug)
+    const lab = concept.lab
+    const labId = lab?.id
+    const language = lab?.language ?? 'JAVA'
+    const conceptSlug = concept.slug
 
-    if (!concept.lab) {
+    // Latest attempt id — either the one we just submitted this session
+    // (activeAttemptId) or, on cold-refresh, the id embedded in
+    // concept.latestAttempt. If the persisted one is already terminal the
+    // useAttempt hook fires once and stops polling.
+    const [activeAttemptId, setActiveAttemptId] = useState(null)
+    const latestAttemptId = concept.latestAttempt?.id ?? null
+    const attemptIdForPolling = activeAttemptId ?? latestAttemptId
+
+    // Editor state — seed from localStorage draft. starterCode is not on
+    // the learner concept payload (see file header) so the fallback is "".
+    // Using an initializer function keeps this a single mount-time read;
+    // subsequent labId changes are rare (route-level remount) but if they
+    // happen we still want to reload the right draft — see the effect
+    // below.
+    const [code, setCode] = useState(() => loadDraft(labId) ?? '')
+
+    // If the user navigates between concepts (labId changes without a full
+    // page remount — e.g. via TopicDetailPage links), reload the draft for
+    // the new lab. This is idempotent when labId is stable.
+    useEffect(() => {
+        setCode(loadDraft(labId) ?? '')
+    }, [labId])
+
+    // Reveal-reference plumbing.
+    const [referenceOpen, setReferenceOpen] = useState(false)
+    const [referenceSolution, setReferenceSolution] = useState(null)
+    const reveal = useRevealReference(labId, conceptSlug)
+
+    // Submit + poll + WS.
+    const submit = useSubmitAttempt(labId)
+    const attemptQuery = useAttempt(labId, attemptIdForPolling)
+    const polledAttempt = attemptQuery.data ?? null
+
+    // Subscribe to curriculum:review_ready ONLY while we have a non-
+    // terminal attempt in flight. The hook internally no-ops on a null
+    // attemptId, so this guard is a small optimisation — it stops us from
+    // opening a socket for already-COMPLETED historical attempts on
+    // page load.
+    const wsAttemptId =
+        polledAttempt && polledAttempt.reviewStatus !== 'COMPLETED' &&
+            polledAttempt.reviewStatus !== 'ERROR'
+            ? attemptIdForPolling
+            : null
+    useCurriculumReviewReady(wsAttemptId, { conceptSlug, labId })
+
+    // The "current attempt" surface uses the polled row when we have one
+    // (has code + codeReview) and falls back to the concept-detail summary
+    // otherwise (fresh page load, before the first getAttempt tick).
+    const currentAttempt = polledAttempt ?? concept.latestAttempt ?? null
+    const gate = computeRevealGate(currentAttempt)
+    const alreadyRevealed = Boolean(currentAttempt?.revealedReferenceAt)
+
+    const canSubmit = useMemo(
+        () => code.trim().length > 0 && !submit.isPending,
+        [code, submit.isPending],
+    )
+
+    async function handleSubmit() {
+        try {
+            const result = await submit.mutateAsync({
+                code,
+                conceptSlug,
+            })
+            const nextId = result?.attemptId
+            if (nextId) {
+                setActiveAttemptId(nextId)
+                clearDraft(labId)
+            }
+        } catch {
+            // useToastingMutation surfaces the error toast.
+        }
+    }
+
+    async function handleReveal() {
+        try {
+            const result = await reveal.mutateAsync()
+            const refCode = result?.referenceSolution ?? ''
+            setReferenceSolution(refCode)
+            setReferenceOpen(true)
+        } catch {
+            // useToastingMutation surfaces the error toast.
+        }
+    }
+
+    if (!lab) {
         return (
             <EmptyState
                 icon="🧪"
@@ -132,26 +244,14 @@ export default function ConceptLabTab({ concept }) {
         )
     }
 
-    const lab = concept.lab
-    const attempt = concept.latestAttempt
-    const gate = computeRevealGate(attempt)
-    const alreadyRevealed = Boolean(attempt?.revealedReferenceAt)
-
-    async function handleReveal() {
-        try {
-            const result = await reveal.mutateAsync()
-            const code = result?.referenceSolution ?? ''
-            setReference(code)
-            setReferenceOpen(true)
-        } catch {
-            // useToastingMutation surfaces the error toast (with the
-            // server's message). Nothing extra to do here.
-        }
-    }
+    // The submitted snapshot fed to ReferenceDiff. MUST be attempt.code
+    // (the persisted snapshot), NOT the live editor state — see the file
+    // header for the reasoning.
+    const submittedUserCode = polledAttempt?.code ?? ''
 
     return (
         <div className="space-y-8">
-            {/* Header — title + meta chips + open-editor CTA ─────── */}
+            {/* Header — title + meta chips ─────────────────────────── */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
                     <h2 className="text-xl font-bold text-text-primary">
@@ -170,16 +270,6 @@ export default function ConceptLabTab({ concept }) {
                         )}
                         <VerdictBadge verdict={lab.status} />
                     </div>
-                </div>
-                <div className="shrink-0">
-                    <Button
-                        variant="primary"
-                        size="md"
-                        disabled
-                        title="Monaco editor coming in Phase 1 Week 5"
-                    >
-                        Open Lab (Week 5)
-                    </Button>
                 </div>
             </div>
 
@@ -211,39 +301,100 @@ export default function ConceptLabTab({ concept }) {
                 </section>
             )}
 
-            {/* Attempt history (latest only for W4) ───────────────── */}
+            {/* Monaco editor + submit ─────────────────────────────── */}
             <section className="space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                    Your attempts
+                    Your solution
                 </h3>
-                {attempt ? (
-                    <div className="border border-border-default bg-surface-1 rounded-xl p-4">
+                <MonacoLabEditor
+                    labId={labId}
+                    language={language}
+                    starterCode=""
+                    value={code}
+                    onChange={setCode}
+                    disabled={submit.isPending}
+                />
+                <div className="flex items-center gap-3 flex-wrap">
+                    <Button
+                        variant="primary"
+                        size="md"
+                        onClick={handleSubmit}
+                        disabled={!canSubmit}
+                    >
+                        {submit.isPending ? 'Submitting…' : 'Submit for review'}
+                    </Button>
+                    {code.trim().length === 0 && (
+                        <span className="text-xs text-text-tertiary">
+                            Write some code first.
+                        </span>
+                    )}
+                </div>
+            </section>
+
+            {/* Current attempt summary ─────────────────────────────── */}
+            <section className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                    Latest attempt
+                </h3>
+                {currentAttempt ? (
+                    <div className="border border-border-default bg-surface-1 rounded-xl p-4 space-y-3">
                         <div className="flex items-center gap-3 flex-wrap">
                             <span className="text-sm font-mono text-text-secondary">
-                                Attempt #{attempt.attemptNumber}
+                                Attempt #{currentAttempt.attemptNumber}
                             </span>
-                            <VerdictBadge verdict={attempt.reviewStatus} />
-                            {attempt.codeReviewVerdict && (
-                                <VerdictBadge verdict={attempt.codeReviewVerdict} />
+                            <VerdictBadge verdict={currentAttempt.reviewStatus} />
+                            {currentAttempt.codeReviewVerdict && (
+                                <VerdictBadge
+                                    verdict={currentAttempt.codeReviewVerdict}
+                                />
                             )}
                             <span className="text-xs text-text-tertiary ml-auto">
-                                {new Date(attempt.submittedAt).toLocaleString()}
+                                {new Date(currentAttempt.submittedAt).toLocaleString()}
                             </span>
                         </div>
-                        {attempt.revealedReferenceAt && (
-                            <p className="mt-2 text-xs text-text-tertiary">
+                        {currentAttempt.reviewStatus === 'PENDING' && (
+                            <p className="text-xs text-text-tertiary">
+                                Waiting for AI review — this normally takes a
+                                few seconds. You can navigate away; the review
+                                will finish in the background.
+                            </p>
+                        )}
+                        {currentAttempt.reviewStatus === 'ERROR' && (
+                            <p className="text-xs text-danger-fg">
+                                Review failed to complete. Try resubmitting.
+                            </p>
+                        )}
+                        {currentAttempt.reviewedAt && (
+                            <p className="text-[11px] text-text-tertiary">
+                                Reviewed on{' '}
+                                {new Date(currentAttempt.reviewedAt).toLocaleString()}
+                            </p>
+                        )}
+                        {currentAttempt.revealedReferenceAt && (
+                            <p className="text-[11px] text-text-tertiary">
                                 Reference revealed on{' '}
-                                {new Date(attempt.revealedReferenceAt).toLocaleDateString()}
+                                {new Date(currentAttempt.revealedReferenceAt).toLocaleDateString()}
                             </p>
                         )}
                     </div>
                 ) : (
                     <div className="border border-border-default bg-surface-1 rounded-xl p-4 text-sm text-text-tertiary italic">
-                        No attempts yet — once the Monaco editor ships in Week 5
-                        you'll be able to submit here.
+                        No attempts yet — write some code above and submit
+                        for review.
                     </div>
                 )}
             </section>
+
+            {/* Structured code-review result ──────────────────────── */}
+            {polledAttempt?.reviewStatus === 'COMPLETED' &&
+                polledAttempt.codeReview && (
+                    <section className="space-y-3">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                            Code review
+                        </h3>
+                        <CodeReviewResult review={polledAttempt.codeReview} />
+                    </section>
+                )}
 
             {/* Reveal-reference button + gate messaging ───────────── */}
             <section className="border-t border-border-default pt-6 space-y-2">
@@ -274,15 +425,17 @@ export default function ConceptLabTab({ concept }) {
                 </div>
                 <p className="text-[11px] text-text-tertiary max-w-lg leading-relaxed">
                     Struggle first, then compare. Revealing the reference is
-                    logged — it's an honest signal, not a shortcut.
+                    logged — it&apos;s an honest signal, not a shortcut.
                 </p>
             </section>
 
-            {/* Reference modal ────────────────────────────────────── */}
+            {/* Reference-diff modal ────────────────────────────────── */}
             <AnimatePresence>
-                {referenceOpen && (
-                    <ReferenceModal
-                        code={reference ?? ''}
+                {referenceOpen && referenceSolution != null && (
+                    <ReferenceDiffModal
+                        language={language}
+                        userCode={submittedUserCode}
+                        referenceCode={referenceSolution}
                         onClose={() => setReferenceOpen(false)}
                     />
                 )}
