@@ -52,7 +52,7 @@ function unwrap(promise) {
 export function useCurriculumAdminTopics() {
     return useQuery({
         queryKey: KEYS.topics,
-        queryFn: () => unwrap(curriculumAdminApi.listTopics()),
+        queryFn: () => unwrap(curriculumAdminApi.listTopics()).then((d) => d.topics ?? []),
     })
 }
 
@@ -118,7 +118,7 @@ export function useUpdateTopic(topicId) {
 export function useCurriculumTemplates() {
     return useQuery({
         queryKey: KEYS.templates,
-        queryFn: () => unwrap(curriculumAdminApi.listTemplates()),
+        queryFn: () => unwrap(curriculumAdminApi.listTemplates()).then((d) => d.templates ?? []),
     })
 }
 
