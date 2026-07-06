@@ -44,6 +44,7 @@
 
 import prisma from "../../lib/prisma.js";
 import { updateMastery } from "../mentor.service.js";
+import logger from "../../utils/logger.js";
 
 // Verdict → 0–100 value mappings. Match the value-choice rationale documented
 // in the Week 4 plan §Task 4:
@@ -105,11 +106,37 @@ export async function recordLabSignal({
   const value = LAB_VERDICT_VALUES[codeReviewVerdict];
   if (value === undefined) return; // Unknown verdict (e.g. null after ERROR) — no-op.
 
-  await updateMastery(userId, conceptId, {
+  const before = await prisma.conceptMastery.findUnique({
+    where: { userId_conceptId: { userId, conceptId } },
+    select: { score: true },
+  });
+  const scoreBefore = before?.score ?? null;
+
+  const after = await updateMastery(userId, conceptId, {
     source: "practice",
     value,
     evidence: { attemptId, codeReviewVerdict },
   });
+
+  const scoreAfter = after?.score ?? null;
+  logger.info(
+    {
+      event: "signal_shift_delta",
+      userId,
+      conceptId,
+      teamId,
+      source: "practice",
+      value,
+      scoreBefore,
+      scoreAfter,
+      delta:
+        scoreBefore != null && scoreAfter != null
+          ? scoreAfter - scoreBefore
+          : null,
+      evidence: { attemptId, codeReviewVerdict },
+    },
+    "signal_shift_delta",
+  );
 
   await _maybeAutoFlipTeachingReady({ userId, conceptId, teamId });
 }
@@ -147,11 +174,37 @@ export async function recordCheckInSignal({
   const value = CHECKIN_VERDICT_VALUES[aiVerdict];
   if (value === undefined) return; // Unknown verdict — no-op.
 
-  await updateMastery(userId, conceptId, {
+  const before = await prisma.conceptMastery.findUnique({
+    where: { userId_conceptId: { userId, conceptId } },
+    select: { score: true },
+  });
+  const scoreBefore = before?.score ?? null;
+
+  const after = await updateMastery(userId, conceptId, {
     source: "checkin",
     value,
     evidence: { checkInId, aiVerdict, calibrationDelta },
   });
+
+  const scoreAfter = after?.score ?? null;
+  logger.info(
+    {
+      event: "signal_shift_delta",
+      userId,
+      conceptId,
+      teamId,
+      source: "checkin",
+      value,
+      scoreBefore,
+      scoreAfter,
+      delta:
+        scoreBefore != null && scoreAfter != null
+          ? scoreAfter - scoreBefore
+          : null,
+      evidence: { checkInId, aiVerdict, calibrationDelta },
+    },
+    "signal_shift_delta",
+  );
 
   await _maybeAutoFlipTeachingReady({ userId, conceptId, teamId });
 }
@@ -176,10 +229,12 @@ export async function recordCheckInSignal({
 export async function recordPrimerReadSignal({ userId, conceptId, teamId }) {
   const existing = await prisma.conceptMastery.findUnique({
     where: { userId_conceptId: { userId, conceptId } },
-    select: { signals: true },
+    select: { signals: true, score: true },
   });
+  const scoreBefore = existing?.score ?? null;
 
   let wroteNewSignal = false;
+  let after = null;
   if (existing?.signals) {
     const signals = Array.isArray(existing.signals) ? existing.signals : [];
     const now = Date.now();
@@ -189,7 +244,7 @@ export async function recordPrimerReadSignal({ userId, conceptId, teamId }) {
       return Number.isFinite(at) && now - at < PRIMER_READ_DEDUP_MS;
     });
     if (!recent) {
-      await updateMastery(userId, conceptId, {
+      after = await updateMastery(userId, conceptId, {
         source: "primer_read",
         value: PRIMER_READ_VALUE,
         evidence: null,
@@ -197,7 +252,7 @@ export async function recordPrimerReadSignal({ userId, conceptId, teamId }) {
       wroteNewSignal = true;
     }
   } else {
-    await updateMastery(userId, conceptId, {
+    after = await updateMastery(userId, conceptId, {
       source: "primer_read",
       value: PRIMER_READ_VALUE,
       evidence: null,
@@ -205,12 +260,35 @@ export async function recordPrimerReadSignal({ userId, conceptId, teamId }) {
     wroteNewSignal = true;
   }
 
+  // Only emit signal_shift_delta when we actually wrote a new signal.
+  // A dedup'd primer_read call means no state change → nothing to log.
+  if (wroteNewSignal) {
+    const scoreAfter = after?.score ?? null;
+    logger.info(
+      {
+        event: "signal_shift_delta",
+        userId,
+        conceptId,
+        teamId,
+        source: "primer_read",
+        value: PRIMER_READ_VALUE,
+        scoreBefore,
+        scoreAfter,
+        delta:
+          scoreBefore != null && scoreAfter != null
+            ? scoreAfter - scoreBefore
+            : null,
+        evidence: {},
+      },
+      "signal_shift_delta",
+    );
+  }
+
   // Always attempt the auto-flip. Even a dedup'd primer_read call can be
   // the tick that satisfies the truth table if the OTHER two conditions
   // (STRONG lab + PASS check-in) landed after the last flip attempt.
   // `_maybeAutoFlipTeachingReady` is a cheap read + no-op when the flip
   // has already fired (idempotent guard inside setTeachingReady).
-  void wroteNewSignal; // acknowledge for future callers / lint
   await _maybeAutoFlipTeachingReady({ userId, conceptId, teamId });
 }
 
@@ -275,9 +353,10 @@ export async function recordTeachingSignal({
 export async function setTeachingReady({
   userId,
   conceptId,
+  teamId = null,
   reason = "truthTable",
 }) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // Upsert on the composite unique (userId, conceptId). Without this,
     // a concept the user has never touched (no primer_read, no lab, no
     // check-in) would have no ConceptMastery row and setTeachingReady
@@ -324,6 +403,18 @@ export async function setTeachingReady({
 
     return { teachingReady: true, alreadyReady: false };
   });
+
+  // Only emit `teachingReady_flipped` when the flip is NEW. Idempotent
+  // re-calls (alreadyReady === true) skip the log so downstream consumers
+  // (metrics/alerts) don't see phantom flips.
+  if (result.alreadyReady === false) {
+    logger.info(
+      { event: "teachingReady_flipped", userId, conceptId, teamId, reason },
+      "teachingReady_flipped",
+    );
+  }
+
+  return result;
 }
 
 // ── Auto-flip internals ─────────────────────────────────────────────────
@@ -409,7 +500,12 @@ async function _maybeAutoFlipTeachingReady({ userId, conceptId, teamId }) {
       teamId,
     });
     if (shouldFlip) {
-      await setTeachingReady({ userId, conceptId, reason: "truthTable" });
+      await setTeachingReady({
+        userId,
+        conceptId,
+        teamId,
+        reason: "truthTable",
+      });
     }
   } catch (err) {
     // Signal already committed — swallow so the caller returns success.

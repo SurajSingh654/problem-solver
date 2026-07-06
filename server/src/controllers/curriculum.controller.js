@@ -30,6 +30,7 @@ import {
   recordPrimerReadSignal,
 } from "../services/curriculum/conceptMastery.service.js";
 import { sendToUser } from "../services/websocket.service.js";
+import logger from "../utils/logger.js";
 
 /**
  * GET /curriculum/topics
@@ -539,7 +540,7 @@ export async function revealReference(req, res) {
       status: "PUBLISHED",
       concept: { status: "PUBLISHED", topic: { status: "PUBLISHED" } },
     },
-    select: { id: true, referenceSolution: true },
+    select: { id: true, referenceSolution: true, conceptId: true },
   });
   if (!lab) return error(res, "Lab not found", 404, "LAB_NOT_FOUND");
 
@@ -594,6 +595,19 @@ export async function revealReference(req, res) {
     data: { revealedReferenceAt: new Date() },
     select: { id: true, revealedReferenceAt: true },
   });
+
+  logger.info(
+    {
+      event: "reveal_reference_verdict",
+      userId: req.user.id,
+      conceptId: lab.conceptId,
+      teamId: req.teamId,
+      labId: lab.id,
+      gateVerdict: codeReviewVerdict,
+      gateNextStep: nextStep,
+    },
+    "reveal_reference_verdict",
+  );
 
   return success(res, {
     referenceSolution: lab.referenceSolution,
@@ -663,6 +677,16 @@ export async function submitCheckIn(req, res) {
 
   // Unlock rule: caller must have a STRONG/ADEQUATE lab attempt.
   if (!concept.lab) {
+    logger.info(
+      {
+        event: "checkin_gate_blocked",
+        userId: req.user.id,
+        conceptId: concept.id,
+        teamId: req.teamId,
+        reason: "no_completed_attempt",
+      },
+      "checkin_gate_blocked",
+    );
     return error(
       res,
       "Check-in locked — no lab attached to this concept yet.",
@@ -680,6 +704,16 @@ export async function submitCheckIn(req, res) {
     select: { id: true },
   });
   if (!eligibleAttempt) {
+    logger.info(
+      {
+        event: "checkin_gate_blocked",
+        userId: req.user.id,
+        conceptId: concept.id,
+        teamId: req.teamId,
+        reason: "no_passing_verdict",
+      },
+      "checkin_gate_blocked",
+    );
     return error(
       res,
       "Check-in locked — complete the lab first with a STRONG or ADEQUATE verdict.",
