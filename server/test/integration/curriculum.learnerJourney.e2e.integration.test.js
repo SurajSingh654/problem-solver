@@ -376,6 +376,27 @@ async function loadMastery() {
   });
 }
 
+/**
+ * Poll ConceptMastery.signals until a signal from `expectedSource` appears.
+ * Fire-and-forget signal writes happen in the .then() chain that follows
+ * `reviewStatus = COMPLETED`, so under parallel test load they can drain
+ * after the attempt row transitions. A fixed sleep is brittle — poll instead.
+ */
+async function waitForSignal(expectedSource, timeoutMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const mastery = await loadMastery();
+    const signals = Array.isArray(mastery?.signals) ? mastery.signals : [];
+    if (signals.some((s) => s.source === expectedSource)) {
+      return mastery;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(
+    `waitForSignal(${expectedSource}) timed out after ${timeoutMs}ms`,
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // The one big end-to-end learner journey test
 // ─────────────────────────────────────────────────────────────────────────
@@ -493,11 +514,10 @@ describe("curriculum — end-to-end learner journey (enroll → attempt → reve
       expect(strongCodeReviewMock).toHaveBeenCalled();
 
       // Signal writes happen inside onReviewCompleted AFTER the row
-      // transitions to COMPLETED. Give the async signal write a beat to
-      // drain — matches the W4.T4 pattern.
-      await new Promise((r) => setTimeout(r, 1000));
-
-      const afterAttempt = await loadMastery();
+      // transitions to COMPLETED. Under parallel test-file load the write
+      // can drain seconds after the attempt row transitions — poll for the
+      // signal to appear rather than a fixed sleep.
+      const afterAttempt = await waitForSignal("practice");
       {
         const signals = Array.isArray(afterAttempt.signals) ? afterAttempt.signals : [];
         const practice = signals.filter((s) => s.source === "practice");
