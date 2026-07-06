@@ -428,9 +428,14 @@ async function onReviewCompleted(attemptId, result) {
         codeReview: result.body,
       },
       include: {
-        // Need conceptId to route the signal write to the right ConceptMastery
-        // row. Cheaper than a follow-up findUnique on the Lab.
-        lab: { select: { conceptId: true } },
+        // Need conceptId + teamId to route the signal write to the right
+        // ConceptMastery row AND to feed the teachingReady auto-flip's
+        // truth-table filter. Cheaper than a follow-up findUnique on the Lab.
+        // `req` isn't in scope here (this is a fire-and-forget callback from
+        // the async validator dispatch) — pulling teamId off the Lab row is
+        // the only way to keep tenancy correct without re-passing it through
+        // the dispatcher.
+        lab: { select: { conceptId: true, teamId: true } },
       },
     });
 
@@ -441,6 +446,7 @@ async function onReviewCompleted(attemptId, result) {
       await recordLabSignal({
         userId: updated.userId,
         conceptId: updated.lab.conceptId,
+        teamId: updated.lab.teamId,
         codeReviewVerdict: result.body.codeReviewVerdict,
         attemptId,
       });
@@ -723,6 +729,7 @@ export async function submitCheckIn(req, res) {
     await recordCheckInSignal({
       userId: req.user.id,
       conceptId: concept.id,
+      teamId: req.teamId,
       aiVerdict: verdict,
       calibrationDelta,
       checkInId: checkIn.id,
@@ -871,6 +878,7 @@ export async function markPrimerRead(req, res) {
     await recordPrimerReadSignal({
       userId: req.user.id,
       conceptId: concept.id,
+      teamId: req.teamId,
     });
   } catch (err) {
     // Signal write failure is not user-facing — log and continue.

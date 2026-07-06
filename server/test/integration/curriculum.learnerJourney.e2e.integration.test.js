@@ -17,10 +17,9 @@
 //  10. POST reveal-reference → 200 with referenceSolution.
 //  11. POST check-in (PASS mock) → 201 with checkIn row + calibrationDelta.
 //  12. Verify checkin signal on ConceptMastery.
-//  13. Refetch concept detail — confirm all three source signals persist.
-//      (`teachingReady` remains false — updateMastery does not flip that
-//      flag in Phase 1; the truth-table wiring is Phase 2 work. See NOTE
-//      block below.)
+//  13. Refetch concept detail — confirm all three source signals persist
+//      AND that the W5.T5 truth-table auto-flip fired (teachingReady=true,
+//      one "teachingReady" audit signal appended). See NOTE block below.
 //
 // The mocks live behind `_overrideValidatorSpec("CODE_REVIEW"|"CHECK_IN")`
 // — same pattern as W4.T2/T3/T4. `initCurriculumValidators()` restores
@@ -34,17 +33,17 @@
 // plus a fire-and-forget CODE_REVIEW poll. Railway Postgres round-trips
 // can be slow.
 //
-// NOTE — teachingReady flip: as of W4, `mentor.service.updateMastery` does
-// NOT set `teachingReady` based on the (PASS check-in + STRONG lab attempt)
-// truth table. The field is a plain default-false column and no writer
-// currently flips it (grep `teachingReady` in server/src returns only reads
-// + one Boolean default declaration in schema.prisma). The Week-4 truth
-// table pattern is Phase-2 wiring. This test therefore verifies:
+// NOTE — teachingReady flip: as of W5.T5, `conceptMastery.service` runs a
+// read-only truth-table check after each learner-signal writer commits and
+// calls `setTeachingReady` when primer_read + ≥1 STRONG/ADEQUATE lab (this
+// team) + latest PASS check-in are all present. The flip is MONOTONIC —
+// once true, WEAK follow-ups do NOT un-flip it. This test therefore
+// verifies:
 //   - all three source signals (primer_read, practice, checkin) exist,
-//   - the flag remains false (its schema default),
-// so the moment a Phase-2 writer starts flipping the flag on PASS+STRONG,
-// this test will fail loudly at the last assertion and force a refactor
-// (i.e. flip the assertion to `true`) rather than silently drift.
+//   - teachingReady=true AND exactly one "teachingReady" audit signal
+//     appended with evidence.reason="truthTable".
+// If a future change alters the truth-table shape (e.g. adds a fourth
+// gate) this assertion fails loudly rather than silently drifting.
 //
 // Run: cd server && npx vitest run test/integration/curriculum.learnerJourney.e2e.integration.test.js
 // ============================================================================
@@ -592,8 +591,9 @@ describe("curriculum — end-to-end learner journey (enroll → attempt → reve
 
       // ── Step 12: refetch concept detail — all three signals + teachingReady ──
       // Confirm the mastery row is now fully populated with primer_read +
-      // practice + checkin signals. `teachingReady` remains false in Phase 1
-      // (no writer flips it — see NOTE at top of file).
+      // practice + checkin signals. As of W5.T5 the truth-table auto-flip
+      // ships: primer_read + STRONG lab + PASS check-in → teachingReady=true
+      // + one "teachingReady" audit signal appended.
       const finalConceptDetail = await req(
         "GET",
         `/api/v1/curriculum/concepts/${CONCEPT_SLUG}`,
@@ -610,11 +610,15 @@ describe("curriculum — end-to-end learner journey (enroll → attempt → reve
       expect(sourcesPresent.has("practice")).toBe(true);
       expect(sourcesPresent.has("checkin")).toBe(true);
 
-      // teachingReady: Phase 1 keeps this at its schema default (false). The
-      // Week-4 truth-table flip is Phase-2 work. When Phase 2 lands and a
-      // writer starts flipping the flag on (PASS check-in + STRONG lab), this
-      // assertion will fail and force an intentional update.
-      expect(finalMastery.teachingReady).toBe(false);
+      // W5.T5 truth-table auto-flip: primer_read + STRONG lab + PASS
+      // check-in ⇒ teachingReady flips to true (monotonic). Exactly one
+      // audit signal with source="teachingReady" is appended to the log.
+      expect(finalMastery.teachingReady).toBe(true);
+      const teachingReadyAudit = finalSignals.filter(
+        (s) => s.source === "teachingReady",
+      );
+      expect(teachingReadyAudit).toHaveLength(1);
+      expect(teachingReadyAudit[0].evidence?.reason).toBe("truthTable");
 
       // Score sanity: with practice=100 + checkin=100 fresh signals, the
       // weighted score should be a solid non-null value (primer_read has
