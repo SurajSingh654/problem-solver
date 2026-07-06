@@ -120,7 +120,7 @@ Embeddings: `server/src/services/embedding.service.js` (separate OpenAI singleto
 
 ## Readiness verdict (dimension model)
 
-10 dimensions, D1-D10. Each has an independent `FEATURE_*_V2` + `VITE_FEATURE_*_V2` flag pair. Score files in `server/src/utils/*Stats.js` — each has a header block with formula, research citation, source-tier ceiling, and tier gates. Read the header, not this file, for per-dim specifics. Verdict prose is enforced by rules in `server/src/services/ai.validators.js` (currently up to Rule 17). Tier readiness in `server/src/utils/readinessTiers.js` — dual gate: overall score AND per-dim mastery counts.
+10 dimensions, D1-D10. Each has an independent `FEATURE_*_V2` + `VITE_FEATURE_*_V2` flag pair. Score files in `server/src/utils/*Stats.js` — each has a header block with formula, research citation, source-tier ceiling, and tier gates. Read the header, not this file, for per-dim specifics. Verdict prose is enforced by rules in `server/src/services/ai.validators.js` (currently up to Rule 22 — Rules 18-22 gate the curriculum validators; see Curriculum Learn+Teach section below). Tier readiness in `server/src/utils/readinessTiers.js` — dual gate: overall score AND per-dim mastery counts.
 
 Cross-dim contracts (things you can't derive from a single file):
 
@@ -129,6 +129,28 @@ Cross-dim contracts (things you can't derive from a single file):
 - `OPT_IN_KEYS` in `readinessTiers.js` + `OPT_IN_DIM_KEYS` in `stats.controller.js` skip gates for users who never touched an opt-in modality (D7 teaching, D8 design, D9 behavioral). Both lists must update together when adding an opt-in dim.
 - `SOLVE_METHOD_REQUIRED_AFTER` in `patternMastery.js` is the deploy-date stamp deciding whether NULL `solveMethod` is legacy-COLD or missing data. Imported by `solutionDepth.js` and `optimizationStats.js`. A fourth consumer → hoist to its own constants module.
 - Report function is `get6DReport` in `stats.controller.js` for backward compat; it returns 10 dims.
+
+## Curriculum Learn+Teach
+
+10 team-scoped Prisma models + 3 template models, four AI validators, six signal sources. Feature-flagged via `FEATURE_CURRICULUM` (server) + `VITE_FEATURE_CURRICULUM` (client, three-place wire per convention). Server-side router guard returns 404 when the flag is off. Content flows: repo `server/curriculum/` → `TopicTemplate` via `curriculumSync.service.js` → `Topic` via TEAM_ADMIN fork (`curriculumFork.service.js`, deep-clone in one interactive `$transaction`).
+
+**Authoring surface:** `client/src/pages/team-admin/curriculum/`. TEAM_ADMIN forks a `TopicTemplate` into a team-scoped `Topic`, edits primer + concepts + labs through a 4-tab UI, invokes AI review (curriculum + lesson validators, Rules 18-22), and publishes through gates enforced by `curriculumPublishGates.js` (Topic: WORTH_LEARNING verdict + every concept PUBLISHED; Concept: READY verdict + readiness rubric present; Lab: reference solution + timebox present). SUPER_ADMIN cross-team writes audit-log to `CurriculumAdminAuditLog`.
+
+**Learner surface:** `client/src/pages/learn/`. Enrolled learners see a topic catalog, drill into concepts through a 5-tab shell (Primer / Lab / Check-in / Notes / Teach), submit lab attempts through a 202-async pattern with fire-and-forget CODE_REVIEW, poll for verdicts, gate-reveal the reference solution (`revealedReferenceAt` stamp), run PASS/FAIL check-ins.
+
+**Signal writers** (in `server/src/services/curriculum/conceptMastery.service.js`): `recordPrimerReadSignal`, `recordLabSignal`, `recordCheckInSignal`, `recordTeachingSignal`, `setTeachingReady`. All take `teamId` explicitly. Each writer delegates to `mentor.service.updateMastery` (single tx) then calls `_maybeAutoFlipTeachingReady` OUTSIDE the transaction — that helper **MUST NOT be called inside an open `$transaction`** or it deadlocks on the ConceptMastery row lock. Truth table for auto-flip: `primer_read` AND ≥1 STRONG/ADEQUATE lab (in this team) AND latest PASS check-in → `teachingReady=true`. Monotonic — never un-flips.
+
+**Tenancy** (W6): `mentor.service.planNextAction / detectStuck / loadTopicState` all require a `teamId` positional arg — they throw when omitted. Callers in `topics.controller.js` (four sites) forward `req.teamId`. Adding a new caller must pass `teamId` explicitly; audit tests in `curriculum.tenancy.integration.test.js` will catch a regression.
+
+**D8 (design aptitude) adapter:** `server/src/utils/designAptitude.curriculum.js` maps STRONG/ADEQUATE curriculum LabAttempts on `LOW_LEVEL_DESIGN` / `SYSTEM_DESIGN` concepts into DesignSession-shaped rows with explicit `designType` + `evaluation.overallScore`. Merged into `stats.controller.js` before the D8 activation guard so curriculum-only users activate D8. Also peeks the adapter before the outer `totalSolutions === 0` short-circuit at the report level (see stats.controller.js — reveal follow-through for curriculum-only learners).
+
+**AI validators** (in `server/src/services/curriculum/`): curriculum-review, lesson-review, code-review, check-in. All routed through `contentReview.service.js` orchestrator with `runValidator(type, input)` + `latestVerdictFor(target, id)`; verdicts persist to `ContentReviewLog`. Prompt-injection defense: user-controlled strings pass through the sanitizer (strips fence bytes rather than encoding), wrapped in XML tags at interpolation, paired with system-prompt instructions to treat tagged content as data. Zod `.strict()` + fallback validators + Rules 18-22 close the corruption-vector chain. Team-scoped rate limiter `aiTeamLimiter` on every AI-backed route.
+
+**Telemetry** (W6): structured `logger.info` events emitted via `server/src/utils/logger.js` — `signal_shift_delta` (each signal write, includes scoreBefore/scoreAfter/delta), `reveal_reference_verdict` (each successful reveal, includes gate verdict + nextStep), `teachingReady_flipped` (each new truth-table flip, includes reason), `checkin_gate_blocked` (each 403 on check-in submit, distinguishes `no_completed_attempt` vs `no_passing_verdict`). Queryable in Railway logs for signal-effectiveness + reveal-gate-pass + check-in-completion metrics.
+
+**Rules canon:** Verdict-prose rules 18-22 gate the curriculum validators (Rule 18: outcome-cited; Rule 19: senior-readiness ≥6/8; Rule 20: code-review multi-dim; Rule 21: WEAK requires actionable feedback; Rule 22: fallback structural minimum). Sit alongside D1-D10 rules — currently 22 total. See `server/src/services/ai.validators.js` for enforcement code + research citations.
+
+**Feature status:** flag OFF in production. Scheduled for staging rollout in W6 with post-ship metric monitoring for one week before prod flip (`curriculum-phase-1-flip-prod` in roadmap NEXT).
 
 ## Adding a new dimension (Dn)
 
