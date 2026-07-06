@@ -3,6 +3,7 @@
 // ============================================================================
 import { create } from "zustand";
 import api from "@services/api";
+import { clearAllLabDrafts } from "@components/curriculum/MonacoLabEditor";
 
 const useAuthStore = create((set, get) => ({
   // ── Auth state ─────────────────────────────────────────
@@ -48,6 +49,10 @@ const useAuthStore = create((set, get) => ({
   },
 
   logout: () => {
+    // Shared-workstation defense — nuke lab drafts before token clear so the
+    // next user opening this browser cannot see the prior user's in-progress
+    // code.
+    clearAllLabDrafts();
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("pendingTeam");

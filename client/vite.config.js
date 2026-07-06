@@ -60,6 +60,7 @@ export default defineConfig({
           highlight: ["highlight.js"],
           excalidraw: ["@excalidraw/excalidraw"],
           mdEditor: ["@uiw/react-md-editor"],
+          monaco: ["@monaco-editor/react", "monaco-editor"],
           // W3.T8 + W3.T9 — curriculum admin (TEAM_ADMIN). Bundled together
           // because every page depends on the same hook file + the shared
           // @components/curriculum primitives; splitting them further would
