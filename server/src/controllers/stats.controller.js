@@ -906,14 +906,24 @@ export async function get6DReport(req, res) {
     const totalSolutions = solutions.length;
 
     if (totalSolutions === 0) {
-      // Zero-submission users get a fully-inactive report shape —
-      // same schema as the normal response so the client doesn't have
-      // to branch on presence/absence of fields.
-      return success(res, {
-        report: buildInactiveReport({
-          message: "Submit solutions to build your intelligence profile.",
-        }),
+      // Zero-submission users usually get a fully-inactive report — but a
+      // curriculum learner with STRONG/ADEQUATE LabAttempts on LLD/SD
+      // concepts has already produced real practice signal (via W5.T6) and
+      // must not be short-circuited before D8 activates. Peek the
+      // curriculum-lab adapter here so we can bypass the inactive envelope
+      // when there's any lab evidence to score. The full fetch downstream
+      // still runs — this is only a "should we even build a report?" gate.
+      const curriculumLabPeek = await mapLabAttemptsToDesignSessions({
+        userId,
+        teamId,
       });
+      if (curriculumLabPeek.length === 0) {
+        return success(res, {
+          report: buildInactiveReport({
+            message: "Submit solutions to build your intelligence profile.",
+          }),
+        });
+      }
     }
 
     // ════════════════════════════════════════════════

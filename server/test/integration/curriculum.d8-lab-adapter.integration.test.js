@@ -407,4 +407,154 @@ describe("stats.report — D8 curriculum-lab adapter (W5.T7b)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "activates D8 for a curriculum-only learner with ZERO solutions (regression for get6DReport short-circuit)",
+    async () => {
+      // Regression for the outer report guard at stats.controller.js:908
+      // that used to short-circuit to `buildInactiveReport` whenever
+      // `solutions.length === 0`. A learner who has ONLY completed lab
+      // attempts on LLD/SD concepts must still activate D8. The fix
+      // (peek `mapLabAttemptsToDesignSessions` before the inactive return)
+      // is verified end-to-end here.
+      const CURR_USER_ID = `${TEST_PREFIX}curr_only_user`;
+      const CURR_TEAM_ID = `${TEST_PREFIX}curr_only_team`;
+      const CURR_LLD_TOPIC_ID = `${TEST_PREFIX}curr_only_topic`;
+      const CURR_LLD_CONCEPT_ID = `${TEST_PREFIX}curr_only_concept`;
+      const CURR_LLD_LAB_ID = `${TEST_PREFIX}curr_only_lab`;
+
+      // Scrub any prior remnants (rerun safety).
+      await prisma.$executeRawUnsafe(`DELETE FROM "lab_attempts" WHERE "userId" = $1`, CURR_USER_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "labs" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "concepts" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "topics" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "team_memberships" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "teams" WHERE "id" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "users" WHERE "id" = $1`, CURR_USER_ID);
+
+      // Seed curriculum-only fixture — user, team, LLD topic/concept/lab,
+      // deliberately NO Problem/Solution rows.
+      await prisma.user.create({
+        data: {
+          id: CURR_USER_ID,
+          email: `${TEST_PREFIX}curr_only@example.test`,
+          password: "$2b$12$placeholderhashforintegrationtest",
+          name: "W5T7b Curriculum-Only",
+          globalRole: "USER",
+          onboardingComplete: true,
+        },
+      });
+      await prisma.team.create({
+        data: {
+          id: CURR_TEAM_ID,
+          name: "W5T7b Curriculum-Only Team",
+          status: "ACTIVE",
+          createdById: CURR_USER_ID,
+          maxMembers: 20,
+          isPersonal: false,
+        },
+      });
+      await prisma.teamMembership.create({
+        data: { userId: CURR_USER_ID, teamId: CURR_TEAM_ID, role: "MEMBER", isActive: true },
+      });
+      await prisma.topic.create({
+        data: {
+          id: CURR_LLD_TOPIC_ID,
+          slug: `${TEST_PREFIX}curr-only-topic`,
+          name: "Curriculum-Only LLD Topic",
+          description: "d",
+          category: "LOW_LEVEL_DESIGN",
+          status: "PUBLISHED",
+          teamId: CURR_TEAM_ID,
+        },
+      });
+      await prisma.concept.create({
+        data: {
+          id: CURR_LLD_CONCEPT_ID,
+          slug: `${TEST_PREFIX}curr-only-concept`,
+          name: "Curriculum-Only Concept",
+          order: 1,
+          status: "PUBLISHED",
+          primerMarkdown: "p",
+          primerHtml: "<p>p</p>",
+          workedExample: "e",
+          canonicalSources: [],
+          expectedQuestions: [],
+          assessmentCriteria: {},
+          readinessRubric: null,
+          teamId: CURR_TEAM_ID,
+          topicId: CURR_LLD_TOPIC_ID,
+        },
+      });
+      await prisma.lab.create({
+        data: {
+          id: CURR_LLD_LAB_ID,
+          title: "L",
+          taskMarkdown: "t",
+          timeboxMinutes: 30,
+          language: "JAVA",
+          referenceSolution: "ref",
+          expectedArtifacts: [],
+          status: "PUBLISHED",
+          teamId: CURR_TEAM_ID,
+          conceptId: CURR_LLD_CONCEPT_ID,
+        },
+      });
+      // Two STRONG lab attempts — enough to activate D8 on their own.
+      await prisma.labAttempt.create({
+        data: {
+          labId: CURR_LLD_LAB_ID,
+          userId: CURR_USER_ID,
+          attemptNumber: 1,
+          code: "c",
+          reviewStatus: "COMPLETED",
+          codeReviewVerdict: "STRONG",
+          reviewedAt: new Date(),
+        },
+      });
+      await prisma.labAttempt.create({
+        data: {
+          labId: CURR_LLD_LAB_ID,
+          userId: CURR_USER_ID,
+          attemptNumber: 2,
+          code: "c",
+          reviewStatus: "COMPLETED",
+          codeReviewVerdict: "STRONG",
+          reviewedAt: new Date(),
+        },
+      });
+
+      // Fetch report as this curriculum-only user.
+      const currToken = generateToken({
+        id: CURR_USER_ID,
+        globalRole: "USER",
+        currentTeamId: CURR_TEAM_ID,
+        teamRole: "MEMBER",
+      });
+      const res = await fetch(`${baseUrl}/api/v1/stats/report`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${currToken}` },
+      });
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      // Must NOT be the inactive-report envelope — that's the bug.
+      expect(body?.data?.report?.dimensions).toBeDefined();
+      const d8 = body.data.report.analytics?.designAptitude;
+      expect(d8).toBeTruthy();
+      expect(d8.active).toBe(true);
+      expect(d8.sessionCount).toBe(2);
+      expect(d8.lldSessionCount).toBe(2);
+
+      // Scrub the ad-hoc fixture — we didn't add it to the global cleanup.
+      await prisma.$executeRawUnsafe(`DELETE FROM "lab_attempts" WHERE "userId" = $1`, CURR_USER_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "labs" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "concepts" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "topics" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "team_memberships" WHERE "teamId" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "teams" WHERE "id" = $1`, CURR_TEAM_ID);
+      await prisma.$executeRawUnsafe(`DELETE FROM "users" WHERE "id" = $1`, CURR_USER_ID);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
