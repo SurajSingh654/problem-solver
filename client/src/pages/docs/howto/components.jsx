@@ -9,6 +9,11 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
+// Re-export StepCard + Callout from the parent docs components module
+// so per-task guide files can pull all their building blocks from a
+// single import path (`../../components`).
+export { StepCard, Callout } from '../components'
+
 // ── Screenshot base path ────────────────────────────────────────────
 // Screenshots go in client/public/docs/how-to/ and are referenced here by
 // filename only. The public folder is served at site root, so a file named
