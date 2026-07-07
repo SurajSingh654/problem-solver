@@ -892,6 +892,19 @@ export const ROADMAP_ITEMS = [
     },
 
     {
+        id: 'test-split-unit-vs-integration',
+        phase: 'NEXT',
+        theme: 'Engineering Hygiene',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'Split `npm test` into unit vs integration scripts to restore pre-push speed',
+        impact: 'Pre-push time went from ~2 min to ~25 min after enabling `fileParallelism: false` in vitest.config.js — the fix that made the 20+ integration tests deterministic under Postgres pool pressure. 25 min for every push is unsustainable; developers will start bypassing with --no-verify, which defeats the safety net.',
+        description: 'Split test commands: `npm run test:unit` (all files under `test/{ai,services,utils,schemas,controllers,middleware,mcp}/`) — parallel, no Postgres, sub-30-second runtime. `npm run test:integration` (`test/integration/`) — serial via `fileParallelism: false`, hits real Postgres, ~25 min. `npm test` = both. Update `.githooks/pre-push` to run `test:unit` unconditionally + `test:integration` only when server-side code changed (`git diff --name-only origin/main..HEAD | grep -q "^server/(src|prisma)"`). Client-only changes get a fast pre-push; server changes get the full safety net.',
+        why: 'Immediate: unblocks pre-push speed for the common case (client tweaks, roadmap edits, docs changes). Longer-term: sets up the codebase for a proper CI split — unit tests run on every PR, integration tests run on merge-to-main. Also opens the door to per-integration-test-file parallel groups if we later want to speed up the integration side (e.g., grouping tests that don\'t touch AI validators can safely parallelize).',
+        technicalNotes: '`server/vitest.config.js` — introduce two config exports OR use CLI overrides. `server/package.json` — new scripts. `.githooks/pre-push` — conditional integration run based on `git diff --name-only` gate. Rough estimate: 1-2 hours including local verification. Related: fixed 2026-07-07 via `fileParallelism: false` after root-causing to Prisma connection pool starvation + `_overrideValidatorSpec` sharing global state across concurrent file runs. `test/setup.js` bumps `connection_limit=30` for headroom.',
+    },
+
+    {
         id: 'sidebar-polish',
         phase: 'NEXT',
         theme: 'UX Polish',
