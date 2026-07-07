@@ -91,6 +91,16 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
                 { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
             ],
         })
+        // Help section — SUPER_ADMIN also needs the How-To Guide.
+        // The guide's shell reads globalRole from useAuthStore and shows
+        // super-admin content (Platform Ops + Moderation groups) here.
+        sections.push({
+            id: 'help',
+            label: 'Help',
+            items: [
+                { to: '/docs/how-to', icon: '📘', label: 'How-To Guide' },
+            ],
+        })
         return sections
     }
 
