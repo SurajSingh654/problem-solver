@@ -31,7 +31,29 @@ run_in() {
 # ── SERVER ────────────────────────────────────────────────────
 if [ -d "${ROOT}/server" ] && [ -f "${ROOT}/server/package.json" ]; then
     run_in server "server: lint (strict)" npm run lint
-    run_in server "server: tests"          npm run test
+
+    # Unit tests always run — fast (<1 min), parallel-safe, no Postgres.
+    # Catches wire-level regressions in AI validators, controllers, services,
+    # utils. Deterministic under parallel execution.
+    run_in server "server: unit tests"     npm run test:unit
+
+    # Integration tests only run when server source or Prisma schema changed.
+    # These hit real Postgres, run serially (fileParallelism: false), take
+    # ~25 min. Skipping them on client-only pushes saves 20+ minutes per push.
+    # If the diff is impossible to compute (e.g., new branch), run anyway to be safe.
+    SERVER_CHANGED="unknown"
+    if REMOTE=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null); then
+        if git diff --name-only "$REMOTE"..HEAD -- 'server/src/**' 'server/prisma/**' 2>/dev/null | grep -q .; then
+            SERVER_CHANGED="yes"
+        else
+            SERVER_CHANGED="no"
+        fi
+    fi
+    if [ "$SERVER_CHANGED" = "no" ]; then
+        gray "▷ server: integration tests skipped — no server/src or server/prisma changes vs upstream"
+    else
+        run_in server "server: integration tests (~25 min)" npm run test:integration
+    fi
 
     # Vulnerability gate — fails on HIGH or CRITICAL CVEs in deps.
     # Moderates print as warnings but do not block. (MCP-5.)
