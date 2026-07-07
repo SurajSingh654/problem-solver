@@ -132,18 +132,23 @@ export async function syncCurriculumTemplates({ root = DEFAULT_ROOT, dryRun = fa
               description,
               category: manifest.category,
               estimatedHoursToMastery: manifest.estimatedHoursToMastery ?? null,
-              templateStatus: "DRAFT",
+              templateStatus: "PUBLISHED",
               sourcePath: topicSlug,
             },
           });
         }
         diff.added.topics.push(manifest.slug);
       } else {
+        // Promote DRAFT → PUBLISHED on every sync. The repo tree IS the
+        // review gate (PR-reviewed content), and there's no separate
+        // promote-templates UI. Fixes existing DRAFT rows synced by the
+        // pre-fix version of this service.
         const needsUpdate =
           existing.name !== manifest.name ||
           existing.description !== description ||
           existing.category !== manifest.category ||
-          existing.estimatedHoursToMastery !== (manifest.estimatedHoursToMastery ?? null);
+          existing.estimatedHoursToMastery !== (manifest.estimatedHoursToMastery ?? null) ||
+          existing.templateStatus !== "PUBLISHED";
         if (needsUpdate) {
           if (!dryRun) {
             await tx.topicTemplate.update({
@@ -153,6 +158,7 @@ export async function syncCurriculumTemplates({ root = DEFAULT_ROOT, dryRun = fa
                 description,
                 category: manifest.category,
                 estimatedHoursToMastery: manifest.estimatedHoursToMastery ?? null,
+                templateStatus: "PUBLISHED",
               },
             });
           }
@@ -189,7 +195,7 @@ export async function syncCurriculumTemplates({ root = DEFAULT_ROOT, dryRun = fa
           assessmentCriteria: fm.assessmentCriteria ?? {},
           readinessRubric: fm.readinessRubric ?? null,
           sourcePath: `${topicSlug}/${fname}`,
-          templateStatus: "DRAFT",
+          templateStatus: "PUBLISHED",
         };
 
         const existingConcept = topicRow
@@ -258,7 +264,7 @@ export async function syncCurriculumTemplates({ root = DEFAULT_ROOT, dryRun = fa
             referenceSolution,
             expectedArtifacts: artifacts,
             sourcePath: `${topicSlug}/labs/${conceptSlug}`,
-            templateStatus: "DRAFT",
+            templateStatus: "PUBLISHED",
           };
 
           const existingLab = await tx.labTemplate.findUnique({
