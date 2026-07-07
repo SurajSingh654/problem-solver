@@ -92,7 +92,8 @@ const TopicAuthoringPage  = lazy(() => import('@pages/team-admin/curriculum/Topi
 const ReadmePage = lazy(() => import('@pages/docs/ReadmePage'))
 const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
 const DeployPage = lazy(() => import('@pages/docs/DeployPage'))
-const HowToPage = lazy(() => import('@pages/docs/HowToPage'))
+const HowToPage = lazy(() => import('@pages/docs/howto/HowToShell'))
+const HowToTaskPage = lazy(() => import('@pages/docs/howto/TaskPage'))
 const ProblemsPage = lazy(() => import('@pages/problems/ProblemsPage'))
 const ProblemDetailPage = lazy(() => import('@pages/problems/ProblemDetailPage'))
 const SubmitSolutionPage = lazy(() => import('@pages/problems/SubmitSolutionPage'))
@@ -399,6 +400,7 @@ export default function App() {
             <Route path="docs/setup" element={<Lazy><SetupPage /></Lazy>} />
             <Route path="docs/deploy" element={<Lazy><DeployPage /></Lazy>} />
             <Route path="docs/how-to" element={<Lazy><HowToPage /></Lazy>} />
+            <Route path="docs/how-to/task/:taskId" element={<Lazy><HowToTaskPage /></Lazy>} />
           </Route>
           {/* ============================================================ */}
           {/* CATCH-ALL — Redirect unknown routes to home                 */}
