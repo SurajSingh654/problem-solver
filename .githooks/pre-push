@@ -77,6 +77,11 @@ fi
 if [ -d "${ROOT}/client" ] && [ -f "${ROOT}/client/package.json" ]; then
     run_in client "client: lint (strict)" npm run lint
 
+    # How-To manifest invariants — unique ids, valid groups/roles,
+    # cross-refs resolve, component import paths exist on disk.
+    # ~1s runtime. Prevents shipping a broken guide navigation.
+    run_in client "client: how-to manifest" node scripts/validate-manifest.js
+
     # Vulnerability gate — fails on HIGH or CRITICAL CVEs in deps. (MCP-5.)
     run_in client "client: npm audit (high+)" npm audit --audit-level=high
 
