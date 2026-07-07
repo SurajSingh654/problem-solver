@@ -89,7 +89,12 @@ export async function listTopicsAdmin(_req, res) {
 export async function getTopicAdmin(req, res) {
   try {
     const { slug } = req.params;
-    const topic = await prisma.topic.findUnique({
+    // Topic.slug is no longer globally unique — the curriculum Phase-1
+    // backfill made it @@unique([teamId, slug]). This SUPER_ADMIN-only
+    // Learning Content surface predates that change. Use findFirst to
+    // grab any Topic with the requested slug (Learning Content ignores
+    // team, showing curated tracks by slug).
+    const topic = await prisma.topic.findFirst({
       where: { slug },
       include: {
         concepts: {
@@ -113,7 +118,8 @@ export async function updateTopicAdmin(req, res) {
     const { slug } = req.params;
     const body = req.body ?? {};
 
-    const topic = await prisma.topic.findUnique({ where: { slug } });
+    // See getTopicAdmin for why findFirst not findUnique.
+    const topic = await prisma.topic.findFirst({ where: { slug } });
     if (!topic) return error(res, "Topic not found.", 404);
 
     const data = {};
@@ -165,7 +171,8 @@ export async function createConceptAdmin(req, res) {
     const { slug: topicSlug } = req.params;
     const body = req.body ?? {};
 
-    const topic = await prisma.topic.findUnique({
+    // See getTopicAdmin for why findFirst not findUnique.
+    const topic = await prisma.topic.findFirst({
       where: { slug: topicSlug },
       select: { id: true },
     });

@@ -20,6 +20,7 @@
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --config vitest.unit.config.js",
     "test:integration": "vitest run test/integration",
+    "test:preship": "npm run test:unit && npm run test:integration",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "lint": "eslint src test eval --max-warnings 0",
