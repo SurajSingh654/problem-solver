@@ -46,7 +46,7 @@ Beyond the Curriculum gap, the current guide is a single 1,700-line scrolling pa
 
 ## 3. Architecture & routing
 
-**Single route, role-gated content.** Keep `/docs/how-to` as the entry point. Behind it, the page reads `user.globalRole` + `user.teamRole` from `authStore` and renders a role-specific view. Sidebar link stays at `Sidebar.jsx:156` unchanged.
+**Single route, role-gated content.** Keep `/docs/how-to` as the entry point. Behind it, the page reads `user.globalRole` + `user.teamRole` from the auth store (imported as `import useAuthStore from '@store/useAuthStore'` — real path is `client/src/store/useAuthStore.js`, singular `store`, not `stores`) and renders a role-specific view. Sidebar link stays at `Sidebar.jsx:156` unchanged.
 
 **New file structure:**
 ```
@@ -69,18 +69,38 @@ client/src/pages/docs/
 - `/docs/how-to` — landing (search + workflow groups filtered by role)
 - `/docs/how-to/task/:taskId` — deep-linkable guide detail
 - `/docs/how-to?viewAs=member` — admin's presentation-only override (`viewAs=team-admin` allowed only for SUPER_ADMIN)
-- Existing hash anchors (`/docs/how-to#solve`, `#ds-sd`, etc.) — backward-compatible via a hash-to-taskId map read by `HowToShell.jsx` on mount, then `navigate()` to the new task URL
+- Existing hash anchors (`/docs/how-to#solve`, `#ds-sd`, etc.) — backward-compatible via a hash-to-taskId map read by `HowToShell.jsx` on mount, then `navigate()` to the new task URL. **Unknown hashes pass through silently** — the map is a shortlist, not an exhaustive gate.
 
-**Role detection (client-side only):**
+**React Router v6 route wiring caveat:** The existing `<Route path="docs/how-to" element={...} />` (flat) does NOT match child paths like `docs/how-to/task/:taskId`. Two options: add sibling route `<Route path="docs/how-to/task/:taskId" element={...} />` at the same nesting level (preferred — no impact on other routes), or convert the parent to `path="docs/how-to/*"` and nest children. Use the sibling-route approach.
+
+**Role detection (client-side only) — extracted into a shared hook `useEffectiveRole()` at `client/src/pages/docs/howto/useEffectiveRole.js`:**
 ```js
-const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
-const isTeamAdmin  = !isSuperAdmin && user?.teamRole === 'TEAM_ADMIN'
-const actualRole   = isSuperAdmin ? 'super-admin' : isTeamAdmin ? 'team-admin' : 'member'
-const viewAsParam  = new URLSearchParams(location.search).get('viewAs')
-const viewAsValid  = viewAsParam &&
-                     (isSuperAdmin || (isTeamAdmin && viewAsParam === 'member'))
-const effectiveRole = viewAsValid ? viewAsParam : actualRole
+// useEffectiveRole.js
+import { useLocation } from 'react-router-dom'
+import useAuthStore from '@store/useAuthStore'
+
+export function useEffectiveRole() {
+    const user = useAuthStore(s => s.user)
+    const location = useLocation()
+    const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
+    const isTeamAdmin  = !isSuperAdmin && user?.teamRole === 'TEAM_ADMIN'
+    const actualRole   = isSuperAdmin ? 'super-admin' : isTeamAdmin ? 'team-admin' : 'member'
+    const viewAs = new URLSearchParams(location.search).get('viewAs')
+    const viewAsValid =
+        viewAs === 'member' && (isSuperAdmin || isTeamAdmin) ? 'member' :
+        viewAs === 'team-admin' && isSuperAdmin ? 'team-admin' :
+        null
+    return {
+        actualRole,
+        effectiveRole: viewAsValid || actualRole,
+        viewAsActive: !!viewAsValid,
+        isSuperAdmin,
+        isTeamAdmin,
+    }
+}
 ```
+
+Both `HowToShell` and `TaskPage` import this hook. No duplicated permission logic.
 
 **Trust boundary note:** Content visibility is a **UX filter, not a security gate**. A curious MEMBER who guesses a URL like `/docs/how-to/task/sync-templates` can read the guide — but the actions described (running `curriculum:sync`, viewing all teams) are separately gated by the app's real authz middleware (`requireGlobalRole('SUPER_ADMIN')` on the actual endpoints). The guide is documentation about a locked door; the door is the security gate.
 
@@ -153,7 +173,7 @@ export const TASKS = [
 - Every `task.id` is unique
 - Every `task.group` exists in `GROUPS`
 - Every `task.role` is one of `ROLES` or `'*'`
-- Every `task.component` is a function returning a dynamic import (evaluated at test time)
+- Every `task.component` is a function; the import path it captures (extracted via `Function.prototype.toString()` regex on the arrow-function source, then resolved relative to the manifest file) points to an existing `.jsx` file on disk — verified with `fs.existsSync`. Node cannot actually execute the dynamic import (JSX needs Vite's transform), so we check the path statically instead of resolving.
 - Every `task.relatedTasks[i]` and `task.prerequisites[i]` references a real task id
 - The `getting-started` group has `roles: ['*']`
 - `support` group has `roles: ['*']`
@@ -270,7 +290,7 @@ Backlog: add a reusable `<HelpButton taskId="…" />` component and drop it in ~
 
 ## 9. Content authoring plan
 
-**31 guides total.** Every guide follows the same shape via reusable components:
+**33 guides total.** Every guide follows the same shape via reusable components:
 
 ```jsx
 <SummaryBlock>Deep-clone a global TopicTemplate into your team as an editable Topic.</SummaryBlock>
@@ -344,13 +364,13 @@ Every agent must read the actual routes/controllers/service files to verify step
 
 ### 🚀 Getting Started
 1. **What is Problem Solver?** — role `'*'` — 6-tile app-shape tour (Curriculum, Problems, Design Studio, Report, Mock, Quiz). Reuses most of the current Overview block.
-2. **Your first 30 minutes** — role `member` — solve one problem → try Design Studio → check Intelligence Report
+2. **Your first 30 minutes** — role `member` — if your team has curriculum, browse the topic catalog first → solve one problem → try Design Studio → check Intelligence Report. Conditional Step 1 renders only when `VITE_FEATURE_CURRICULUM === 'true'`; falls back to solve-first otherwise.
 3. **Your first 30 minutes** — role `team-admin` — fork a template → author one concept → publish
 4. **Your first 30 minutes** — role `super-admin` — sync templates → view teams → set up your first team
 
 Each is a separate manifest task with a role-scoped `taskId` (e.g., `first-30-minutes-member`, `first-30-minutes-team-admin`) so deep-linking from role-specific onboarding surfaces works cleanly. On the landing, all four appear under the "Getting Started" group header; the three role-scoped ones only render when the effective role matches.
 
-### 👤 MEMBER (11 guides)
+### 👤 MEMBER (13 guides)
 1. **Learn a curriculum topic** — enroll → primer → lab → check-in → teach *(NEW)*
 2. **Solve a Problem** *(rip from existing `#solve`)*
 3. **Practice in Design Studio — System Design** *(rip from existing `#ds-sd`)*
@@ -361,13 +381,18 @@ Each is a separate manifest task with a role-scoped `taskId` (e.g., `first-30-mi
 8. **Attempt a Quiz** *(rip from existing `#quiz`)*
 9. **Mock Interview** *(rip from existing `#mock`)*
 10. **Intelligence Report — dimensions + activation** *(rip from existing `#report`)*
-11. **File Feedback** *(rip from existing `#feedback`)*
+11. **Personal Notes on a Problem** — create, edit, browse — client/src/pages/notes/ *(NEW; existing feature, gated by `VITE_FEATURE_NOTES_ENABLED`)*
+12. **Join or Switch a Team** — invite acceptance, team switcher, personal-mode auto-team model *(NEW)*
+13. *(File Feedback moved to Support group — see below)*
+
+### 💬 Support (both roles — `role: '*'`)
+1. **File Feedback** *(rip from existing `#feedback`; moved from MEMBER-only to shared since TEAM_ADMIN + SUPER_ADMIN also file feedback)*
 
 ### 🛡️ TEAM_ADMIN (7 guides)
 1. **Fork a Curriculum Template** *(NEW)*
 2. **Author a Topic — 4-tab UI** *(NEW)*
-3. **Run AI Curriculum Review — Rules 18-22** *(NEW)*
-4. **Publish a Topic — gates explained** *(NEW)*
+3. **Run AI Curriculum Review** *(NEW; do NOT cite internal Rule 18-22 numbers in the rendered prose — describe outcomes only. Internal-rule numbering leaks the validator's attack-surface to end users.)*
+4. **Publish a Topic — gates explained** *(NEW; source: gate logic lives in `server/src/controllers/curriculumAdmin.controller.js` + `server/src/services/curriculum/contentReview.service.js` `latestVerdictFor(...)` — the earlier assumption of a `curriculumPublishGates.js` file is wrong; that file does not exist)*
 5. **Add a Problem (AI generation)** *(rip from existing `#add-problem-ai`)*
 6. **Add a Problem (Manual)** *(rip from existing `#add-problem-manual`)*
 7. **Manage Team Members — invite, roles, personal-team model** *(NEW; source: `server/src/routes/team*.js` + relevant client pages)*
@@ -491,3 +516,33 @@ Strong signals (post-analytics, not blocking):
 - Guide page views by role match role distribution in the user table
 - Search terms with 0 results feed content backlog
 - Deep-link click-through rate on the 4 wired surfaces
+
+---
+
+## 16. Review feedback log (2026-07-07 four-role review)
+
+**BLOCKERs addressed inline:**
+- Auth store path corrected — `@store/useAuthStore` (singular `store`), not `@stores/authStore` (BA)
+- Publish gate source corrected — `curriculumAdmin.controller.js` + `contentReview.service.js`, not the non-existent `curriculumPublishGates.js` (BA)
+- React Router v6 route wiring clarified — sibling route pattern, no wildcard needed (BA + LeadEngineer)
+- Validator invariant #6 fixed — path-existence check via `fs.existsSync`, not dynamic import (LeadEngineer)
+- `useEffectiveRole()` extracted to shared hook — no duplicated permission logic (LeadEngineer)
+- MEMBER inventory: added `notes` (existing feature under `VITE_FEATURE_NOTES_ENABLED`) and `join-team` guides (PO)
+- File Feedback moved from MEMBER-only to Support with `role: '*'` (PO)
+- First-30-minutes-member conditionally includes Curriculum step when `VITE_FEATURE_CURRICULUM` on (PO)
+- Content-authoring constraint: do not cite internal Rule 18-22 numbers in rendered prose (Security)
+
+**MINORs deferred to backlog:**
+- Consider splitting `learn-curriculum-topic` into learner + teach guides post-launch (PO)
+- Add `manualChunks: { howto: [...] }` in `vite.config.js` when bundle-size warrants it (LeadEngineer)
+- Manifest split convention (per-role sub-arrays) when `TASKS.length > 40` (LeadEngineer)
+- Hash-redirect edge case: known-hash paths must strip the hash before `navigate()` to avoid double-consumption (LeadEngineer)
+- Content agents must NOT render raw endpoint paths in prose (`POST /api/v1/super-admin/…`) — cite as JSX code comment instead (Security)
+- Sidebar line reference — verify exact line during Task 1 (BA)
+- Roadmap page guide — one-paragraph callout could suffice instead of full guide (PO)
+
+**Content-agent pre-flight checklist (added to Task 7-9 agent prompts):**
+1. NEVER render raw REST endpoint paths in visible guide prose. Use JSX code comments for citations.
+2. NEVER cite internal validator rule numbers (Rule 18-22 etc.). Describe outcomes only.
+3. Verify every claimed UI element with grep before writing.
+4. Cite file:line for every non-obvious claim (in a JSX comment; strip on merge if needed).
