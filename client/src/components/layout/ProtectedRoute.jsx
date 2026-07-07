@@ -69,12 +69,16 @@ export default function ProtectedRoute({
         }
     }
 
-    // ── Team context guard (STRICT — no SuperAdmin bypass) ──
+    // ── Team context guard ──────────────────────────────
+    // Regular users without a team → onboarding.
+    // SuperAdmin without a team → team picker with return-to redirect.
+    // The picker calls switchTeam (server-extended to allow SUPER_ADMIN
+    // without a TeamMembership row).
     if (requireTeamContext) {
         if (!user.currentTeamId) {
-            // SuperAdmin should never reach team routes — redirect to their dashboard
             if (user.globalRole === 'SUPER_ADMIN') {
-                return <Navigate to="/super-admin" replace />
+                const redirectParam = encodeURIComponent(location.pathname + location.search)
+                return <Navigate to={`/select-team?redirect=${redirectParam}`} replace />
             }
             return <Navigate to="/onboarding" replace />
         }

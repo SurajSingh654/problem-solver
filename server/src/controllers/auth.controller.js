@@ -844,6 +844,7 @@ export async function switchTeam(req, res) {
   try {
     const { teamId } = req.body;
     const userId = req.user.id;
+    const isSuperAdmin = req.user.globalRole === "SUPER_ADMIN";
 
     if (!teamId) {
       return error(res, "Team ID is required.", 400);
@@ -862,23 +863,34 @@ export async function switchTeam(req, res) {
       return error(res, "This team is not active.", 400);
     }
 
-    // Verify user has an active membership in this team
-    // TeamMembership is the authoritative access check
-    const membership = await prisma.teamMembership.findUnique({
-      where: { userId_teamId: { userId, teamId } },
-      select: { role: true, isActive: true },
-    });
+    // Role resolution:
+    //   SUPER_ADMIN — no membership required; acts as TEAM_ADMIN in any team.
+    //     This is the "act as" model for platform admins who need to inspect
+    //     or edit team-scoped surfaces (curriculum authoring, feedback triage
+    //     per team, etc.). The tenancy invariant still holds — server-side
+    //     requireTeamContext maps req.teamId from currentTeamId.
+    //   Otherwise — TeamMembership is the authoritative access check.
+    let effectiveRole;
+    if (isSuperAdmin) {
+      effectiveRole = "TEAM_ADMIN";
+    } else {
+      const membership = await prisma.teamMembership.findUnique({
+        where: { userId_teamId: { userId, teamId } },
+        select: { role: true, isActive: true },
+      });
 
-    if (!membership || !membership.isActive) {
-      return error(res, "You are not a member of this team.", 403);
+      if (!membership || !membership.isActive) {
+        return error(res, "You are not a member of this team.", 403);
+      }
+      effectiveRole = membership.role;
     }
 
-    // Update current context — role comes from membership record
+    // Update current context — role from membership OR SUPER_ADMIN override
     await prisma.user.update({
       where: { id: userId },
       data: {
         currentTeamId: teamId,
-        teamRole: membership.role,
+        teamRole: effectiveRole,
       },
     });
 

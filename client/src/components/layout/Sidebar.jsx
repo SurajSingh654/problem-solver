@@ -549,8 +549,15 @@ function Logo({ collapsed }) {
 }
 
 function SuperAdminBadge({ collapsed }) {
+    const { user } = useAuthStore()
+    const activeTeamName = user?.memberships?.find(m => m.team.id === user.currentTeamId)?.team?.name
+        // memberships may not include the acting team if SUPER_ADMIN switched
+        // via /select-team (no TeamMembership row). Fall back to teamName-lite
+        // from currentTeamId presence.
+        || (user?.currentTeamId ? 'a team' : null)
+
     return (
-        <div className="px-2 py-2 border-b border-border-default">
+        <div className="px-2 py-2 border-b border-border-default space-y-1.5">
             <div
                 className={cn(
                     'group/navitem relative flex items-center rounded-xl bg-danger-soft border border-danger-line',
@@ -567,6 +574,28 @@ function SuperAdminBadge({ collapsed }) {
                 )}
                 {collapsed && <NavTooltip>Platform Admin</NavTooltip>}
             </div>
+
+            {/* "Acting as" pill — team-scoped surfaces need a team context.
+                Without one, links like Curriculum Admin / Templates / Sessions
+                / Showcase / Learning silently redirect via requireTeamContext. */}
+            {!collapsed && (
+                <NavLink
+                    to={`/select-team?redirect=${encodeURIComponent(window.location.pathname)}`}
+                    className={cn(
+                        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors',
+                        activeTeamName
+                            ? 'bg-brand-soft border border-brand-line text-brand-fg-soft hover:bg-brand-soft/70'
+                            : 'bg-warning-soft border border-warning-line text-warning-fg hover:bg-warning-soft/70',
+                    )}
+                >
+                    <span>👁️</span>
+                    <span className="min-w-0 flex-1 truncate">
+                        {activeTeamName
+                            ? <>Acting as <strong>{activeTeamName}</strong></>
+                            : 'Pick a team →'}
+                    </span>
+                </NavLink>
+            )}
         </div>
     )
 }

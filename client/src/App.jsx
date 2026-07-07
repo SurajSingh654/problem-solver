@@ -94,6 +94,7 @@ const SetupPage = lazy(() => import('@pages/docs/SetupPage'))
 const DeployPage = lazy(() => import('@pages/docs/DeployPage'))
 const HowToPage = lazy(() => import('@pages/docs/howto/HowToShell'))
 const HowToTaskPage = lazy(() => import('@pages/docs/howto/TaskPage'))
+const SelectTeamPage = lazy(() => import('@pages/SelectTeamPage'))
 const ProblemsPage = lazy(() => import('@pages/problems/ProblemsPage'))
 const ProblemDetailPage = lazy(() => import('@pages/problems/ProblemDetailPage'))
 const SubmitSolutionPage = lazy(() => import('@pages/problems/SubmitSolutionPage'))
@@ -200,6 +201,15 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <OnboardingPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* ── SUPER_ADMIN team picker (outside AppShell — sidebar/topbar hidden) */}
+          <Route
+            path="/select-team"
+            element={
+              <ProtectedRoute requireSuperAdmin>
+                <Lazy><SelectTeamPage /></Lazy>
               </ProtectedRoute>
             }
           />
