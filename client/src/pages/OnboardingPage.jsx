@@ -122,6 +122,12 @@ export default function OnboardingPage() {
           <p className="text-sm text-text-secondary">
             How would you like to use ProbSolver?
           </p>
+          <p className="text-xs text-text-tertiary mt-3">
+            First time here?{' '}
+            <a href="/docs/how-to" className="text-brand-fg-soft underline">
+              Read the How-To Guide →
+            </a>
+          </p>
         </div>
 
         {/* Mode selection cards */}

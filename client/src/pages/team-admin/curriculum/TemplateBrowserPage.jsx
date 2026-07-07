@@ -82,7 +82,10 @@ function TemplateCard({ template, onFork, disabled, alreadyForked }) {
                     <a href="/admin/curriculum" className="underline font-semibold">
                         Curriculum Admin
                     </a>
-                    .
+                    .{' '}
+                    <a href="/docs/how-to/task/fork-template" className="underline">
+                        Why? →
+                    </a>
                 </div>
             ) : (
                 <Button

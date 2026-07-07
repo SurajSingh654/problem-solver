@@ -753,6 +753,12 @@ export default function ConceptsListTab({ topic }) {
                     <PlusCircle className="w-4 h-4" />
                     Add concept
                 </Button>
+                <p className="text-xs text-text-tertiary">
+                    Never done this before?{' '}
+                    <a href="/docs/how-to/task/author-topic" className="text-brand-fg-soft underline">
+                        Read the Author a Topic guide →
+                    </a>
+                </p>
             </div>
         )
     }

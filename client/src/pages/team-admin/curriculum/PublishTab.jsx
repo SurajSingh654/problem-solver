@@ -159,6 +159,12 @@ export default function PublishTab({ topic, onGoToConcepts, onGoToReview }) {
                         Publish blocked
                     </p>
                     <PublishGateChecklist gates={gates} />
+                    <div className="text-xs text-text-secondary pt-1 border-t border-danger-line/40">
+                        💡 Confused about a gate?{' '}
+                        <a href="/docs/how-to/task/publish-topic" className="text-brand-fg-soft underline">
+                            Read the Publish gates guide →
+                        </a>
+                    </div>
                 </div>
             )}
 
