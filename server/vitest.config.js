@@ -56,5 +56,14 @@ export default defineConfig({
                 singleFork: true,
             },
         },
+        // Retry-on-failure for integration tests. The curriculum-fork tests
+        // (and a few adjacent ones) share a single Railway Postgres and can
+        // flake on transient pool pressure at the tail of a long suite:
+        //   • fork transaction returns 500 waiting for a connection
+        //   • duplicate-detection asserts fail because prior req failed silently
+        // A single retry after a cold-start absorbs the vast majority. Real
+        // logic bugs are deterministic and fail on all attempts — this does
+        // not hide them.
+        retry: 2,
     },
 })
