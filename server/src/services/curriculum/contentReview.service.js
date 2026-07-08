@@ -80,6 +80,8 @@ export async function runValidator(type, input) {
 
     let body;
     let usedFallback = false;
+    let fallbackReason = null;
+    let rawSample = null;
 
     try {
         const raw = await spec.aiComplete({
@@ -88,16 +90,33 @@ export async function runValidator(type, input) {
             userPrompt: prompt,
             responseFormat: { type: "json_object" },
         });
+        rawSample = typeof raw === "string" ? raw.slice(0, 500) : JSON.stringify(raw).slice(0, 500);
         const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
         const zodResult = spec.schema.safeParse(parsed);
         if (!zodResult.success) {
-            throw new Error(`Zod validation failed: ${zodResult.error?.message ?? "schema mismatch"}`);
+            // Zod issue paths are more actionable than the flat message.
+            const issues = (zodResult.error?.issues ?? [])
+                .slice(0, 5)
+                .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+                .join(" | ");
+            throw new Error(`Zod validation failed: ${issues || zodResult.error?.message || "schema mismatch"}`);
         }
         body = spec.validate(zodResult.data, sanitizedInputs);
     } catch (err) {
-        console.warn(`[contentReview:${type}] validation failed, falling back:`, err.message);
+        fallbackReason = err.message ?? String(err);
+        console.warn(
+            `[contentReview:${type}] validation failed, falling back:`,
+            fallbackReason,
+            rawSample ? `\n  rawSample (first 500 chars): ${rawSample}` : "",
+        );
         body = spec.fallback(input);
         usedFallback = true;
+        // Surface the concrete failure reason back to the caller (dev + admin
+        // UI can display) so they don't have to dig through Railway logs.
+        body.mustFix = [
+            `Automated review failed validation. Re-run required.`,
+            `Failure reason: ${fallbackReason}`,
+        ];
     }
 
     let logId;
@@ -126,6 +145,7 @@ export async function runValidator(type, input) {
         body,
         logId,
         usedFallback,
+        fallbackReason,
     };
 }
 
