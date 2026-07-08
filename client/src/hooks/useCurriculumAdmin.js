@@ -370,6 +370,24 @@ export function usePublishConcept(conceptId, topicId) {
     })
 }
 
+/**
+ * POST /labs/:id/publish — enforce deterministic lab publish gates
+ * (referenceSolution + timebox). Both structural, no force= support.
+ * Caller reads `mutation.error.response.data.error.details.gates` on 400.
+ */
+export function usePublishLab(labId, topicId) {
+    const qc = useQueryClient()
+    return useToastingMutation({
+        mutationFn: () => unwrap(curriculumAdminApi.publishLab(labId)),
+        onSuccess: () => {
+            if (topicId) {
+                qc.invalidateQueries({ queryKey: KEYS.topicDetail(topicId) })
+            }
+        },
+        silent: true,
+    })
+}
+
 // Re-export for callers that want to distinguish gate errors from other
 // errors without pulling from services/api directly.
 export { extractErrorCode }

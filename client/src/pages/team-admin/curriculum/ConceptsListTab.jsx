@@ -60,6 +60,7 @@ import {
     useRunLessonReview,
     useRunLabShapeCheck,
     usePublishConcept,
+    usePublishLab,
     extractErrorCode,
 } from '@hooks/useCurriculumAdmin'
 
@@ -569,11 +570,13 @@ function ConceptRow({ topic, concept }) {
     const [labOpen, setLabOpen]         = useState(false)
     const [reviewOut, setReviewOut]     = useState(null)   // lesson review body
     const [labReviewOut, setLabReviewOut] = useState(null) // lab shape check body
-    const [gateOut, setGateOut]         = useState(null)   // { gates } on 400
+    const [gateOut, setGateOut]         = useState(null)   // { gates } on concept-publish 400
+    const [labGateOut, setLabGateOut]   = useState(null)   // { gates } on lab-publish 400
 
     const review     = useRunLessonReview(concept.id, topic.id)
     const labReview  = useRunLabShapeCheck(concept.lab?.id)
     const publish    = usePublishConcept(concept.id, topic.id)
+    const publishLab = usePublishLab(concept.lab?.id, topic.id)
 
     const runReview = async () => {
         try {
@@ -591,6 +594,19 @@ function ConceptRow({ topic, concept }) {
             setLabReviewOut(data)
         } catch {
             // toast handled
+        }
+    }
+
+    const runPublishLab = async () => {
+        if (!concept.lab?.id) return
+        setLabGateOut(null)
+        try {
+            await publishLab.mutateAsync()
+            // toast handled; topic detail invalidated → status badge refreshes.
+        } catch (err) {
+            if (extractErrorCode(err) === 'PUBLISH_GATE_BLOCKED') {
+                setLabGateOut(err.response.data.error.details ?? { gates: [] })
+            }
         }
     }
 
@@ -690,11 +706,13 @@ function ConceptRow({ topic, concept }) {
                 </div>
             )}
 
-            {/* Lab shape-check summary + run button */}
+            {/* Lab shape-check summary + run button + publish */}
             {concept.lab && (
                 <div className="rounded-xl border border-border-default bg-surface-1 p-3 flex items-center justify-between gap-3 flex-wrap">
                     <div className="text-xs text-text-secondary min-w-0">
                         <span className="font-semibold text-text-primary">{concept.lab.title}</span>
+                        <span className="mx-2 opacity-40">·</span>
+                        <VerdictBadge verdict={concept.lab.status} />
                         <span className="mx-2 opacity-40">·</span>
                         {concept.lab.language}
                         {concept.lab.timeboxMinutes != null && (
@@ -704,14 +722,36 @@ function ConceptRow({ topic, concept }) {
                             </>
                         )}
                     </div>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={runLabReview}
-                        loading={labReview.isPending}
-                    >
-                        Run lab shape check
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={runLabReview}
+                            loading={labReview.isPending}
+                        >
+                            Run lab shape check
+                        </Button>
+                        {/* Publish visible only when lab is not yet PUBLISHED AND parent
+                            concept is PUBLISHED — labs can't ship ahead of their concept. */}
+                        {concept.lab.status !== 'PUBLISHED' && concept.status === 'PUBLISHED' && (
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={runPublishLab}
+                                loading={publishLab.isPending}
+                            >
+                                <UploadCloud className="w-3.5 h-3.5" /> Publish lab
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            )}
+            {labGateOut?.gates && (
+                <div className="rounded-xl border border-danger-line bg-danger-soft/40 p-4 space-y-2">
+                    <p className="text-xs font-semibold text-danger-fg">
+                        Lab publish blocked. Fix the failing gates below and retry.
+                    </p>
+                    <PublishGateChecklist gates={labGateOut.gates} />
                 </div>
             )}
             {labReviewOut && (

@@ -53,16 +53,13 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
                 { to: '/super-admin/learning', icon: '📓', label: 'Learning Content' },
             ],
         })
-        if (featureCurriculum) {
-            sections.push({
-                id: 'curriculum',
-                label: 'Curriculum',
-                items: [
-                    { to: '/admin/curriculum', icon: '📖', label: 'Curriculum Admin' },
-                    { to: '/admin/curriculum/templates', icon: '📚', label: 'Templates' },
-                ],
-            })
-        }
+        // Curriculum Admin, Templates, Sessions — REMOVED from SUPER_ADMIN
+        // sidebar. Those are team-scoped (per-team topic authoring, team's own
+        // teaching sessions). SUPER_ADMIN's responsibility is platform ops;
+        // team-content authoring is TEAM_ADMIN work — the solo dev who is
+        // both should get a TeamMembership row on their team and see the
+        // TEAM_ADMIN sidebar block below (which is no longer gated by
+        // !isSuperAdmin, so the block renders alongside the platform one).
         sections.push({
             id: 'health',
             label: 'Health & Audit',
@@ -74,12 +71,13 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
             ],
         })
         if (featureTeaching) {
+            // Teaching Flags only — cross-team moderation, PLATFORM concern.
+            // Team teaching Sessions belong under the TEAM_ADMIN sidebar.
             sections.push({
                 id: 'teaching',
-                label: 'Teaching',
+                label: 'Moderation',
                 items: [
-                    { to: '/teaching', icon: '📚', label: 'Sessions' },
-                    { to: '/super-admin/teaching-flags', icon: '🚩', label: 'Flags' },
+                    { to: '/super-admin/teaching-flags', icon: '🚩', label: 'Teaching Flags' },
                 ],
             })
         }
@@ -91,17 +89,23 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
                 { to: apiDocsUrl, icon: '📖', label: 'API Docs', external: true },
             ],
         })
-        // Help section — SUPER_ADMIN also needs the How-To Guide.
-        // The guide's shell reads globalRole from useAuthStore and shows
-        // super-admin content (Platform Ops + Moderation groups) here.
-        sections.push({
-            id: 'help',
-            label: 'Help',
-            items: [
-                { to: '/docs/how-to', icon: '📘', label: 'How-To Guide' },
-            ],
-        })
-        return sections
+        // If this SUPER_ADMIN also has a TeamMembership as TEAM_ADMIN on a
+        // real team (common for solo-dev owners), fall through to build the
+        // learner + team-admin sections below. That way one account with
+        // both roles sees BOTH sidebar blocks — no team-picker gymnastics.
+        // The Help section is pushed at the very end of the TEAM path
+        // (line 152) so it renders after every other section for dual-role
+        // users. Pure-platform users get Help pushed here.
+        if (!isTeamAdmin) {
+            sections.push({
+                id: 'sa-help',
+                label: 'Help',
+                items: [
+                    { to: '/docs/how-to', icon: '📘', label: 'How-To Guide' },
+                ],
+            })
+            return sections
+        }
     }
 
     // Team members & individuals
@@ -339,7 +343,12 @@ export default function Sidebar() {
     const [switching, setSwitching] = useState(false)
 
     const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
-    const isTeamAdmin = !isSuperAdmin && user?.teamRole === 'TEAM_ADMIN'
+    // A user can be BOTH SUPER_ADMIN and TEAM_ADMIN on their own team (via
+    // a real TeamMembership row). The previous `!isSuperAdmin` predicate
+    // hid the team-admin sidebar block for solo-dev SUPER_ADMINs, forcing
+    // them into the awkward "act as team" flow for work that should be
+    // normal TEAM_ADMIN clicks. Track the role independently.
+    const isTeamAdmin = user?.teamRole === 'TEAM_ADMIN'
     const isPersonal = user?.currentTeamId === user?.personalTeamId
 
     const teamName = isPersonal ? 'My Practice' : user?.currentTeam?.name || 'Team'
@@ -437,8 +446,13 @@ export default function Sidebar() {
             {/* ── SUPER_ADMIN badge ─────────────────────────── */}
             {isSuperAdmin && <SuperAdminBadge collapsed={collapsed} />}
 
-            {/* ── Team Switcher (not for SUPER_ADMIN) ───────── */}
-            {!isSuperAdmin && (
+            {/* ── Team Switcher ─────────────────────────────── */}
+            {/* Visible when the user has any TeamMembership rows. Applies to
+                MEMBERs, TEAM_ADMINs, AND SUPER_ADMINs who also own a team
+                (solo-dev case). Previous `!isSuperAdmin` gate hid the
+                switcher from SAs even when they had legitimate memberships,
+                forcing the awkward "/select-team" flow. */}
+            {user?.memberships?.length > 0 && (
                 <TeamSwitcher
                     collapsed={collapsed}
                     user={user}

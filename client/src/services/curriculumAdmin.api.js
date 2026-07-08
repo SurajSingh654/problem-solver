@@ -49,4 +49,6 @@ export const curriculumAdminApi = {
         api.post(`${ROOT}/topics/${id}/publish`, force ? { force: true } : {}),
     publishConcept: (id, force = false) =>
         api.post(`${ROOT}/concepts/${id}/publish`, force ? { force: true } : {}),
+    // Lab publish is structural-only — no advisory gate, no force= flag.
+    publishLab: (id) => api.post(`${ROOT}/labs/${id}/publish`),
 }
