@@ -999,8 +999,14 @@ export async function publishTopic(req, res) {
 
     const gates = [];
 
-    // Gate 1: latest curriculum-review verdict must be WORTH_LEARNING.
-    // SUPER_ADMIN + force=true bypasses.
+    // Gate 1: latest curriculum-review verdict must be WORTH_LEARNING or
+    // WORTH_WITH_ADJUSTMENTS. Mirror the concept gate — the AI is a coach,
+    // not a gatekeeper. Only NOT_WORTH_TIME blocks. SUPER_ADMIN can still
+    // force-override that case.
+    const PASSING_TOPIC_VERDICTS = new Set([
+      "WORTH_LEARNING",
+      "WORTH_WITH_ADJUSTMENTS",
+    ]);
     const reviewLog = await latestVerdictFor("TOPIC", topic.id);
     if (!reviewLog) {
       gates.push({
@@ -1011,21 +1017,22 @@ export async function publishTopic(req, res) {
           ? "Overridden by SUPER_ADMIN (no review run)."
           : "No curriculum review has been run for this topic yet.",
       });
-    } else if (reviewLog.verdict !== "WORTH_LEARNING") {
+    } else if (!PASSING_TOPIC_VERDICTS.has(reviewLog.verdict)) {
+      // Only NOT_WORTH_TIME reaches here after the loosened gate.
       gates.push({
         id: "curriculum_review_verdict",
         label: "Curriculum review verdict",
         status: canForce ? "PASS" : "FAIL",
         message: canForce
           ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
-          : `Latest verdict is ${reviewLog.verdict}. Required: WORTH_LEARNING.`,
+          : `Latest verdict is ${reviewLog.verdict}. Required: WORTH_LEARNING or WORTH_WITH_ADJUSTMENTS.`,
       });
     } else {
       gates.push({
         id: "curriculum_review_verdict",
         label: "Curriculum review verdict",
         status: "PASS",
-        message: "WORTH_LEARNING",
+        message: reviewLog.verdict, // "WORTH_LEARNING" or "WORTH_WITH_ADJUSTMENTS"
       });
     }
 
@@ -1114,8 +1121,13 @@ export async function publishConcept(req, res) {
 
     const gates = [];
 
-    // Gate 1: latest lesson-review verdict must be READY.
-    // SUPER_ADMIN + force=true bypasses this gate (advisory only).
+    // Gate 1: latest lesson-review verdict must be READY *or* POLISH.
+    // Rationale: the AI is a coach, not a gatekeeper. POLISH means "good
+    // bones, has room for improvement" — perfectly reasonable to publish.
+    // Only NOT_READY (or "no review run") blocks. SUPER_ADMIN can still
+    // force-override the NOT_READY case if they've read the content and
+    // disagree with the AI.
+    const PASSING_LESSON_VERDICTS = new Set(["READY", "POLISH"]);
     const reviewLog = await latestVerdictFor("CONCEPT", concept.id);
     if (!reviewLog) {
       gates.push({
@@ -1126,21 +1138,22 @@ export async function publishConcept(req, res) {
           ? "Overridden by SUPER_ADMIN (no review run)."
           : "No lesson review has been run for this concept yet.",
       });
-    } else if (reviewLog.verdict !== "READY") {
+    } else if (!PASSING_LESSON_VERDICTS.has(reviewLog.verdict)) {
+      // Only NOT_READY reaches here after the loosened gate.
       gates.push({
         id: "lesson_review_verdict",
         label: "Lesson review verdict",
         status: canForce ? "PASS" : "FAIL",
         message: canForce
           ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
-          : `Latest verdict is ${reviewLog.verdict}. Required: READY.`,
+          : `Latest verdict is ${reviewLog.verdict}. Required: READY or POLISH.`,
       });
     } else {
       gates.push({
         id: "lesson_review_verdict",
         label: "Lesson review verdict",
         status: "PASS",
-        message: "READY",
+        message: reviewLog.verdict, // "READY" or "POLISH"
       });
     }
 
