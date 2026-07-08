@@ -38,6 +38,37 @@ const CATEGORY_LABEL = {
     DATA_STRUCTURES: 'Data Structures',
 }
 
+// Strip markdown syntax down to a readable card teaser. The card has
+// line-clamp-3 so we mostly need to kill the visible syntax noise
+// (headings, bold markers, code backticks, bullet markers). Full
+// markdown rendering would defeat line-clamp and add height thrash.
+function plainSummary(md, maxLen = 220) {
+    if (!md) return ''
+    let s = String(md)
+    // Drop fenced code blocks entirely
+    s = s.replace(/```[\s\S]*?```/g, ' ')
+    // Drop headings including the leading '#'
+    s = s.replace(/^#{1,6}\s+.*$/gm, '')
+    // Bold + italic markers
+    s = s.replace(/\*\*(.+?)\*\*/g, '$1')
+    s = s.replace(/\*(.+?)\*/g, '$1')
+    s = s.replace(/__(.+?)__/g, '$1')
+    s = s.replace(/_(.+?)_/g, '$1')
+    // Inline code backticks
+    s = s.replace(/`([^`]+)`/g, '$1')
+    // Bullet + numbered list markers at start of line
+    s = s.replace(/^[\s]*[-*+]\s+/gm, '')
+    s = s.replace(/^[\s]*\d+\.\s+/gm, '')
+    // Blockquote markers
+    s = s.replace(/^>\s?/gm, '')
+    // Link syntax: keep the label, drop the target
+    s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Collapse whitespace
+    s = s.replace(/\s+/g, ' ').trim()
+    if (s.length <= maxLen) return s
+    return s.slice(0, maxLen).replace(/\s+\S*$/, '') + '…'
+}
+
 // ────────────────────────────────────────────────────────────────
 // Single template card
 // ────────────────────────────────────────────────────────────────
@@ -59,7 +90,7 @@ function TemplateCard({ template, onFork, disabled, alreadyForked }) {
             </div>
 
             <p className="text-sm text-text-secondary line-clamp-3 flex-1">
-                {template.description}
+                {plainSummary(template.description)}
             </p>
 
             <div className="flex items-center gap-4 text-xs text-text-tertiary">
