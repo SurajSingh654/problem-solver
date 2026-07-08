@@ -981,6 +981,11 @@ export async function reviewLab(req, res) {
 export async function publishTopic(req, res) {
   try {
     const { id } = req.params;
+    // SUPER_ADMIN override for the ADVISORY curriculum-review gate only —
+    // structural gate (all concepts PUBLISHED) is NOT bypassable. See
+    // publishConcept for the parallel treatment.
+    const forceParam = req.body?.force === true || req.query?.force === "true";
+    const canForce = forceParam && req.user?.globalRole === "SUPER_ADMIN";
 
     const topic = await prisma.topic.findFirst({
       where: { id, teamId: req.teamId },
@@ -995,20 +1000,25 @@ export async function publishTopic(req, res) {
     const gates = [];
 
     // Gate 1: latest curriculum-review verdict must be WORTH_LEARNING.
+    // SUPER_ADMIN + force=true bypasses.
     const reviewLog = await latestVerdictFor("TOPIC", topic.id);
     if (!reviewLog) {
       gates.push({
         id: "curriculum_review_verdict",
         label: "Curriculum review verdict",
-        status: "FAIL",
-        message: "No curriculum review has been run for this topic yet.",
+        status: canForce ? "PASS" : "FAIL",
+        message: canForce
+          ? "Overridden by SUPER_ADMIN (no review run)."
+          : "No curriculum review has been run for this topic yet.",
       });
     } else if (reviewLog.verdict !== "WORTH_LEARNING") {
       gates.push({
         id: "curriculum_review_verdict",
         label: "Curriculum review verdict",
-        status: "FAIL",
-        message: `Latest verdict is ${reviewLog.verdict}. Required: WORTH_LEARNING.`,
+        status: canForce ? "PASS" : "FAIL",
+        message: canForce
+          ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
+          : `Latest verdict is ${reviewLog.verdict}. Required: WORTH_LEARNING.`,
       });
     } else {
       gates.push({
@@ -1052,6 +1062,13 @@ export async function publishTopic(req, res) {
       });
     }
 
+    if (canForce && reviewLog?.verdict !== "WORTH_LEARNING") {
+      await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH_FORCE", {
+        topicId: topic.id,
+        overriddenVerdict: reviewLog?.verdict ?? "NONE",
+      });
+    }
+
     const published = await prisma.topic.update({
       where: { id: topic.id },
       data: {
@@ -1079,6 +1096,13 @@ export async function publishTopic(req, res) {
 export async function publishConcept(req, res) {
   try {
     const { id } = req.params;
+    // SUPER_ADMIN override — the AI lesson-review verdict is advisory, not
+    // authoritative. When a platform admin has read the content and wants
+    // to publish despite a POLISH / NOT_READY verdict, allow it with an
+    // audit log entry. The readiness_rubric gate is NOT bypassable — it's
+    // a structural requirement for the Mentor to score learner readiness.
+    const forceParam = req.body?.force === true || req.query?.force === "true";
+    const canForce = forceParam && req.user?.globalRole === "SUPER_ADMIN";
 
     const concept = await prisma.concept.findFirst({
       where: { id, teamId: req.teamId },
@@ -1091,20 +1115,25 @@ export async function publishConcept(req, res) {
     const gates = [];
 
     // Gate 1: latest lesson-review verdict must be READY.
+    // SUPER_ADMIN + force=true bypasses this gate (advisory only).
     const reviewLog = await latestVerdictFor("CONCEPT", concept.id);
     if (!reviewLog) {
       gates.push({
         id: "lesson_review_verdict",
         label: "Lesson review verdict",
-        status: "FAIL",
-        message: "No lesson review has been run for this concept yet.",
+        status: canForce ? "PASS" : "FAIL",
+        message: canForce
+          ? "Overridden by SUPER_ADMIN (no review run)."
+          : "No lesson review has been run for this concept yet.",
       });
     } else if (reviewLog.verdict !== "READY") {
       gates.push({
         id: "lesson_review_verdict",
         label: "Lesson review verdict",
-        status: "FAIL",
-        message: `Latest verdict is ${reviewLog.verdict}. Required: READY.`,
+        status: canForce ? "PASS" : "FAIL",
+        message: canForce
+          ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
+          : `Latest verdict is ${reviewLog.verdict}. Required: READY.`,
       });
     } else {
       gates.push({
@@ -1117,7 +1146,7 @@ export async function publishConcept(req, res) {
 
     // Gate 2: readinessRubric must be non-null. The rubric feeds Mentor's
     // readiness classifier — publishing without it means the concept ships
-    // with no way to score learner readiness.
+    // with no way to score learner readiness. NOT bypassable by force.
     if (!concept.readinessRubric) {
       gates.push({
         id: "readiness_rubric_present",
@@ -1138,6 +1167,14 @@ export async function publishConcept(req, res) {
     if (failed.length > 0) {
       return error(res, "Publish blocked", 400, "PUBLISH_GATE_BLOCKED", {
         gates,
+      });
+    }
+
+    // Audit the override if used — the SUPER_ADMIN just bypassed the AI gate.
+    if (canForce && reviewLog?.verdict !== "READY") {
+      await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH_FORCE", {
+        conceptId: concept.id,
+        overriddenVerdict: reviewLog?.verdict ?? "NONE",
       });
     }
 

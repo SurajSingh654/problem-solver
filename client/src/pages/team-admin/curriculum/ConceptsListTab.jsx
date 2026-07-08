@@ -46,6 +46,7 @@ import {
     PlusCircle, FileText, Beaker, ClipboardCheck, GitPullRequestArrow,
     UploadCloud, X, Save,
 } from 'lucide-react'
+import useAuthStore from '@store/useAuthStore'
 import { VerdictBadge, PublishGateChecklist, MarkdownEditor } from '@components/curriculum'
 import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
@@ -549,8 +550,20 @@ function LabEditor({ topic, concept, open, onClose }) {
 // ─────────────────────────────────────────────────────────────────
 // Per-concept row card — actions + inline verdict/gate panels.
 // ─────────────────────────────────────────────────────────────────
+// Advisory gates (SUPER_ADMIN can override) vs structural gates (never bypassable).
+// Keep in sync with server: publishConcept honors force= for `lesson_review_verdict`;
+// publishTopic honors force= for `curriculum_review_verdict`. `readiness_rubric_present`
+// and `concepts_all_published` are structural and always enforced.
+const ADVISORY_GATE_IDS = new Set(['lesson_review_verdict', 'curriculum_review_verdict'])
+function onlyAdvisoryGatesFailing(gates) {
+    const failing = gates.filter((g) => g.status === 'FAIL')
+    return failing.length > 0 && failing.every((g) => ADVISORY_GATE_IDS.has(g.id))
+}
+
 function ConceptRow({ topic, concept }) {
     const confirm = useConfirm()
+    const user = useAuthStore((s) => s.user)
+    const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
     const [primerOpen, setPrimerOpen]   = useState(false)
     const [rubricOpen, setRubricOpen]   = useState(false)
     const [labOpen, setLabOpen]         = useState(false)
@@ -581,17 +594,19 @@ function ConceptRow({ topic, concept }) {
         }
     }
 
-    const runPublish = async () => {
+    const runPublish = async ({ force = false } = {}) => {
         const ok = await confirm({
-            title: 'Publish this concept?',
-            description: `Learners will see "${concept.name}" once published. You can update it after.`,
-            confirmLabel: 'Publish',
+            title: force ? 'Publish anyway (SUPER_ADMIN override)?' : 'Publish this concept?',
+            description: force
+                ? `AI lesson-review verdict flagged issues. Overriding as SUPER_ADMIN. Action is audit-logged.`
+                : `Learners will see "${concept.name}" once published. You can update it after.`,
+            confirmLabel: force ? 'Publish anyway' : 'Publish',
             cancelLabel: 'Cancel',
         })
         if (!ok) return
         setGateOut(null)
         try {
-            await publish.mutateAsync()
+            await publish.mutateAsync({ force })
             // toast handled; topic detail invalidated → status badge refreshes.
         } catch (err) {
             if (extractErrorCode(err) === 'PUBLISH_GATE_BLOCKED') {
@@ -639,7 +654,7 @@ function ConceptRow({ topic, concept }) {
                     <Button
                         variant="primary"
                         size="sm"
-                        onClick={runPublish}
+                        onClick={() => runPublish()}
                         loading={publish.isPending}
                         disabled={concept.status === 'PUBLISHED'}
                     >
@@ -725,6 +740,21 @@ function ConceptRow({ topic, concept }) {
                         Publish blocked. Fix the failing gates below and retry.
                     </p>
                     <PublishGateChecklist gates={gateOut.gates} />
+                    {isSuperAdmin && onlyAdvisoryGatesFailing(gateOut.gates) && (
+                        <div className="flex items-center gap-3 pt-2 border-t border-danger-line/40">
+                            <p className="text-[11px] text-text-tertiary flex-1">
+                                Only the advisory AI-review gate is failing. As SUPER_ADMIN you can publish anyway — the action is audit-logged.
+                            </p>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => runPublish({ force: true })}
+                                loading={publish.isPending}
+                            >
+                                <UploadCloud className="w-3.5 h-3.5" /> Publish anyway
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
 

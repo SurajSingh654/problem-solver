@@ -335,7 +335,11 @@ export function useRunLabShapeCheck(labId) {
 export function usePublishTopic(topicId) {
     const qc = useQueryClient()
     return useToastingMutation({
-        mutationFn: () => unwrap(curriculumAdminApi.publishTopic(topicId)),
+        // Accepts { force: true } to bypass the advisory curriculum-review
+        // gate (SUPER_ADMIN only; concepts-all-published gate is not
+        // bypassable).
+        mutationFn: (opts = {}) =>
+            unwrap(curriculumAdminApi.publishTopic(topicId, !!opts.force)),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: KEYS.topicDetail(topicId) })
             qc.invalidateQueries({ queryKey: KEYS.topics })
@@ -353,7 +357,10 @@ export function usePublishTopic(topicId) {
 export function usePublishConcept(conceptId, topicId) {
     const qc = useQueryClient()
     return useToastingMutation({
-        mutationFn: () => unwrap(curriculumAdminApi.publishConcept(conceptId)),
+        // Accepts { force: true } to bypass the advisory lesson-review gate
+        // (SUPER_ADMIN only; the readiness rubric gate is not bypassable).
+        mutationFn: (opts = {}) =>
+            unwrap(curriculumAdminApi.publishConcept(conceptId, !!opts.force)),
         onSuccess: () => {
             if (topicId) {
                 qc.invalidateQueries({ queryKey: KEYS.topicDetail(topicId) })

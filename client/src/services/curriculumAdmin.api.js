@@ -45,6 +45,8 @@ export const curriculumAdminApi = {
     // ── Publish (W3.T4) ─────────────────────────────────────────────
     // 400 with PUBLISH_GATE_BLOCKED carries `error.details.gates[]` —
     // callers extract via extractErrorCode + err.response.data.error.details.
-    publishTopic: (id) => api.post(`${ROOT}/topics/${id}/publish`),
-    publishConcept: (id) => api.post(`${ROOT}/concepts/${id}/publish`),
+    publishTopic: (id, force = false) =>
+        api.post(`${ROOT}/topics/${id}/publish`, force ? { force: true } : {}),
+    publishConcept: (id, force = false) =>
+        api.post(`${ROOT}/concepts/${id}/publish`, force ? { force: true } : {}),
 }

@@ -24,14 +24,26 @@ import { useState } from 'react'
 import { UploadCloud, ExternalLink, CheckCircle2 } from 'lucide-react'
 import { VerdictBadge, PublishGateChecklist } from '@components/curriculum'
 import { Button } from '@components/ui/Button'
+import useAuthStore from '@store/useAuthStore'
 import { toast } from '@store/useUIStore'
 import { useConfirm } from '@hooks/useConfirm'
 import { usePublishTopic, extractErrorCode } from '@hooks/useCurriculumAdmin'
 import { extractErrorMessage } from '@services/api'
 
+// Advisory (SUPER_ADMIN can force) vs structural (never bypassable).
+// Mirrors the server: curriculum_review_verdict is advisory;
+// concepts_all_published is structural.
+const ADVISORY_GATE_IDS = new Set(['curriculum_review_verdict'])
+function onlyAdvisoryGatesFailing(gates) {
+    const failing = gates.filter((g) => g.status === 'FAIL')
+    return failing.length > 0 && failing.every((g) => ADVISORY_GATE_IDS.has(g.id))
+}
+
 export default function PublishTab({ topic, onGoToConcepts, onGoToReview }) {
     const confirm = useConfirm()
     const publish = usePublishTopic(topic.id)
+    const user = useAuthStore((s) => s.user)
+    const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
     const [gates, setGates] = useState(null)   // gates[] from a failed publish
     const [otherError, setOtherError] = useState(null) // non-gate error text
 
@@ -65,19 +77,20 @@ export default function PublishTab({ topic, onGoToConcepts, onGoToReview }) {
         })
     }
 
-    const doPublish = async () => {
+    const doPublish = async ({ force = false } = {}) => {
         const ok = await confirm({
-            title: 'Publish this topic?',
-            description:
-                'Learners in your team will see this topic. You can update it after publishing.',
-            confirmLabel: 'Publish',
+            title: force ? 'Publish anyway (SUPER_ADMIN override)?' : 'Publish this topic?',
+            description: force
+                ? 'AI curriculum-review flagged issues. Overriding as SUPER_ADMIN. Action is audit-logged.'
+                : 'Learners in your team will see this topic. You can update it after publishing.',
+            confirmLabel: force ? 'Publish anyway' : 'Publish',
             cancelLabel: 'Cancel',
         })
         if (!ok) return
         setGates(null)
         setOtherError(null)
         try {
-            await publish.mutateAsync()
+            await publish.mutateAsync({ force })
             toast.success('Topic published.')
         } catch (err) {
             if (extractErrorCode(err) === 'PUBLISH_GATE_BLOCKED') {
@@ -106,7 +119,7 @@ export default function PublishTab({ topic, onGoToConcepts, onGoToReview }) {
                 <Button
                     variant="primary"
                     size="md"
-                    onClick={doPublish}
+                    onClick={() => doPublish()}
                     loading={publish.isPending}
                     disabled={alreadyPublished || publish.isPending}
                 >
@@ -159,6 +172,21 @@ export default function PublishTab({ topic, onGoToConcepts, onGoToReview }) {
                         Publish blocked
                     </p>
                     <PublishGateChecklist gates={gates} />
+                    {isSuperAdmin && onlyAdvisoryGatesFailing(gates) && (
+                        <div className="flex items-center gap-3 pt-2 border-t border-danger-line/40">
+                            <p className="text-xs text-text-secondary flex-1">
+                                Only the advisory AI-review gate is failing. As SUPER_ADMIN you can publish anyway — the action is audit-logged.
+                            </p>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => doPublish({ force: true })}
+                                loading={publish.isPending}
+                            >
+                                <UploadCloud className="w-3.5 h-3.5" /> Publish anyway
+                            </Button>
+                        </div>
+                    )}
                     <div className="text-xs text-text-secondary pt-1 border-t border-danger-line/40">
                         💡 Confused about a gate?{' '}
                         <a href="/docs/how-to/task/publish-topic" className="text-brand-fg-soft underline">
