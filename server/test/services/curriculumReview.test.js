@@ -70,13 +70,43 @@ describe("curriculumReviewSchema (Zod)", () => {
     expect(r.success).toBe(false);
   });
 
-  it("rejects unknown roi.verdict enum", () => {
+  it("coerces prose roi.verdict to the closest enum via looseEnum", () => {
+    // After the looseEnum retrofit, descriptive sub-enums (roi.verdict,
+    // retention.verdict, structuralSanity.*) coerce prose to the closest
+    // canonical value instead of rejecting. Top-level verdict (WORTH_LEARNING
+    // etc.) is still strict — see "rejects unknown verdict enum" above.
+    // Unknown-token input like "MAX" doesn't match any keyword and falls
+    // back to the safe default (MEDIUM for roi.verdict).
     const bad = {
       ...validSample,
       roi: { ...validSample.roi, verdict: "MAX" },
     };
     const r = curriculumReviewSchema.safeParse(bad);
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
+    expect(r.data.roi.verdict).toBe("MEDIUM");
+  });
+
+  it("coerces 'High' prose in roi.verdict to HIGH", () => {
+    const bad = {
+      ...validSample,
+      roi: { ...validSample.roi, verdict: "High confidence in interview payoff" },
+    };
+    const r = curriculumReviewSchema.safeParse(bad);
+    expect(r.success).toBe(true);
+    expect(r.data.roi.verdict).toBe("HIGH");
+  });
+
+  it("coerces prose titleSpecificity to enum via keyword match", () => {
+    const bad = {
+      ...validSample,
+      structuralSanity: {
+        ...validSample.structuralSanity,
+        titleSpecificity: "High specificity with clear focus on OOP and SOLID.",
+      },
+    };
+    const r = curriculumReviewSchema.safeParse(bad);
+    expect(r.success).toBe(true);
+    expect(r.data.structuralSanity.titleSpecificity).toBe("STRONG");
   });
 
   it("rejects negative moduleCount", () => {

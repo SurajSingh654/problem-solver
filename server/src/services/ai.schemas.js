@@ -3,6 +3,56 @@
  * Ensures AI responses are always parseable and structured.
  */
 import { z } from "zod";
+import logger from "../utils/logger.js";
+
+/**
+ * looseEnum — Zod enum that coerces AI prose ("High specificity...") into
+ * canonical enum values via case-insensitive substring matching. Every
+ * coercion emits an `enum_coerced` log so we can detect prompt drift; a
+ * failed coercion falls back to a safe default and emits
+ * `enum_coerce_fallback` for weekly review.
+ *
+ * Belt-and-suspenders companion to the JSON-example prompt-fix — a prompt
+ * regression that lets prose slip through still yields a valid verdict
+ * instead of the fallback path (which forces NOT_READY / NOT_WORTH_TIME).
+ *
+ * DO NOT use for top-level verdict fields (WORTH_LEARNING vs NOT_WORTH_TIME,
+ * READY vs NOT_READY, STRONG vs WEAK) — a coerced verdict could flip the
+ * gate outcome silently. Only use for descriptive sub-enums.
+ *
+ * @param {string[]} enumValues canonical values, e.g. ["STRONG","OK","WEAK"]
+ * @param {Record<string,string[]>} keywordMap enumValue -> substrings (lowercased) that map to it
+ * @param {string} fallback which enumValue to use when nothing matches
+ */
+export function looseEnum(enumValues, keywordMap, fallback) {
+  if (!enumValues.includes(fallback)) {
+    throw new Error(`looseEnum: fallback ${fallback} not in enum`);
+  }
+  return z.preprocess((raw) => {
+    if (typeof raw !== "string") return raw; // let z.enum handle non-string type errors
+    if (enumValues.includes(raw)) return raw; // exact match — hot path, no log
+    const lower = raw.toLowerCase();
+    for (const value of enumValues) {
+      const keywords = keywordMap[value] || [];
+      if (keywords.some((k) => lower.includes(k.toLowerCase()))) {
+        logger.info({
+          event: "enum_coerced",
+          from: raw.slice(0, 120),
+          to: value,
+          enumValues,
+        });
+        return value;
+      }
+    }
+    logger.warn({
+      event: "enum_coerce_fallback",
+      from: raw.slice(0, 120),
+      to: fallback,
+      enumValues,
+    });
+    return fallback;
+  }, z.enum(enumValues));
+}
 
 export const solutionReviewSchema = z.object({
   overallScore: z.number().min(1).max(10),
@@ -95,22 +145,68 @@ export const curriculumReviewSchema = z
         interviewValue: z.string(),
         jobValue: z.string(),
         depthVsBreadth: z.string(),
-        verdict: z.enum(["HIGH", "MEDIUM", "LOW"]),
+        // Descriptive sub-enum — AI has a habit of writing "HIGH — because…" or
+        // free-form intensity words. Coerce; log-and-review if the mapping fires.
+        verdict: looseEnum(
+          ["HIGH", "MEDIUM", "LOW"],
+          {
+            HIGH: ["high", "strong", "significant", "substantial"],
+            MEDIUM: ["medium", "moderate", "mid", "some"],
+            LOW: ["low", "little", "minimal", "poor", "weak"],
+          },
+          "MEDIUM",
+        ),
       })
       .strict(),
     retention: z
       .object({
         signalsFor: z.array(z.string()),
         signalsAgainst: z.array(z.string()),
-        verdict: z.enum(["HIGH", "MEDIUM", "LOW"]),
+        verdict: looseEnum(
+          ["HIGH", "MEDIUM", "LOW"],
+          {
+            HIGH: ["high", "strong", "significant", "substantial"],
+            MEDIUM: ["medium", "moderate", "mid", "some"],
+            LOW: ["low", "little", "minimal", "poor", "weak"],
+          },
+          "MEDIUM",
+        ),
       })
       .strict(),
     structuralSanity: z
       .object({
         moduleCount: z.number().int().nonnegative(),
-        titleSpecificity: z.enum(["STRONG", "OK", "WEAK"]),
-        capstoneConcreteness: z.enum(["STRONG", "OK", "WEAK", "MISSING"]),
-        dependencyChain: z.enum(["CLEAN", "MOSTLY_CLEAN", "TANGLED"]),
+        // These three enums are where prod broke — AI wrote sentences like
+        // "High specificity with clear focus" instead of "STRONG". Coerce
+        // prose to the closest enum via keyword match.
+        titleSpecificity: looseEnum(
+          ["STRONG", "OK", "WEAK"],
+          {
+            STRONG: ["strong", "high", "specific", "clear", "precise", "concrete"],
+            OK: ["ok", "adequate", "moderate", "acceptable", "reasonable"],
+            WEAK: ["weak", "vague", "unclear", "generic", "ambiguous"],
+          },
+          "OK",
+        ),
+        capstoneConcreteness: looseEnum(
+          ["STRONG", "OK", "WEAK", "MISSING"],
+          {
+            STRONG: ["strong", "high", "concrete", "specific", "clear", "practical"],
+            OK: ["ok", "adequate", "moderate", "acceptable"],
+            WEAK: ["weak", "vague", "unclear", "generic"],
+            MISSING: ["missing", "absent", "no capstone", "none", "n/a"],
+          },
+          "OK",
+        ),
+        dependencyChain: looseEnum(
+          ["CLEAN", "MOSTLY_CLEAN", "TANGLED"],
+          {
+            CLEAN: ["clean", "clear", "logical", "well-ordered", "sequential", "progression"],
+            MOSTLY_CLEAN: ["mostly clean", "mostly", "largely clean", "minor"],
+            TANGLED: ["tangled", "unclear", "confused", "circular", "messy"],
+          },
+          "MOSTLY_CLEAN",
+        ),
       })
       .strict(),
     modulesNeedingWork: z.array(

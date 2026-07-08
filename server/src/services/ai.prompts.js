@@ -3287,17 +3287,70 @@ ${labBlocks}
 Produce a JSON verdict per the schema. Requirements:
 - \`verdict\`: WORTH_LEARNING (if a learner will genuinely be better at the topic after 20+ hours), \
 WORTH_WITH_ADJUSTMENTS (if the outline has fixable gaps), or NOT_WORTH_TIME.
+- \`oneLineSummary\`: single sentence, ≤200 chars, capturing the review headline.
 - \`outcomes\`: 4-7 specific, testable outcomes the learner will be able to demonstrate.
 - \`wontTeach\`: explicit gaps — what a learner will still need separate learning for.
 - \`roi\`: time / interviewValue / jobValue / depthVsBreadth all one-line strings; \`verdict\` HIGH/MEDIUM/LOW.
 - \`retention\`: signalsFor + signalsAgainst arrays; \`verdict\` HIGH/MEDIUM/LOW.
-- \`structuralSanity\`: moduleCount, titleSpecificity, capstoneConcreteness, dependencyChain.
+- \`structuralSanity\`: moduleCount (integer), titleSpecificity (STRONG/OK/WEAK), \
+capstoneConcreteness (STRONG/OK/WEAK/MISSING), dependencyChain (CLEAN/MOSTLY_CLEAN/TANGLED).
 - \`modulesNeedingWork\`: [{ conceptId, issue, suggestedFix }] for weak modules.
 - \`missingCoverage\`: high-leverage concepts a senior would expect but the curriculum omits.
 - \`redundantModules\`: consolidation candidates.
 - \`strong\`: what's genuinely good.
 - \`finalRecommendation\`: 2-3 sentences. If verdict is WORTH_LEARNING, CITE at least one of the \`outcomes\` \
-by name (verbatim substring match).`;
+by name (verbatim substring match).
+
+---
+
+**REQUIRED EXACT JSON SHAPE — output MUST match this structure:**
+
+\`\`\`json
+{
+  "verdict": "WORTH_LEARNING",
+  "oneLineSummary": "Solid intro to OOP + SOLID for Java devs; ~20h investment lands them at production-ready senior-loop signal.",
+  "outcomes": [
+    "Refactor a procedural Java module into cohesive classes with clear responsibilities",
+    "Apply each SOLID principle to a real code review and justify the tradeoff",
+    "Diagnose Liskov / interface-segregation violations from a symptom",
+    "Explain when NOT to reach for inheritance vs. composition"
+  ],
+  "wontTeach": ["Design patterns beyond the Gang-of-Four basics", "Advanced generics"],
+  "roi": {
+    "time": "~20 hours",
+    "interviewValue": "High — OOD questions appear in ~40% of senior loops",
+    "jobValue": "High — daily use for backend engineers",
+    "depthVsBreadth": "Depth-leaning; narrow topic covered thoroughly",
+    "verdict": "HIGH"
+  },
+  "retention": {
+    "signalsFor": ["Labs force applied practice", "Capstone integrates all 5 SOLID principles"],
+    "signalsAgainst": ["No spaced-repetition checkpoints between modules"],
+    "verdict": "MEDIUM"
+  },
+  "structuralSanity": {
+    "moduleCount": 11,
+    "titleSpecificity": "STRONG",
+    "capstoneConcreteness": "STRONG",
+    "dependencyChain": "CLEAN"
+  },
+  "modulesNeedingWork": [
+    { "conceptId": "solid-lsp", "issue": "LSP module lacks a counter-example", "suggestedFix": "Add a Rectangle/Square inheritance bug walkthrough." }
+  ],
+  "missingCoverage": ["Composition-over-inheritance decision framework"],
+  "redundantModules": [],
+  "strong": ["Capstone is a real refactor, not toy code", "Concrete Java examples throughout"],
+  "finalRecommendation": "Ship it — learners will finish able to \\"Apply each SOLID principle to a real code review and justify the tradeoff\\", which is the senior-loop signal this curriculum targets."
+}
+\`\`\`
+
+Field-shape reminders (violations trigger a fallback):
+- \`verdict\`, \`roi.verdict\`, \`retention.verdict\` are string enums — use only the values listed above, never a prose description.
+- \`structuralSanity.titleSpecificity\` MUST be exactly \`"STRONG"\`, \`"OK"\`, or \`"WEAK"\` (not "High specificity..." or any prose).
+- \`structuralSanity.capstoneConcreteness\` MUST be exactly \`"STRONG"\`, \`"OK"\`, \`"WEAK"\`, or \`"MISSING"\`.
+- \`structuralSanity.dependencyChain\` MUST be exactly \`"CLEAN"\`, \`"MOSTLY_CLEAN"\`, or \`"TANGLED"\`.
+- \`structuralSanity.moduleCount\` is a non-negative integer, not a description.
+- Do NOT add extra top-level keys — the schema is strict.`;
 
   return {
     prompt,
@@ -3674,7 +3727,41 @@ non-empty lineRef is REQUIRED for a STRONG verdict.
 **Grading rules the validator will enforce (respect them):**
 - Rule 20: STRONG verdict must include ≥1 non-empty lineRef in whatYouGotRight.
 - Rule 21: STRONG or ADEQUATE verdict requires nextStep = READY_FOR_REFERENCE.
-- Rule 22 (code): STRONG or ADEQUATE verdict requires whatYouGotRight.length ≥ 1.`;
+- Rule 22 (code): STRONG or ADEQUATE verdict requires whatYouGotRight.length ≥ 1.
+
+---
+
+**REQUIRED EXACT JSON SHAPE — output MUST match this structure:**
+
+\`\`\`json
+{
+  "overall": "Solid attempt — mental model is right on encapsulation, minor idiom gaps around dependency injection.",
+  "correctness": "STRONG",
+  "conceptApplication": "STRONG",
+  "designQuality": "ADEQUATE",
+  "idiomaticStyle": "ADEQUATE",
+  "robustness": "ADEQUATE",
+  "testing": "MISSING",
+  "mentalModelSignal": "Learner clearly grasps single-responsibility — each class has one reason to change. Fuzzy on dependency-inversion: line 34 news up a concrete DB client instead of taking an interface. Recommend the reference solution's constructor-injection pattern.",
+  "whatYouGotRight": [
+    { "item": "Clean separation of parser and validator", "lineRef": "lines 12-28" },
+    { "item": "Meaningful class names", "lineRef": "line 4" }
+  ],
+  "thingsToImprove": [
+    { "what": "Inject the DB client via constructor", "whyItMatters": "Testability + DIP.", "how": "Accept a DbClient interface; caller wires the concrete impl.", "lineRef": "line 34" }
+  ],
+  "bugs": [],
+  "nextStep": "READY_FOR_REFERENCE",
+  "codeReviewVerdict": "ADEQUATE"
+}
+\`\`\`
+
+Field-shape reminders (violations trigger a fallback):
+- Rubric dimensions (\`correctness\`, \`conceptApplication\`, \`designQuality\`, \`idiomaticStyle\`, \`robustness\`, \`testing\`) MUST be exactly \`"STRONG"\` / \`"ADEQUATE"\` / \`"WEAK"\` / \`"MISSING"\` — never a prose description.
+- \`codeReviewVerdict\` MUST be exactly \`"STRONG"\`, \`"ADEQUATE"\`, or \`"WEAK"\`.
+- \`nextStep\` MUST be exactly \`"READY_FOR_REFERENCE"\`, \`"ADDRESS_AND_RESUBMIT"\`, or \`"MINI_DRILL"\`.
+- \`whatYouGotRight\`, \`thingsToImprove\`, \`bugs\` are ARRAYS (may be empty), not objects.
+- Do NOT add extra top-level keys — schema is strict.`;
 
   return {
     prompt,
@@ -3814,7 +3901,30 @@ wrote. Generic praise ("good job!") or generic criticism ("try again") is \
 worthless — cite what they got right or what's missing.
 
 **encouragement** — 1-2 sentence closing that acknowledges the calibration \
-gap if it's large (>0.4) and points to the next step.`;
+gap if it's large (>0.4) and points to the next step.
+
+---
+
+**REQUIRED EXACT JSON SHAPE — output MUST match this structure:**
+
+\`\`\`json
+{
+  "perQuestion": {
+    "recall": { "verdict": "PASS", "feedback": "Correctly named SRP as one-reason-to-change and cited the invoice-formatter split as an example." },
+    "apply": { "verdict": "PARTIAL", "feedback": "Right instinct to extract the tax calculation, but the new class still touches both persistence and formatting — split further." },
+    "build": { "verdict": "FAIL", "feedback": "Answer restated SRP instead of justifying the design choice; no tradeoff named against composition." }
+  },
+  "overallVerdict": "PARTIAL",
+  "calibrationDelta": 0.30,
+  "encouragement": "Recall is locked in; the gap is defending a design under pressure. Redo the build question after skimming the tradeoffs section — you're closer than the score suggests."
+}
+\`\`\`
+
+Field-shape reminders (violations trigger a fallback):
+- \`perQuestion.recall.verdict\`, \`perQuestion.apply.verdict\`, \`perQuestion.build.verdict\` MUST be exactly \`"PASS"\` / \`"PARTIAL"\` / \`"FAIL"\` — not descriptive prose.
+- \`overallVerdict\` MUST be exactly \`"PASS"\` / \`"PARTIAL"\` / \`"FAIL"\`.
+- \`calibrationDelta\` is a number, not a string. Range −4 to +4 (typical: −1 to +1).
+- Do NOT add extra keys — schema is strict.`;
 
   return {
     prompt,
