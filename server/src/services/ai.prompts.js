@@ -3473,7 +3473,66 @@ what specifically is missing in the lesson body. If a key is TRUE, no entry need
 - Rule 22 (lesson): \`READY\` requires ≥6 of 8 seniorReadiness true.
 
 **mustFix / niceToHave / strong** — bullet arrays. \`mustFix\` blocks publish for POLISH / NOT_READY.
-**nextStep** — 1-2 sentences with the concrete next author action.`;
+**nextStep** — 1-2 sentences with the concrete next author action.
+
+---
+
+**REQUIRED EXACT JSON SHAPE — output MUST match this structure:**
+
+\`\`\`json
+{
+  "verdict": "READY",
+  "structuralCompleteness": [
+    { "section": "learningObjectives", "grade": "PASS", "justification": "..." },
+    { "section": "prerequisitesSetup", "grade": "PASS", "justification": "..." },
+    { "section": "problemItSolves", "grade": "PASS", "justification": "..." },
+    { "section": "mentalModel", "grade": "PASS", "justification": "..." },
+    { "section": "coreConcept", "grade": "PASS", "justification": "..." },
+    { "section": "workedExample", "grade": "WEAK", "justification": "..." },
+    { "section": "handsOnLab", "grade": "PASS", "justification": "..." },
+    { "section": "referenceSolution", "grade": "PASS", "justification": "..." },
+    { "section": "underTheHood", "grade": "WEAK", "justification": "..." },
+    { "section": "tradeoffs", "grade": "PASS", "justification": "..." },
+    { "section": "productionConcerns", "grade": "MISSING", "justification": "..." },
+    { "section": "checkInQuestions", "grade": "PASS", "justification": "..." }
+  ],
+  "contentQuality": {
+    "depthCalibration": "PASS",
+    "fundamentalsFirst": "PASS",
+    "progressiveLayering": "PASS",
+    "concreteOverAcademic": "PASS",
+    "tradeoffHonesty": "PASS",
+    "productionReality": "WEAK",
+    "curation": "PASS",
+    "lengthCalibration": "PASS"
+  },
+  "seniorReadiness": {
+    "explainToJunior": true,
+    "sketchArchitecture": true,
+    "buildFromScratch": true,
+    "nameFailureModes": true,
+    "compareAlternatives": true,
+    "estimateCost": false,
+    "blastRadius": true,
+    "debugFromSymptoms": true
+  },
+  "seniorReadinessJustifications": {
+    "estimateCost": "Lesson does not discuss cost/complexity estimation. Add one paragraph or a rubric line."
+  },
+  "mustFix": [],
+  "niceToHave": ["Add a paragraph on estimating maintenance cost of alternative designs."],
+  "strong": ["Concrete Java code contrasts good vs bad OOP throughout."],
+  "nextStep": "Add a short section on cost estimation to satisfy estimateCost."
+}
+\`\`\`
+
+Field-shape reminders (violations trigger a fallback):
+- \`verdict\` is a top-level string: exactly \`"READY"\`, \`"POLISH"\`, or \`"NOT_READY"\`.
+- \`structuralCompleteness\` is an ARRAY of 12 objects, one per section named above. Not an object.
+- \`contentQuality\` is a flat object with the 8 named keys. Values are \`"PASS"\` / \`"WEAK"\` / \`"MISSING"\`.
+- \`seniorReadiness\` is a flat object with the 8 named boolean keys.
+- \`seniorReadinessJustifications\` includes an entry ONLY for every false readiness key (empty object if all true).
+- Do NOT add extra keys — the schema is strict and rejects anything not listed above.`;
 
   return {
     prompt,
