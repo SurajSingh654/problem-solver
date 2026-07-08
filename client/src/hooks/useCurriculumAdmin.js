@@ -64,7 +64,10 @@ export function useCurriculumAdminTopics() {
 export function useTopicDetail(topicId) {
     return useQuery({
         queryKey: KEYS.topicDetail(topicId),
-        queryFn: () => unwrap(curriculumAdminApi.getTopicDetail(topicId)),
+        // Server returns { data: { topic: {...} } }. unwrap gives us
+        // { topic: ... } — flatten once more so callers get the topic
+        // object directly (matches useAllTopics + useTemplates shape).
+        queryFn: () => unwrap(curriculumAdminApi.getTopicDetail(topicId)).then(x => x.topic),
         enabled: !!topicId,
     })
 }
