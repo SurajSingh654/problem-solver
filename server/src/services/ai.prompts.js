@@ -3341,17 +3341,38 @@ export function buildLessonReviewPrompt(input) {
   const workedExample = sanitizeForPrompt(
     input.concept.workedExample ?? "",
   ).slice(0, 4000);
+  // canonicalSources entries are objects { title, type, author } in curriculum
+  // frontmatter — same [object Object] bug class as the two below. Coerce each
+  // entry to a readable string before sanitizing.
+  const sourceToString = (s) => {
+    if (typeof s === "string") return s;
+    if (s && typeof s === "object") {
+      const bits = [s.title, s.author && `by ${s.author}`, s.type && `(${s.type})`];
+      const joined = bits.filter(Boolean).join(" ");
+      return joined || JSON.stringify(s);
+    }
+    return String(s ?? "");
+  };
   const expectedQuestions = (input.concept.expectedQuestions ?? [])
-    .map(sanitizeForPrompt)
+    .map((q) => sanitizeForPrompt(typeof q === "string" ? q : String(q)))
     .join("\n  - ");
   const canonicalSources = (input.concept.canonicalSources ?? [])
-    .map(sanitizeForPrompt)
+    .map((s) => sanitizeForPrompt(sourceToString(s)))
     .join("\n  - ");
+  // assessmentCriteria + readinessRubric are stored as JSON objects on the
+  // Concept row. sanitizeForPrompt does String(input) which yields the
+  // useless "[object Object]" for a raw object. JSON.stringify first so
+  // the AI sees the actual rubric axes / criteria, not a wrapper string.
+  const stringify = (v) => {
+    if (v == null || v === "") return "";
+    if (typeof v === "string") return v;
+    try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+  };
   const assessmentCriteria = sanitizeForPrompt(
-    input.concept.assessmentCriteria ?? "",
+    stringify(input.concept.assessmentCriteria),
   ).slice(0, 2000);
   const readinessRubric = sanitizeForPrompt(
-    input.concept.readinessRubric ?? "",
+    stringify(input.concept.readinessRubric),
   ).slice(0, 2000);
 
   const hasLab = !!input.lab;
