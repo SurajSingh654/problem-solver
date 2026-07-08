@@ -1199,8 +1199,44 @@ export async function publishConcept(req, res) {
       },
     });
 
+    // Auto-publish the attached lab (if any). Rationale:
+    //   - Learners hit `LAB_NOT_FOUND` on attempt submit if the lab stays
+    //     DRAFT (curriculum.controller.js:326 requires lab.status=PUBLISHED).
+    //   - There is no client UI that publishes labs separately — the
+    //     endpoint exists (POST /curriculum/admin/labs/:id/publish) but no
+    //     button calls it.
+    //   - Author mental model: publishing the concept publishes all of it.
+    //
+    // Lab shape gates (from publishLab): reference solution present +
+    // positive timebox. We check both; if either fails we skip the lab
+    // publish silently (concept can still ship — lab is optional per the
+    // schema and the missing gate can be fixed later by the author).
+    const attachedLab = await prisma.lab.findFirst({
+      where: { conceptId: concept.id, teamId: req.teamId },
+      select: {
+        id: true,
+        status: true,
+        referenceSolution: true,
+        timeboxMinutes: true,
+      },
+    });
+    if (
+      attachedLab &&
+      attachedLab.status !== "PUBLISHED" &&
+      attachedLab.referenceSolution &&
+      attachedLab.referenceSolution.trim().length > 0 &&
+      attachedLab.timeboxMinutes &&
+      attachedLab.timeboxMinutes > 0
+    ) {
+      await prisma.lab.update({
+        where: { id: attachedLab.id },
+        data: { status: "PUBLISHED" },
+      });
+    }
+
     await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH", {
       conceptId: concept.id,
+      labAutoPublished: attachedLab?.status !== "PUBLISHED" && !!attachedLab,
     });
 
     return success(res, { concept: published, gates });
