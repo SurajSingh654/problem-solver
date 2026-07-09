@@ -68,7 +68,6 @@ import teachingRoutes from "./routes/teaching.routes.js";
 import notesRoutes from "./routes/notes.routes.js";
 import flashcardsRoutes from "./routes/flashcards.routes.js";
 import topicsRoutes from "./routes/topics.routes.js";
-import topicsAdminRoutes from "./routes/topicsAdmin.routes.js";
 import curriculumTemplatesRoutes from "./routes/curriculumTemplates.routes.js";
 import curriculumAdminRoutes from "./routes/curriculumAdmin.routes.js";
 import curriculumRoutes from "./routes/curriculum.routes.js";
@@ -268,9 +267,10 @@ function mountRoutes(prefix) {
   // gate is the architectural anti-hallucination defense.
   app.use(`${prefix}/topics`, apiLimiter, topicsRoutes);
 
-  // ── Topic admin (SuperAdmin) — authoring + publishing ──
-  // Sees ALL rows regardless of status. Publish-time gate for content.
-  app.use(`${prefix}/admin/learning`, apiLimiter, topicsAdminRoutes);
+  // Note: the legacy SUPER_ADMIN Learning Content surface (topicsAdmin.routes.js,
+  // mounted at /admin/learning) was sunset — curriculum authoring is now
+  // TEAM_ADMIN's territory via /admin/curriculum/topics. See the role-separation
+  // commit (d3b2506) for rationale.
 
   // ── Curriculum templates (SuperAdmin) — sync endpoint + CLI backer ──
   // aiLimiter for parity with the other SuperAdmin heavyweight endpoints

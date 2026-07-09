@@ -41,7 +41,6 @@ const PAGE_META = {
     '/super-admin/ai-usage': { title: 'AI Usage', crumb: 'Platform' },
     '/super-admin/diagnostics': { title: 'Diagnostics', crumb: 'Platform' },
     '/super-admin/teaching-flags': { title: 'Teaching Flags', crumb: 'Platform' },
-    '/super-admin/learning': { title: 'Learning Content', crumb: 'Platform' },
     '/super-admin/settings': { title: 'Settings', crumb: 'Account' },
     '/super-admin/profile': { title: 'My Profile', crumb: 'Account' },
 }

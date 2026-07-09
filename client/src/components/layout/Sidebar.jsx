@@ -48,9 +48,8 @@ function buildSections({ user, isSuperAdmin, isTeamAdmin, isPersonal, apiDocsUrl
             items: [
                 { to: '/super-admin/showcase', icon: '🎪', label: 'Showcase' },
                 { to: '/super-admin/roadmap', icon: '🗺️', label: 'Roadmap' },
-                // 📓 (notebook) instead of 🎓 to avoid icon collision with
-                // the new `/learn` curriculum surface — sidebar-polish 2026-07-07.
-                { to: '/super-admin/learning', icon: '📓', label: 'Learning Content' },
+                // Learning Content sunset — curriculum authoring is TEAM_ADMIN's
+                // job via /admin/curriculum/topics. See role-separation (d3b2506).
             ],
         })
         // Curriculum Admin, Templates, Sessions — REMOVED from SUPER_ADMIN

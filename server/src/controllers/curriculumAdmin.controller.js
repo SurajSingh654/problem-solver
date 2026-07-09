@@ -3,15 +3,10 @@
 // ============================================================================
 //
 // TEAM_ADMIN-gated CRUD endpoints for the team's Topic curriculum plus the
-// TopicTemplate → Topic fork entry point.
-//
-// Contrast with `topicsAdmin.controller.js`:
-//   - `topicsAdmin.controller.js` is SUPER_ADMIN-only and operates on the
-//     GLOBAL Topic table (curated content authored by the platform team,
-//     not team-scoped).
-//   - This controller is TEAM_ADMIN-scoped and operates on the TEAM'S
-//     Topic table (`req.teamId`). It's the surface reviewers use to
-//     customize forked templates into their team's curriculum.
+// TopicTemplate → Topic fork entry point. This is the sole curriculum-
+// authoring surface — a legacy SUPER_ADMIN-only `topicsAdmin.controller.js`
+// existed before the team-scoping migration and was sunset alongside the
+// role-separation decision (curriculum belongs to teams, not the platform).
 //
 // Tenancy invariants (enforced by every route):
 //   - Every read filters by `req.teamId` — no cross-team leakage even
