@@ -92,6 +92,28 @@ function computeRevealGate(attempt) {
 // side with the reference. AnimatePresence lives in the caller so exit
 // animations run.
 function ReferenceDiffModal({ language, userCode, referenceCode, onClose }) {
+    // ESC-to-close + return-focus-on-close. Captures the element that had
+    // focus before the modal opened and restores it on unmount so the
+    // keyboard user lands back on the "Reveal reference" trigger button
+    // instead of on `<body>`. Effect runs once because this component
+    // only mounts when the modal is open.
+    useEffect(() => {
+        const previouslyFocused = document.activeElement
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault()
+                onClose?.()
+            }
+        }
+        document.addEventListener('keydown', onKeyDown)
+        return () => {
+            document.removeEventListener('keydown', onKeyDown)
+            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                previouslyFocused.focus()
+            }
+        }
+    }, [onClose])
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -319,9 +341,10 @@ export default function ConceptLabTab({ concept }) {
                         variant="primary"
                         size="md"
                         onClick={handleSubmit}
+                        loading={submit.isPending}
                         disabled={!canSubmit}
                     >
-                        {submit.isPending ? 'Submitting…' : 'Submit for review'}
+                        Submit for review
                     </Button>
                     {code.trim().length === 0 && (
                         <span className="text-xs text-text-tertiary">

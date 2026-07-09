@@ -179,11 +179,13 @@ export default function TemplateBrowserPage() {
     }
 
     if (isError) {
+        const msg =
+            error?.response?.data?.error?.message ??
+            error?.message ??
+            'unknown error'
         return (
             <div className="p-8">
-                <p className="text-sm text-danger-fg">
-                    Failed to load templates: {error?.message ?? 'unknown error'}
-                </p>
+                <p className="text-sm text-danger-fg">Failed to load templates: {msg}</p>
             </div>
         )
     }

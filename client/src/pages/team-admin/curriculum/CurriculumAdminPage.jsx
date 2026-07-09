@@ -292,11 +292,16 @@ export default function CurriculumAdminPage() {
     }
 
     if (isError) {
+        // Prefer the server envelope's human-readable message (matches the
+        // shape used across TopicAuthoringPage). Fall back to axios's raw
+        // message string, then a generic label.
+        const msg =
+            error?.response?.data?.error?.message ??
+            error?.message ??
+            'unknown error'
         return (
             <div className="p-8">
-                <p className="text-sm text-danger-fg">
-                    Failed to load topics: {error?.message ?? 'unknown error'}
-                </p>
+                <p className="text-sm text-danger-fg">Failed to load topics: {msg}</p>
             </div>
         )
     }

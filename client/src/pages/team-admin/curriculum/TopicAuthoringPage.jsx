@@ -73,16 +73,34 @@ function TemplateUpdatedChip({ topicId }) {
 // until a third callsite justifies extraction.
 // ────────────────────────────────────────────────────────────────
 function TabBar({ active, onChange, tabs }) {
+    // Arrow-key roving-tabindex per WAI-ARIA tablist pattern. Only the
+    // active tab is Tab-reachable; the rest respond to ArrowLeft/Right.
+    const onKeyDown = (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        const idx = tabs.findIndex((t) => t.id === active)
+        if (idx < 0) return
+        const next =
+            e.key === 'ArrowLeft'
+                ? tabs[(idx - 1 + tabs.length) % tabs.length]
+                : tabs[(idx + 1) % tabs.length]
+        onChange(next.id)
+    }
+
     return (
         <div
             role="tablist"
+            onKeyDown={onKeyDown}
             className="flex gap-1 bg-surface-2 border border-border-default rounded-xl p-1 overflow-x-auto"
         >
             {tabs.map((t) => (
                 <button
                     key={t.id}
                     role="tab"
+                    id={`topic-tab-${t.id}`}
                     aria-selected={active === t.id}
+                    aria-controls={`topic-tabpanel-${t.id}`}
+                    tabIndex={active === t.id ? 0 : -1}
                     onClick={() => onChange(t.id)}
                     className={cn(
                         'px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap',
@@ -211,6 +229,9 @@ export default function TopicAuthoringPage() {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.15 }}
+                role="tabpanel"
+                id={`topic-tabpanel-${activeTab}`}
+                aria-labelledby={`topic-tab-${activeTab}`}
             >
                 {activeTab === 'metadata' && <TopicMetadataTab topic={topic} />}
                 {activeTab === 'concepts' && <ConceptsListTab topic={topic} />}
