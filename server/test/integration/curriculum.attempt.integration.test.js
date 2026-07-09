@@ -639,6 +639,41 @@ describe("GET /curriculum/labs/:id/attempts/:attemptId — polling + privacy", (
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "returns 404 when the owner probes their own attempt from a foreign team context (tenancy)",
+    async () => {
+      // Defense-in-depth: even if the JWT's currentTeamId is misaligned
+      // (e.g. a forged token or an in-flight team-switch race), the
+      // `lab: { teamId: req.teamId }` filter must still 404 an attempt
+      // on a lab in a different team. Same user, different req.teamId.
+      const seed = await prisma.labAttempt.create({
+        data: {
+          labId: aPublishedLabId,
+          userId: LEARNER_A_USER_ID,
+          attemptNumber: 1001,
+          code: "// mine but wrong team",
+          reviewStatus: "PENDING",
+        },
+      });
+
+      const forgedTeamBToken = generateToken({
+        id: LEARNER_A_USER_ID,
+        globalRole: "USER",
+        currentTeamId: TEAM_B_ID,
+        teamRole: "MEMBER",
+      });
+
+      const { status, body } = await req(
+        "GET",
+        `/api/v1/curriculum/labs/${aPublishedLabId}/attempts/${seed.id}`,
+        { token: forgedTeamBToken },
+      );
+      expect(status).toBe(404);
+      expect(body?.error?.code).toBe("ATTEMPT_NOT_FOUND");
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 describe("async completion — end-to-end", () => {

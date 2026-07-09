@@ -45,26 +45,17 @@ export function sanitizeForPrompt(input) {
 }
 
 /**
- * DOMPurify attribute hook — enforces two per-attribute security policies that
- * the flat ALLOWED_ATTR list can't express:
+ * DOMPurify attribute hook — restricts `class` to <code>/<pre> and to
+ * `language-*` tokens only. Blocks overlay-injection via arbitrary class
+ * attrs on <p>/<div>/<span> (e.g. `class="fixed inset-0 bg-white z-50"`).
  *
- *   1. `<img src="data:...">` / `<img src="vbscript:...">` — block. SVG payloads
- *      base64-encoded into data: URIs can carry <script> tags.
- *   2. `class` — allowed only on <code> / <pre>, and only `language-*` tokens.
- *      Blocks overlay-injection via arbitrary class attrs on <p>/<div>/<span>
- *      (e.g. `class="fixed inset-0 bg-white z-50"`).
+ * `<img>` is no longer in the tag allow-list (see sanitizeHtml below), so
+ * the previous img.src scheme check is unnecessary — the tag never reaches
+ * the attribute stage.
  *
  * Registered once at module load; DOMPurify hooks are process-global.
  */
 DOMPurify.addHook("uponSanitizeAttribute", (node, hookEvent) => {
-  // Reject data:/vbscript: URIs on img.src (SVG-embedded XSS).
-  if (node.tagName === "IMG" && hookEvent.attrName === "src") {
-    const value = hookEvent.attrValue || "";
-    if (/^\s*(data|vbscript):/i.test(value)) {
-      hookEvent.keepAttr = false;
-      return;
-    }
-  }
   // Restrict `class` to <code>/<pre> and to `language-*` tokens only.
   if (hookEvent.attrName === "class") {
     const tag = node.tagName;
@@ -86,6 +77,11 @@ DOMPurify.addHook("uponSanitizeAttribute", (node, hookEvent) => {
  * Sanitize a raw HTML string. Strips <script>, inline event handlers,
  * javascript: URIs, and other DOM-based XSS vectors. Use on ANY raw HTML
  * that will be rendered client-side.
+ *
+ * `<img>` intentionally not in the allow-list: cheatsheet HTML is the
+ * primary consumer today and a stored `<img src="https://attacker.com/x">`
+ * fires a cross-origin request as a tracking beacon (leaks IP + Referer +
+ * anyone-viewing-this-page) the moment the page renders. Text + code only.
  */
 export function sanitizeHtml(html) {
   if (html == null) return html;
@@ -96,11 +92,11 @@ export function sanitizeHtml(html) {
       "p", "br", "hr",
       "strong", "em", "code", "pre", "blockquote",
       "ul", "ol", "li",
-      "a", "img",
+      "a",
       "table", "thead", "tbody", "tr", "th", "td",
       "div", "span",
     ],
-    ALLOWED_ATTR: ["href", "title", "alt", "src", "class"],
+    ALLOWED_ATTR: ["href", "title", "class"],
     ALLOW_DATA_ATTR: false,
   });
 }

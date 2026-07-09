@@ -355,29 +355,48 @@ export async function updateMastery(userId, conceptId, signal) {
 
   // Append + recompute in a single transaction to avoid races on the
   // signals log.
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.conceptMastery.findUnique({
-      where: { userId_conceptId: { userId, conceptId } },
-    });
-    const log = Array.isArray(existing?.signals) ? [...existing.signals] : [];
-    log.push({
-      source: signal.source,
-      value,
-      at: new Date().toISOString(),
-      evidence: signal.evidence ?? null,
-    });
-    const score = computeScore(log);
+  //
+  // Concurrency: signals is a JSON array we mutate via read-modify-write.
+  // Two concurrent writers at READ COMMITTED would both read the same
+  // `existing.signals`, both append, and the second write clobbers the
+  // first's append (lost update). SELECT ... FOR UPDATE can't lock a row
+  // that doesn't exist yet, so we serialize on a `pg_advisory_xact_lock`
+  // keyed by `hashtext("<userId>:<conceptId>")`. Auto-released at commit.
+  //
+  // Timeouts: default $transaction options are `maxWait: 2s / timeout: 5s`.
+  // Under a burst of concurrent writers on the same row, the advisory
+  // lock queues them; each holder does a few short queries so per-holder
+  // time is small, but queue depth can push later writers past 5s. Bump
+  // to 15s to absorb realistic contention without masking a real slow
+  // query (which would be a separate bug).
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${conceptId}`})::bigint)`;
 
-    if (existing) {
-      return tx.conceptMastery.update({
-        where: { id: existing.id },
-        data: { signals: log, score },
+      const existing = await tx.conceptMastery.findUnique({
+        where: { userId_conceptId: { userId, conceptId } },
       });
-    }
-    return tx.conceptMastery.create({
-      data: { userId, conceptId, signals: log, score },
-    });
-  });
+      const log = Array.isArray(existing?.signals) ? [...existing.signals] : [];
+      log.push({
+        source: signal.source,
+        value,
+        at: new Date().toISOString(),
+        evidence: signal.evidence ?? null,
+      });
+      const score = computeScore(log);
+
+      if (existing) {
+        return tx.conceptMastery.update({
+          where: { id: existing.id },
+          data: { signals: log, score },
+        });
+      }
+      return tx.conceptMastery.create({
+        data: { userId, conceptId, signals: log, score },
+      });
+    },
+    { maxWait: 15000, timeout: 15000 },
+  );
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
