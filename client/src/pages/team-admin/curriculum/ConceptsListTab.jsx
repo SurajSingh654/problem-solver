@@ -48,6 +48,7 @@ import {
 } from 'lucide-react'
 import useAuthStore from '@store/useAuthStore'
 import { VerdictBadge, PublishGateChecklist, MarkdownEditor } from '@components/curriculum'
+import PrimerSectionsEditor from './primer-editor/PrimerSectionsEditor'
 import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
 import { cn } from '@utils/cn'
@@ -275,50 +276,12 @@ function NewConceptForm({ topicId, existingCount, onCancel, onCreated }) {
     )
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Primer editor modal — a single MarkdownEditor + Save.
-// ─────────────────────────────────────────────────────────────────
-function PrimerEditor({ topic, concept, open, onClose }) {
-    const [value, setValue] = useState(concept?.primerMarkdown ?? '')
-    const update = useUpdateConcept(concept?.id, topic.id)
-
-    // Reset the editor state whenever the modal opens with a different
-    // concept — avoids stale content bleeding between rows.
-    useEffect(() => {
-        if (open) setValue(concept?.primerMarkdown ?? '')
-    }, [open, concept?.id, concept?.primerMarkdown])
-
-    if (!open) return null
-
-    const save = async () => {
-        try {
-            await update.mutateAsync({ primerMarkdown: value })
-            onClose()
-        } catch {
-            // toast handled by hook
-        }
-    }
-
-    return (
-        <Modal open={open} onClose={onClose} title={`Primer — ${concept.name}`} size="lg">
-            <div className="space-y-4">
-                <MarkdownEditor value={value} onChange={setValue} height={420} />
-                <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
-                    <Button
-                        variant="primary"
-                        size="md"
-                        onClick={save}
-                        loading={update.isPending}
-                    >
-                        <Save className="w-4 h-4" />
-                        Save primer
-                    </Button>
-                </div>
-            </div>
-        </Modal>
-    )
-}
+// The flat `PrimerEditor` component was removed in Phase C (2026-07-09).
+// Primer editing lives in `./primer-editor/PrimerSectionsEditor.jsx` — a
+// section-list editor that supersedes the single MarkdownEditor. The
+// legacy `Concept.primerMarkdown` field is retained on the schema for
+// one release cycle as a safety net; the section editor auto-seeds a
+// { type: "body" } section from any existing flat markdown on first open.
 
 // ─────────────────────────────────────────────────────────────────
 // Rubric editor modal — 8 textareas mirroring RUBRIC_FIELDS.
@@ -825,7 +788,12 @@ function ConceptRow({ topic, concept }) {
             )}
 
             {/* Modals */}
-            <PrimerEditor topic={topic} concept={concept} open={primerOpen} onClose={() => setPrimerOpen(false)} />
+            {/* Phase C — section-based primer editor. Replaces the flat
+                `PrimerEditor` (below, retained temporarily for direct
+                markdown edits during the transition release). Section
+                editor auto-seeds from legacy flat fields the first time
+                it opens so authors never see a blank slate. */}
+            <PrimerSectionsEditor topic={topic} concept={concept} open={primerOpen} onClose={() => setPrimerOpen(false)} />
             <RubricEditor topic={topic} concept={concept} open={rubricOpen} onClose={() => setRubricOpen(false)} />
             <LabEditor    topic={topic} concept={concept} open={labOpen}    onClose={() => setLabOpen(false)} />
         </div>
