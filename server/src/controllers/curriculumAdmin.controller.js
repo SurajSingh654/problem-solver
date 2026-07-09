@@ -123,7 +123,7 @@ export async function listTemplates(req, res) {
     return success(res, { templates });
   } catch (err) {
     console.error("listTemplates:", err);
-    return error(res, "Failed to list templates.", 500);
+    return error(res, "Failed to list templates.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -143,7 +143,7 @@ export async function listTopics(req, res) {
     return success(res, { topics });
   } catch (err) {
     console.error("listTopics:", err);
-    return error(res, "Failed to list topics.", 500);
+    return error(res, "Failed to list topics.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -195,7 +195,7 @@ export async function createTopic(req, res) {
       );
     }
     console.error("createTopic:", err);
-    return error(res, "Failed to create topic.", 500);
+    return error(res, "Failed to create topic.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -256,7 +256,7 @@ export async function updateTopic(req, res) {
     return success(res, { topic });
   } catch (err) {
     console.error("updateTopic:", err);
-    return error(res, "Failed to update topic.", 500);
+    return error(res, "Failed to update topic.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -303,7 +303,7 @@ export async function forkFromTemplate(req, res) {
       return error(res, err.message, 409, "DUPLICATE_SLUG", err.meta);
     }
     console.error("forkFromTemplate:", err);
-    return error(res, "Failed to fork template.", 500);
+    return error(res, "Failed to fork template.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -335,7 +335,7 @@ export async function getTopicDetail(req, res) {
     return success(res, { topic });
   } catch (err) {
     console.error("getTopicDetail:", err);
-    return error(res, "Failed to fetch topic.", 500);
+    return error(res, "Failed to fetch topic.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -381,7 +381,7 @@ export async function getTemplateStatus(req, res) {
     });
   } catch (err) {
     console.error("getTemplateStatus:", err);
-    return error(res, "Failed to fetch template status.", 500);
+    return error(res, "Failed to fetch template status.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -502,7 +502,7 @@ export async function createConcept(req, res) {
     }
   } catch (err) {
     console.error("createConcept:", err);
-    return error(res, "Failed to create concept.", 500);
+    return error(res, "Failed to create concept.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -573,7 +573,7 @@ export async function updateConcept(req, res) {
     return success(res, { concept });
   } catch (err) {
     console.error("updateConcept:", err);
-    return error(res, "Failed to update concept.", 500);
+    return error(res, "Failed to update concept.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -673,7 +673,7 @@ export async function createLab(req, res) {
     }
   } catch (err) {
     console.error("createLab:", err);
-    return error(res, "Failed to create lab.", 500);
+    return error(res, "Failed to create lab.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -727,7 +727,7 @@ export async function updateLab(req, res) {
     return success(res, { lab });
   } catch (err) {
     console.error("updateLab:", err);
-    return error(res, "Failed to update lab.", 500);
+    return error(res, "Failed to update lab.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -823,7 +823,7 @@ export async function reviewTopic(req, res) {
     });
   } catch (err) {
     console.error("reviewTopic:", err);
-    return error(res, "Failed to run curriculum review.", 500);
+    return error(res, "Failed to run curriculum review.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -880,7 +880,7 @@ export async function reviewConcept(req, res) {
     });
   } catch (err) {
     console.error("reviewConcept:", err);
-    return error(res, "Failed to run lesson review.", 500);
+    return error(res, "Failed to run lesson review.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -942,7 +942,7 @@ export async function reviewLab(req, res) {
     });
   } catch (err) {
     console.error("reviewLab:", err);
-    return error(res, "Failed to run lab shape check.", 500);
+    return error(res, "Failed to run lab shape check.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -1111,22 +1111,26 @@ export async function publishTopic(req, res) {
     }
 
     // Audit-log writes run OUTSIDE the tx — best-effort, and the audit
-    // model has no FK to the row that was just updated, so serializing
-    // them into the same tx adds no atomicity guarantee.
+    // model has no FK to the row that was just updated. Exactly ONE row
+    // is written per publish: TOPIC_PUBLISH_FORCE when the SA bypassed the
+    // AI gate, TOPIC_PUBLISH otherwise. The FORCE action name already
+    // implies "publish happened" so a second TOPIC_PUBLISH row would be
+    // redundant.
     if (txResult.forced) {
       await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH_FORCE", {
         topicId: txResult.topic.id,
         overriddenVerdict: txResult.overriddenVerdict,
       });
+    } else {
+      await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH", {
+        topicId: txResult.topic.id,
+      });
     }
-    await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH", {
-      topicId: txResult.topic.id,
-    });
 
     return success(res, { topic: txResult.topic, gates: txResult.gates });
   } catch (err) {
     console.error("publishTopic:", err);
-    return error(res, "Failed to publish topic.", 500);
+    return error(res, "Failed to publish topic.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -1310,21 +1314,24 @@ export async function publishConcept(req, res) {
       return error(res, txResult.message, txResult.status, txResult.code, txResult.details);
     }
 
+    // Exactly ONE audit row per publish — see publishTopic for the rationale.
     if (txResult.forced) {
       await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH_FORCE", {
         conceptId: txResult.concept.id,
         overriddenVerdict: txResult.overriddenVerdict,
+        labAutoPublished: txResult.labAutoPublished,
+      });
+    } else {
+      await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH", {
+        conceptId: txResult.concept.id,
+        labAutoPublished: txResult.labAutoPublished,
       });
     }
-    await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH", {
-      conceptId: txResult.concept.id,
-      labAutoPublished: txResult.labAutoPublished,
-    });
 
     return success(res, { concept: txResult.concept, gates: txResult.gates });
   } catch (err) {
     console.error("publishConcept:", err);
-    return error(res, "Failed to publish concept.", 500);
+    return error(res, "Failed to publish concept.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -1436,6 +1443,6 @@ export async function publishLab(req, res) {
     return success(res, { lab: published, gates });
   } catch (err) {
     console.error("publishLab:", err);
-    return error(res, "Failed to publish lab.", 500);
+    return error(res, "Failed to publish lab.", 500, "INTERNAL_ERROR");
   }
 }

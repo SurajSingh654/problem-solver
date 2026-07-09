@@ -545,7 +545,7 @@ async function onReviewFailed(attemptId, err) {
 export async function revealReference(req, res) {
   const { id: labId } = req.params;
 
-  // Team-scope + published check. DRAFT / REVEIWED content is not
+  // Team-scope + published check. DRAFT / REVIEWED content is not
   // reference-revealable even if a stale attempt row exists.
   const lab = await prisma.lab.findFirst({
     where: {
