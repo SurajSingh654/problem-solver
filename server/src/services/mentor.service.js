@@ -369,6 +369,10 @@ export async function updateMastery(userId, conceptId, signal) {
   // time is small, but queue depth can push later writers past 5s. Bump
   // to 15s to absorb realistic contention without masking a real slow
   // query (which would be a separate bug).
+  //
+  // Return shape: attaches `_scoreBefore` (non-enumerable) to the row so
+  // callers logging `signal_shift_delta` don't need a second SELECT before
+  // the update. Value is the pre-update score or `null` for fresh rows.
   return prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${conceptId}`})::bigint)`;
@@ -376,6 +380,7 @@ export async function updateMastery(userId, conceptId, signal) {
       const existing = await tx.conceptMastery.findUnique({
         where: { userId_conceptId: { userId, conceptId } },
       });
+      const scoreBefore = existing?.score ?? null;
       const log = Array.isArray(existing?.signals) ? [...existing.signals] : [];
       log.push({
         source: signal.source,
@@ -385,15 +390,19 @@ export async function updateMastery(userId, conceptId, signal) {
       });
       const score = computeScore(log);
 
-      if (existing) {
-        return tx.conceptMastery.update({
-          where: { id: existing.id },
-          data: { signals: log, score },
-        });
-      }
-      return tx.conceptMastery.create({
-        data: { userId, conceptId, signals: log, score },
+      const row = existing
+        ? await tx.conceptMastery.update({
+            where: { id: existing.id },
+            data: { signals: log, score },
+          })
+        : await tx.conceptMastery.create({
+            data: { userId, conceptId, signals: log, score },
+          });
+      Object.defineProperty(row, "_scoreBefore", {
+        value: scoreBefore,
+        enumerable: false,
       });
+      return row;
     },
     { maxWait: 15000, timeout: 15000 },
   );

@@ -106,18 +106,16 @@ export async function recordLabSignal({
   const value = LAB_VERDICT_VALUES[codeReviewVerdict];
   if (value === undefined) return; // Unknown verdict (e.g. null after ERROR) — no-op.
 
-  const before = await prisma.conceptMastery.findUnique({
-    where: { userId_conceptId: { userId, conceptId } },
-    select: { score: true },
-  });
-  const scoreBefore = before?.score ?? null;
-
+  // `updateMastery` reads scoreBefore inside its own transaction and
+  // attaches it as a non-enumerable `_scoreBefore` field on the returned
+  // row. Reading it here avoids a second SELECT per signal write.
   const after = await updateMastery(userId, conceptId, {
     source: "practice",
     value,
     evidence: { attemptId, codeReviewVerdict },
   });
 
+  const scoreBefore = after?._scoreBefore ?? null;
   const scoreAfter = after?.score ?? null;
   logger.info(
     {
@@ -138,7 +136,12 @@ export async function recordLabSignal({
     "signal_shift_delta",
   );
 
-  await _maybeAutoFlipTeachingReady({ userId, conceptId, teamId });
+  await _maybeAutoFlipTeachingReady({
+    userId,
+    conceptId,
+    teamId,
+    mastery: after,
+  });
 }
 
 /**
@@ -174,18 +177,15 @@ export async function recordCheckInSignal({
   const value = CHECKIN_VERDICT_VALUES[aiVerdict];
   if (value === undefined) return; // Unknown verdict — no-op.
 
-  const before = await prisma.conceptMastery.findUnique({
-    where: { userId_conceptId: { userId, conceptId } },
-    select: { score: true },
-  });
-  const scoreBefore = before?.score ?? null;
-
+  // scoreBefore is folded into `updateMastery`'s tx-internal read — no
+  // separate SELECT round-trip. See recordLabSignal for the same pattern.
   const after = await updateMastery(userId, conceptId, {
     source: "checkin",
     value,
     evidence: { checkInId, aiVerdict, calibrationDelta },
   });
 
+  const scoreBefore = after?._scoreBefore ?? null;
   const scoreAfter = after?.score ?? null;
   logger.info(
     {
@@ -206,7 +206,12 @@ export async function recordCheckInSignal({
     "signal_shift_delta",
   );
 
-  await _maybeAutoFlipTeachingReady({ userId, conceptId, teamId });
+  await _maybeAutoFlipTeachingReady({
+    userId,
+    conceptId,
+    teamId,
+    mastery: after,
+  });
 }
 
 /**
@@ -227,9 +232,12 @@ export async function recordCheckInSignal({
  * @returns {Promise<void>}
  */
 export async function recordPrimerReadSignal({ userId, conceptId, teamId }) {
+  // Select `teachingReady` too so the same row can feed the auto-flip
+  // helper's early-exit check without a second SELECT (see the caller of
+  // `_maybeAutoFlipTeachingReady` at the bottom of this function).
   const existing = await prisma.conceptMastery.findUnique({
     where: { userId_conceptId: { userId, conceptId } },
-    select: { signals: true, score: true },
+    select: { signals: true, score: true, teachingReady: true },
   });
   const scoreBefore = existing?.score ?? null;
 
@@ -289,7 +297,16 @@ export async function recordPrimerReadSignal({ userId, conceptId, teamId }) {
   // (STRONG lab + PASS check-in) landed after the last flip attempt.
   // `_maybeAutoFlipTeachingReady` is a cheap read + no-op when the flip
   // has already fired (idempotent guard inside setTeachingReady).
-  await _maybeAutoFlipTeachingReady({ userId, conceptId, teamId });
+  //
+  // Pass the freshest mastery view we have: `after` (post-update) when a
+  // new signal was written, else `existing` (pre-read at line 235). Either
+  // is more current than a fresh SELECT the helper would run.
+  await _maybeAutoFlipTeachingReady({
+    userId,
+    conceptId,
+    teamId,
+    mastery: after ?? existing,
+  });
 }
 
 /**
@@ -436,18 +453,33 @@ export async function setTeachingReady({
  * @private
  * @returns {Promise<boolean>}
  */
-async function _shouldAutoFlipTeachingReady({ userId, conceptId, teamId }) {
+async function _shouldAutoFlipTeachingReady({
+  userId,
+  conceptId,
+  teamId,
+  mastery: masteryHint,
+}) {
   if (!teamId) return false; // defensive — caller MUST pass teamId
 
-  // (1) primer_read present?
-  const mastery = await prisma.conceptMastery.findUnique({
-    where: { userId_conceptId: { userId, conceptId } },
-    select: { signals: true, teachingReady: true },
-  });
+  // (1) primer_read present? Skip the DB round-trip when the caller already
+  // has the just-updated ConceptMastery row (recordLabSignal / recordCheckInSignal
+  // pass `after` — the tx result from updateMastery, which is authoritative
+  // and fresher than any follow-up SELECT). Fall back to a fetch when no hint
+  // was passed (defensive; keeps the internal API tolerant of new callers).
+  const mastery =
+    masteryHint ??
+    (await prisma.conceptMastery.findUnique({
+      where: { userId_conceptId: { userId, conceptId } },
+      select: { signals: true, teachingReady: true },
+    }));
   if (!mastery) return false;
   if (mastery.teachingReady === true) return false; // already flipped — no-op
   const signals = Array.isArray(mastery.signals) ? mastery.signals : [];
   const hasPrimerRead = signals.some((s) => s?.source === "primer_read");
+  // No primer_read yet → the truth table cannot possibly satisfy. Short-
+  // circuit BEFORE the two more expensive lab + check-in scans. This is
+  // the common case for fresh learners; the previous impl ran all three
+  // queries even when the first gate was obviously not met.
   if (!hasPrimerRead) return false;
 
   // (2) ≥1 STRONG/ADEQUATE lab on THIS team's lab.
@@ -466,10 +498,14 @@ async function _shouldAutoFlipTeachingReady({ userId, conceptId, teamId }) {
   if (!strongLab) return false;
 
   // (3) LATEST check-in on THIS team's concept has aiVerdict = PASS.
+  // Filter by conceptId + userId first (backed by the composite index on
+  // ConceptCheckIn), then apply the team-scope filter via the relation as
+  // a safety check — order matters for index-only scans.
   const latestCheckIn = await prisma.conceptCheckIn.findFirst({
     where: {
       userId,
-      concept: { id: conceptId, teamId },
+      conceptId,
+      concept: { teamId },
     },
     orderBy: { completedAt: "desc" },
     select: { aiVerdict: true },
@@ -490,14 +526,24 @@ async function _shouldAutoFlipTeachingReady({ userId, conceptId, teamId }) {
  * opens its own $transaction and would deadlock on the ConceptMastery row
  * lock the outer transaction is holding.
  *
+ * `mastery` (optional): pass the just-updated ConceptMastery row from
+ * `updateMastery` to skip the initial primer_read presence query — its
+ * `signals` array is authoritative.
+ *
  * @private
  */
-async function _maybeAutoFlipTeachingReady({ userId, conceptId, teamId }) {
+async function _maybeAutoFlipTeachingReady({
+  userId,
+  conceptId,
+  teamId,
+  mastery = null,
+}) {
   try {
     const shouldFlip = await _shouldAutoFlipTeachingReady({
       userId,
       conceptId,
       teamId,
+      mastery,
     });
     if (shouldFlip) {
       await setTeachingReady({
