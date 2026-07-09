@@ -135,10 +135,30 @@ export async function listTemplates(req, res) {
  */
 export async function listTopics(req, res) {
   try {
+    // Explicit select — `cheatsheetHtml` (Text) and `curriculumReview` (Json
+    // blob, potentially large) are NOT rendered on the list card, so
+    // transferring them for every row was wasteful. Fields chosen to match
+    // what CurriculumAdminPage renders (name/slug/status/category/hours/
+    // forkedFromTemplateId + concept count).
     const topics = await prisma.topic.findMany({
       where: { teamId: req.teamId },
       orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
-      include: { _count: { select: { concepts: true } } },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        description: true,
+        category: true,
+        status: true,
+        estimatedHoursToMastery: true,
+        forkedFromTemplateId: true,
+        forkedAt: true,
+        publishedAt: true,
+        reviewedAt: true,
+        updatedAt: true,
+        createdAt: true,
+        _count: { select: { concepts: true } },
+      },
     });
     return success(res, { topics });
   } catch (err) {

@@ -31,12 +31,7 @@ import {
 // Category → display label. Kept inline (not imported) because the pair
 // exists in `CurriculumAdminPage.jsx` too and is a 4-entry map — the
 // duplication is cheap and lets each page tune the labels if needed.
-const CATEGORY_LABEL = {
-    LOW_LEVEL_DESIGN: 'Low-Level Design',
-    HIGH_LEVEL_DESIGN: 'High-Level Design',
-    AI_ENGINEERING: 'AI Engineering',
-    DATA_STRUCTURES: 'Data Structures',
-}
+import { CURRICULUM_CATEGORY_LABEL as CATEGORY_LABEL } from '@utils/curriculumCategories'
 
 // Strip markdown syntax down to a readable card teaser. The card has
 // line-clamp-3 so we mostly need to kill the visible syntax noise

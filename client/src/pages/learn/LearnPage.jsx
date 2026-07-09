@@ -120,12 +120,25 @@ function TopicCard({ topic, index, onOpen }) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: Math.min(index * 0.04, 0.4) }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open topic ${topic.name}`}
             onClick={onOpen}
+            onKeyDown={(e) => {
+                // Enter/Space activate a clickable card. Without this a
+                // keyboard user reaching the card via Tab has no way to
+                // open the topic — the inner "Enroll" button was the only
+                // reachable target.
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onOpen?.()
+                }
+            }}
             className={cn(
                 'rounded-2xl border border-border-default bg-surface-2 p-5',
                 'flex flex-col gap-4 cursor-pointer',
                 'transition-all hover:border-brand-400 hover:-translate-y-px',
-                'focus-within:border-brand-400',
+                'focus:outline-none focus-visible:border-brand-400 focus-within:border-brand-400',
             )}
         >
             {/* Header — name + category badge */}

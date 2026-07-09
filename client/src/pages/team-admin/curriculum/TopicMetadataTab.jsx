@@ -23,15 +23,7 @@ import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
 import { MarkdownEditor } from '@components/curriculum'
 import { useUpdateTopic } from '@hooks/useCurriculumAdmin'
-
-// Same enum + labels as CurriculumAdminPage. Kept inline (not shared) —
-// four entries with two references is not worth a shared module yet.
-const CATEGORIES = [
-    { value: 'LOW_LEVEL_DESIGN',  label: 'Low-Level Design' },
-    { value: 'HIGH_LEVEL_DESIGN', label: 'High-Level Design' },
-    { value: 'AI_ENGINEERING',    label: 'AI Engineering' },
-    { value: 'DATA_STRUCTURES',   label: 'Data Structures' },
-]
+import { CURRICULUM_CATEGORIES as CATEGORIES } from '@utils/curriculumCategories'
 
 export default function TopicMetadataTab({ topic }) {
     const [name, setName]                 = useState(topic.name ?? '')

@@ -33,12 +33,7 @@ import {
 // The four canonical Topic categories mirror the Prisma enum
 // (schema.prisma: TopicCategory). Keep in sync if a new one lands — the
 // server rejects unknown values as validation errors.
-const CATEGORIES = [
-    { value: 'LOW_LEVEL_DESIGN', label: 'Low-Level Design' },
-    { value: 'HIGH_LEVEL_DESIGN', label: 'High-Level Design' },
-    { value: 'AI_ENGINEERING', label: 'AI Engineering' },
-    { value: 'DATA_STRUCTURES', label: 'Data Structures' },
-]
+import { CURRICULUM_CATEGORIES as CATEGORIES } from '@utils/curriculumCategories'
 
 const STATUS_BUCKETS = [
     { status: 'DRAFT',     label: 'Draft',     tone: 'gray'    },
