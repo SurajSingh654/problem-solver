@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { optionalTeamContext } from "../middleware/team.middleware.js";
+import { aiLimiter } from "../middleware/rateLimit.middleware.js";
 import multer from "multer";
 import {
   startInterview,
@@ -42,7 +43,12 @@ router.get("/history/list", getInterviewHistory);
 // Phase 4: audio transcription endpoint
 // Client sends audio blob → server transcribes → returns text
 // Client then sends text via interview:voice_transcript WebSocket message
-router.post("/transcribe", audioUpload.single("audio"), transcribeAudio);
+//
+// `aiLimiter` caps per-user Whisper spend (20 req / 15 min). Whisper calls
+// bypass `ai.service.js` (which is chat-completions specific) — without a
+// route-level cap this endpoint was cost-uncapped for any authenticated
+// user.
+router.post("/transcribe", aiLimiter, audioUpload.single("audio"), transcribeAudio);
 
 router.get("/:sessionId", getInterview);
 router.post("/:sessionId/end", endInterview);

@@ -118,7 +118,11 @@ export async function transcribeAudio(req, res) {
     }
 
     const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI();
+    const { AI_REQUEST_TIMEOUT_MS } = await import("../config/env.js");
+    // Explicit per-call timeout keeps a stuck upload from tying up the
+    // process for the SDK default (~10 min on large audio). Mirrors the
+    // `timeout` option `ai.service.js` sets on its OpenAI client.
+    const openai = new OpenAI({ timeout: AI_REQUEST_TIMEOUT_MS });
 
     // Use gpt-4o-transcribe for best technical vocabulary accuracy
     // Falls back to whisper-1 which is more stable
