@@ -20,8 +20,10 @@ let updateCalls = [];
 vi.mock("../../src/lib/prisma.js", () => ({
   default: {
     topic: {
-      findUnique: vi.fn(async ({ where }) =>
-        where.slug === "ai-engineering" ? { id: "topic_ae" } : null,
+      // Post 2026-07-04 tenancy migration, topics.controller uses findFirst
+      // ({slug, teamId, status}) because Topic.slug is @@unique([teamId, slug]).
+      findFirst: vi.fn(async ({ where }) =>
+        where.slug === "ai-engineering" ? { id: "topic_ae", teamId: where.teamId } : null,
       ),
     },
     topicEnrollment: {

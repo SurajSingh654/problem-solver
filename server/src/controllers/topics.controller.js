@@ -109,7 +109,7 @@ export async function listTopics(req, res) {
   try {
     const userId = req.user.id;
     const topics = await prisma.topic.findMany({
-      where: { status: "PUBLISHED" },
+      where: { teamId: req.teamId, status: "PUBLISHED" },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       include: {
         _count: { select: { concepts: { where: { status: "PUBLISHED" } } } },
@@ -142,8 +142,11 @@ export async function listTopics(req, res) {
 export async function getTopic(req, res) {
   try {
     const { slug } = req.params;
-    const topic = await prisma.topic.findUnique({
-      where: { slug },
+    // Topic.slug moved to @@unique([teamId, slug]) on 2026-07-04 — a lone
+    // findUnique({where:{slug}}) throws PrismaClientValidationError. Same
+    // fix applied to every findUnique({where:{slug}}) below.
+    const topic = await prisma.topic.findFirst({
+      where: { slug, teamId: req.teamId, status: "PUBLISHED" },
       include: {
         concepts: {
           where: { status: "PUBLISHED" },
@@ -154,7 +157,7 @@ export async function getTopic(req, res) {
         },
       },
     });
-    if (!topic || topic.status !== "PUBLISHED") {
+    if (!topic) {
       return error(res, "Topic not found.", 404);
     }
 
@@ -179,11 +182,11 @@ export async function enrollInTopic(req, res) {
     const validationError = validatePreferences(preferences);
     if (validationError) return error(res, validationError, 400);
 
-    const topic = await prisma.topic.findUnique({
-      where: { slug },
-      select: { id: true, status: true },
+    const topic = await prisma.topic.findFirst({
+      where: { slug, teamId: req.teamId, status: "PUBLISHED" },
+      select: { id: true },
     });
-    if (!topic || topic.status !== "PUBLISHED") {
+    if (!topic) {
       return error(res, "Topic not found.", 404);
     }
 
@@ -220,11 +223,11 @@ export async function getTopicState(req, res) {
     const userId = req.user.id;
     const { slug } = req.params;
 
-    const topic = await prisma.topic.findUnique({
-      where: { slug },
-      select: { id: true, status: true, teamId: true },
+    const topic = await prisma.topic.findFirst({
+      where: { slug, teamId: req.teamId, status: "PUBLISHED" },
+      select: { id: true, teamId: true },
     });
-    if (!topic || topic.status !== "PUBLISHED") {
+    if (!topic) {
       return error(res, "Topic not found.", 404);
     }
 
@@ -314,8 +317,8 @@ export async function updateEnrollment(req, res) {
     const { slug } = req.params;
     const { preferences, status: nextStatus } = req.body ?? {};
 
-    const topic = await prisma.topic.findUnique({
-      where: { slug },
+    const topic = await prisma.topic.findFirst({
+      where: { slug, teamId: req.teamId },
       select: { id: true },
     });
     if (!topic) return error(res, "Topic not found.", 404);
@@ -378,8 +381,8 @@ export async function getTopicCalibration(req, res) {
     const userId = req.user.id;
     const { slug } = req.params;
 
-    const topic = await prisma.topic.findUnique({
-      where: { slug },
+    const topic = await prisma.topic.findFirst({
+      where: { slug, teamId: req.teamId },
       select: { id: true },
     });
     if (!topic) return error(res, "Topic not found.", 404);
@@ -428,8 +431,8 @@ export async function submitTopicCalibration(req, res) {
     const { slug } = req.params;
     const { responses } = req.body ?? {};
 
-    const topic = await prisma.topic.findUnique({
-      where: { slug },
+    const topic = await prisma.topic.findFirst({
+      where: { slug, teamId: req.teamId },
       select: { id: true, teamId: true },
     });
     if (!topic) return error(res, "Topic not found.", 404);
@@ -509,13 +512,13 @@ export async function getTopicConcept(req, res) {
     const { slug, conceptSlug } = req.params;
 
     const topic = await prisma.topic.findFirst({
-      where: { slug, status: "PUBLISHED" },
-      select: { id: true, slug: true, name: true },
+      where: { slug, teamId: req.teamId, status: "PUBLISHED" },
+      select: { id: true, slug: true, name: true, teamId: true },
     });
     if (!topic) return error(res, "Topic not found.", 404);
 
     const concept = await prisma.concept.findFirst({
-      where: { topicId: topic.id, slug: conceptSlug, status: "PUBLISHED" },
+      where: { topicId: topic.id, teamId: topic.teamId, slug: conceptSlug, status: "PUBLISHED" },
       include: {
         prerequisites: { select: { prereqId: true } },
       },
@@ -596,7 +599,7 @@ export async function markConceptRead(req, res) {
     const { slug, conceptSlug } = req.params;
 
     const topic = await prisma.topic.findFirst({
-      where: { slug, status: "PUBLISHED" },
+      where: { slug, teamId: req.teamId, status: "PUBLISHED" },
       select: { id: true, teamId: true },
     });
     if (!topic) return error(res, "Topic not found.", 404);

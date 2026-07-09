@@ -2,13 +2,19 @@
 // Topic Mastery Tracks — Routes (v1 scaffold)
 // ============================================================================
 //
-// Personal/user-scoped — uses `authenticate` middleware. NOT team-scoped:
-// a Track follows the user across team switches, same as Notes/Flashcards.
-// Admin endpoints (publish/unpublish, content edits) live elsewhere.
+// Team-scoped as of 2026-07-04, when Topic.slug moved from global `@unique`
+// to composite `@@unique([teamId, slug])`. Every handler in this router
+// now filters by `req.teamId`; without `requireTeamContext` the controllers
+// would leak cross-team topics (list) or throw a Prisma validation error
+// on `findFirst({slug})` (detail).
+//
+// Admin endpoints (publish/unpublish, content edits) live in
+// `curriculumAdmin.controller.js`.
 // ============================================================================
 
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
+import { requireTeamContext } from "../middleware/team.middleware.js";
 import {
   listTopics,
   getTopic,
@@ -24,6 +30,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(requireTeamContext);
 
 router.get("/", listTopics);
 router.get("/:slug", getTopic);
