@@ -97,18 +97,23 @@ export const SECTION_LABEL_BY_TYPE = Object.fromEntries(
 
 /**
  * Return a fresh empty section for the given type — used when the author
- * clicks "add section". Shape mirrors the Zod schema defaults.
+ * clicks "add section". Optional string fields are deliberately OMITTED
+ * (not seeded with '') because Zod's `.optional()` variants that carry
+ * `.refine()` — notably `diagramUrl` with its `^https?:` check — fire
+ * that refine on empty strings and reject with a confusing "must be
+ * http(s)" error the author never triggered. Editor inputs handle
+ * undefined via `value={value ?? ''}` so blank UI still works.
  */
 export function emptySection(type) {
     switch (type) {
         case 'objectives':
             return { type, items: [{ verb: '', outcome: '' }] }
         case 'prerequisites':
-            return { type, note: '' }
+            return { type }
         case 'mentalModel':
             return { type, markdown: '' }
         case 'body':
-            return { type, markdown: '', heading: '' }
+            return { type, markdown: '' }
         case 'workedExample':
             return { type, markdown: '' }
         case 'checkYourself':
@@ -116,16 +121,59 @@ export function emptySection(type) {
         case 'cheatsheet':
             return { type, markdown: '' }
         case 'codeReference':
-            return { type, markdown: '', language: '', kind: '' }
+            return { type, markdown: '' }
         case 'diagram':
-            return { type, diagramUrl: '', markdown: '', caption: '' }
+            return { type }
         case 'comparison':
-            return { type, markdown: '', dimensions: [] }
+            return { type, markdown: '' }
         case 'gotchas':
             return { type, markdown: '' }
         case 'complexity':
-            return { type, markdown: '', dimensions: [] }
+            return { type, markdown: '' }
         default:
             return { type, markdown: '' }
     }
+}
+
+/**
+ * Strip empty-string / empty-array optional fields from a section before
+ * it hits the wire. Zod's `.optional()` refinements (e.g. diagramUrl's
+ * `^https?:` check) fire on empty-string values, so we must send
+ * `undefined` for "not filled in" — not `""`.
+ *
+ * Non-optional fields are preserved as-is (empty required content is
+ * still an error, but at least the failure message points at the real
+ * missing field rather than "URL must be http(s)").
+ */
+export function normalizeSectionForWire(section) {
+    if (!section || typeof section !== 'object') return section
+    const out = { ...section }
+    const stripIfBlank = [
+        'markdown',
+        'heading',
+        'note',
+        'diagramUrl',
+        'excalidraw',
+        'caption',
+        'language',
+        'kind',
+    ]
+    for (const k of stripIfBlank) {
+        if (typeof out[k] === 'string' && out[k].trim() === '') {
+            delete out[k]
+        }
+    }
+    if (Array.isArray(out.dimensions) && out.dimensions.length === 0) {
+        delete out.dimensions
+    }
+    if (out.type === 'objectives' && Array.isArray(out.items)) {
+        // Drop objective rows where both verb and outcome are empty — they'd
+        // fail Zod's `.min(1)` and confuse the author about why save failed.
+        out.items = out.items.filter(
+            (it) =>
+                (it?.verb ?? '').trim().length > 0 ||
+                (it?.outcome ?? '').trim().length > 0,
+        )
+    }
+    return out
 }

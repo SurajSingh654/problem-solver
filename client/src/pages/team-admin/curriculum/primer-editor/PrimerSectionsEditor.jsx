@@ -28,7 +28,12 @@ import {
 import { Button } from '@components/ui/Button'
 import { useUpdateConcept } from '@hooks/useCurriculumAdmin'
 import { cn } from '@utils/cn'
-import { SECTION_CATALOG, SECTION_LABEL_BY_TYPE, emptySection } from './sectionCatalog'
+import {
+    SECTION_CATALOG,
+    SECTION_LABEL_BY_TYPE,
+    emptySection,
+    normalizeSectionForWire,
+} from './sectionCatalog'
 import { EDITOR_REGISTRY } from './editorRegistry'
 
 // Mirror the read-side fallback so first-open of a legacy concept doesn't
@@ -114,8 +119,12 @@ export default function PrimerSectionsEditor({ topic, concept, open, onClose }) 
 
     const save = async () => {
         setValidationIssues(null)
+        // Strip empty-string optional fields per-section before the wire
+        // send — Zod refinements (diagramUrl `^https?:` etc.) fire on ""
+        // and would reject an untouched section otherwise.
+        const wireSections = sections.map(normalizeSectionForWire)
         try {
-            await update.mutateAsync({ primerSections: sections })
+            await update.mutateAsync({ primerSections: wireSections })
             onClose?.()
         } catch (err) {
             const details = err?.response?.data?.error?.details
