@@ -23,11 +23,17 @@ export default function ConceptTeachTab({ concept, onGoToLab, onGoToCheckIn }) {
     const ready = concept.mastery?.teachingReady === true
 
     if (ready) {
-        // Same `?conceptId=` param the plan specifies. TeachingNewPage
-        // doesn't consume it yet (see TeachingNewPage.jsx — no
-        // useSearchParams read for conceptId); the URL stays parseable
-        // so wiring the prefill later is a one-line change on that page.
-        const scheduleHref = `/teaching/new?conceptId=${encodeURIComponent(concept.id)}`
+        // Prefill topic + suggested title on the TeachingNewPage. Passing
+        // the name/slug directly avoids a second fetch on that page just
+        // to look up the concept. `conceptId` is included for future
+        // relation-linking (e.g. attaching the resulting TeachingSession
+        // back to this concept's TEACH signal).
+        const params = new URLSearchParams({
+            conceptId: concept.id,
+            topic: concept.name,
+            title: `Teach: ${concept.name}`,
+        })
+        const scheduleHref = `/teaching/new?${params.toString()}`
         return (
             <div className="max-w-2xl mx-auto py-10 space-y-6">
                 <div className="bg-success-soft border border-success-line rounded-xl p-5 space-y-3">

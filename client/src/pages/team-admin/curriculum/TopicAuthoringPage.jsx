@@ -29,7 +29,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, RefreshCw, ExternalLink } from 'lucide-react'
 import { VerdictBadge } from '@components/curriculum'
 import { Button } from '@components/ui/Button'
 import { Spinner } from '@components/ui/Spinner'
@@ -174,6 +174,30 @@ export default function TopicAuthoringPage() {
                             {topic.slug}
                         </p>
                     </div>
+                    {/* Preview-as-learner — opens the exact URL a member would
+                        hit on /learn. Only enabled once the topic is
+                        PUBLISHED; the learner surface 404s on DRAFT so a
+                        DRAFT preview would misrender. */}
+                    {topic.status === 'PUBLISHED' ? (
+                        <a
+                            href={`/learn/${topic.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-md border border-border-default bg-surface-2 text-text-secondary hover:text-text-primary hover:border-brand-400"
+                            title="Open the learner view for this topic in a new tab"
+                        >
+                            Preview as learner
+                            <ExternalLink className="w-3 h-3" />
+                        </a>
+                    ) : (
+                        <span
+                            className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-md border border-border-default bg-surface-2 text-text-disabled cursor-not-allowed"
+                            title="Publish the topic to open a live learner preview"
+                        >
+                            Preview as learner
+                            <ExternalLink className="w-3 h-3" />
+                        </span>
+                    )}
                 </div>
                 <TemplateUpdatedChip topicId={topicId} />
             </header>

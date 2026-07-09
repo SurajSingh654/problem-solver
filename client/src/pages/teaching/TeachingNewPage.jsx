@@ -7,7 +7,7 @@
 // navigate to the new session's detail page.
 // ============================================================================
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useCreateTeachingSession } from '@hooks/useTeaching'
 import { Spinner } from '@components/ui/Spinner'
@@ -34,9 +34,13 @@ function defaultScheduledLocal() {
 export default function TeachingNewPage() {
     const navigate = useNavigate()
     const create = useCreateTeachingSession()
+    // Prefill from curriculum ConceptTeachTab deep-link: /teaching/new?topic=X&title=Y.
+    // Reads once on mount (via useState initializer) so a stale URL doesn't
+    // stomp on user edits after they've started typing.
+    const [searchParams] = useSearchParams()
 
-    const [title, setTitle] = useState('')
-    const [topic, setTopic] = useState('')
+    const [title, setTitle] = useState(() => searchParams.get('title') ?? '')
+    const [topic, setTopic] = useState(() => searchParams.get('topic') ?? '')
     const [description, setDescription] = useState('')
     const [externalMeetingLink, setExternalMeetingLink] = useState('')
     const [capacity, setCapacity] = useState(20)
