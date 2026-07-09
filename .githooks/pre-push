@@ -32,6 +32,19 @@ run_in() {
 if [ -d "${ROOT}/server" ] && [ -f "${ROOT}/server/package.json" ]; then
     run_in server "server: lint (strict)" npm run lint
 
+    # Server boot check — imports every module under src/ (except index.js).
+    # Fails if any module throws at load. This catches an ENTIRE class of
+    # prod-down bug that unit tests can't catch: module-level construction
+    # errors (Zod discriminatedUnion misuse, circular imports, missing
+    # exports referenced by top-level code) that only surface at server
+    # startup, not on any code path a unit test exercises.
+    #
+    # Motivating incident (2026-07-09): a `z.discriminatedUnion` variant
+    # wrapped in `.refine()` threw at module import; no unit test imported
+    # the schema; pre-push passed; prod crashed on container startup.
+    # Runs in ~2s.
+    run_in server "server: boot check"     npm run boot-check
+
     # Unit tests always run — fast (~2 min), parallel-safe, no Postgres.
     # Catches wire-level regressions in AI validators, controllers, services,
     # utils. Deterministic under parallel execution.
