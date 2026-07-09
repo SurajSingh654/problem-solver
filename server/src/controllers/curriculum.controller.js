@@ -216,7 +216,17 @@ export async function getConceptDetail(req, res) {
       topic: { status: "PUBLISHED" },
     },
     include: {
-      topic: { select: { id: true, slug: true, name: true } },
+      // `_count.concepts` filtered to PUBLISHED feeds the "Concept N of M"
+      // progress strip on ConceptPage. Cheap — one COUNT query alongside
+      // the concept fetch.
+      topic: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          _count: { select: { concepts: { where: { status: "PUBLISHED" } } } },
+        },
+      },
       lab: {
         // Explicit select — NO `referenceSolution`, NO `starterCode`.
         // These are the two fields the reveal-reference gate protects.

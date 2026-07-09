@@ -178,6 +178,17 @@ export default function ConceptPage() {
                 <span className="text-text-secondary">{concept.name}</span>
             </nav>
 
+            {/* Progress strip — "Concept N of M" so a learner deep-linking
+                into the middle of a topic knows where they are. `order` is
+                1-indexed in the seed; treat it as human-friendly. Only
+                render when the server included the count (older cached
+                responses may lack _count during rollout). */}
+            {concept.order != null && concept.topic?._count?.concepts > 0 && (
+                <div className="text-xs font-mono text-text-tertiary">
+                    Concept {concept.order} of {concept.topic._count.concepts}
+                </div>
+            )}
+
             {/* Header ─────────────────────────────────────────────── */}
             <header className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="space-y-1">
