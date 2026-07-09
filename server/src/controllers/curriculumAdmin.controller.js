@@ -26,6 +26,7 @@
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { sanitizeHtml, sanitizeMarkdownToHtml } from "../services/sanitize.service.js";
+import { primerSectionsArraySchema } from "../schemas/curriculum.schema.js";
 import {
   forkTopicTemplate,
   ForkDuplicateError,
@@ -563,6 +564,7 @@ export async function updateConcept(req, res) {
       readinessRubric,
       cheatsheetMarkdown,
       richHtmlEnabled,
+      primerSections,
     } = req.body ?? {};
 
     const data = {};
@@ -584,6 +586,19 @@ export async function updateConcept(req, res) {
     if (readinessRubric !== undefined) data.readinessRubric = readinessRubric;
     if (cheatsheetMarkdown !== undefined) data.cheatsheetMarkdown = cheatsheetMarkdown;
     if (richHtmlEnabled !== undefined) data.richHtmlEnabled = richHtmlEnabled;
+    // Phase B — validate the structured primer array against the
+    // discriminated union. Reject the whole PATCH on any invalid section
+    // so half-broken content never lands on the reader surface. Empty
+    // array is allowed (signals "fall back to flat fields").
+    if (primerSections !== undefined) {
+      const parsed = primerSectionsArraySchema.safeParse(primerSections);
+      if (!parsed.success) {
+        return error(res, "Invalid primerSections", 400, "INVALID_BODY", {
+          issues: parsed.error.issues,
+        });
+      }
+      data.primerSections = parsed.data;
+    }
 
     const concept = await prisma.concept.update({ where: { id }, data });
     await auditIfSuperAdminOverride(req, "CONCEPT_UPDATE", {

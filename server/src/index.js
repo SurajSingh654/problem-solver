@@ -108,7 +108,13 @@ app.use(
   cors({
     origin: IS_PRODUCTION
       ? CLIENT_URL
-      : ["http://localhost:3000", "http://localhost:5173", CLIENT_URL],
+      : [
+          "http://localhost:3000",
+          "http://localhost:5173",
+          "http://localhost:5174",
+          "http://localhost:5175",
+          CLIENT_URL,
+        ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Team-Id"],

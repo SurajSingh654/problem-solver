@@ -227,6 +227,14 @@ export async function getConceptDetail(req, res) {
       name: true,
       order: true,
       status: true,
+      // Structured section-model primer (Phase B). When present the client
+      // renders via PrimerSectionRenderer; when empty the client falls back
+      // to the legacy flat fields below. Backfill migration seeded
+      // primerSections for every existing concept.
+      primerSections: true,
+      // Legacy flat fields — retained for the transition release. Read
+      // path falls back when primerSections is empty; authors still edit
+      // these until Phase C ships the section editor.
       primerMarkdown: true,
       workedExample: true,
       cheatsheetMarkdown: true,
@@ -235,6 +243,19 @@ export async function getConceptDetail(req, res) {
       createdAt: true,
       updatedAt: true,
       publishedAt: true,
+      // Prerequisites — surfaced on the Primer via the `prerequisites`
+      // section type. Team-scoping is transitive via the parent concept's
+      // teamId filter; the join stays cheap because ConceptDependency has
+      // a composite unique index on (conceptId, prereqId).
+      prerequisites: {
+        select: {
+          id: true,
+          hintNote: true,
+          prereq: {
+            select: { id: true, slug: true, name: true, status: true },
+          },
+        },
+      },
       topic: {
         select: {
           id: true,

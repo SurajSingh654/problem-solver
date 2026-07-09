@@ -1,35 +1,26 @@
 // ============================================================================
-// ConceptPrimerTab — read-once primer surface (W4.T7)
+// ConceptPrimerTab — shell around the section-model Primer (Phase B)
 // ============================================================================
 //
-// Renders the admin-authored `primerMarkdown` (source-grounded, sanitized
-// upstream at the authoring layer via rehype-sanitize per W1.T4) with the
-// same `MarkdownRenderer` used elsewhere in the app — code fences,
-// syntax-highlighted blocks, safe HTML.
+// The primer body is now a series of typed sections (objectives, prereqs,
+// mental model, body, worked example, check yourself, cheatsheet, code
+// reference, diagram, comparison, gotchas, complexity). Ordering comes
+// from `concept.primerSections`; each entry dispatches through
+// `sectionRegistry` in `./primer/PrimerSectionRenderer`. When the array
+// is empty (rare — backfill covered all pre-existing concepts) the
+// renderer derives an equivalent from the legacy flat fields.
 //
-// On first mount for a given concept slug we fire the
-// `POST /concepts/:slug/mark-primer-read` engagement signal (weight 0 —
-// reading is logged but does NOT inflate the mastery score). The
-// mutation is intentionally fire-and-forget; no toast, no error UI.
-// Server dedups within 24 h so remounting the tab within that window
-// is a no-op on the backend either way.
-//
-// Alongside the primer body we surface:
-//   - `workedExample` in a distinct callout block (if present)
-//   - `expectedQuestions` as Socratic self-check prompts (if present)
-//   - `canonicalSources` sidebar (clickable — same styling as the pre-
-//     shell scaffold; carried forward because the reading list is
-//     source-grounded honesty, not decoration)
-//
-// A footer CTA "Ready to practice?" tab-switches to Lab. The handler
-// is passed down from ConceptPage; the tab itself doesn't know about
-// tab state.
+// This shell keeps three concerns that DON'T belong in individual sections:
+//   1. Fire the `primer_read` engagement signal on mount (weight 0, dedup 24h).
+//   2. The `canonicalSources` sidebar — a cross-cutting reading list
+//      (source-grounded honesty), not a per-section artifact.
+//   3. The footer CTA to Lab — flow control, owned by the tab shell.
 // ============================================================================
 import { useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { Button } from '@components/ui/Button'
 import { useMarkPrimerRead } from '@hooks/useCurriculumLearn'
+import PrimerSectionRenderer from './primer/PrimerSectionRenderer'
 
 export default function ConceptPrimerTab({ concept, onGoToLab }) {
     const markPrimerRead = useMarkPrimerRead()
@@ -40,102 +31,21 @@ export default function ConceptPrimerTab({ concept, onGoToLab }) {
     // fire on every re-render. The lint suppression is intentional.
     useEffect(() => {
         if (concept?.slug) {
-            // .mutate — no await, no toast, no error handling. Server
-            // dedups within 24h; failures are silently dropped on the
-            // client because this is engagement telemetry, not a user
-            // action.
             markPrimerRead.mutate(concept.slug)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [concept?.slug])
 
-    const primer = concept.primerMarkdown ?? ''
-    const workedExample = concept.workedExample
-    const cheatsheet = concept.cheatsheetMarkdown
-    const expectedQuestions = concept.expectedQuestions ?? []
-    const canonicalSources = concept.canonicalSources ?? []
+    const canonicalSources = concept?.canonicalSources ?? []
+    const topicSlug = concept?.topic?.slug
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-[1fr_240px] gap-8">
-            {/* ── Primer body ─────────────────────────────────── */}
-            <article className="space-y-8">
-                {primer ? (
-                    <MarkdownRenderer content={primer} />
-                ) : (
-                    <p className="text-sm text-text-tertiary italic">
-                        No primer written yet for this concept.
-                    </p>
-                )}
+            {/* ── Primer body (section-model) ─────────────────────── */}
+            <article className="space-y-8 min-w-0">
+                <PrimerSectionRenderer concept={concept} topicSlug={topicSlug} />
 
-                {workedExample && (
-                    <section className="space-y-3">
-                        {/* h3 (not h2) so the outline nests: page h1 → tabpanel
-                            (implicit h2) → section labels + authored primer
-                            headings at h3. Screen-reader nav stays linear. */}
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                            Worked example
-                        </h3>
-                        <div className="bg-surface-2 border border-border-default rounded-xl p-4">
-                            <MarkdownRenderer content={workedExample} size="sm" />
-                        </div>
-                    </section>
-                )}
-
-                {cheatsheet && (
-                    <section className="space-y-3">
-                        {/* Reviewer-authored cheatsheet — previously never
-                            rendered on the learner surface despite being an
-                            authored field. Collapsed by default so a
-                            first-time reader isn't distracted; expanded on
-                            demand and on return visits (Phase B will make
-                            expansion the default when a prior primer_read
-                            signal exists). */}
-                        <details className="bg-surface-2 border border-border-default rounded-xl group">
-                            <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between text-xs font-bold uppercase tracking-widest text-text-tertiary hover:text-text-secondary">
-                                <span>Cheatsheet</span>
-                                <span aria-hidden="true" className="text-[10px] font-mono opacity-60 group-open:hidden">
-                                    expand
-                                </span>
-                                <span aria-hidden="true" className="text-[10px] font-mono opacity-60 hidden group-open:inline">
-                                    collapse
-                                </span>
-                            </summary>
-                            <div className="px-4 pb-4 border-t border-border-default pt-3">
-                                <MarkdownRenderer content={cheatsheet} size="sm" />
-                            </div>
-                        </details>
-                    </section>
-                )}
-
-                {expectedQuestions.length > 0 && (
-                    <section className="space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                            Check yourself
-                        </h3>
-                        <p className="text-xs text-text-tertiary leading-relaxed">
-                            If you can answer these without re-reading, you've
-                            understood the surface. Mastery shows up in practice
-                            and teaching, not reading.
-                        </p>
-                        <ol className="space-y-2">
-                            {expectedQuestions.map((q, i) => (
-                                <li
-                                    key={i}
-                                    className="bg-surface-1 border border-border-default rounded-xl p-3 flex items-start gap-3"
-                                >
-                                    <span className="text-[10px] font-bold font-mono text-text-tertiary shrink-0 mt-0.5">
-                                        Q{i + 1}
-                                    </span>
-                                    <p className="text-xs text-text-secondary leading-relaxed">
-                                        {q}
-                                    </p>
-                                </li>
-                            ))}
-                        </ol>
-                    </section>
-                )}
-
-                {/* Footer CTA — tab-switch to Lab.
+                {/* Footer CTA — flow to Lab.
                     - `flex-wrap` on narrow screens so the tagline stacks
                       above the button instead of horizontally overflowing.
                     - Fade animation short-circuits when the user has
@@ -162,12 +72,15 @@ export default function ConceptPrimerTab({ concept, onGoToLab }) {
             </article>
 
             {/* ── Sources sidebar ─────────────────────────────── */}
-            <aside className="space-y-4 md:sticky md:top-6 md:self-start">
+            <aside
+                className="space-y-4 md:sticky md:top-6 md:self-start"
+                aria-label="Canonical sources"
+            >
                 {canonicalSources.length > 0 && (
                     <section className="space-y-2">
-                        <h2 className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">
                             Canonical sources
-                        </h2>
+                        </h3>
                         <ul className="space-y-2">
                             {canonicalSources.map((src, i) => {
                                 // Author-supplied URLs — refuse anything that

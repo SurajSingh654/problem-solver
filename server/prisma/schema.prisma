@@ -2575,6 +2575,16 @@ model Concept {
   // Shape: { quizThreshold: 0.8, practiceMin: 2, teachingExpected: bool }
   assessmentCriteria Json    @default("{}")
 
+  // ── Curriculum Phase 2 · structured primer sections ───────
+  // Ordered array of typed sections that supersedes the flat
+  // `primerMarkdown` blob. Each entry: { type, ...typeSpecificFields }.
+  // 12 section types today (see docs/superpowers/specs/2026-07-09-primer-section-model-design.md):
+  //   universal core: objectives · prerequisites · mentalModel · body
+  //                   · workedExample · checkYourself · cheatsheet
+  //   domain-flavored: codeReference · diagram · comparison · gotchas · complexity
+  // Empty array = fall back to legacy flat fields during migration window.
+  primerSections     Json    @default("[]")
+
   // ── Curriculum Phase 1 additions ───────────────────
   // Gate for whether the reviewer-authored rich HTML primer is exposed
   // to users; when false, the surface falls back to `primerMarkdown`.
@@ -2618,6 +2628,11 @@ model ConceptDependency {
   concept   Concept @relation("ConceptPrereq", fields: [conceptId], references: [id], onDelete: Cascade)
   prereqId  String
   prereq    Concept @relation("ConceptUnlocks", fields: [prereqId], references: [id], onDelete: Cascade)
+
+  /// Author-supplied hint shown on the learner's Primer prerequisites section,
+  /// e.g. "if Fenwick trees feel hazy, skim that primer first". Nullable —
+  /// most prereqs don't need a hint, the link to the prereq concept is enough.
+  hintNote  String? @db.Text
 
   @@unique([conceptId, prereqId])
   @@index([prereqId])
