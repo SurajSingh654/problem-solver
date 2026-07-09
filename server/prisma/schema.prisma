@@ -2418,6 +2418,15 @@ enum TopicCategory {
   HR
   CS_FUNDAMENTALS
   AI_ENGINEERING
+  // Phase D — cross-discipline curriculum expansion. The section-model
+  // primer (Phase B) already accommodates these; adding the category
+  // enum lets Topics be filed under a language / framework / DB flavor.
+  // Finer-grain differentiation ("Advanced Java" vs "Python" both under
+  // PROGRAMMING_LANGUAGE) lives on Topic.subCategory.
+  PROGRAMMING_LANGUAGE
+  FRAMEWORK
+  SQL
+  NOSQL
 }
 
 /// Lifecycle of a user's enrollment in a Topic. ABANDONED is set by the
@@ -2492,6 +2501,12 @@ model Topic {
   name        String
   description String        @db.Text
   category    TopicCategory
+  /// Phase D — free-text differentiator for grouped categories. Examples:
+  /// "Advanced Java" / "Python" under PROGRAMMING_LANGUAGE; "Spring Boot"
+  /// / "React" under FRAMEWORK; "PostgreSQL" / "MySQL" under SQL;
+  /// "MongoDB" / "Redis" under NOSQL. Null for categories that don't need
+  /// finer grain (DSA, HLD, LLD, etc.). Indexed for filter/dashboard views.
+  subCategory String?
   status      ConceptStatus @default(DRAFT)
 
   // Team-scoped ownership. Every Topic belongs to exactly one team; the
@@ -2541,6 +2556,7 @@ model Topic {
   @@unique([teamId, slug])
   @@index([teamId, status])
   @@index([status, category])
+  @@index([category, subCategory])
   @@map("topics")
 }
 

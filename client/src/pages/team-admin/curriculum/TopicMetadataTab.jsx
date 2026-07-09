@@ -23,12 +23,17 @@ import { Button } from '@components/ui/Button'
 import { Input } from '@components/ui/Input'
 import { MarkdownEditor } from '@components/curriculum'
 import { useUpdateTopic } from '@hooks/useCurriculumAdmin'
-import { CURRICULUM_CATEGORIES as CATEGORIES } from '@utils/curriculumCategories'
+import {
+    CURRICULUM_CATEGORIES as CATEGORIES,
+    CATEGORIES_WITH_SUBCATEGORY,
+    subCategoryHintFor,
+} from '@utils/curriculumCategories'
 
 export default function TopicMetadataTab({ topic }) {
     const [name, setName]                 = useState(topic.name ?? '')
     const [description, setDescription]   = useState(topic.description ?? '')
     const [category, setCategory]         = useState(topic.category ?? 'LOW_LEVEL_DESIGN')
+    const [subCategory, setSubCategory]   = useState(topic.subCategory ?? '')
     const [hours, setHours]               = useState(
         topic.estimatedHoursToMastery == null ? '' : String(topic.estimatedHoursToMastery),
     )
@@ -51,6 +56,18 @@ export default function TopicMetadataTab({ topic }) {
         if (description !== (topic.description ?? '')) changes.description = description
         if (category !== (topic.category ?? '')) changes.category = category
 
+        // subCategory: send only when the CURRENT category expects one AND
+        // the trimmed value has diverged. Categories that don't expect a
+        // subCategory (DSA, LLD, HLD, …) auto-clear the field on save so a
+        // stale value from a previous category doesn't linger.
+        const nextSubCategory = CATEGORIES_WITH_SUBCATEGORY.has(category)
+            ? subCategory.trim() || null
+            : null
+        const prevSubCategory = topic.subCategory ?? null
+        if (nextSubCategory !== prevSubCategory) {
+            changes.subCategory = nextSubCategory
+        }
+
         // hours is an int OR null OR undefined; empty string means "clear it".
         const nextHours = hours === '' ? null : Number(hours)
         const prevHours = topic.estimatedHoursToMastery ?? null
@@ -65,7 +82,7 @@ export default function TopicMetadataTab({ topic }) {
             changes.cheatsheetHtml = cheatsheet.trim() === '' ? null : cheatsheet
         }
         return changes
-    }, [name, description, category, hours, cheatsheet, topic])
+    }, [name, description, category, subCategory, hours, cheatsheet, topic])
 
     const isDirty = Object.keys(changedFields).length > 0
 
@@ -111,6 +128,26 @@ export default function TopicMetadataTab({ topic }) {
                         </select>
                     </div>
                 </div>
+
+                {/* subCategory — only for grouped categories (languages,
+                    frameworks, SQL/NoSQL). Free-text so we don't have to
+                    ship a new enum every time a new language ships. */}
+                {CATEGORIES_WITH_SUBCATEGORY.has(category) && (
+                    <div>
+                        <label className="block text-xs font-semibold text-text-secondary mb-1">
+                            Sub-category
+                        </label>
+                        <Input
+                            value={subCategory}
+                            onChange={(e) => setSubCategory(e.target.value)}
+                            placeholder={subCategoryHintFor(category)}
+                        />
+                        <p className="text-[11px] text-text-tertiary mt-1 leading-relaxed">
+                            Free-text differentiator within {category.replace(/_/g, ' ').toLowerCase()}.
+                            Leave blank if this Topic covers the discipline in general.
+                        </p>
+                    </div>
+                )}
 
                 <div>
                     <label className="block text-xs font-semibold text-text-secondary mb-1">

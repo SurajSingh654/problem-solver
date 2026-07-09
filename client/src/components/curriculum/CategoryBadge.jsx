@@ -8,15 +8,23 @@ import { cn } from '@utils/cn'
 // Categories are content taxonomy (what kind of topic), not workflow verdicts.
 // Each maps to a distinct tone so scanning a Learn catalog is fast.
 const CATEGORY_TONE = {
-  CODING:            'brand',    // interview coding staple
-  SYSTEM_DESIGN:     'info',     // architecture blue
-  LOW_LEVEL_DESIGN:  'purple',   // OOP/patterns purple
-  AI_ENGINEERING:    'success',  // ML/LLM green
-  DATA_STRUCTURES:   'warning',  // fundamentals amber
-  BEHAVIORAL:        'gray',
-  CS_FUNDAMENTALS:   'gray',
-  HR:                'gray',
-  SQL:               'brand',
+  CODING:               'brand',    // interview coding staple
+  SYSTEM_DESIGN:        'info',     // architecture blue
+  LOW_LEVEL_DESIGN:     'purple',   // OOP/patterns purple
+  AI_ENGINEERING:       'success',  // ML/LLM green
+  DATA_STRUCTURES:      'warning',  // fundamentals amber
+  DSA:                  'warning',  // schema-canonical name for DATA_STRUCTURES
+  BEHAVIORAL:           'gray',
+  CS_FUNDAMENTALS:      'gray',
+  HR:                   'gray',
+  DBMS:                 'info',
+  OS:                   'gray',
+  NETWORKS:             'info',
+  // Phase D — cross-discipline curriculum expansion.
+  PROGRAMMING_LANGUAGE: 'brand',    // language-first curricula
+  FRAMEWORK:            'purple',   // language on top of language
+  SQL:                  'info',     // relational query DB
+  NOSQL:                'success',  // document / KV DB
 }
 
 // Semantic classes — theme-aware (light + dark), same convention as

@@ -128,14 +128,24 @@ const codeReferenceSection = z
 // NOTE: no `.refine()` here. `z.discriminatedUnion` requires each option to
 // be a plain `ZodObject` — a `ZodEffects` wrapper (produced by `.refine()`)
 // throws `Cannot read properties of undefined (reading 'type')` at schema
-// construction. The "must have diagramUrl OR markdown" cross-field check
-// is enforced by `primerSectionsArraySchema` below via `superRefine`.
+// construction. The "must have at least one of diagramUrl / markdown /
+// excalidraw" cross-field check is enforced by `primerSectionsArraySchema`
+// below via `superRefine`.
+//
+// Phase D — `excalidraw` accepts a JSON-string of the Excalidraw scene
+// (elements array). The client stores what `ExcalidrawEditor.onChange`
+// emits (a stringified `elements` array). Capped at 200KB to prevent
+// runaway scenes; typical diagrams are 5-20KB.
 const diagramSection = z
   .object({
     type: z.literal("diagram"),
     diagramUrl: diagramUrl.optional(),
     // Fallback markdown when no image is available yet (e.g. ASCII art).
     markdown: markdownField.optional(),
+    // Inline Excalidraw scene JSON (stringified). Preferred over hosted
+    // URLs because the diagram travels with the concept (no CDN dependency,
+    // no CORS surface).
+    excalidraw: z.string().trim().max(200_000).optional(),
     caption: z.string().trim().max(240).optional(),
   })
   .strict();
@@ -204,13 +214,14 @@ export const primerSectionsArraySchema = z
       if (
         section.type === "diagram" &&
         !section.diagramUrl &&
-        !(section.markdown && section.markdown.length > 0)
+        !(section.markdown && section.markdown.length > 0) &&
+        !(section.excalidraw && section.excalidraw.length > 0)
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [i],
           message:
-            "diagram section needs at least one of diagramUrl or markdown",
+            "diagram section needs at least one of diagramUrl, markdown, or excalidraw",
         });
       }
     });

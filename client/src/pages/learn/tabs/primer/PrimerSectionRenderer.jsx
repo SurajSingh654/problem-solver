@@ -42,6 +42,19 @@ function deriveFromFlatFields(concept) {
     return sections
 }
 
+/**
+ * Detect return-visit state — the learner has viewed this primer before
+ * (prior `primer_read` signal). Signal is fire-on-mount so any past visit
+ * satisfies this. Fresh learners get first-visit mode; anyone who's been
+ * here before gets `openByDefault` on the cheatsheet section so the
+ * compact reference is expanded when they scroll to it.
+ */
+function isReturnVisit(concept) {
+    const signals = concept?.mastery?.signals
+    if (!Array.isArray(signals)) return false
+    return signals.some((s) => s?.source === 'primer_read')
+}
+
 export default function PrimerSectionRenderer({ concept, topicSlug }) {
     let sections = Array.isArray(concept?.primerSections)
         ? concept.primerSections
@@ -56,8 +69,17 @@ export default function PrimerSectionRenderer({ concept, topicSlug }) {
             </p>
         )
     }
+    const returnVisit = isReturnVisit(concept)
     return (
         <div className="space-y-8">
+            {returnVisit && (
+                <div className="rounded-lg border border-border-default bg-surface-2 px-3 py-2 text-[11px] text-text-tertiary flex items-center justify-between gap-3">
+                    <span>
+                        Welcome back — cheatsheet is expanded for quick review.
+                    </span>
+                    <span className="font-mono text-[10px] opacity-70">review mode</span>
+                </div>
+            )}
             {sections.map((section, i) => {
                 const Renderer = sectionRegistry[section?.type]
                 if (!Renderer) {
@@ -70,12 +92,17 @@ export default function PrimerSectionRenderer({ concept, topicSlug }) {
                     }
                     return null
                 }
+                // On return visits, auto-open the cheatsheet. Other section
+                // types don't take `openByDefault` — they just ignore it.
+                const openByDefault =
+                    returnVisit && section.type === 'cheatsheet'
                 return (
                     <Renderer
                         key={i}
                         section={section}
                         concept={concept}
                         topicSlug={topicSlug}
+                        openByDefault={openByDefault}
                     />
                 )
             })}

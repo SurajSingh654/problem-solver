@@ -262,6 +262,7 @@ export async function getConceptDetail(req, res) {
           slug: true,
           name: true,
           category: true,
+          subCategory: true,
           // `_count.concepts` filtered to PUBLISHED feeds the "Concept N of M"
           // progress strip on ConceptPage.
           _count: { select: { concepts: { where: { status: "PUBLISHED" } } } },

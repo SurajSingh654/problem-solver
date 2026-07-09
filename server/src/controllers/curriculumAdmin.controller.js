@@ -177,7 +177,14 @@ export async function listTopics(req, res) {
  * checks — the create surface is intentionally minimal.
  */
 export async function createTopic(req, res) {
-  const { slug, name, description, category, estimatedHoursToMastery } = req.body ?? {};
+  const {
+    slug,
+    name,
+    description,
+    category,
+    subCategory,
+    estimatedHoursToMastery,
+  } = req.body ?? {};
 
   if (!slug || !name || !description || !category) {
     return error(
@@ -189,12 +196,17 @@ export async function createTopic(req, res) {
   }
 
   try {
+    // Phase D — free-text differentiator; null-out empty so a stray "" from
+    // the create form doesn't index as a distinct sub-category value.
+    const trimmedSub =
+      typeof subCategory === "string" ? subCategory.trim() : null;
     const topic = await prisma.topic.create({
       data: {
         slug,
         name,
         description,
         category,
+        subCategory: trimmedSub && trimmedSub.length > 0 ? trimmedSub : null,
         estimatedHoursToMastery: estimatedHoursToMastery ?? null,
         status: "DRAFT",
         teamId: req.teamId,
@@ -237,6 +249,7 @@ export async function updateTopic(req, res) {
       name,
       description,
       category,
+      subCategory,
       estimatedHoursToMastery,
       cheatsheetHtml,
     } = req.body ?? {};
@@ -255,6 +268,16 @@ export async function updateTopic(req, res) {
     if (name !== undefined) data.name = name;
     if (description !== undefined) data.description = description;
     if (category !== undefined) data.category = category;
+    if (subCategory !== undefined) {
+      // Phase D — free-text differentiator within grouped categories
+      // (Java under PROGRAMMING_LANGUAGE, Spring Boot under FRAMEWORK, etc).
+      // Null-out on empty string so a category swap doesn't leave a stale
+      // value behind (the client sends null explicitly when the current
+      // category doesn't expect a subCategory).
+      const trimmed =
+        typeof subCategory === "string" ? subCategory.trim() : null;
+      data.subCategory = trimmed && trimmed.length > 0 ? trimmed : null;
+    }
     if (estimatedHoursToMastery !== undefined) {
       data.estimatedHoursToMastery = estimatedHoursToMastery;
     }

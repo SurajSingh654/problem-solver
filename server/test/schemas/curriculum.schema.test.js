@@ -76,7 +76,7 @@ describe("curriculum.schema — primerSectionsArraySchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("rejects a diagram section with neither diagramUrl nor markdown", () => {
+  it("rejects a diagram section with no diagramUrl, markdown, or excalidraw", () => {
     // superRefine on the array — not on the section — catches this without
     // wrapping the section in ZodEffects (which would break the union).
     const r = primerSectionsArraySchema.safeParse([{ type: "diagram" }]);
@@ -91,9 +91,27 @@ describe("curriculum.schema — primerSectionsArraySchema", () => {
     expect(r.success).toBe(true);
   });
 
+  it("accepts a diagram section with only an Excalidraw scene", () => {
+    // Excalidraw JSON is a stringified `elements` array (what the
+    // ExcalidrawEditor.onChange callback emits). Any non-empty string is
+    // schema-valid; the client decides whether to render it.
+    const r = primerSectionsArraySchema.safeParse([
+      { type: "diagram", excalidraw: "[]" },
+    ]);
+    expect(r.success).toBe(true);
+  });
+
   it("rejects a diagram section with a non-http(s) diagramUrl", () => {
     const r = primerSectionsArraySchema.safeParse([
       { type: "diagram", diagramUrl: "javascript:alert(1)" },
+    ]);
+    expect(r.success).toBe(false);
+  });
+
+  it("caps excalidraw scene size at 200KB", () => {
+    const big = "x".repeat(200_001);
+    const r = primerSectionsArraySchema.safeParse([
+      { type: "diagram", excalidraw: big },
     ]);
     expect(r.success).toBe(false);
   });
