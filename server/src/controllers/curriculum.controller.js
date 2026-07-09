@@ -208,6 +208,10 @@ export async function enrollInTopic(req, res) {
 export async function getConceptDetail(req, res) {
   const { slug } = req.params;
 
+  // Explicit `select` on Concept — drops `readinessRubric`,
+  // `assessmentCriteria`, `primerHtml`, `richHtmlEnabled` from the
+  // learner payload (they were leaking via a bare `include`). Also
+  // folds `latestAttempt` into `lab.attempts` (one query instead of two).
   const concept = await prisma.concept.findFirst({
     where: {
       slug,
@@ -215,21 +219,37 @@ export async function getConceptDetail(req, res) {
       status: "PUBLISHED",
       topic: { status: "PUBLISHED" },
     },
-    include: {
-      // `_count.concepts` filtered to PUBLISHED feeds the "Concept N of M"
-      // progress strip on ConceptPage. Cheap — one COUNT query alongside
-      // the concept fetch.
+    select: {
+      id: true,
+      topicId: true,
+      teamId: true,
+      slug: true,
+      name: true,
+      order: true,
+      status: true,
+      primerMarkdown: true,
+      workedExample: true,
+      cheatsheetMarkdown: true,
+      canonicalSources: true,
+      expectedQuestions: true,
+      createdAt: true,
+      updatedAt: true,
+      publishedAt: true,
       topic: {
         select: {
           id: true,
           slug: true,
           name: true,
+          category: true,
+          // `_count.concepts` filtered to PUBLISHED feeds the "Concept N of M"
+          // progress strip on ConceptPage.
           _count: { select: { concepts: { where: { status: "PUBLISHED" } } } },
         },
       },
       lab: {
-        // Explicit select — NO `referenceSolution`, NO `starterCode`.
-        // These are the two fields the reveal-reference gate protects.
+        // NO `referenceSolution`, NO `starterCode` — the reveal-reference
+        // gate protects both. Nested `attempts` folds what used to be a
+        // separate `findFirst` into the same round-trip.
         select: {
           id: true,
           title: true,
@@ -238,6 +258,20 @@ export async function getConceptDetail(req, res) {
           language: true,
           expectedArtifacts: true,
           status: true,
+          attempts: {
+            where: { userId: req.user.id },
+            orderBy: { submittedAt: "desc" },
+            take: 1,
+            select: {
+              id: true,
+              attemptNumber: true,
+              submittedAt: true,
+              reviewedAt: true,
+              reviewStatus: true,
+              codeReviewVerdict: true,
+              revealedReferenceAt: true,
+            },
+          },
         },
       },
       masteries: {
@@ -257,31 +291,20 @@ export async function getConceptDetail(req, res) {
     return error(res, "Concept not found", 404, "CONCEPT_NOT_FOUND");
   }
 
-  // Most recent LabAttempt (summary only — no code body). Only fetched
-  // when the concept has a Lab; otherwise there's nothing to attempt.
-  let latestAttempt = null;
-  if (concept.lab) {
-    latestAttempt = await prisma.labAttempt.findFirst({
-      where: { userId: req.user.id, labId: concept.lab.id },
-      orderBy: { submittedAt: "desc" },
-      select: {
-        id: true,
-        attemptNumber: true,
-        submittedAt: true,
-        reviewedAt: true,
-        reviewStatus: true,
-        codeReviewVerdict: true,
-        revealedReferenceAt: true,
-      },
-    });
-  }
-
+  const latestAttempt = concept.lab?.attempts?.[0] ?? null;
   const shaped = {
     ...concept,
     mastery: concept.masteries[0] ?? null,
     latestAttempt,
   };
   delete shaped.masteries;
+  // Response contract stays flat (`concept.lab.attempts` isn't in the
+  // documented shape) — strip the internal array now that we've pulled
+  // the row out.
+  if (shaped.lab) {
+    shaped.lab = { ...shaped.lab };
+    delete shaped.lab.attempts;
+  }
 
   return success(res, { concept: shaped });
 }

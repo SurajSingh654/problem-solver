@@ -26,13 +26,14 @@
 // tab state.
 // ============================================================================
 import { useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { Button } from '@components/ui/Button'
 import { useMarkPrimerRead } from '@hooks/useCurriculumLearn'
 
 export default function ConceptPrimerTab({ concept, onGoToLab }) {
     const markPrimerRead = useMarkPrimerRead()
+    const prefersReducedMotion = useReducedMotion()
 
     // Fire once per concept-slug mount. Deliberately depends ONLY on the
     // slug — re-running when the mutation identity changes would double-
@@ -50,6 +51,7 @@ export default function ConceptPrimerTab({ concept, onGoToLab }) {
 
     const primer = concept.primerMarkdown ?? ''
     const workedExample = concept.workedExample
+    const cheatsheet = concept.cheatsheetMarkdown
     const expectedQuestions = concept.expectedQuestions ?? []
     const canonicalSources = concept.canonicalSources ?? []
 
@@ -67,20 +69,49 @@ export default function ConceptPrimerTab({ concept, onGoToLab }) {
 
                 {workedExample && (
                     <section className="space-y-3">
-                        <h2 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                        {/* h3 (not h2) so the outline nests: page h1 → tabpanel
+                            (implicit h2) → section labels + authored primer
+                            headings at h3. Screen-reader nav stays linear. */}
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
                             Worked example
-                        </h2>
+                        </h3>
                         <div className="bg-surface-2 border border-border-default rounded-xl p-4">
                             <MarkdownRenderer content={workedExample} size="sm" />
                         </div>
                     </section>
                 )}
 
+                {cheatsheet && (
+                    <section className="space-y-3">
+                        {/* Reviewer-authored cheatsheet — previously never
+                            rendered on the learner surface despite being an
+                            authored field. Collapsed by default so a
+                            first-time reader isn't distracted; expanded on
+                            demand and on return visits (Phase B will make
+                            expansion the default when a prior primer_read
+                            signal exists). */}
+                        <details className="bg-surface-2 border border-border-default rounded-xl group">
+                            <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between text-xs font-bold uppercase tracking-widest text-text-tertiary hover:text-text-secondary">
+                                <span>Cheatsheet</span>
+                                <span aria-hidden="true" className="text-[10px] font-mono opacity-60 group-open:hidden">
+                                    expand
+                                </span>
+                                <span aria-hidden="true" className="text-[10px] font-mono opacity-60 hidden group-open:inline">
+                                    collapse
+                                </span>
+                            </summary>
+                            <div className="px-4 pb-4 border-t border-border-default pt-3">
+                                <MarkdownRenderer content={cheatsheet} size="sm" />
+                            </div>
+                        </details>
+                    </section>
+                )}
+
                 {expectedQuestions.length > 0 && (
                     <section className="space-y-3">
-                        <h2 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
                             Check yourself
-                        </h2>
+                        </h3>
                         <p className="text-xs text-text-tertiary leading-relaxed">
                             If you can answer these without re-reading, you've
                             understood the surface. Mastery shows up in practice
@@ -104,12 +135,17 @@ export default function ConceptPrimerTab({ concept, onGoToLab }) {
                     </section>
                 )}
 
-                {/* Footer CTA — tab-switch to Lab */}
+                {/* Footer CTA — tab-switch to Lab.
+                    - `flex-wrap` on narrow screens so the tagline stacks
+                      above the button instead of horizontally overflowing.
+                    - Fade animation short-circuits when the user has
+                      requested reduced motion (framer-motion does NOT
+                      respect the media query by default). */}
                 <motion.div
-                    initial={{ opacity: 0 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="pt-4 border-t border-border-default flex items-center justify-between gap-4"
+                    transition={prefersReducedMotion ? { duration: 0 } : { delay: 0.1 }}
+                    className="pt-4 border-t border-border-default flex flex-wrap items-center justify-between gap-4 sm:flex-nowrap"
                 >
                     <p className="text-xs text-text-tertiary leading-relaxed max-w-md">
                         Reading is the start of learning, not proof of it —

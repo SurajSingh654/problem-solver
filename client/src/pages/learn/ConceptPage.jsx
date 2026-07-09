@@ -20,7 +20,7 @@
 // `/learn/:slug/concepts/:conceptSlug`); we call the concept API with
 // `conceptSlug`. Back-nav uses the topic slug.
 // ============================================================================
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
@@ -145,6 +145,20 @@ export default function ConceptPage() {
         )
     }, [conceptQ.data?.mastery?.teachingReady])
 
+    // Move focus to the tabpanel when the active tab changes so keyboard
+    // users don't have to Tab through the whole tab bar after activation.
+    // `didMountRef` skips the initial mount — otherwise focus would steal
+    // from the breadcrumb / back button as soon as the page renders.
+    const tabpanelRef = useRef(null)
+    const didMountRef = useRef(false)
+    useEffect(() => {
+        if (!didMountRef.current) {
+            didMountRef.current = true
+            return
+        }
+        tabpanelRef.current?.focus?.()
+    }, [activeTab])
+
     if (conceptQ.isLoading) {
         return (
             <div className="flex items-center justify-center py-24">
@@ -257,12 +271,15 @@ export default function ConceptPage() {
             {/* Active tab body ────────────────────────────────────── */}
             <motion.div
                 key={activeTab}
+                ref={tabpanelRef}
+                tabIndex={-1}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.15 }}
                 role="tabpanel"
                 id={`concept-tabpanel-${activeTab}`}
                 aria-labelledby={`concept-tab-${activeTab}`}
+                className="focus:outline-none"
             >
                 {activeTab === 'primer'  && (
                     <ConceptPrimerTab

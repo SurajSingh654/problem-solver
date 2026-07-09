@@ -46,6 +46,19 @@ md.use({
             const cls = language ? `hljs language-${language}` : 'hljs'
             return `<pre><code class="${cls}">${html}</code></pre>\n`
         },
+        // Promote every authored heading level by one. Rationale: the page
+        // hosts an <h1> (concept name in ConceptPage) and per-section labels
+        // that used to render at <h2>. When authored `## Foo` also emitted
+        // <h2>, screen readers saw a flat outline with page labels and
+        // primer body headings at the same rank. Shifting `##` → <h3>,
+        // `###` → <h4>, etc. re-nests the outline properly. h1 in markdown
+        // is discouraged (there's already a page-level h1) but we still
+        // shift it to h2 rather than dropping.
+        heading({ tokens, depth }) {
+            const level = Math.min(depth + 1, 6)
+            const inner = this.parser.parseInline(tokens)
+            return `<h${level}>${inner}</h${level}>\n`
+        },
     },
 })
 
@@ -66,7 +79,23 @@ const PURIFY_CONFIG = {
     // Keep all standard markdown tags. Block <iframe>, <object>, <embed>, etc.
     FORBID_TAGS: ['iframe', 'object', 'embed', 'form', 'input', 'button', 'script', 'style'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit'],
+    ALLOW_DATA_ATTR: false,
 }
+
+// Strip non-http(s) URIs from `src` attributes AFTER sanitization runs.
+// DOMPurify keeps `<img src="data:image/svg+xml,...<script>...">` and
+// `<img src="blob:...">` by default when `src` is in ALLOWED_ATTR — the
+// SVG data URI is a stored-XSS vector because SVG can host <script>.
+// Symmetric with the server-side `canonicalSources[].url` check.
+// Hook registered once at module load; DOMPurify hooks are process-global.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.hasAttribute?.('src')) {
+        const src = node.getAttribute('src') ?? ''
+        if (!/^https?:\/\//i.test(src)) {
+            node.removeAttribute('src')
+        }
+    }
+})
 
 export function MarkdownRenderer({ content, className, size = 'default' }) {
     const html = useMemo(() => {
@@ -85,7 +114,7 @@ export function MarkdownRenderer({ content, className, size = 'default' }) {
 
     return (
         <div
-            className={cn('prose prose-invert prose-app max-w-none', sizeClass, className)}
+            className={cn('prose dark:prose-invert prose-app max-w-none', sizeClass, className)}
             dangerouslySetInnerHTML={{ __html: html }}
         />
     )
