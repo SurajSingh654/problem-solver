@@ -125,6 +125,11 @@ const codeReferenceSection = z
   })
   .strict();
 
+// NOTE: no `.refine()` here. `z.discriminatedUnion` requires each option to
+// be a plain `ZodObject` — a `ZodEffects` wrapper (produced by `.refine()`)
+// throws `Cannot read properties of undefined (reading 'type')` at schema
+// construction. The "must have diagramUrl OR markdown" cross-field check
+// is enforced by `primerSectionsArraySchema` below via `superRefine`.
 const diagramSection = z
   .object({
     type: z.literal("diagram"),
@@ -133,11 +138,7 @@ const diagramSection = z
     markdown: markdownField.optional(),
     caption: z.string().trim().max(240).optional(),
   })
-  .strict()
-  .refine(
-    (v) => Boolean(v.diagramUrl) || Boolean(v.markdown),
-    "diagram section needs at least one of diagramUrl or markdown",
-  );
+  .strict();
 
 const comparisonSection = z
   .object({
@@ -190,8 +191,30 @@ export const primerSectionSchema = z.discriminatedUnion("type", [
  * The full `Concept.primerSections` array. Empty array is allowed — that's
  * the DEFAULT and it signals "fall back to legacy flat fields on the read
  * path". Capped at 20 sections per concept to keep the surface finite.
+ *
+ * Cross-section refinements live here (via `superRefine`) rather than on
+ * individual section schemas — refining a section schema wraps it in a
+ * `ZodEffects` which breaks `z.discriminatedUnion`.
  */
-export const primerSectionsArraySchema = z.array(primerSectionSchema).max(20);
+export const primerSectionsArraySchema = z
+  .array(primerSectionSchema)
+  .max(20)
+  .superRefine((sections, ctx) => {
+    sections.forEach((section, i) => {
+      if (
+        section.type === "diagram" &&
+        !section.diagramUrl &&
+        !(section.markdown && section.markdown.length > 0)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [i],
+          message:
+            "diagram section needs at least one of diagramUrl or markdown",
+        });
+      }
+    });
+  });
 
 /** All section type strings, useful for tests + client sectionRegistry keys. */
 export const PRIMER_SECTION_TYPES = /** @type {const} */ ([
