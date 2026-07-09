@@ -23,7 +23,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Clock, GitFork } from 'lucide-react'
 import { Spinner } from '@components/ui/Spinner'
 import { Button } from '@components/ui/Button'
-import { VerdictBadge } from '@components/curriculum'
+import { CategoryBadge } from '@components/curriculum'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { useTopicDetail, useEnrollInTopic } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
@@ -117,7 +117,7 @@ export default function TopicDetailPage() {
                             {topic.slug}
                         </p>
                     </div>
-                    <VerdictBadge verdict={topic.category} />
+                    <CategoryBadge category={topic.category} />
                 </div>
                 {topic.description && (
                     <MarkdownRenderer
@@ -382,20 +382,36 @@ function ConceptRow({ topicSlug, concept, index, enrolled }) {
     // Progress bar width: 0-100 clamped. null → 0.
     const barWidth = Math.max(0, Math.min(100, score ?? 0))
 
+    // Un-enrolled learners get a static card, not a link. Clicking through
+    // to ConceptPage without enrollment used to 404 server-side ("not
+    // enrolled") — the enrolled prop was threaded down but never gated the
+    // navigation. Gate the Link+hover treatment on enrolled=true.
+    const RowWrapper = enrolled ? Link : 'div'
+    const wrapperProps = enrolled
+        ? {
+            to: `/learn/${topicSlug}/concepts/${concept.slug}`,
+            className: cn(
+                'block rounded-xl border border-border-default bg-surface-2 p-4',
+                'transition-all hover:border-brand-400 hover:-translate-y-px',
+                'focus:outline-none focus-visible:border-brand-400',
+            ),
+        }
+        : {
+            className: cn(
+                'block rounded-xl border border-border-default bg-surface-2 p-4',
+                'opacity-70 cursor-not-allowed',
+            ),
+            'aria-disabled': true,
+            title: 'Enroll in the topic to open this concept',
+        }
+
     return (
         <motion.div
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: Math.min(index * 0.02, 0.3) }}
         >
-            <Link
-                to={`/learn/${topicSlug}/concepts/${concept.slug}`}
-                className={cn(
-                    'block rounded-xl border border-border-default bg-surface-2 p-4',
-                    'transition-all hover:border-brand-400 hover:-translate-y-px',
-                    'focus:outline-none focus-visible:border-brand-400',
-                )}
-            >
+            <RowWrapper {...wrapperProps}>
                 <div className="flex items-start gap-4">
                     <div className="w-8 h-8 rounded-full bg-surface-3 border border-border-default flex items-center justify-center text-xs font-bold text-text-secondary shrink-0">
                         {concept.order ?? index + 1}
@@ -442,7 +458,7 @@ function ConceptRow({ topicSlug, concept, index, enrolled }) {
                         )}
                     </div>
                 </div>
-            </Link>
+            </RowWrapper>
         </motion.div>
     )
 }

@@ -102,6 +102,20 @@ export async function requireTeamContext(req, res, next) {
           req.teamId = team.id;
           req.teamStatus = team.status;
           req.isPersonalTeam = team.isPersonal;
+          // A SUPER_ADMIN can persist a foreign team as their currentTeamId
+          // via the `switchTeam` "act as" path. That request looks like a
+          // native TEAM_ADMIN action (no ?teamId=/X-Team-Id header set), so
+          // without this check every downstream write skips the audit log.
+          // Flip the override flag when the SA has no native membership.
+          const membership = await prisma.teamMembership.findUnique({
+            where: {
+              userId_teamId: { userId: req.user.id, teamId: team.id },
+            },
+            select: { isActive: true },
+          });
+          if (!membership || !membership.isActive) {
+            req.superAdminOverride = true;
+          }
           return next();
         }
       }

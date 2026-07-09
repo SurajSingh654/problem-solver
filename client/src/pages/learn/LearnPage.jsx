@@ -18,7 +18,7 @@ import { BookOpen, Clock } from 'lucide-react'
 import { Spinner } from '@components/ui/Spinner'
 import { Button } from '@components/ui/Button'
 import { EmptyState } from '@components/ui/EmptyState'
-import { VerdictBadge } from '@components/curriculum'
+import { CategoryBadge } from '@components/curriculum'
 import { useLearnCatalog, useEnrollInTopic } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
 
@@ -134,7 +134,7 @@ function TopicCard({ topic, index, onOpen }) {
                     <h3 className="text-base font-bold text-text-primary leading-tight">
                         {topic.name}
                     </h3>
-                    <VerdictBadge verdict={topic.category} />
+                    <CategoryBadge category={topic.category} />
                 </div>
                 <p className="text-xs font-mono text-text-tertiary mt-1">
                     {topic.slug}

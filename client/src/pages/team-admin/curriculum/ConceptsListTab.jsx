@@ -87,9 +87,10 @@ const LAB_LANGUAGES = [
 ]
 
 // ─────────────────────────────────────────────────────────────────
-// Small modal shell — no shared Modal primitive yet; keep the render
-// inline. Uses framer-motion for the backdrop + panel animations
-// consistent with the rest of the app.
+// Small modal shell — inline; TODO extract to @components/ui/Modal.
+// Adds ESC-to-close + return-focus-on-close + role=dialog aria-modal.
+// Focus trap is intentionally minimal (autofocus + return-focus); a
+// full tab-cycle trap is deferred until the shared primitive lands.
 // ─────────────────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, size = 'md' }) {
     const widthClass = {
@@ -97,6 +98,28 @@ function Modal({ open, onClose, title, children, size = 'md' }) {
         md: 'max-w-2xl',
         lg: 'max-w-4xl',
     }[size]
+
+    // ESC-to-close + return-focus-on-close. Effect only runs while open
+    // so we don't attach a global listener when the modal isn't mounted.
+    useEffect(() => {
+        if (!open) return
+        const previouslyFocused = document.activeElement
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault()
+                onClose?.()
+            }
+        }
+        document.addEventListener('keydown', onKeyDown)
+        return () => {
+            document.removeEventListener('keydown', onKeyDown)
+            // Restore focus to the element that opened the modal.
+            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                previouslyFocused.focus()
+            }
+        }
+    }, [open, onClose])
+
     return (
         <AnimatePresence>
             {open && (
@@ -112,13 +135,16 @@ function Modal({ open, onClose, title, children, size = 'md' }) {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 12 }}
                         onClick={(e) => e.stopPropagation()}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="modal-title"
                         className={cn(
                             'w-full rounded-2xl border border-border-default bg-surface-1 shadow-xl overflow-hidden',
                             widthClass,
                         )}
                     >
                         <header className="flex items-center justify-between px-5 py-3 border-b border-border-default">
-                            <h3 className="text-base font-bold text-text-primary">
+                            <h3 id="modal-title" className="text-base font-bold text-text-primary">
                                 {title}
                             </h3>
                             <button

@@ -34,6 +34,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import prisma from "../lib/prisma.js";
 import { generateToken } from "../lib/jwt.js";
+import logger from "../utils/logger.js";
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
@@ -868,11 +869,30 @@ export async function switchTeam(req, res) {
     //     This is the "act as" model for platform admins who need to inspect
     //     or edit team-scoped surfaces (curriculum authoring, feedback triage
     //     per team, etc.). The tenancy invariant still holds — server-side
-    //     requireTeamContext maps req.teamId from currentTeamId.
+    //     requireTeamContext maps req.teamId from currentTeamId. When the SA
+    //     has no native TeamMembership on the target team, we emit a
+    //     structured `super_admin_act_as_team` audit event so ops has a
+    //     durable trail even before per-write audit rows land.
     //   Otherwise — TeamMembership is the authoritative access check.
     let effectiveRole;
     if (isSuperAdmin) {
       effectiveRole = "TEAM_ADMIN";
+      const membership = await prisma.teamMembership.findUnique({
+        where: { userId_teamId: { userId, teamId } },
+        select: { role: true, isActive: true },
+      });
+      if (!membership || !membership.isActive) {
+        logger.warn(
+          {
+            event: "super_admin_act_as_team",
+            actorUserId: userId,
+            targetTeamId: teamId,
+            targetTeamName: team.name,
+            isPersonalTeam: team.isPersonal,
+          },
+          "SUPER_ADMIN switched into a team with no native membership",
+        );
+      }
     } else {
       const membership = await prisma.teamMembership.findUnique({
         where: { userId_teamId: { userId, teamId } },

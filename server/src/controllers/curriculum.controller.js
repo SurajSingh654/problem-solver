@@ -24,6 +24,7 @@ import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { runValidator } from "../services/curriculum/contentReview.service.js";
+import { dispatchReview } from "../services/curriculum/reviewSemaphore.js";
 import {
   recordLabSignal,
   recordCheckInSignal,
@@ -346,26 +347,29 @@ export async function submitAttempt(req, res) {
     code,
   });
 
-  // Fire-and-forget CODE_REVIEW. Async .then() chain updates the LabAttempt
-  // row when the AI review completes; on throw, .catch() flips to ERROR.
-  // Never awaited — the 202 must return immediately.
-  runValidator("CODE_REVIEW", {
-    targetId: labId,
-    lab: {
-      title: lab.title,
-      taskMarkdown: lab.taskMarkdown,
-      expectedArtifacts: lab.expectedArtifacts,
-      language: lab.language,
-    },
-    concept: {
-      name: lab.concept.name,
-      primerExcerpt: (lab.concept.primerMarkdown ?? "").slice(0, 4000),
-    },
-    attempt: {
-      code,
-      attemptNumber: attempt.attemptNumber,
-    },
-  })
+  // Fire-and-forget CODE_REVIEW, gated by a per-team in-flight cap. Async
+  // .then() chain updates the LabAttempt row when the AI review completes;
+  // on throw, .catch() flips to ERROR. Never awaited — the 202 must return
+  // immediately. See reviewSemaphore.js for the concurrency contract.
+  dispatchReview(req.teamId, () =>
+    runValidator("CODE_REVIEW", {
+      targetId: labId,
+      lab: {
+        title: lab.title,
+        taskMarkdown: lab.taskMarkdown,
+        expectedArtifacts: lab.expectedArtifacts,
+        language: lab.language,
+      },
+      concept: {
+        name: lab.concept.name,
+        primerExcerpt: (lab.concept.primerMarkdown ?? "").slice(0, 4000),
+      },
+      attempt: {
+        code,
+        attemptNumber: attempt.attemptNumber,
+      },
+    }),
+  )
     .then((result) => onReviewCompleted(attempt.id, result))
     .catch((err) => onReviewFailed(attempt.id, err));
 
