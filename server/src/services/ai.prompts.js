@@ -3663,11 +3663,13 @@ Return ONLY a JSON object matching the schema. No prose outside the JSON.`;
 
   const prompt = `Review the following learner Lab attempt.
 
-Lab title: ${labTitle}
-Language: ${language}
 Attempt #${attemptNumber}
 
+<team_admin_input>
+Lab title: ${labTitle}
+Language: ${language}
 Target concept: ${conceptName}
+</team_admin_input>
 
 <lesson_body>
 Concept primer excerpt (first ~4KB):
@@ -3850,8 +3852,11 @@ Return ONLY a JSON object matching the schema. No prose outside the JSON.`;
 
   const prompt = `Grade the following 3-question check-in.
 
-Concept: ${conceptName}
 Learner preConfidence (1-5): ${preConfidence ?? "(not provided)"}
+
+<team_admin_input>
+Concept: ${conceptName}
+</team_admin_input>
 
 <lesson_body>
 Concept primer (first ~8KB):

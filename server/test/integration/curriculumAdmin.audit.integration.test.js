@@ -140,13 +140,23 @@ beforeAll(async () => {
     },
   });
 
-  // TEAM_ADMIN owns Team A. SUPER_ADMIN's currentTeamId is Team A but no
-  // membership is required — the requireTeamContext middleware treats
-  // SUPER_ADMIN as globally scoped and validates the team status directly.
+  // TEAM_ADMIN owns Team A. SUPER_ADMIN also holds an ACTIVE TeamMembership
+  // on Team A — this simulates the "solo-dev owner" pattern where the same
+  // account is both platform-admin and native member of their own team.
+  // Without a membership row on the team they're writing to, requireTeamContext
+  // treats the SUPER_ADMIN as cross-team-override (BLOCKER 5, 2026-07-09) and
+  // audits every write — which would defeat Scenario 2 below (own-team writes
+  // must NOT audit). Membership row makes SA a legit member for these tests.
   await prisma.teamMembership.createMany({
     data: [
       {
         userId: TEAMADMIN_USER_ID,
+        teamId: TEAM_A_ID,
+        role: "TEAM_ADMIN",
+        isActive: true,
+      },
+      {
+        userId: SUPERADMIN_USER_ID,
         teamId: TEAM_A_ID,
         role: "TEAM_ADMIN",
         isActive: true,

@@ -133,14 +133,14 @@ export default function ConceptPrimerTab({ concept, onGoToLab }) {
                             Canonical sources
                         </h2>
                         <ul className="space-y-2">
-                            {canonicalSources.map((src, i) => (
-                                <li key={i}>
-                                    <a
-                                        href={src.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="block bg-surface-1 border border-border-default rounded-lg p-3 hover:bg-surface-2 transition-colors"
-                                    >
+                            {canonicalSources.map((src, i) => {
+                                // Author-supplied URLs — refuse anything that
+                                // isn't http(s). A `javascript:` URI on an
+                                // `<a href>` executes on click even after
+                                // React renders — no auto-sanitization.
+                                const safeUrl = /^https?:\/\//i.test(src?.url) ? src.url : null
+                                const inner = (
+                                    <>
                                         <p className="text-xs font-bold text-text-primary leading-snug">
                                             {src.title}
                                         </p>
@@ -149,9 +149,30 @@ export default function ConceptPrimerTab({ concept, onGoToLab }) {
                                                 {src.type}
                                             </p>
                                         )}
-                                    </a>
-                                </li>
-                            ))}
+                                    </>
+                                )
+                                return (
+                                    <li key={i}>
+                                        {safeUrl ? (
+                                            <a
+                                                href={safeUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="block bg-surface-1 border border-border-default rounded-lg p-3 hover:bg-surface-2 transition-colors"
+                                            >
+                                                {inner}
+                                            </a>
+                                        ) : (
+                                            <div
+                                                className="block bg-surface-1 border border-border-default rounded-lg p-3 opacity-70"
+                                                title="Source URL blocked (must start with http:// or https://)"
+                                            >
+                                                {inner}
+                                            </div>
+                                        )}
+                                    </li>
+                                )
+                            })}
                         </ul>
                     </section>
                 )}

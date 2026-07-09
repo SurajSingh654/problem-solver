@@ -360,8 +360,10 @@ describe("POST /curriculum/admin/topics/:id/publish", () => {
   );
 
   it(
-    "returns 400 with curriculum_review_verdict:FAIL when latest verdict is WORTH_WITH_ADJUSTMENTS",
+    "publishes when latest verdict is WORTH_WITH_ADJUSTMENTS (loosened gate — AI is a coach, not a gatekeeper)",
     async () => {
+      // Commit b3a1c9f (2026-07-07) loosened the topic gate to accept both
+      // WORTH_LEARNING and WORTH_WITH_ADJUSTMENTS. Only NOT_WORTH_TIME blocks.
       const topic = await createTopicFixture({ suffix: "adj" });
       await createConceptFixture({
         suffix: "adj",
@@ -376,12 +378,13 @@ describe("POST /curriculum/admin/topics/:id/publish", () => {
         { token: adminAToken },
       );
 
-      expect(status).toBe(400);
-      const gates = body?.error?.details?.gates ?? [];
-      const reviewGate = gates.find((g) => g.id === "curriculum_review_verdict");
-      expect(reviewGate?.status).toBe("FAIL");
-      expect(reviewGate?.message).toContain("WORTH_WITH_ADJUSTMENTS");
-      expect(reviewGate?.message).toContain("WORTH_LEARNING");
+      expect(status).toBe(200);
+      expect(body?.data?.topic?.status).toBe("PUBLISHED");
+      const reviewGate = body?.data?.gates?.find(
+        (g) => g.id === "curriculum_review_verdict",
+      );
+      expect(reviewGate?.status).toBe("PASS");
+      expect(reviewGate?.message).toBe("WORTH_WITH_ADJUSTMENTS");
     },
     TEST_TIMEOUT_MS,
   );

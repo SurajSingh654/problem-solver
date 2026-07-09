@@ -969,9 +969,14 @@ export async function reviewLab(req, res) {
 /**
  * POST /curriculum/admin/topics/:id/publish
  * Enforces the two Topic publish gates and flips Topic.status → PUBLISHED
- * (sets publishedAt = now()) when both pass. Race between two team-admins
- * publishing the same Topic simultaneously is not explicitly locked; if
- * this becomes a real concern add `SELECT ... FOR UPDATE` in Phase 2.
+ * (sets publishedAt = now()) when both pass.
+ *
+ * Concurrency: gate-check + status-flip are wrapped in an interactive
+ * `$transaction` with a `pg_advisory_xact_lock` keyed on the Topic id, so
+ * two admins publishing the same Topic simultaneously serialize instead of
+ * both flipping (and both writing an audit log). The concept-status
+ * re-read inside the tx also catches the "concurrent un-publish of a
+ * required concept between gate check and topic flip" hole.
  */
 export async function publishTopic(req, res) {
   try {
@@ -982,108 +987,143 @@ export async function publishTopic(req, res) {
     const forceParam = req.body?.force === true || req.query?.force === "true";
     const canForce = forceParam && req.user?.globalRole === "SUPER_ADMIN";
 
-    const topic = await prisma.topic.findFirst({
+    // Team-scope check outside the transaction — the 404 path is common
+    // and doesn't need to hold the advisory lock. Everything after this
+    // must run inside the tx so gate + flip are atomic.
+    const teamCheck = await prisma.topic.findFirst({
       where: { id, teamId: req.teamId },
-      include: {
-        concepts: { select: { id: true, slug: true, status: true } },
-      },
+      select: { id: true },
     });
-    if (!topic) {
+    if (!teamCheck) {
       return error(res, "Topic not found", 404, "TOPIC_NOT_FOUND");
     }
 
-    const gates = [];
+    const txResult = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`topic-publish:${id}`})::bigint)`;
 
-    // Gate 1: latest curriculum-review verdict must be WORTH_LEARNING or
-    // WORTH_WITH_ADJUSTMENTS. Mirror the concept gate — the AI is a coach,
-    // not a gatekeeper. Only NOT_WORTH_TIME blocks. SUPER_ADMIN can still
-    // force-override that case.
-    const PASSING_TOPIC_VERDICTS = new Set([
-      "WORTH_LEARNING",
-      "WORTH_WITH_ADJUSTMENTS",
-    ]);
-    const reviewLog = await latestVerdictFor("TOPIC", topic.id);
-    if (!reviewLog) {
-      gates.push({
-        id: "curriculum_review_verdict",
-        label: "Curriculum review verdict",
-        status: canForce ? "PASS" : "FAIL",
-        message: canForce
-          ? "Overridden by SUPER_ADMIN (no review run)."
-          : "No curriculum review has been run for this topic yet.",
+      const topic = await tx.topic.findFirst({
+        where: { id, teamId: req.teamId },
+        include: {
+          concepts: { select: { id: true, slug: true, status: true } },
+        },
       });
-    } else if (!PASSING_TOPIC_VERDICTS.has(reviewLog.verdict)) {
-      // Only NOT_WORTH_TIME reaches here after the loosened gate.
-      gates.push({
-        id: "curriculum_review_verdict",
-        label: "Curriculum review verdict",
-        status: canForce ? "PASS" : "FAIL",
-        message: canForce
-          ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
-          : `Latest verdict is ${reviewLog.verdict}. Required: WORTH_LEARNING or WORTH_WITH_ADJUSTMENTS.`,
-      });
-    } else {
-      gates.push({
-        id: "curriculum_review_verdict",
-        label: "Curriculum review verdict",
-        status: "PASS",
-        message: reviewLog.verdict, // "WORTH_LEARNING" or "WORTH_WITH_ADJUSTMENTS"
-      });
-    }
+      if (!topic) {
+        return { ok: false, code: "TOPIC_NOT_FOUND", status: 404, message: "Topic not found" };
+      }
 
-    // Gate 2: every child Concept.status must be PUBLISHED.
-    const concepts = topic.concepts;
-    const unpublished = concepts.filter((c) => c.status !== "PUBLISHED");
-    if (concepts.length === 0) {
-      gates.push({
-        id: "concepts_all_published",
-        label: "All concepts PUBLISHED",
-        status: "FAIL",
-        message: "Topic has no concepts.",
-      });
-    } else if (unpublished.length > 0) {
-      gates.push({
-        id: "concepts_all_published",
-        label: "All concepts PUBLISHED",
-        status: "FAIL",
-        message: `${concepts.length - unpublished.length} of ${concepts.length} published; missing: ${unpublished.map((c) => c.slug).join(", ")}`,
-      });
-    } else {
-      gates.push({
-        id: "concepts_all_published",
-        label: "All concepts PUBLISHED",
-        status: "PASS",
-        message: `All ${concepts.length} concept(s) published.`,
-      });
-    }
+      const gates = [];
 
-    const failed = gates.filter((g) => g.status === "FAIL");
-    if (failed.length > 0) {
-      return error(res, "Publish blocked", 400, "PUBLISH_GATE_BLOCKED", {
+      // Gate 1: latest curriculum-review verdict must be WORTH_LEARNING or
+      // WORTH_WITH_ADJUSTMENTS. Mirror the concept gate — the AI is a coach,
+      // not a gatekeeper. Only NOT_WORTH_TIME blocks. SUPER_ADMIN can still
+      // force-override that case.
+      const PASSING_TOPIC_VERDICTS = new Set([
+        "WORTH_LEARNING",
+        "WORTH_WITH_ADJUSTMENTS",
+      ]);
+      const reviewLog = await latestVerdictFor("TOPIC", topic.id);
+      if (!reviewLog) {
+        gates.push({
+          id: "curriculum_review_verdict",
+          label: "Curriculum review verdict",
+          status: canForce ? "PASS" : "FAIL",
+          message: canForce
+            ? "Overridden by SUPER_ADMIN (no review run)."
+            : "No curriculum review has been run for this topic yet.",
+        });
+      } else if (!PASSING_TOPIC_VERDICTS.has(reviewLog.verdict)) {
+        // Only NOT_WORTH_TIME reaches here after the loosened gate.
+        gates.push({
+          id: "curriculum_review_verdict",
+          label: "Curriculum review verdict",
+          status: canForce ? "PASS" : "FAIL",
+          message: canForce
+            ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
+            : `Latest verdict is ${reviewLog.verdict}. Required: WORTH_LEARNING or WORTH_WITH_ADJUSTMENTS.`,
+        });
+      } else {
+        gates.push({
+          id: "curriculum_review_verdict",
+          label: "Curriculum review verdict",
+          status: "PASS",
+          message: reviewLog.verdict, // "WORTH_LEARNING" or "WORTH_WITH_ADJUSTMENTS"
+        });
+      }
+
+      // Gate 2: every child Concept.status must be PUBLISHED. Re-read
+      // inside the tx (via `topic.concepts` above) so a concurrent
+      // unpublish of a required concept can't race past the gate.
+      const concepts = topic.concepts;
+      const unpublished = concepts.filter((c) => c.status !== "PUBLISHED");
+      if (concepts.length === 0) {
+        gates.push({
+          id: "concepts_all_published",
+          label: "All concepts PUBLISHED",
+          status: "FAIL",
+          message: "Topic has no concepts.",
+        });
+      } else if (unpublished.length > 0) {
+        gates.push({
+          id: "concepts_all_published",
+          label: "All concepts PUBLISHED",
+          status: "FAIL",
+          message: `${concepts.length - unpublished.length} of ${concepts.length} published; missing: ${unpublished.map((c) => c.slug).join(", ")}`,
+        });
+      } else {
+        gates.push({
+          id: "concepts_all_published",
+          label: "All concepts PUBLISHED",
+          status: "PASS",
+          message: `All ${concepts.length} concept(s) published.`,
+        });
+      }
+
+      const failed = gates.filter((g) => g.status === "FAIL");
+      if (failed.length > 0) {
+        return {
+          ok: false,
+          code: "PUBLISH_GATE_BLOCKED",
+          status: 400,
+          message: "Publish blocked",
+          details: { gates },
+        };
+      }
+
+      const published = await tx.topic.update({
+        where: { id: topic.id },
+        data: {
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+        },
+      });
+
+      return {
+        ok: true,
+        topic: published,
         gates,
-      });
-    }
-
-    if (canForce && reviewLog?.verdict !== "WORTH_LEARNING") {
-      await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH_FORCE", {
-        topicId: topic.id,
+        forced: canForce && reviewLog?.verdict !== "WORTH_LEARNING",
         overriddenVerdict: reviewLog?.verdict ?? "NONE",
-      });
+      };
+    });
+
+    if (!txResult.ok) {
+      return error(res, txResult.message, txResult.status, txResult.code, txResult.details);
     }
 
-    const published = await prisma.topic.update({
-      where: { id: topic.id },
-      data: {
-        status: "PUBLISHED",
-        publishedAt: new Date(),
-      },
-    });
-
+    // Audit-log writes run OUTSIDE the tx — best-effort, and the audit
+    // model has no FK to the row that was just updated, so serializing
+    // them into the same tx adds no atomicity guarantee.
+    if (txResult.forced) {
+      await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH_FORCE", {
+        topicId: txResult.topic.id,
+        overriddenVerdict: txResult.overriddenVerdict,
+      });
+    }
     await auditIfSuperAdminOverride(req, "TOPIC_PUBLISH", {
-      topicId: topic.id,
+      topicId: txResult.topic.id,
     });
 
-    return success(res, { topic: published, gates });
+    return success(res, { topic: txResult.topic, gates: txResult.gates });
   } catch (err) {
     console.error("publishTopic:", err);
     return error(res, "Failed to publish topic.", 500);
@@ -1093,7 +1133,13 @@ export async function publishTopic(req, res) {
 /**
  * POST /curriculum/admin/concepts/:id/publish
  * Enforces the two Concept publish gates and flips Concept.status → PUBLISHED
- * (sets publishedAt = now()) when both pass.
+ * (sets publishedAt = now()) when both pass. Also auto-publishes the
+ * attached Lab when its own publish gates pass (matches `publishLab` gates
+ * exactly — reference solution + timebox + ≥ 1 expected artifact).
+ *
+ * Concurrency: gate-check + status-flip + lab auto-publish run inside a
+ * single `$transaction` with a `pg_advisory_xact_lock` keyed on the
+ * concept id. Serializes concurrent publish attempts on the same concept.
  */
 export async function publishConcept(req, res) {
   try {
@@ -1106,135 +1152,176 @@ export async function publishConcept(req, res) {
     const forceParam = req.body?.force === true || req.query?.force === "true";
     const canForce = forceParam && req.user?.globalRole === "SUPER_ADMIN";
 
-    const concept = await prisma.concept.findFirst({
+    // Team-scope check outside the tx — the 404 path is common and
+    // doesn't need to hold the advisory lock.
+    const teamCheck = await prisma.concept.findFirst({
       where: { id, teamId: req.teamId },
-      select: { id: true, readinessRubric: true },
+      select: { id: true },
     });
-    if (!concept) {
+    if (!teamCheck) {
       return error(res, "Concept not found", 404, "CONCEPT_NOT_FOUND");
     }
 
-    const gates = [];
+    const txResult = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`concept-publish:${id}`})::bigint)`;
 
-    // Gate 1: latest lesson-review verdict must be READY *or* POLISH.
-    // Rationale: the AI is a coach, not a gatekeeper. POLISH means "good
-    // bones, has room for improvement" — perfectly reasonable to publish.
-    // Only NOT_READY (or "no review run") blocks. SUPER_ADMIN can still
-    // force-override the NOT_READY case if they've read the content and
-    // disagree with the AI.
-    const PASSING_LESSON_VERDICTS = new Set(["READY", "POLISH"]);
-    const reviewLog = await latestVerdictFor("CONCEPT", concept.id);
-    if (!reviewLog) {
-      gates.push({
-        id: "lesson_review_verdict",
-        label: "Lesson review verdict",
-        status: canForce ? "PASS" : "FAIL",
-        message: canForce
-          ? "Overridden by SUPER_ADMIN (no review run)."
-          : "No lesson review has been run for this concept yet.",
+      const concept = await tx.concept.findFirst({
+        where: { id, teamId: req.teamId },
+        select: { id: true, readinessRubric: true },
       });
-    } else if (!PASSING_LESSON_VERDICTS.has(reviewLog.verdict)) {
-      // Only NOT_READY reaches here after the loosened gate.
-      gates.push({
-        id: "lesson_review_verdict",
-        label: "Lesson review verdict",
-        status: canForce ? "PASS" : "FAIL",
-        message: canForce
-          ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
-          : `Latest verdict is ${reviewLog.verdict}. Required: READY or POLISH.`,
-      });
-    } else {
-      gates.push({
-        id: "lesson_review_verdict",
-        label: "Lesson review verdict",
-        status: "PASS",
-        message: reviewLog.verdict, // "READY" or "POLISH"
-      });
-    }
+      if (!concept) {
+        return {
+          ok: false,
+          code: "CONCEPT_NOT_FOUND",
+          status: 404,
+          message: "Concept not found",
+        };
+      }
 
-    // Gate 2: readinessRubric must be non-null. The rubric feeds Mentor's
-    // readiness classifier — publishing without it means the concept ships
-    // with no way to score learner readiness. NOT bypassable by force.
-    if (!concept.readinessRubric) {
-      gates.push({
-        id: "readiness_rubric_present",
-        label: "Readiness rubric present",
-        status: "FAIL",
-        message: "Concept.readinessRubric is required for publish.",
-      });
-    } else {
-      gates.push({
-        id: "readiness_rubric_present",
-        label: "Readiness rubric present",
-        status: "PASS",
-        message: "Rubric defined.",
-      });
-    }
+      const gates = [];
 
-    const failed = gates.filter((g) => g.status === "FAIL");
-    if (failed.length > 0) {
-      return error(res, "Publish blocked", 400, "PUBLISH_GATE_BLOCKED", {
+      // Gate 1: latest lesson-review verdict must be READY *or* POLISH.
+      // Rationale: the AI is a coach, not a gatekeeper. POLISH means "good
+      // bones, has room for improvement" — perfectly reasonable to publish.
+      // Only NOT_READY (or "no review run") blocks. SUPER_ADMIN can still
+      // force-override the NOT_READY case if they've read the content and
+      // disagree with the AI.
+      const PASSING_LESSON_VERDICTS = new Set(["READY", "POLISH"]);
+      const reviewLog = await latestVerdictFor("CONCEPT", concept.id);
+      if (!reviewLog) {
+        gates.push({
+          id: "lesson_review_verdict",
+          label: "Lesson review verdict",
+          status: canForce ? "PASS" : "FAIL",
+          message: canForce
+            ? "Overridden by SUPER_ADMIN (no review run)."
+            : "No lesson review has been run for this concept yet.",
+        });
+      } else if (!PASSING_LESSON_VERDICTS.has(reviewLog.verdict)) {
+        // Only NOT_READY reaches here after the loosened gate.
+        gates.push({
+          id: "lesson_review_verdict",
+          label: "Lesson review verdict",
+          status: canForce ? "PASS" : "FAIL",
+          message: canForce
+            ? `Overridden by SUPER_ADMIN (was ${reviewLog.verdict}).`
+            : `Latest verdict is ${reviewLog.verdict}. Required: READY or POLISH.`,
+        });
+      } else {
+        gates.push({
+          id: "lesson_review_verdict",
+          label: "Lesson review verdict",
+          status: "PASS",
+          message: reviewLog.verdict, // "READY" or "POLISH"
+        });
+      }
+
+      // Gate 2: readinessRubric must be non-null. The rubric feeds Mentor's
+      // readiness classifier — publishing without it means the concept ships
+      // with no way to score learner readiness. NOT bypassable by force.
+      if (!concept.readinessRubric) {
+        gates.push({
+          id: "readiness_rubric_present",
+          label: "Readiness rubric present",
+          status: "FAIL",
+          message: "Concept.readinessRubric is required for publish.",
+        });
+      } else {
+        gates.push({
+          id: "readiness_rubric_present",
+          label: "Readiness rubric present",
+          status: "PASS",
+          message: "Rubric defined.",
+        });
+      }
+
+      const failed = gates.filter((g) => g.status === "FAIL");
+      if (failed.length > 0) {
+        return {
+          ok: false,
+          code: "PUBLISH_GATE_BLOCKED",
+          status: 400,
+          message: "Publish blocked",
+          details: { gates },
+        };
+      }
+
+      const published = await tx.concept.update({
+        where: { id: concept.id },
+        data: {
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+        },
+      });
+
+      // Auto-publish the attached lab (if any). Rationale:
+      //   - Learners hit `LAB_NOT_FOUND` on attempt submit if the lab stays
+      //     DRAFT (curriculum.controller.js:326 requires lab.status=PUBLISHED).
+      //   - There is no client UI that publishes labs separately — the
+      //     endpoint exists (POST /curriculum/admin/labs/:id/publish) but no
+      //     button calls it.
+      //   - Author mental model: publishing the concept publishes all of it.
+      //
+      // Lab shape gates must match `publishLab` exactly — reference solution
+      // present + positive timebox + ≥ 1 expected artifact. If any gate
+      // fails we skip the auto-publish (concept can still ship — the lab
+      // is optional; author can fix the gaps and hit /labs/:id/publish).
+      const attachedLab = await tx.lab.findFirst({
+        where: { conceptId: concept.id, teamId: req.teamId },
+        select: {
+          id: true,
+          status: true,
+          referenceSolution: true,
+          timeboxMinutes: true,
+          expectedArtifacts: true,
+        },
+      });
+      const attachedLabArtifacts = Array.isArray(attachedLab?.expectedArtifacts)
+        ? attachedLab.expectedArtifacts
+        : [];
+      let labAutoPublished = false;
+      if (
+        attachedLab &&
+        attachedLab.status !== "PUBLISHED" &&
+        attachedLab.referenceSolution &&
+        attachedLab.referenceSolution.trim().length > 0 &&
+        attachedLab.timeboxMinutes &&
+        attachedLab.timeboxMinutes > 0 &&
+        attachedLabArtifacts.length > 0
+      ) {
+        await tx.lab.update({
+          where: { id: attachedLab.id },
+          data: { status: "PUBLISHED" },
+        });
+        labAutoPublished = true;
+      }
+
+      return {
+        ok: true,
+        concept: published,
         gates,
-      });
-    }
-
-    // Audit the override if used — the SUPER_ADMIN just bypassed the AI gate.
-    if (canForce && reviewLog?.verdict !== "READY") {
-      await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH_FORCE", {
-        conceptId: concept.id,
+        forced: canForce && reviewLog?.verdict !== "READY",
         overriddenVerdict: reviewLog?.verdict ?? "NONE",
-      });
-    }
-
-    const published = await prisma.concept.update({
-      where: { id: concept.id },
-      data: {
-        status: "PUBLISHED",
-        publishedAt: new Date(),
-      },
+        labAutoPublished,
+      };
     });
 
-    // Auto-publish the attached lab (if any). Rationale:
-    //   - Learners hit `LAB_NOT_FOUND` on attempt submit if the lab stays
-    //     DRAFT (curriculum.controller.js:326 requires lab.status=PUBLISHED).
-    //   - There is no client UI that publishes labs separately — the
-    //     endpoint exists (POST /curriculum/admin/labs/:id/publish) but no
-    //     button calls it.
-    //   - Author mental model: publishing the concept publishes all of it.
-    //
-    // Lab shape gates (from publishLab): reference solution present +
-    // positive timebox. We check both; if either fails we skip the lab
-    // publish silently (concept can still ship — lab is optional per the
-    // schema and the missing gate can be fixed later by the author).
-    const attachedLab = await prisma.lab.findFirst({
-      where: { conceptId: concept.id, teamId: req.teamId },
-      select: {
-        id: true,
-        status: true,
-        referenceSolution: true,
-        timeboxMinutes: true,
-      },
-    });
-    if (
-      attachedLab &&
-      attachedLab.status !== "PUBLISHED" &&
-      attachedLab.referenceSolution &&
-      attachedLab.referenceSolution.trim().length > 0 &&
-      attachedLab.timeboxMinutes &&
-      attachedLab.timeboxMinutes > 0
-    ) {
-      await prisma.lab.update({
-        where: { id: attachedLab.id },
-        data: { status: "PUBLISHED" },
-      });
+    if (!txResult.ok) {
+      return error(res, txResult.message, txResult.status, txResult.code, txResult.details);
     }
 
+    if (txResult.forced) {
+      await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH_FORCE", {
+        conceptId: txResult.concept.id,
+        overriddenVerdict: txResult.overriddenVerdict,
+      });
+    }
     await auditIfSuperAdminOverride(req, "CONCEPT_PUBLISH", {
-      conceptId: concept.id,
-      labAutoPublished: attachedLab?.status !== "PUBLISHED" && !!attachedLab,
+      conceptId: txResult.concept.id,
+      labAutoPublished: txResult.labAutoPublished,
     });
 
-    return success(res, { concept: published, gates });
+    return success(res, { concept: txResult.concept, gates: txResult.gates });
   } catch (err) {
     console.error("publishConcept:", err);
     return error(res, "Failed to publish concept.", 500);
@@ -1258,6 +1345,7 @@ export async function publishLab(req, res) {
         starterCode: true,
         referenceSolution: true,
         timeboxMinutes: true,
+        expectedArtifacts: true,
       },
     });
     if (!lab) {
@@ -1297,6 +1385,30 @@ export async function publishLab(req, res) {
         label: "Timebox present",
         status: "PASS",
         message: `${lab.timeboxMinutes} min.`,
+      });
+    }
+
+    // Gate 3: expectedArtifacts declared. The CODE_REVIEW validator uses
+    // this array to score whether the submission actually solves the lab;
+    // an empty list makes the AI review meaningless (grades on style alone).
+    // `reviewLab` already advises this — the publish gate enforces it.
+    const artifacts = Array.isArray(lab.expectedArtifacts)
+      ? lab.expectedArtifacts
+      : [];
+    if (artifacts.length === 0) {
+      gates.push({
+        id: "expected_artifacts_present",
+        label: "Expected artifacts declared",
+        status: "FAIL",
+        message:
+          "Lab.expectedArtifacts must list ≥ 1 item so the AI reviewer knows what to grade against.",
+      });
+    } else {
+      gates.push({
+        id: "expected_artifacts_present",
+        label: "Expected artifacts declared",
+        status: "PASS",
+        message: `${artifacts.length} artifact(s).`,
       });
     }
 
