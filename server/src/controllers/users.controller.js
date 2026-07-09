@@ -8,11 +8,17 @@ import { success, error } from "../utils/response.js";
 export async function getUsers(req, res) {
   try {
     const where = {};
-    const teamId = req.user.currentTeamId;
+    const isSuperAdmin = req.user.globalRole === "SUPER_ADMIN";
 
-    if (teamId) {
-      where.currentTeamId = teamId;
-    } else if (req.user.globalRole !== "SUPER_ADMIN") {
+    if (isSuperAdmin) {
+      // AllUsersPage — SA sees every user across every team, unfiltered.
+      // The pre-existing code inadvertently narrowed SA to their own team
+      // whenever they had a currentTeamId, breaking the platform-wide list.
+    } else if (req.teamId) {
+      // `req.teamId` (from optionalTeamContext) is null when the caller's
+      // team isn't ACTIVE — treat that as no team access.
+      where.currentTeamId = req.teamId;
+    } else {
       return success(res, { users: [], count: 0 });
     }
 
@@ -116,8 +122,11 @@ export async function getUserProfile(req, res) {
       return error(res, "User not found.", 404);
     }
 
+    // `req.teamId` is null when caller's team isn't ACTIVE — treat as "no
+    // shared team" so a member of a suspended team sees only the target's
+    // public profile fragment (name + avatar), not the full record.
     const isSameTeam =
-      req.user.currentTeamId && user.currentTeamId === req.user.currentTeamId;
+      req.teamId && user.currentTeamId === req.teamId;
     const isSuperAdmin = req.user.globalRole === "SUPER_ADMIN";
     const isSelf = user.id === req.user.id;
 
@@ -129,8 +138,7 @@ export async function getUserProfile(req, res) {
 
     const solutionWhere = { userId: id };
     if (!isSuperAdmin) {
-      const teamId = req.user.currentTeamId;
-      if (teamId) solutionWhere.teamId = teamId;
+      if (req.teamId) solutionWhere.teamId = req.teamId;
     }
 
     const recentSolutions = await prisma.solution.findMany({
@@ -276,9 +284,12 @@ export async function updateUserRole(req, res) {
       return error(res, "User not found.", 404);
     }
 
+    // `req.teamId` gates on ACTIVE status — a TEAM_ADMIN of a SUSPENDED
+    // team can't change roles even if the target's currentTeamId still
+    // matches their JWT-stamped currentTeamId.
     if (
       req.user.globalRole !== "SUPER_ADMIN" &&
-      user.currentTeamId !== req.user.currentTeamId
+      user.currentTeamId !== req.teamId
     ) {
       return error(res, "User is not in your team.", 403);
     }

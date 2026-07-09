@@ -3,6 +3,7 @@
 // ============================================================================
 import { Router } from 'express'
 import { authenticate } from '../middleware/auth.middleware.js'
+import { optionalTeamContext } from '../middleware/team.middleware.js'
 import { requireAnyAdmin } from '../middleware/superAdmin.middleware.js'
 import {
   getUsers,
@@ -18,7 +19,14 @@ import {
 
 const router = Router()
 
-router.use(authenticate)
+// `optionalTeamContext` (not `requireTeamContext`) because SUPER_ADMIN calls
+// `getUsers` from AllUsersPage without a team override — the SA sees every
+// user across every team. For regular members, optionalTeamContext sets
+// `req.teamId = null` if their team isn't ACTIVE, which the controllers
+// treat as "no team access" (empty list / restricted profile). This closes
+// the pre-existing team-status bypass where a user of a SUSPENDED team
+// could still list team members using the raw JWT currentTeamId.
+router.use(authenticate, optionalTeamContext)
 
 // ── MCP token self-management (Phase MCP-4) ─────────────────
 // Each user manages their own tokens — no admin override. Mounted BEFORE

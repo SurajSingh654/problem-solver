@@ -51,7 +51,12 @@ export async function createMcpToken(req, res) {
     return error(res, "MCP server is disabled.", 503);
   }
   const userId = req.user.id;
-  const teamId = req.teamId ?? req.user.currentTeamId ?? null;
+  // `req.teamId` is set by `optionalTeamContext` on the users router — it's
+  // the caller's currentTeamId iff that team is ACTIVE, else null. Stamping
+  // an MCP token under a paused team would let the token continue to
+  // impersonate a paused-team user; treating status-null as "no team" is
+  // the safer default.
+  const teamId = req.teamId ?? null;
 
   // Validate input
   const parsed = createSchema.safeParse(req.body ?? {});
