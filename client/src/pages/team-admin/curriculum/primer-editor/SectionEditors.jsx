@@ -13,7 +13,7 @@
 // body / codeReference), swap to MarkdownEditor per-type without touching the
 // registry.
 // ============================================================================
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { MarkdownEditor } from '@components/curriculum'
 import { ExcalidrawEditor } from '@components/ui/ExcalidrawEditor'
@@ -316,19 +316,12 @@ export function CodeReferenceEditor({ section, onChange }) {
 }
 
 // ── diagram ──────────────────────────────────────────────────────────
-// Three input modes, in order of preference:
-//   1. Inline Excalidraw scene — travels with the concept, no CDN dep
-//   2. Hosted image URL — for existing diagrams / other tools
-//   3. Markdown fallback — ASCII art or a text description
-// Author picks the mode; reader render precedence matches (excalidraw wins).
+// Three optional input slots — Excalidraw scene, hosted image URL, and
+// markdown/ASCII fallback. Author fills at least one; reader picks by
+// precedence: excalidraw > URL > markdown. Showing all three at once
+// avoids the "switching modes drops content" data-loss bug the earlier
+// mode-toggle version had.
 export function DiagramEditor({ section, onChange }) {
-    const initialMode = section?.excalidraw
-        ? 'excalidraw'
-        : section?.diagramUrl
-          ? 'url'
-          : 'markdown'
-    const [mode, setMode] = useState(initialMode)
-
     // Parse the persisted Excalidraw JSON on first mount so the editor
     // opens to the existing scene. useMemo because ExcalidrawEditor's
     // `initialData` is only consumed on its own mount.
@@ -341,94 +334,78 @@ export function DiagramEditor({ section, onChange }) {
         }
     }, [section?.excalidraw])
 
-    const setModeAndClear = (nextMode) => {
-        // Null out the fields the new mode doesn't own so a saved section
-        // never carries stale content from a previous mode.
-        const next = { ...section }
-        if (nextMode !== 'excalidraw') next.excalidraw = undefined
-        if (nextMode !== 'url') next.diagramUrl = undefined
-        if (nextMode !== 'markdown') next.markdown = undefined
-        onChange(next)
-        setMode(nextMode)
-    }
+    const hasAnyContent =
+        Boolean(section?.excalidraw) ||
+        Boolean(section?.diagramUrl && section.diagramUrl.length > 0) ||
+        Boolean(section?.markdown && section.markdown.length > 0)
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
+            <div className="rounded-lg border border-border-default bg-surface-1 px-3 py-2">
+                <p className="text-[11px] text-text-tertiary leading-relaxed">
+                    Fill any one of the slots below. Precedence when
+                    rendering: <strong>Excalidraw</strong> → <strong>URL</strong>{' '}
+                    → <strong>Markdown</strong>. If nothing is filled the
+                    server will reject Save.
+                </p>
+            </div>
+
             <Field
-                label="Source"
-                hint="Inline Excalidraw is preferred — it travels with the concept and doesn't rely on an external CDN. Use URL for existing diagrams or markdown for ASCII fallbacks."
+                label="Excalidraw scene (preferred)"
+                hint="Draw inline. Auto-saves to the section on any edit. Scene JSON travels with the concept — no external CDN dependency."
             >
-                <div className="flex flex-wrap gap-1.5">
-                    {[
-                        { id: 'excalidraw', label: 'Excalidraw (inline)' },
-                        { id: 'url', label: 'Image URL' },
-                        { id: 'markdown', label: 'Markdown / ASCII' },
-                    ].map((opt) => {
-                        const on = mode === opt.id
-                        return (
-                            <button
-                                key={opt.id}
-                                type="button"
-                                onClick={() => setModeAndClear(opt.id)}
-                                className={`inline-flex items-center rounded-full border font-semibold leading-none whitespace-nowrap text-[11px] px-2.5 py-1 transition-colors ${
-                                    on
-                                        ? 'bg-brand-soft text-brand-fg-soft border-brand-line'
-                                        : 'bg-surface-1 text-text-tertiary border-border-default hover:text-text-secondary'
-                                }`}
-                            >
-                                {opt.label}
-                            </button>
-                        )
-                    })}
+                <div className="h-[420px] w-full rounded-lg overflow-hidden border border-border-default bg-surface-1">
+                    <ExcalidrawEditor
+                        initialData={excalidrawInitial}
+                        onChange={(json) =>
+                            onChange({ ...section, excalidraw: json })
+                        }
+                    />
                 </div>
+                {section?.excalidraw && (
+                    <div className="flex items-center justify-between mt-1.5">
+                        <span className="text-[10px] font-mono text-text-tertiary">
+                            {section.excalidraw.length.toLocaleString()} chars in scene JSON
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                onChange({ ...section, excalidraw: undefined })
+                            }
+                            className="text-[10px] font-semibold text-text-tertiary hover:text-danger-fg"
+                        >
+                            Clear scene
+                        </button>
+                    </div>
+                )}
             </Field>
 
-            {mode === 'excalidraw' && (
-                <Field
-                    label="Excalidraw scene"
-                    hint="Draw or edit inline. The scene JSON is persisted with the section (capped at 200KB)."
-                >
-                    <div className="h-[420px] w-full rounded-lg overflow-hidden border border-border-default bg-surface-1">
-                        <ExcalidrawEditor
-                            initialData={excalidrawInitial}
-                            onChange={(json) =>
-                                onChange({ ...section, excalidraw: json })
-                            }
-                        />
-                    </div>
-                </Field>
-            )}
+            <Field
+                label="Image URL"
+                hint="http(s) only. Non-http URLs are stripped by the sanitizer. Falls back to this when no Excalidraw scene is present."
+            >
+                <TextInput
+                    value={section.diagramUrl}
+                    onChange={(v) =>
+                        onChange({ ...section, diagramUrl: v || undefined })
+                    }
+                    placeholder="https://…"
+                    maxLength={2000}
+                />
+            </Field>
 
-            {mode === 'url' && (
-                <Field
-                    label="Image URL"
-                    hint="http(s) only. Non-http URLs are stripped by the sanitizer."
-                >
-                    <TextInput
-                        value={section.diagramUrl}
-                        onChange={(v) =>
-                            onChange({ ...section, diagramUrl: v || undefined })
-                        }
-                        placeholder="https://…"
-                        maxLength={2000}
-                    />
-                </Field>
-            )}
-
-            {mode === 'markdown' && (
-                <Field
-                    label="Markdown / ASCII fallback"
-                    hint="ASCII art or a text description of the diagram."
-                >
-                    <TextArea
-                        value={section.markdown}
-                        onChange={(v) =>
-                            onChange({ ...section, markdown: v || undefined })
-                        }
-                        rows={6}
-                    />
-                </Field>
-            )}
+            <Field
+                label="Markdown / ASCII fallback"
+                hint="ASCII art or a text description. Rendered when neither Excalidraw nor URL is set."
+            >
+                <TextArea
+                    value={section.markdown}
+                    onChange={(v) =>
+                        onChange({ ...section, markdown: v || undefined })
+                    }
+                    rows={5}
+                />
+            </Field>
 
             <Field label="Caption (optional)">
                 <TextInput
@@ -439,6 +416,16 @@ export function DiagramEditor({ section, onChange }) {
                     maxLength={240}
                 />
             </Field>
+
+            {!hasAnyContent && (
+                <div className="rounded-lg border border-warning-line bg-warning-soft px-3 py-2">
+                    <p className="text-[11px] text-warning-fg leading-relaxed">
+                        This diagram section has no content yet. Fill one of
+                        Excalidraw / URL / Markdown above before saving — the
+                        server rejects an empty diagram.
+                    </p>
+                </div>
+            )}
         </div>
     )
 }
