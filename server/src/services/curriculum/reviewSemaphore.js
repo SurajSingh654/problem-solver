@@ -24,6 +24,15 @@
 // ============================================================================
 
 const DEFAULT_CAP = 3;
+const DEFAULT_MAX_QUEUE_DEPTH = 10;
+
+// Marker error thrown when a team's queue is full. Callers should catch it,
+// flip the LabAttempt to ERROR, and surface a "retry later" message —
+// NOT translate it into a HTTP 5xx or leave the attempt in PENDING.
+export const REVIEW_QUEUE_FULL = Symbol.for("curriculum:review_queue_full");
+export function isReviewQueueFullError(err) {
+    return err?.reason === REVIEW_QUEUE_FULL;
+}
 
 // teamId -> { inFlight: number, queue: Array<() => Promise<void>> }
 const state = new Map();
@@ -33,6 +42,14 @@ function getCap() {
     if (!raw) return DEFAULT_CAP;
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 1) return DEFAULT_CAP;
+    return Math.floor(n);
+}
+
+function getMaxQueueDepth() {
+    const raw = process.env.CURRICULUM_REVIEW_QUEUE_MAX;
+    if (!raw) return DEFAULT_MAX_QUEUE_DEPTH;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 1) return DEFAULT_MAX_QUEUE_DEPTH;
     return Math.floor(n);
 }
 
@@ -58,6 +75,7 @@ export function dispatchReview(teamId, task) {
     return new Promise((resolve, reject) => {
         const slot = getSlot(teamId);
         const cap = getCap();
+        const maxDepth = getMaxQueueDepth();
 
         const run = async () => {
             slot.inFlight += 1;
@@ -81,9 +99,24 @@ export function dispatchReview(teamId, task) {
 
         if (slot.inFlight < cap) {
             run();
-        } else {
-            slot.queue.push(run);
+            return;
         }
+
+        // Bounded queue: sustained abuse (500 submits × 100 KB code strings)
+        // used to pin ~50 MB per team burst because each queued closure kept
+        // its `task` alive. Reject once the queue is full so the caller can
+        // fail-fast the LabAttempt to ERROR and the learner sees a real
+        // recovery path instead of a forever-spinner.
+        if (slot.queue.length >= maxDepth) {
+            const err = new Error(
+                `Curriculum review queue is full for team ${teamId} (cap=${cap}, maxDepth=${maxDepth}). Try again in a minute.`,
+            );
+            err.reason = REVIEW_QUEUE_FULL;
+            reject(err);
+            return;
+        }
+
+        slot.queue.push(run);
     });
 }
 

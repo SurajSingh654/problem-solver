@@ -354,6 +354,32 @@ export async function getConceptDetail(req, res) {
 //   defense-in-depth so a cross-team probe with a valid attemptId still 404s.
 // ============================================================================
 
+/**
+ * Derive a primer excerpt for the CODE_REVIEW prompt. Prefers the legacy
+ * flat `primerMarkdown` when present; otherwise stitches `mentalModel` +
+ * `body` sections from the Phase-B `primerSections` array. Returns an
+ * empty string when neither source has content (the AI prompt substitutes
+ * "(empty)" and the review still runs, just with less context).
+ */
+function derivePrimerExcerpt(concept) {
+  const flat = concept?.primerMarkdown ?? "";
+  if (flat.trim().length > 0) return flat;
+  const sections = Array.isArray(concept?.primerSections)
+    ? concept.primerSections
+    : [];
+  const parts = [];
+  for (const s of sections) {
+    if (
+      (s?.type === "mentalModel" || s?.type === "body") &&
+      typeof s.markdown === "string" &&
+      s.markdown.trim().length > 0
+    ) {
+      parts.push(s.markdown);
+    }
+  }
+  return parts.join("\n\n");
+}
+
 // Zod cap on submission — per Security m2 (100 KB limit).
 const submitAttemptSchema = z
   .object({
@@ -388,7 +414,17 @@ export async function submitAttempt(req, res) {
     },
     include: {
       concept: {
-        select: { id: true, slug: true, name: true, primerMarkdown: true },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          primerMarkdown: true,
+          // Phase-B primer-section-model fallback: derive an excerpt from
+          // `primerSections` when the legacy flat field is empty. Otherwise
+          // the CODE_REVIEW prompt sends `(empty)` and grades against a
+          // vacuum, dropping AI verdict quality.
+          primerSections: true,
+        },
       },
     },
   });
@@ -417,7 +453,7 @@ export async function submitAttempt(req, res) {
       },
       concept: {
         name: lab.concept.name,
-        primerExcerpt: (lab.concept.primerMarkdown ?? "").slice(0, 4000),
+        primerExcerpt: derivePrimerExcerpt(lab.concept).slice(0, 4000),
       },
       attempt: {
         code,
@@ -486,6 +522,12 @@ async function onReviewCompleted(attemptId, result) {
         reviewedAt: new Date(),
         codeReviewVerdict: result.body.codeReviewVerdict,
         codeReview: result.body,
+        // Persist the fallback flag from `contentReview.service.runValidator`.
+        // When true, the AI call failed and a deterministic conservative
+        // WEAK verdict was substituted. Client badges the verdict so the
+        // learner knows to retry rather than assuming this is the real
+        // AI's judgement (which would permanently block the reveal gate).
+        usedFallback: result.usedFallback ?? false,
       },
       include: {
         // Need conceptId + teamId to route the signal write to the right
@@ -919,6 +961,10 @@ export async function getAttempt(req, res) {
       codeReviewVerdict: true,
       codeReview: true,
       revealedReferenceAt: true,
+      // Lab Phase A — client-side "AI unavailable" badge on the verdict.
+      // Distinguishes a real WEAK from a fallback WEAK so the learner knows
+      // to retry rather than treat it as authoritative.
+      usedFallback: true,
     },
   });
 

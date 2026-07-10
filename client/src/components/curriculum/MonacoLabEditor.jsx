@@ -80,6 +80,11 @@ export default function MonacoLabEditor({
             lineNumbers: "on",
             scrollBeyondLastLine: false,
             readOnly: disabled,
+            // Monaco captures Tab as indent by default, which traps
+            // keyboard-only users in the editor. `tabFocusMode: true`
+            // makes Tab move focus out of the editor; Ctrl/Cmd+M toggles
+            // back to indent mode when they actually want to indent.
+            tabFocusMode: true,
           }}
         />
       </Suspense>

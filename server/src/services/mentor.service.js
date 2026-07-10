@@ -404,7 +404,14 @@ export async function updateMastery(userId, conceptId, signal) {
       });
       return row;
     },
-    { maxWait: 15000, timeout: 15000 },
+    // Timeouts sized for the 8-parallel-writer race test (a stress case,
+    // not real production load — no real user gets 8 concurrent signal
+    // writes on the same (user, concept) row). Under the corporate proxy
+    // path, the advisory-lock queue on 8 writers has crossed 15s more
+    // than once. Bump to 30s to absorb realistic queue depth without
+    // masking a genuine slow query (which would still be visible in
+    // Railway logs).
+    { maxWait: 30000, timeout: 30000 },
   );
 }
 

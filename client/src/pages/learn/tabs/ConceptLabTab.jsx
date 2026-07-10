@@ -35,7 +35,7 @@
 // NOT include it, so `useAttempt` is the only source of truth here.
 // ============================================================================
 import { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { Button } from '@components/ui/Button'
@@ -81,9 +81,17 @@ function computeRevealGate(attempt) {
             message: `Iterate on your solution — current verdict is ${verdict ?? 'unknown'}.`,
         }
     }
-    // Verdict is good. nextStep may still block server-side (client can't
-    // see it in the concept detail payload); we let the user click and
-    // rely on the server 403 + toast to explain.
+    // Client mirrors the second server-side gate on `nextStep` so the
+    // learner doesn't hit the enabled-looking Reveal button only to get a
+    // 403 REVEAL_BLOCKED_NEXT_STEP. The polled `getAttempt` returns the
+    // full `codeReview` JSON with `nextStep` since Phase A.
+    const nextStep = attempt.codeReview?.nextStep
+    if (nextStep && nextStep !== 'READY_FOR_REFERENCE') {
+        return {
+            canReveal: false,
+            message: `Reviewer's next step is ${nextStep} — follow that before revealing.`,
+        }
+    }
     return { canReveal: true, message: null }
 }
 
@@ -92,6 +100,8 @@ function computeRevealGate(attempt) {
 // side with the reference. AnimatePresence lives in the caller so exit
 // animations run.
 function ReferenceDiffModal({ language, userCode, referenceCode, onClose }) {
+    const prefersReducedMotion = useReducedMotion()
+
     // ESC-to-close + return-focus-on-close. Captures the element that had
     // focus before the modal opened and restores it on unmount so the
     // keyboard user lands back on the "Reveal reference" trigger button
@@ -114,6 +124,20 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose }) {
         }
     }, [onClose])
 
+    // Reduced-motion strips the scale+translate variants and shortens the
+    // fade to zero. framer-motion doesn't respect the media query by
+    // default. Vestibular-sensitive users get a snap-in modal.
+    const innerInitial = prefersReducedMotion
+        ? { opacity: 0 }
+        : { opacity: 0, scale: 0.96, y: 8 }
+    const innerAnimate = prefersReducedMotion
+        ? { opacity: 1 }
+        : { opacity: 1, scale: 1, y: 0 }
+    const innerExit = prefersReducedMotion
+        ? { opacity: 0 }
+        : { opacity: 0, scale: 0.96, y: 8 }
+    const innerTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.15 }
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -124,10 +148,10 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose }) {
             role="presentation"
         >
             <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                transition={{ duration: 0.15 }}
+                initial={innerInitial}
+                animate={innerAnimate}
+                exit={innerExit}
+                transition={innerTransition}
                 onClick={(e) => e.stopPropagation()}
                 role="dialog"
                 aria-modal="true"
@@ -235,10 +259,15 @@ export default function ConceptLabTab({ concept }) {
                 code,
                 conceptSlug,
             })
+            // Clear the draft unconditionally on a 2xx response. Previous
+            // logic was gated on `attemptId` presence — a partial or
+            // malformed 2xx (network truncation, server hiccup) would leave
+            // the draft in localStorage while the submit had succeeded,
+            // producing duplicate submissions on next edit.
+            clearDraft(labId)
             const nextId = result?.attemptId
             if (nextId) {
                 setActiveAttemptId(nextId)
-                clearDraft(labId)
             }
         } catch {
             // useToastingMutation surfaces the error toast.
@@ -415,7 +444,10 @@ export default function ConceptLabTab({ concept }) {
                         <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
                             Code review
                         </h3>
-                        <CodeReviewResult review={polledAttempt.codeReview} />
+                        <CodeReviewResult
+                            review={polledAttempt.codeReview}
+                            usedFallback={polledAttempt.usedFallback === true}
+                        />
                     </section>
                 )}
 
@@ -427,6 +459,7 @@ export default function ConceptLabTab({ concept }) {
                         size="md"
                         disabled={!gate.canReveal || reveal.isPending}
                         onClick={handleReveal}
+                        aria-describedby={!gate.canReveal ? 'reveal-gate-msg' : undefined}
                     >
                         {reveal.isPending
                             ? 'Unlocking…'
@@ -436,6 +469,7 @@ export default function ConceptLabTab({ concept }) {
                     </Button>
                     {!gate.canReveal && (
                         <span
+                            id="reveal-gate-msg"
                             className={cn(
                                 'text-xs leading-relaxed text-text-secondary',
                                 'flex items-center gap-1.5',

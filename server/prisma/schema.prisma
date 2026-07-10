@@ -2786,6 +2786,14 @@ model LabAttempt {
   codeReview          Json?
   revealedReferenceAt DateTime?
 
+  /// Lab Phase A — set to true when `contentReview.service.runValidator`
+  /// hit its deterministic fallback path (AI outage, malformed AI output,
+  /// or Zod validation failure). The fallback always emits a conservative
+  /// WEAK verdict; the flag lets the client badge it as such so the
+  /// learner can distinguish "AI said WEAK" from "AI unavailable, structural
+  /// check said WEAK" and retry accordingly.
+  usedFallback        Boolean                @default(false)
+
   @@unique([userId, labId, attemptNumber])
   @@index([userId, labId, submittedAt])
   @@map("lab_attempts")

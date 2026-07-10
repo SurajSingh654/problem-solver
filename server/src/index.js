@@ -364,6 +364,33 @@ async function start() {
     await prisma.$connect();
     console.log("✅ Database connected\n");
 
+    // Resurrect orphaned LabAttempts left in PENDING by the previous process
+    // restart. `reviewSemaphore.js` explicitly warns that a restart drops
+    // queued work; without this scan the LabAttempt row stays PENDING
+    // forever and the learner sees a permanent spinner with no recovery
+    // path. Cutoff = 5 min: anything older than that is definitely orphaned
+    // (real AI reviews finish well inside that window even under queue
+    // depth), and setting it to a small value means legit in-flight
+    // reviews that started less than 5 min before restart aren't clobbered.
+    try {
+      const cutoff = new Date(Date.now() - 5 * 60 * 1000);
+      const flipped = await prisma.labAttempt.updateMany({
+        where: { reviewStatus: "PENDING", submittedAt: { lt: cutoff } },
+        data: { reviewStatus: "ERROR", reviewedAt: new Date() },
+      });
+      if (flipped.count > 0) {
+        console.log(
+          `⚠️  Flipped ${flipped.count} orphaned PENDING lab attempt(s) → ERROR`,
+        );
+      }
+    } catch (resurrErr) {
+      // Non-fatal — better to boot without the scan than to fail startup.
+      console.warn(
+        "[startup] LabAttempt resurrection scan failed:",
+        resurrErr?.message ?? resurrErr,
+      );
+    }
+
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`   Environment: ${NODE_ENV}`);
