@@ -36,7 +36,7 @@
 // ============================================================================
 import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { X, ArrowRight, RotateCcw } from 'lucide-react'
+import { X, ArrowRight, RotateCcw, Columns, Rows } from 'lucide-react'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { Button } from '@components/ui/Button'
 import { EmptyState } from '@components/ui/EmptyState'
@@ -102,6 +102,12 @@ function computeRevealGate(attempt) {
 function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onCloseAndEdit }) {
     const prefersReducedMotion = useReducedMotion()
 
+    // Diff layout override — 'auto' uses the responsive matchMedia rule
+    // inside ReferenceDiff; 'sideBySide' / 'inline' lock it. Local to the
+    // modal so it resets on next open — this is a preference for THIS
+    // reveal viewing, not a durable user setting.
+    const [layout, setLayout] = useState('auto')
+
     // ESC-to-close + return-focus-on-close. Captures the element that had
     // focus before the modal opened and restores it on unmount so the
     // keyboard user lands back on the "Reveal reference" trigger button
@@ -158,8 +164,8 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onClos
                 aria-label="Reference solution diff"
                 className="bg-surface-1 border border-border-default rounded-2xl w-full max-w-6xl shadow-2xl max-h-[90vh] flex flex-col"
             >
-                <div className="p-5 border-b border-border-subtle flex items-center justify-between">
-                    <div>
+                <div className="p-5 border-b border-border-subtle flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                         <h2 className="text-base font-bold text-text-primary">
                             Reference solution
                         </h2>
@@ -169,14 +175,52 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onClos
                             be correct — read for insight, not conformance.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Close"
-                        className="p-1 rounded hover:bg-surface-2 text-text-tertiary hover:text-text-primary transition-colors"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Layout toggle — Auto (responsive) is the default;
+                            users on a wide viewport who prefer inline (or on
+                            narrow who want to force side-by-side) can lock it.
+                            State is modal-scoped so it resets on next open. */}
+                        <div
+                            role="radiogroup"
+                            aria-label="Diff layout"
+                            className="hidden sm:inline-flex items-center rounded-md border border-border-default bg-surface-2 p-0.5 text-[11px]"
+                        >
+                            {[
+                                { key: 'auto', label: 'Auto' },
+                                { key: 'sideBySide', label: 'Side-by-side', Icon: Columns },
+                                { key: 'inline', label: 'Inline', Icon: Rows },
+                            ].map((opt) => {
+                                const active = layout === opt.key
+                                const Icon = opt.Icon
+                                return (
+                                    <button
+                                        key={opt.key}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={active}
+                                        onClick={() => setLayout(opt.key)}
+                                        className={cn(
+                                            'inline-flex items-center gap-1 rounded px-2 py-1 font-medium transition-colors',
+                                            active
+                                                ? 'bg-surface-1 text-text-primary shadow-sm'
+                                                : 'text-text-tertiary hover:text-text-primary',
+                                        )}
+                                    >
+                                        {Icon && <Icon className="w-3 h-3" aria-hidden="true" />}
+                                        {opt.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            aria-label="Close"
+                            className="p-1 rounded hover:bg-surface-2 text-text-tertiary hover:text-text-primary transition-colors"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
                 <div className="flex-1 overflow-auto p-4">
                     {/* Responsive height: on very short viewports (<600px, e.g.
@@ -188,6 +232,7 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onClos
                             language={language}
                             userCode={userCode}
                             referenceCode={referenceCode}
+                            layout={layout}
                         />
                     </div>
                 </div>

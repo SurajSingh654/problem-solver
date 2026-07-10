@@ -28,14 +28,19 @@ export default function ReferenceDiff({
   language = "JAVA",
   userCode,
   referenceCode,
+  // Optional external override for the layout. Modal-level toggle chip
+  // passes 'sideBySide' / 'inline' / 'auto'; 'auto' (default) uses the
+  // window-width matchMedia rule. Users on a wide viewport who prefer
+  // stacked / inline can lock it in.
+  layout = "auto",
 }) {
   const theme = useUIStore((s) => s.theme);
 
-  // Responsive side-by-side toggle. Matches Monaco's own breakpoint — a
-  // narrower viewport shows inline diff so lines aren't truncated. We use
+  // Responsive default matches Monaco's own breakpoint — a narrower
+  // viewport shows inline diff so lines aren't truncated. We use
   // window.matchMedia rather than a resize listener to avoid a re-render
   // on every pixel of a drag.
-  const [sideBySide, setSideBySide] = useState(() => {
+  const [autoSideBySide, setAutoSideBySide] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.matchMedia(`(min-width: ${SIDE_BY_SIDE_MIN_WIDTH}px)`).matches;
   });
@@ -43,10 +48,13 @@ export default function ReferenceDiff({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia(`(min-width: ${SIDE_BY_SIDE_MIN_WIDTH}px)`);
-    const onChange = (e) => setSideBySide(e.matches);
+    const onChange = (e) => setAutoSideBySide(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+
+  const sideBySide =
+    layout === "sideBySide" ? true : layout === "inline" ? false : autoSideBySide;
 
   return (
     <div className="h-full rounded-md border border-border-default overflow-hidden">
