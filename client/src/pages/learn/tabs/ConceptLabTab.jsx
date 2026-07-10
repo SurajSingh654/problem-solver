@@ -36,7 +36,7 @@
 // ============================================================================
 import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { X } from 'lucide-react'
+import { X, ArrowRight, RotateCcw } from 'lucide-react'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { Button } from '@components/ui/Button'
 import { EmptyState } from '@components/ui/EmptyState'
@@ -99,7 +99,7 @@ function computeRevealGate(attempt) {
 // their SUBMITTED code (attempt.code, NOT the live editor state) side-by-
 // side with the reference. AnimatePresence lives in the caller so exit
 // animations run.
-function ReferenceDiffModal({ language, userCode, referenceCode, onClose }) {
+function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onCloseAndEdit }) {
     const prefersReducedMotion = useReducedMotion()
 
     // ESC-to-close + return-focus-on-close. Captures the element that had
@@ -179,18 +179,87 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose }) {
                     </button>
                 </div>
                 <div className="flex-1 overflow-auto p-4">
-                    <ReferenceDiff
-                        language={language}
-                        userCode={userCode}
-                        referenceCode={referenceCode}
-                    />
+                    {/* Responsive height: on very short viewports (<600px, e.g.
+                        mobile landscape) the fixed 520px diff would blow past
+                        the viewport, hiding the modal footer. Clamp to
+                        min(520px, 60vh) so the footer stays reachable. */}
+                    <div className="h-[min(520px,60vh)]">
+                        <ReferenceDiff
+                            language={language}
+                            userCode={userCode}
+                            referenceCode={referenceCode}
+                        />
+                    </div>
+                </div>
+                <div className="p-4 border-t border-border-subtle flex items-center justify-end gap-2 flex-wrap">
+                    <Button variant="secondary" size="sm" onClick={onClose}>
+                        Close
+                    </Button>
+                    {onCloseAndEdit && (
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={onCloseAndEdit}
+                        >
+                            Close and edit my solution
+                        </Button>
+                    )}
                 </div>
             </motion.div>
         </motion.div>
     )
 }
 
-export default function ConceptLabTab({ concept }) {
+// Animated phase strip for the PENDING state. The server exposes only
+// two poll states (PENDING / REVIEWING / COMPLETED / ERROR), but the wait
+// feels long without progress. Cycles three visual phases every ~1.6s so
+// the learner sees SOMETHING happening. Purely cosmetic — the real state
+// is the polled reviewStatus.
+function ReviewProgressPhases({ status }) {
+    const prefersReducedMotion = useReducedMotion()
+    const [phase, setPhase] = useState(0)
+    useEffect(() => {
+        if (prefersReducedMotion) return
+        const t = setInterval(() => setPhase((p) => (p + 1) % 3), 1600)
+        return () => clearInterval(t)
+    }, [prefersReducedMotion])
+
+    const phases = [
+        { label: 'Queued', hint: 'Your attempt is in the review queue.' },
+        { label: 'Reviewing', hint: 'The AI reviewer is reading your code.' },
+        { label: 'Finalizing', hint: 'Wrapping up the six-dimensional verdict.' },
+    ]
+
+    // If the server has flipped to REVIEWING, jump the animation past
+    // "Queued". Doesn't force a full stop — the visual still cycles so
+    // the learner sees motion.
+    const anchored = status === 'REVIEWING' ? Math.max(phase, 1) : phase
+    const current = phases[anchored]
+
+    return (
+        <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+                {phases.map((p, i) => (
+                    <div
+                        key={p.label}
+                        className={cn(
+                            'h-1.5 flex-1 rounded-full transition-colors',
+                            i <= anchored ? 'bg-brand-500' : 'bg-surface-3',
+                        )}
+                        aria-hidden="true"
+                    />
+                ))}
+            </div>
+            <p className="text-xs text-text-secondary" aria-live="polite">
+                <span className="font-semibold text-text-primary">{current.label}</span>
+                {' — '}
+                {current.hint}
+            </p>
+        </div>
+    )
+}
+
+export default function ConceptLabTab({ concept, onGoToCheckIn }) {
     const lab = concept.lab
     const labId = lab?.id
     const language = lab?.language ?? 'JAVA'
@@ -246,7 +315,16 @@ export default function ConceptLabTab({ concept }) {
     // otherwise (fresh page load, before the first getAttempt tick).
     const currentAttempt = polledAttempt ?? concept.latestAttempt ?? null
     const gate = computeRevealGate(currentAttempt)
-    const alreadyRevealed = Boolean(currentAttempt?.revealedReferenceAt)
+    // `useRevealReference` invalidates conceptDetail (refreshes
+    // concept.latestAttempt.revealedReferenceAt) but NOT the attempt
+    // polling query — so polledAttempt.revealedReferenceAt lags one
+    // reveal behind. Prefer whichever source has the stamp so the CTA
+    // and meta strip flip immediately after handleReveal resolves.
+    const revealedRefAt =
+        polledAttempt?.revealedReferenceAt ??
+        concept.latestAttempt?.revealedReferenceAt ??
+        null
+    const alreadyRevealed = Boolean(revealedRefAt)
 
     const canSubmit = useMemo(
         () => code.trim().length > 0 && !submit.isPending,
@@ -285,6 +363,32 @@ export default function ConceptLabTab({ concept }) {
         }
     }
 
+    // ERROR-state resubmit: repopulate the editor with the failed
+    // attempt's code so the learner doesn't lose their work when they
+    // "try again". Clears the pending activeAttemptId so the next submit
+    // creates a fresh attempt row.
+    function handleResubmitFromError() {
+        const failedCode = currentAttempt?.code ?? ''
+        if (failedCode) {
+            setCode(failedCode)
+        }
+        setActiveAttemptId(null)
+    }
+
+    // Close reveal modal AND scroll editor into view so the learner can
+    // immediately try again with the reference fresh in mind. Doesn't wipe
+    // the editor — their attempt.code is already there (or their post-
+    // reveal edits).
+    function handleCloseAndEdit() {
+        setReferenceOpen(false)
+        // Defer to next tick so the modal-exit animation starts before
+        // we scroll; framer-motion needs one paint to begin the transition.
+        requestAnimationFrame(() => {
+            const editor = document.querySelector('[data-lab-editor-anchor]')
+            editor?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+    }
+
     if (!lab) {
         return (
             <EmptyState
@@ -300,8 +404,25 @@ export default function ConceptLabTab({ concept }) {
     // header for the reasoning.
     const submittedUserCode = polledAttempt?.code ?? ''
 
+    const isCompleted = currentAttempt?.reviewStatus === 'COMPLETED'
+    const isPendingReview =
+        currentAttempt?.reviewStatus === 'PENDING' ||
+        currentAttempt?.reviewStatus === 'REVIEWING'
+    const isErrored = currentAttempt?.reviewStatus === 'ERROR'
+
     return (
         <div className="space-y-8">
+            {/* Mastery framing banner — anchors the lab in the 5-step
+                learn/teach loop. "Practice" (labs) is step 2 of 5;
+                learners frequently miss that submit+reveal isn't the
+                terminal step. Static, low-density, drops out on very
+                narrow viewports if it competes with content. */}
+            <div className="rounded-lg border border-brand-line bg-brand-soft px-4 py-2 flex items-center gap-2 text-xs text-brand-fg-soft">
+                <span className="font-bold uppercase tracking-widest">Step 2 of 5</span>
+                <span className="opacity-60">·</span>
+                <span>Practice — apply the primer under a timebox, then get an AI review.</span>
+            </div>
+
             {/* Header — title + meta chips ─────────────────────────── */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
@@ -353,7 +474,7 @@ export default function ConceptLabTab({ concept }) {
             )}
 
             {/* Monaco editor + submit ─────────────────────────────── */}
-            <section className="space-y-3">
+            <section className="space-y-3" data-lab-editor-anchor>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
                     Your solution
                 </h3>
@@ -383,73 +504,110 @@ export default function ConceptLabTab({ concept }) {
                 </div>
             </section>
 
-            {/* Current attempt summary ─────────────────────────────── */}
-            <section className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                    Latest attempt
-                </h3>
-                {currentAttempt ? (
+            {/* Attempt status / verdict — one section, three shapes:
+                – no attempt yet           → empty prompt
+                – PENDING / REVIEWING     → animated waiting card
+                – ERROR                   → error card with resubmit
+                – COMPLETED               → compact meta strip + full
+                                            <CodeReviewResult> below
+                Previously this was two stacked sections ("Latest attempt"
+                + "Code review") with duplicated meta. Collapsed so the
+                COMPLETED verdict is the visual centerpiece, not buried
+                under a redundant summary card. */}
+            {!currentAttempt && (
+                <section className="space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                        Review status
+                    </h3>
+                    <div className="border border-border-default bg-surface-1 rounded-xl p-4 text-sm text-text-tertiary italic">
+                        No attempts yet — write some code above and submit
+                        for review.
+                    </div>
+                </section>
+            )}
+
+            {isPendingReview && (
+                <section className="space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                        Review in progress
+                    </h3>
                     <div className="border border-border-default bg-surface-1 rounded-xl p-4 space-y-3">
                         <div className="flex items-center gap-3 flex-wrap">
                             <span className="text-sm font-mono text-text-secondary">
                                 Attempt #{currentAttempt.attemptNumber}
                             </span>
                             <VerdictBadge verdict={currentAttempt.reviewStatus} />
-                            {currentAttempt.codeReviewVerdict && (
-                                <VerdictBadge
-                                    verdict={currentAttempt.codeReviewVerdict}
-                                />
-                            )}
                             <span className="text-xs text-text-tertiary ml-auto">
-                                {new Date(currentAttempt.submittedAt).toLocaleString()}
+                                Submitted {new Date(currentAttempt.submittedAt).toLocaleTimeString()}
                             </span>
                         </div>
-                        {currentAttempt.reviewStatus === 'PENDING' && (
-                            <p className="text-xs text-text-tertiary">
-                                Waiting for AI review — this normally takes a
-                                few seconds. You can navigate away; the review
-                                will finish in the background.
-                            </p>
-                        )}
-                        {currentAttempt.reviewStatus === 'ERROR' && (
-                            <p className="text-xs text-danger-fg">
-                                Review failed to complete. Try resubmitting.
-                            </p>
-                        )}
-                        {currentAttempt.reviewedAt && (
-                            <p className="text-[11px] text-text-tertiary">
-                                Reviewed on{' '}
-                                {new Date(currentAttempt.reviewedAt).toLocaleString()}
-                            </p>
-                        )}
-                        {currentAttempt.revealedReferenceAt && (
-                            <p className="text-[11px] text-text-tertiary">
-                                Reference revealed on{' '}
-                                {new Date(currentAttempt.revealedReferenceAt).toLocaleDateString()}
-                            </p>
-                        )}
+                        <ReviewProgressPhases status={currentAttempt.reviewStatus} />
+                        <p className="text-[11px] text-text-tertiary">
+                            You can navigate away — the review finishes in the background
+                            and will be here when you come back.
+                        </p>
                     </div>
-                ) : (
-                    <div className="border border-border-default bg-surface-1 rounded-xl p-4 text-sm text-text-tertiary italic">
-                        No attempts yet — write some code above and submit
-                        for review.
-                    </div>
-                )}
-            </section>
+                </section>
+            )}
 
-            {/* Structured code-review result ──────────────────────── */}
-            {polledAttempt?.reviewStatus === 'COMPLETED' &&
-                polledAttempt.codeReview && (
-                    <section className="space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
-                            Code review
-                        </h3>
-                        <CodeReviewResult
-                            review={polledAttempt.codeReview}
-                            usedFallback={polledAttempt.usedFallback === true}
-                        />
-                    </section>
-                )}
+            {isErrored && (
+                <section className="space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-text-tertiary">
+                        Review failed
+                    </h3>
+                    <div className="border border-danger-line bg-danger-soft rounded-xl p-4 space-y-3">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-sm font-mono text-danger-fg">
+                                Attempt #{currentAttempt.attemptNumber}
+                            </span>
+                            <VerdictBadge verdict="ERROR" />
+                            <span className="text-xs text-danger-fg opacity-70 ml-auto">
+                                {new Date(currentAttempt.submittedAt).toLocaleTimeString()}
+                            </span>
+                        </div>
+                        <p className="text-xs text-danger-fg leading-relaxed">
+                            The AI reviewer didn&apos;t return a verdict — usually a transient
+                            timeout. Your code is preserved. Restore it into the editor and
+                            resubmit to get a fresh review.
+                        </p>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleResubmitFromError}
+                        >
+                            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                            Restore code and try again
+                        </Button>
+                    </div>
+                </section>
+            )}
+
+            {/* COMPLETED — compact meta strip + full CodeReviewResult ── */}
+            {isCompleted && polledAttempt?.codeReview && (
+                <section className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-text-tertiary">
+                        <span className="font-mono">Attempt #{currentAttempt.attemptNumber}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                            Reviewed{' '}
+                            {new Date(currentAttempt.reviewedAt ?? currentAttempt.submittedAt).toLocaleString()}
+                        </span>
+                        {revealedRefAt && (
+                            <>
+                                <span aria-hidden="true">·</span>
+                                <span>
+                                    Reference revealed{' '}
+                                    {new Date(revealedRefAt).toLocaleDateString()}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                    <CodeReviewResult
+                        review={polledAttempt.codeReview}
+                        usedFallback={polledAttempt.usedFallback === true}
+                    />
+                </section>
+            )}
 
             {/* Reveal-reference button + gate messaging ───────────── */}
             <section className="border-t border-border-default pt-6 space-y-2">
@@ -486,6 +644,34 @@ export default function ConceptLabTab({ concept }) {
                 </p>
             </section>
 
+            {/* Ready-for-check-in CTA — surfaces the next mastery step once
+                the reference is unlocked. Reveal is the ceremony that says
+                "you've extracted the lab's lesson"; the check-in is where
+                it becomes a mastery signal. Without this hop learners
+                often think the tab is finished at reveal. */}
+            {alreadyRevealed && onGoToCheckIn && (
+                <section className="rounded-xl border border-success-line bg-success-soft p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-success-fg">
+                            Ready for the check-in
+                        </p>
+                        <p className="text-xs text-success-fg opacity-90 leading-relaxed mt-0.5">
+                            You&apos;ve seen the reference — the check-in is where this
+                            becomes a mastery signal. Three short questions, then this
+                            concept is done.
+                        </p>
+                    </div>
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={onGoToCheckIn}
+                    >
+                        Go to check-in
+                        <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                    </Button>
+                </section>
+            )}
+
             {/* Reference-diff modal ────────────────────────────────── */}
             <AnimatePresence>
                 {referenceOpen && referenceSolution != null && (
@@ -494,6 +680,7 @@ export default function ConceptLabTab({ concept }) {
                         userCode={submittedUserCode}
                         referenceCode={referenceSolution}
                         onClose={() => setReferenceOpen(false)}
+                        onCloseAndEdit={handleCloseAndEdit}
                     />
                 )}
             </AnimatePresence>

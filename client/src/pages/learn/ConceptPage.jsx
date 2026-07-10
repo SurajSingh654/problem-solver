@@ -287,7 +287,7 @@ export default function ConceptPage() {
                         onGoToLab={() => setActiveTab('lab')}
                     />
                 )}
-                {activeTab === 'lab'     && <ConceptLabTab     concept={concept} />}
+                {activeTab === 'lab'     && <ConceptLabTab     concept={concept} onGoToCheckIn={() => setActiveTab('checkin')} />}
                 {activeTab === 'checkin' && <ConceptCheckInTab concept={concept} onGoToLab={() => setActiveTab('lab')} />}
                 {activeTab === 'notes'   && <ConceptNotesTab   concept={concept} />}
                 {activeTab === 'teach'   && <ConceptTeachTab   concept={concept} onGoToLab={() => setActiveTab('lab')} onGoToCheckIn={() => setActiveTab('checkin')} />}

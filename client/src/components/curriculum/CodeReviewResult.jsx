@@ -82,16 +82,20 @@ function DimBadge({ label, verdict }) {
   return (
     <div
       className={cn(
-        "flex flex-col gap-1 rounded-md border px-3 py-2",
+        // min-h keeps 2-col mobile rows aligned even when a label wraps
+        // to two lines (e.g. "Concept application", "Idiomatic style").
+        // Without this the taller cell drags its whole row and the badges
+        // sit at inconsistent heights.
+        "flex flex-col gap-1 rounded-md border px-3 py-2 min-h-[64px]",
         "border-border-default bg-surface-1",
       )}
     >
-      <div className="text-xs font-medium text-text-secondary">{label}</div>
+      <div className="text-xs font-medium text-text-secondary leading-tight">{label}</div>
       <span
         className={cn(
           "inline-flex w-fit items-center gap-1 rounded-full border",
           "text-[10px] font-semibold uppercase leading-none",
-          "px-2 py-0.5",
+          "px-2 py-0.5 mt-auto",
           style.badge,
         )}
       >
