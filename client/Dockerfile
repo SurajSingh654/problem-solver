@@ -41,6 +41,13 @@ ARG VITE_FEATURE_CANONICAL_ALTERNATIVES=false
 ENV VITE_FEATURE_CANONICAL_ALTERNATIVES=$VITE_FEATURE_CANONICAL_ALTERNATIVES
 ARG VITE_FEATURE_CURRICULUM=false
 ENV VITE_FEATURE_CURRICULUM=$VITE_FEATURE_CURRICULUM
+# Sub-flag for Reveal Walkthrough (Phase R.1, 2026-07-11). Default OFF for
+# dark launch. Flip per-team via Railway env when the server-side
+# FEATURE_CURRICULUM_WALKTHROUGH is also true; the client only reads this
+# flag to decide whether to poll for walkthrough state — the actual
+# generation is gated server-side.
+ARG VITE_FEATURE_CURRICULUM_WALKTHROUGH=false
+ENV VITE_FEATURE_CURRICULUM_WALKTHROUGH=$VITE_FEATURE_CURRICULUM_WALKTHROUGH
 ARG VITE_MCP_URL
 ENV VITE_MCP_URL=$VITE_MCP_URL
 

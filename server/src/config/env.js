@@ -415,6 +415,19 @@ export const FEEDBACK_NOTIFICATION_EMAIL = process.env.FEEDBACK_NOTIFICATION_EMA
 // VITE_FEATURE_CURRICULUM (also declare ARG/ENV in client/Dockerfile).
 export const FEATURE_CURRICULUM = optional('FEATURE_CURRICULUM', 'false') === 'true'
 
+// Sub-flag for the AI-narrated Reveal Walkthrough (Phase R.1, 2026-07-11).
+// When OFF, revealReference behaves exactly as it did in Phase B (returns
+// referenceSolution + attempt only; no dispatch, no new endpoints). When
+// ON, the reveal fires the CODE_WALKTHROUGH validator through the per-team
+// semaphore. Default OFF for dark-launch — flip per team once a week of
+// staging telemetry looks healthy. Requires FEATURE_CURRICULUM=true (the
+// walkthrough is a curriculum feature); the dependency is enforced at
+// startup by assertCurriculumDependencies(). Client mirror:
+// VITE_FEATURE_CURRICULUM_WALKTHROUGH (also declare ARG/ENV in
+// client/Dockerfile).
+export const FEATURE_CURRICULUM_WALKTHROUGH =
+  optional('FEATURE_CURRICULUM_WALKTHROUGH', 'false') === 'true'
+
 /**
  * Startup dependency check for the Curriculum feature.
  *
@@ -434,6 +447,17 @@ export function assertCurriculumDependencies() {
     throw new Error(
       `FEATURE_CURRICULUM=true requires: ${missing.join(', ')}. ` +
         `Either enable those flags or set FEATURE_CURRICULUM=false.`,
+    )
+  }
+  // Walkthrough is a curriculum sub-feature; enabling it standalone is a
+  // config error — the reveal endpoint (which triggers it) lives under the
+  // curriculum router and would 404 without FEATURE_CURRICULUM.
+  if (
+    process.env.FEATURE_CURRICULUM_WALKTHROUGH === 'true' &&
+    process.env.FEATURE_CURRICULUM !== 'true'
+  ) {
+    throw new Error(
+      'FEATURE_CURRICULUM_WALKTHROUGH=true requires FEATURE_CURRICULUM=true.',
     )
   }
 }

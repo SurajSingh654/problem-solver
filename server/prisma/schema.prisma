@@ -2495,6 +2495,18 @@ enum LabAttemptReviewStatus {
   ERROR
 }
 
+/// Async pipeline state for the AI walkthrough that fires at reveal time.
+/// NOT_STARTED covers pre-reveal attempts (default); revealReference flips
+/// to PENDING atomically before dispatch. Distinct from
+/// LabAttemptReviewStatus so terminal state on the code-review side doesn't
+/// stop the client from polling for the walkthrough.
+enum WalkthroughStatus {
+  NOT_STARTED
+  PENDING
+  COMPLETED
+  ERROR
+}
+
 model Topic {
   id          String        @id @default(cuid())
   slug        String
@@ -2793,6 +2805,34 @@ model LabAttempt {
   /// learner can distinguish "AI said WEAK" from "AI unavailable, structural
   /// check said WEAK" and retry accordingly.
   usedFallback        Boolean                @default(false)
+
+  /// Reveal Walkthrough (Phase R.1, 2026-07-11) — replaces the
+  /// Monaco-diff-as-primary-artifact with an AI-narrated per-dimension
+  /// tradeoff walkthrough. Dispatched fire-and-forget from
+  /// `revealReference` through the existing per-team semaphore.
+  ///
+  /// Shape (`walkthrough`): { overall, approachSummary, dimensions[3..6]
+  ///   × { dim, yourApproach, referenceApproach, tradeoff,
+  ///       whenReferenceIsBetter?, whenYoursIsBetter? }, keyTakeaway }.
+  /// See ai.schemas.js::codeWalkthroughSchema for the strict shape.
+  ///
+  /// `walkthroughViewedAt` — first successful GET
+  /// /walkthrough after COMPLETED. Feeds D10 metacognition (reveal-
+  /// without-view signals the learner ignored the correction).
+  ///
+  /// `walkthroughInputHash` — SHA-256 of {taskMarkdown, referenceSolution}
+  /// at generation time. On view, compare to live hash and badge "based on
+  /// earlier version" if drifted. Cheaper than storing a full snapshot.
+  ///
+  /// `walkthroughType` — forward-compat for Phase 2 HLD rubric
+  /// (walkthroughType='DESIGN'). Adding NOW avoids a Phase-2 data migration.
+  walkthrough              Json?
+  walkthroughStatus        WalkthroughStatus @default(NOT_STARTED)
+  walkthroughUsedFallback  Boolean           @default(false)
+  walkthroughAt            DateTime?
+  walkthroughViewedAt      DateTime?
+  walkthroughInputHash     String?
+  walkthroughType          String            @default("CODE")
 
   @@unique([userId, labId, attemptNumber])
   @@index([userId, labId, submittedAt])
