@@ -918,6 +918,32 @@ export const ROADMAP_ITEMS = [
     },
 
     {
+        id: 'lab-previous-attempt-diff',
+        phase: 'NEXT',
+        theme: 'Learning Science',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'Curriculum labs — "Compare to previous attempt" diff',
+        impact: 'Learners who retry a lab after a WEAK verdict currently have no way to see what they changed between attempt N-1 and attempt N. They read the review, guess at edits, and resubmit blind. A single "Compare to previous attempt" button on the completed-attempt view opens Monaco DiffEditor with prior code on the left and current code on the right — the smallest possible surface that answers "what did I actually change?"',
+        description: 'Replaces the killed Lab Phase C.2 attempt-history feature (2026-07-11 four-role review — PO + BA both flagged full history as scope creep given the reveal gate caps realistic attempt counts at 1-3). Narrow shape: no new endpoint (getAttempt already returns .code); client fetches N-1 by attemptNumber via a second useAttempt call keyed on the prior id; button lives on the COMPLETED-state block above CodeReviewResult. Only shows when attemptNumber > 1. Reuses the existing ReferenceDiffModal shell — same responsive layout + Auto/Side-by-side/Inline toggle from Phase C.1.',
+        why: 'Higher signal than a chronological history list at a fraction of the surface area. PO put it as the "if you must build something here" alternative. Deferred from Phase C on 2026-07-11 pending real usage signal — first confirm that ≥5% of learners actually retry a lab on the same day before building.',
+        technicalNotes: 'Server: none. Client: (1) add `getAttemptByNumber` to curriculum learn hook or reuse getAttempt with the prior id — need concept detail to expose latestAttempt.previousAttemptId, or add a small `GET /labs/:id/attempts/:attemptNumber` lookup. (2) ConceptLabTab.jsx — new "Compare to previous attempt" button in the COMPLETED meta strip. (3) Reuse ReferenceDiffModal with a `mode="attemptCompare"` prop or extract a generic DiffModal. Rough estimate: 3-4 hours.',
+    },
+
+    {
+        id: 'check-in-add-reflection-field',
+        phase: 'NEXT',
+        theme: 'Learning Science',
+        priority: 'MEDIUM',
+        effort: 'Small',
+        title: 'Check-in tab — add optional reflection field to feed D10 metacognition',
+        impact: 'Learners today complete recall / apply / build questions in the check-in, but do NOT write a free-form "what did the reference show you / what will you change" reflection. That prose is the strongest single metacognition signal — Karpicke & Blunt 2011 shows generative retrieval + reflection outperforms plain retrieval on transfer tests. It also feeds D10 (verification/metacognition) with a richer input than calibration delta alone.',
+        description: 'Replaces the killed Lab Phase C.2 reflection-on-LabAttempt feature (2026-07-11 four-role review — PO + BA both said the reflection belongs on the Check-in, not the Lab, because per-attempt reflection fragments the mastery signal and the check-in already carries metacognition). Correct home: extend ConceptCheckIn with `reflection String? @db.Text`. Add textarea below the 3 questions in the check-in tab, max 5000 chars. Emit `signal_shift_delta` (source: `checkin`, already the pattern) with a small bump when reflection is non-empty — cap the bump so learners can\'t game score by writing padding. NOT sent to any AI in v1 (self-note only); if v2 grades reflection quality it MUST be XML-tagged + sanitized before AI interpolation.',
+        why: 'Correct location per PO/BA review. Lower risk than the killed C.2 shape: (a) one write path instead of per-attempt fragmentation, (b) fits the existing D10 pipeline instead of inventing a new one, (c) the check-in reveal-gate already handles the "reflect only after seeing the reference" ordering. Priority MEDIUM because it improves an existing shipped signal, not a net-new feature.',
+        technicalNotes: 'Migration: `ALTER TABLE "concept_checkins" ADD COLUMN "reflection" TEXT;`. Prisma model ConceptCheckIn — add `reflection String? @db.Text` with a JSDoc note "User-controlled free text. If ever sent to AI, wrap in XML tags + sanitize (see prompt-injection-hardening)." Zod schema in server/src/schemas/curriculum.js — extend the check-in submit body with `reflection: z.string().max(5000).optional()`. Controller: pass through, no gate needed (check-in itself is post-primer-post-lab so the reveal-first invariant is already satisfied). Signal weight: reflection non-empty → bump score by +2 with a per-concept cap (or fold into existing checkin weight — 0.30 — with a modest multiplier). Client: ConceptCheckInTab textarea + character counter + save-in-same-mutation (no new endpoint). Integration test: reflection persists + is returned on next getConceptDetail. Rough estimate: half a day including migration + tests.',
+    },
+
+    {
         id: 'curriculum-lab-multi-file',
         phase: 'NEXT',
         theme: 'Learning Science',
