@@ -30,6 +30,8 @@ import {
   submitAttempt,
   getAttempt,
   revealReference,
+  getWalkthrough,
+  retryWalkthrough,
   submitCheckIn,
   markPrimerRead,
 } from "../controllers/curriculum.controller.js";
@@ -67,8 +69,35 @@ router.post(
 router.get("/labs/:id/attempts/:attemptId", asyncHandler(getAttempt));
 
 // ── Reveal reference solution (struggle-first gate, W4.T3) ─────────
-// Deterministic DB check — no AI. Parent-level apiLimiter is sufficient.
-router.post("/labs/:id/reveal-reference", asyncHandler(revealReference));
+// Deterministic DB check for the reveal itself, but when
+// FEATURE_CURRICULUM_WALKTHROUGH is ON it fire-and-forget dispatches a
+// CODE_WALKTHROUGH task via the per-team semaphore. That makes reveal
+// AI-backed at the tail, so we chain aiLimiter + aiTeamLimiter per the
+// SecurityManager review (2026-07-11): otherwise a learner could hammer
+// reveals across many attempts to burn the AI budget.
+router.post(
+  "/labs/:id/reveal-reference",
+  aiLimiter,
+  aiTeamLimiter,
+  asyncHandler(revealReference),
+);
+
+// ── Reveal Walkthrough (Phase R.1, 2026-07-11) ─────────────────────
+// GET returns the walkthrough body when walkthroughStatus === COMPLETED,
+// stamps walkthroughViewedAt on first successful hit (D10 signal). Cheap
+// DB read; parent apiLimiter is sufficient.
+router.get(
+  "/labs/:id/attempts/:attemptId/walkthrough",
+  asyncHandler(getWalkthrough),
+);
+// POST re-enters the AI dispatch path for an ERROR-state walkthrough. Chain
+// aiLimiter + aiTeamLimiter — this triggers a fresh AI call.
+router.post(
+  "/labs/:id/attempts/:attemptId/walkthrough/retry",
+  aiLimiter,
+  aiTeamLimiter,
+  asyncHandler(retryWalkthrough),
+);
 
 // ── Concept check-in submit (3-question grader, W4.T3) ─────────────
 // AI-backed (CHECK_IN validator, AI_MODEL_FAST). Chain aiLimiter +

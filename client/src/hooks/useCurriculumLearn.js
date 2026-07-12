@@ -43,6 +43,17 @@ const KEYS = {
         labId,
         attemptId,
     ],
+    // Per-attempt walkthrough (Phase R.1). Separate key from `attempt` so
+    // walkthrough polling can terminate independently of code-review
+    // polling; also lets the reveal-invalidation touch only walkthrough
+    // state without evicting the main attempt row.
+    walkthrough: (labId, attemptId) => [
+        "curriculum",
+        "learner",
+        "walkthrough",
+        labId,
+        attemptId,
+    ],
 };
 
 // The api client returns axios responses; server envelope is `{ success,
@@ -155,14 +166,35 @@ export function useSubmitAttempt(labId) {
 }
 
 /**
- * Poll for an attempt's review status. Stops polling once `reviewStatus`
- * is terminal (COMPLETED | ERROR). TanStack Query v4+ supports returning
- * `false` from `refetchInterval` to disable the loop; the query stays
- * mounted and warm in cache for the caller's UI.
+ * Poll for an attempt's review status. Stops polling once BOTH
+ * `reviewStatus` and `walkthroughStatus` are in terminal states — that
+ * matters because the walkthrough is dispatched after codeReview
+ * completes, and pre-R.1 the polling would stop the moment reviewStatus
+ * flipped to COMPLETED, hiding walkthrough state changes.
+ *
+ * Terminal-status truth table:
+ *   reviewStatus:    COMPLETED | ERROR                     — terminal
+ *   walkthroughStatus: NOT_STARTED (feature off / pre-reveal) — terminal
+ *                    | COMPLETED | ERROR                    — terminal
+ *                    | PENDING                              — non-terminal
  *
  * 3 s cadence matches the perceived-latency budget for lab reviews;
  * anything faster is wasteful given the WS event is the primary path.
  */
+function isReviewStatusTerminal(status) {
+    return status === "COMPLETED" || status === "ERROR";
+}
+function isWalkthroughStatusTerminal(status) {
+    // NOT_STARTED covers pre-reveal + feature-off; explicitly terminal so
+    // we don't hold open a poll for a walkthrough that will never fire.
+    return (
+        !status ||
+        status === "NOT_STARTED" ||
+        status === "COMPLETED" ||
+        status === "ERROR"
+    );
+}
+
 export function useAttempt(labId, attemptId) {
     return useQuery({
         queryKey: KEYS.attempt(labId, attemptId),
@@ -172,10 +204,70 @@ export function useAttempt(labId, attemptId) {
             ),
         enabled: !!labId && !!attemptId,
         refetchInterval: (query) => {
-            const status = query.state.data?.reviewStatus;
-            if (status === "COMPLETED" || status === "ERROR") return false;
+            const data = query.state.data;
+            const reviewTerm = isReviewStatusTerminal(data?.reviewStatus);
+            const walkTerm = isWalkthroughStatusTerminal(data?.walkthroughStatus);
+            if (reviewTerm && walkTerm) return false;
             return 3000;
         },
+    });
+}
+
+// ============================================================================
+// WALKTHROUGH (Phase R.1, 2026-07-11)
+// ============================================================================
+//
+// GET returns { status, walkthrough, usedFallback, generatedAt, viewedAt,
+// inputStale, walkthroughType }. Server stamps `walkthroughViewedAt` on
+// first successful COMPLETED fetch. Client polling stops on terminal
+// state (COMPLETED | ERROR) — pre-reveal / NOT_STARTED gets a one-shot
+// check and stops.
+
+/**
+ * Poll for a walkthrough's status + body. Enabled only when we have both
+ * ids AND `walkthroughEnabled` is true (server-side flag echoed from the
+ * reveal response or gated on the client-side VITE flag by the caller).
+ *
+ * The `enabled` gate lets us keep the same hook shape for the pre-reveal
+ * state (renders nothing) and post-reveal (polls until terminal).
+ */
+export function useWalkthrough(labId, attemptId, { enabled = true } = {}) {
+    return useQuery({
+        queryKey: KEYS.walkthrough(labId, attemptId),
+        queryFn: () =>
+            unwrap(curriculumLearnApi.getWalkthrough(labId, attemptId)),
+        enabled: !!labId && !!attemptId && enabled,
+        refetchInterval: (query) => {
+            const status = query.state.data?.status;
+            if (status === "COMPLETED" || status === "ERROR") return false;
+            if (status === "NOT_STARTED") return false;
+            return 3000;
+        },
+    });
+}
+
+/**
+ * POST /labs/:id/attempts/:attemptId/walkthrough/retry — only allowed
+ * when the current status is ERROR (server-side gate). On success flips
+ * back to PENDING and re-dispatches the AI task.
+ */
+export function useRetryWalkthrough(labId, attemptId) {
+    const qc = useQueryClient();
+    return useToastingMutation({
+        mutationFn: () =>
+            unwrap(curriculumLearnApi.retryWalkthrough(labId, attemptId)),
+        onSuccess: () => {
+            qc.invalidateQueries({
+                queryKey: KEYS.walkthrough(labId, attemptId),
+            });
+            // Also invalidate the attempt row so the walkthroughStatus
+            // change shows up in downstream consumers.
+            qc.invalidateQueries({
+                queryKey: KEYS.attempt(labId, attemptId),
+            });
+        },
+        successMessage: "Regenerating walkthrough…",
+        errorPrefix: "Retry failed",
     });
 }
 
@@ -202,6 +294,13 @@ export function useRevealReference(labId, conceptSlug) {
                     queryKey: KEYS.conceptDetail(conceptSlug),
                 });
             }
+            // Broad-brush walkthrough cache invalidation — the reveal
+            // dispatched a walkthrough task; any cached NOT_STARTED
+            // response for THIS lab's attempts should refetch so the
+            // client picks up walkthroughStatus=PENDING next poll.
+            qc.invalidateQueries({
+                queryKey: ["curriculum", "learner", "walkthrough", labId],
+            });
         },
         successMessage: "Reference solution unlocked.",
         errorPrefix: "Reveal blocked",

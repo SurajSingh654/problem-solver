@@ -2212,6 +2212,161 @@ export function validateCodeReview(data, _sanitizedInputs) {
 }
 
 // ============================================================================
+// Curriculum · code-walkthrough validator — Rule 23 (Reveal Walkthrough).
+// ============================================================================
+//
+// Rule 23 gates the CODE_WALKTHROUGH validator that runs at reveal-time
+// (post codeReview verdict, learner has clicked "Reveal reference solution").
+// Four sub-rules — all cheap structural checks, all firing on contradictory
+// or ungrounded output:
+//
+//   Rule 23-a — dimensions[] must not repeat, must come from the six known
+//   axes. Enforced at schema level via .superRefine + here as defense-in-
+//   depth for future refactors that widen the enum.
+//
+//   Rule 23-b — `overall` MUST equal the paired codeReview.codeReviewVerdict
+//   verbatim. This is NOT a re-grade — the walkthrough exists to teach
+//   tradeoffs, not to re-score. A walkthrough that flips a STRONG verdict
+//   to WEAK reveals the model hallucinated. Requires the caller to pass
+//   priorVerdict via sanitizedInputs (already threaded through the prompt
+//   builder — see ai.prompts.js::buildCodeWalkthroughPrompt).
+//
+//   Rule 23-c — ≥2 non-empty `yourApproachLineRef` entries AND ≥1 non-empty
+//   `referenceApproachLineRef` entry across the whole dimensions[] array.
+//   The walkthrough is worthless if it can't guide the learner back to
+//   their own code — same family as Rule 20 for codeReview.
+//
+//   Rule 23-d — every `tradeoff` string must use at least one hedge word
+//   ("often", "usually", "typically", "one", "when", "if", "sometimes"). A
+//   walkthrough that decrees ("always do X") teaches conformance, which is
+//   exactly what the four-role review (2026-07-11) said to avoid — the
+//   whole point of replacing the diff was to teach options, not authority.
+//
+// Fallback (WEAK-mirroring stub) fires on any rule throw — never a
+// contradictory walkthrough shown to a learner.
+
+const WALKTHROUGH_HEDGE_TOKENS = [
+  "often",
+  "usually",
+  "typically",
+  "one",
+  "when",
+  "if",
+  "sometimes",
+  "may",
+  "might",
+  "can be",
+  "depends",
+  "tradeoff",
+  "trade-off",
+  "in most",
+  "in some",
+];
+
+const WALKTHROUGH_KNOWN_DIMS = new Set([
+  "correctness",
+  "conceptApplication",
+  "designQuality",
+  "idiomaticStyle",
+  "robustness",
+  "testing",
+]);
+
+// Rule 23-a — no duplicate dims + all from known set.
+function checkRule23A(data) {
+  const seen = new Set();
+  for (const d of data.dimensions ?? []) {
+    if (!WALKTHROUGH_KNOWN_DIMS.has(d.dim)) {
+      throw new Error(
+        `Rule 23-a violation: unknown walkthrough dim "${d.dim}".`,
+      );
+    }
+    if (seen.has(d.dim)) {
+      throw new Error(
+        `Rule 23-a violation: duplicate walkthrough dim "${d.dim}".`,
+      );
+    }
+    seen.add(d.dim);
+  }
+}
+
+// Rule 23-b — overall MUST equal paired codeReviewVerdict verbatim.
+// sanitizedInputs.priorVerdict is threaded through from buildCodeWalkthrough
+// Prompt; when absent (test paths) the check is a no-op — a caller that
+// forgets to pass priorVerdict gets a "your walkthrough passed" but the
+// controller-level double-check will catch it. See revealReference for the
+// second-layer enforcement.
+function checkRule23B(data, sanitizedInputs) {
+  const priorVerdict = sanitizedInputs?.priorVerdict;
+  if (!priorVerdict) return;
+  if (data.overall !== priorVerdict) {
+    throw new Error(
+      `Rule 23-b violation: walkthrough.overall="${data.overall}" contradicts codeReview.codeReviewVerdict="${priorVerdict}". Walkthrough MUST mirror the verdict — this is not a re-grade.`,
+    );
+  }
+}
+
+// Rule 23-c — ≥2 non-empty yourApproachLineRef + ≥1 referenceApproachLineRef
+// across the whole dimensions array. Missing lineRefs mean the walkthrough
+// can't guide the learner back to their own code.
+function checkRule23C(data) {
+  const nonEmpty = (s) => typeof s === "string" && s.trim().length > 0;
+  const yourRefs = (data.dimensions ?? []).filter((d) =>
+    nonEmpty(d.yourApproachLineRef),
+  ).length;
+  const referenceRefs = (data.dimensions ?? []).filter((d) =>
+    nonEmpty(d.referenceApproachLineRef),
+  ).length;
+  if (yourRefs < 2) {
+    throw new Error(
+      `Rule 23-c violation: walkthrough must have ≥2 non-empty yourApproachLineRef entries, got ${yourRefs}.`,
+    );
+  }
+  if (referenceRefs < 1) {
+    throw new Error(
+      `Rule 23-c violation: walkthrough must have ≥1 non-empty referenceApproachLineRef entry, got ${referenceRefs}.`,
+    );
+  }
+}
+
+// Rule 23-d — every tradeoff string must include at least one hedge token.
+// Case-insensitive substring match against a curated allowlist. A walkthrough
+// that speaks in decrees teaches conformance instead of options.
+function checkRule23D(data) {
+  for (let i = 0; i < (data.dimensions ?? []).length; i++) {
+    const trade = String(data.dimensions[i].tradeoff ?? "").toLowerCase();
+    const hasHedge = WALKTHROUGH_HEDGE_TOKENS.some((tok) =>
+      trade.includes(tok),
+    );
+    if (!hasHedge) {
+      throw new Error(
+        `Rule 23-d violation: dimensions[${i}].tradeoff must use hedge vocab (${WALKTHROUGH_HEDGE_TOKENS.slice(0, 5).join(", ")}, …). Absolutes teach conformance.`,
+      );
+    }
+  }
+}
+
+/**
+ * Validate a code-walkthrough verdict against Rules 23a–d.
+ * Throws on rule violation. Returns validated data on success.
+ *
+ * Called by contentReview.service.js after Zod safeParse. On throw, the
+ * orchestrator falls back to buildFallbackCodeWalkthrough (neutral prose,
+ * overall mirrors the paired verdict via sanitizedInputs.priorVerdict).
+ *
+ * Order: cheapest structural checks first (23-a duplicate/enum, 23-b verdict
+ * mirror, 23-c line-ref grounding, 23-d hedge vocab). All fire on
+ * contradictory input.
+ */
+export function validateCodeWalkthrough(data, sanitizedInputs) {
+  checkRule23A(data);
+  checkRule23B(data, sanitizedInputs);
+  checkRule23C(data);
+  checkRule23D(data);
+  return data;
+}
+
+// ============================================================================
 // Curriculum · check-in validator (no Rules — identity pass).
 // ============================================================================
 // The check-in AI grades a 3-question gate (recall / apply / build) at

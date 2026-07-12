@@ -47,9 +47,23 @@ export const curriculumLearnApi = {
 
     // Reveal reference solution — server enforces the struggle-first gate
     // (STRONG/ADEQUATE verdict + READY_FOR_REFERENCE concept status). 403
-    // GATE_BLOCKED on failure.
+    // GATE_BLOCKED on failure. When FEATURE_CURRICULUM_WALKTHROUGH is on
+    // server-side, the response also includes `walkthroughEnabled: true` +
+    // `attempt.walkthroughStatus`, and the AI walkthrough task is dispatched
+    // fire-and-forget through the per-team semaphore.
     revealReference: (labId) =>
         api.post(`${ROOT}/labs/${labId}/reveal-reference`),
+
+    // Walkthrough (Phase R.1, 2026-07-11) — GET returns { status, walkthrough
+    // (only when COMPLETED), usedFallback, generatedAt, viewedAt, inputStale }.
+    // First successful GET after COMPLETED stamps walkthroughViewedAt server-
+    // side (D10 metacognition signal). Cheap DB read; poll safely.
+    getWalkthrough: (labId, attemptId) =>
+        api.get(`${ROOT}/labs/${labId}/attempts/${attemptId}/walkthrough`),
+    // Retry from ERROR state — owner-gated, requires revealedReferenceAt to
+    // be set. Chained AI limiters at the route layer.
+    retryWalkthrough: (labId, attemptId) =>
+        api.post(`${ROOT}/labs/${labId}/attempts/${attemptId}/walkthrough/retry`),
 
     // Check-in submit (recall / apply / build → AI verdict + calibration).
     submitCheckIn: (slug, body) =>

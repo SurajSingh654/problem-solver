@@ -22,24 +22,28 @@ import {
     curriculumReviewSchema,
     lessonReviewSchema,
     codeReviewSchema,
+    codeWalkthroughSchema,
     checkInSchema,
 } from "../ai.schemas.js";
 import {
     validateCurriculumReview,
     validateLessonReview,
     validateCodeReview,
+    validateCodeWalkthrough,
     validateCheckInReview,
 } from "../ai.validators.js";
 import {
     buildFallbackCurriculumReview,
     buildFallbackLessonReview,
     buildFallbackCodeReview,
+    buildFallbackCodeWalkthrough,
     buildFallbackCheckIn,
 } from "../ai.fallbacks.js";
 import {
     buildCurriculumReviewPrompt,
     buildLessonReviewPrompt,
     buildCodeReviewPrompt,
+    buildCodeWalkthroughPrompt,
     buildCheckInPrompt,
 } from "../ai.prompts.js";
 
@@ -98,6 +102,25 @@ export function initCurriculumValidators() {
         schema: codeReviewSchema,
         validate: validateCodeReview,
         fallback: buildFallbackCodeReview,
+        targetType: "LAB",
+        aiComplete,
+    });
+
+    // Reveal Walkthrough (Phase R.1, 2026-07-11) — LEARNER-triggered at
+    // reveal time. Model: PRIMARY tier per 4-role review (2026-07-11) —
+    // fast-tier hallucinates line references, and Rule 23-c requires ≥2
+    // yourApproachLineRef + ≥1 referenceApproachLineRef so garbled refs
+    // would tank the walkthrough. Cost is per-reveal (rare), not per-
+    // submit. Enforces Rule 23 (23-a duplicate/enum dims, 23-b verdict
+    // mirror, 23-c line-ref grounding, 23-d hedge vocab). Fallback is a
+    // neutral 3-dim placeholder that mirrors priorVerdict; the client
+    // badges it as "walkthrough failed — retry" via `usedFallback`.
+    registerValidator("CODE_WALKTHROUGH", {
+        model: AI_MODEL_PRIMARY,
+        buildPrompt: buildCodeWalkthroughPrompt,
+        schema: codeWalkthroughSchema,
+        validate: validateCodeWalkthrough,
+        fallback: buildFallbackCodeWalkthrough,
         targetType: "LAB",
         aiComplete,
     });

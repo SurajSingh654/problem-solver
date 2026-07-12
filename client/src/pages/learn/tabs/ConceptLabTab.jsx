@@ -47,13 +47,23 @@ import MonacoLabEditor, {
 } from '@components/curriculum/MonacoLabEditor'
 import CodeReviewResult from '@components/curriculum/CodeReviewResult'
 import ReferenceDiff from '@components/curriculum/ReferenceDiff'
+import WalkthroughPanel from '@components/curriculum/WalkthroughPanel'
 import {
     useAttempt,
     useCurriculumReviewReady,
     useRevealReference,
+    useRetryWalkthrough,
     useSubmitAttempt,
+    useWalkthrough,
 } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
+
+// Feature-flag gate for the AI-narrated walkthrough. Server has a matching
+// FEATURE_CURRICULUM_WALKTHROUGH; client uses the VITE_* mirror to decide
+// whether to mount the useWalkthrough hook and swap the reveal modal body
+// from raw-diff-first to walkthrough-first. Both flags default OFF for
+// dark launch.
+const WALKTHROUGH_ENABLED = import.meta.env.VITE_FEATURE_CURRICULUM_WALKTHROUGH === 'true'
 
 // Client-side gate for the reveal button. Mirrors part of the server
 // contract in curriculum.controller.js#revealReference — we can check
@@ -99,7 +109,16 @@ function computeRevealGate(attempt) {
 // their SUBMITTED code (attempt.code, NOT the live editor state) side-by-
 // side with the reference. AnimatePresence lives in the caller so exit
 // animations run.
-function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onCloseAndEdit }) {
+function ReferenceDiffModal({
+    language,
+    userCode,
+    referenceCode,
+    onClose,
+    onCloseAndEdit,
+    walkthroughState = null,
+    onWalkthroughRetry,
+    walkthroughRetrying = false,
+}) {
     const prefersReducedMotion = useReducedMotion()
 
     // Diff layout override — 'auto' uses the responsive matchMedia rule
@@ -107,6 +126,20 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onClos
     // modal so it resets on next open — this is a preference for THIS
     // reveal viewing, not a durable user setting.
     const [layout, setLayout] = useState('auto')
+
+    // When the walkthrough is available, the diff is DEMOTED to an
+    // opt-in toggle inside the modal (four-role review recommendation:
+    // don't make the mechanical diff the primary artifact). Learners who
+    // want the raw comparison can still get it — one click.
+    const walkthroughAvailable = Boolean(walkthroughState)
+    const [showRawDiff, setShowRawDiff] = useState(!walkthroughAvailable)
+    useEffect(() => {
+        // If the walkthrough state arrives after the modal opened (e.g.
+        // fired on this reveal, still PENDING when modal mounted), collapse
+        // the diff on first appearance so the walkthrough is the primary
+        // artifact.
+        if (walkthroughAvailable) setShowRawDiff(false)
+    }, [walkthroughAvailable])
 
     // ESC-to-close + return-focus-on-close. Captures the element that had
     // focus before the modal opened and restores it on unmount so the
@@ -222,19 +255,47 @@ function ReferenceDiffModal({ language, userCode, referenceCode, onClose, onClos
                         </button>
                     </div>
                 </div>
-                <div className="flex-1 overflow-auto p-4">
-                    {/* Responsive height: on very short viewports (<600px, e.g.
-                        mobile landscape) the fixed 520px diff would blow past
-                        the viewport, hiding the modal footer. Clamp to
-                        min(520px, 60vh) so the footer stays reachable. */}
-                    <div className="h-[min(520px,60vh)]">
-                        <ReferenceDiff
-                            language={language}
-                            userCode={userCode}
-                            referenceCode={referenceCode}
-                            layout={layout}
+                <div className="flex-1 overflow-auto p-4 space-y-4">
+                    {walkthroughAvailable && (
+                        <WalkthroughPanel
+                            state={walkthroughState}
+                            onRetry={onWalkthroughRetry}
+                            retrying={walkthroughRetrying}
+                            onOpenRawReference={
+                                showRawDiff ? undefined : () => setShowRawDiff(true)
+                            }
                         />
-                    </div>
+                    )}
+                    {showRawDiff && (
+                        <div>
+                            {walkthroughAvailable && (
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-semibold text-text-tertiary uppercase tracking-widest">
+                                        Reference solution (raw)
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowRawDiff(false)}
+                                        className="text-xs text-text-tertiary hover:text-text-primary underline underline-offset-2"
+                                    >
+                                        Hide raw diff
+                                    </button>
+                                </div>
+                            )}
+                            {/* Responsive height: on very short viewports (<600px, e.g.
+                                mobile landscape) the fixed 520px diff would blow past
+                                the viewport, hiding the modal footer. Clamp to
+                                min(520px, 60vh) so the footer stays reachable. */}
+                            <div className="h-[min(520px,60vh)]">
+                                <ReferenceDiff
+                                    language={language}
+                                    userCode={userCode}
+                                    referenceCode={referenceCode}
+                                    layout={layout}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <div className="p-4 border-t border-border-subtle flex items-center justify-end gap-2 flex-wrap">
                     <Button variant="secondary" size="sm" onClick={onClose}>
@@ -370,6 +431,18 @@ export default function ConceptLabTab({ concept, onGoToCheckIn }) {
         concept.latestAttempt?.revealedReferenceAt ??
         null
     const alreadyRevealed = Boolean(revealedRefAt)
+
+    // Walkthrough plumbing (Phase R.1, feature-flagged). Enabled only when:
+    //   - the client-side VITE flag is on,
+    //   - we have an attempt id to key the query,
+    //   - the attempt has already been revealed (nothing to fetch pre-reveal).
+    // Mirrors the server's gate; the two must agree or we waste polls.
+    const walkthroughEnabled = WALKTHROUGH_ENABLED && alreadyRevealed
+    const walkthroughQuery = useWalkthrough(labId, attemptIdForPolling, {
+        enabled: walkthroughEnabled,
+    })
+    const walkthroughState = walkthroughEnabled ? walkthroughQuery.data ?? null : null
+    const retryWalkthrough = useRetryWalkthrough(labId, attemptIdForPolling)
 
     const canSubmit = useMemo(
         () => code.trim().length > 0 && !submit.isPending,
@@ -726,6 +799,9 @@ export default function ConceptLabTab({ concept, onGoToCheckIn }) {
                         referenceCode={referenceSolution}
                         onClose={() => setReferenceOpen(false)}
                         onCloseAndEdit={handleCloseAndEdit}
+                        walkthroughState={walkthroughState}
+                        onWalkthroughRetry={() => retryWalkthrough.mutate()}
+                        walkthroughRetrying={retryWalkthrough.isPending}
                     />
                 )}
             </AnimatePresence>

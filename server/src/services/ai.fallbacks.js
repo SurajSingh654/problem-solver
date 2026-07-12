@@ -1429,6 +1429,74 @@ export function buildFallbackCodeReview(_input = {}) {
 }
 
 // ============================================================================
+// Curriculum · code-walkthrough fallback.
+// ============================================================================
+/**
+ * Conservative fallback for the CODE_WALKTHROUGH validator.
+ *
+ * Design commitments preserved even in fallback state:
+ *  - `overall` mirrors the paired codeReview.codeReviewVerdict when known,
+ *    defaults to "ADEQUATE" otherwise. Never contradicts a STRONG verdict
+ *    with a WEAK fallback — that would demoralize a learner who just got
+ *    validated. Rule 23-b is bypassed on the fallback path (rules run only
+ *    on the AI-produced body), but this mirroring keeps client rendering
+ *    coherent.
+ *  - Three neutral dimensions with hedge vocab and placeholder lineRefs.
+ *    Satisfies Rule 23-c (≥2 your + ≥1 reference lineRefs) and Rule 23-d
+ *    (hedge tokens present) so a future refactor that runs rules on the
+ *    fallback doesn't fail.
+ *  - `keyTakeaway` explicitly names the fallback state so learners can
+ *    distinguish "walkthrough said 'both approaches are similar'" from
+ *    "walkthrough failed to generate — retry available."
+ *
+ * Prose is deliberately generic. Real walkthroughs teach concrete tradeoffs;
+ * the fallback exists ONLY as a shape-valid placeholder that the client
+ * badges via `walkthroughUsedFallback: true` so the learner can retry.
+ */
+export function buildFallbackCodeWalkthrough(input = {}) {
+  const priorVerdict = input?.priorReview?.codeReviewVerdict;
+  const overall =
+    priorVerdict === "STRONG" || priorVerdict === "ADEQUATE" || priorVerdict === "WEAK"
+      ? priorVerdict
+      : "ADEQUATE";
+  return {
+    overall,
+    approachSummary:
+      "Automated walkthrough failed to generate. Your submission and the reference solution can typically be compared along design, style, and robustness dimensions — retry to get a specific comparison.",
+    dimensions: [
+      {
+        dim: "correctness",
+        yourApproach: "Your submitted code — see editor for details.",
+        yourApproachLineRef: "n/a",
+        referenceApproach:
+          "Reference solution — see the raw reference toggle below.",
+        referenceApproachLineRef: "n/a",
+        tradeoff:
+          "Two correct solutions can often differ in structure while producing the same output; when the reference and your code both pass the task's expected artifacts, the choice usually comes down to team convention.",
+      },
+      {
+        dim: "designQuality",
+        yourApproach: "Your submitted approach to structuring the solution.",
+        yourApproachLineRef: "n/a",
+        referenceApproach: "Reference approach to structuring the solution.",
+        tradeoff:
+          "One tradeoff to keep in mind: heavier decomposition typically wins when the module grows, while flat structure is often clearer for small, self-contained tasks.",
+      },
+      {
+        dim: "idiomaticStyle",
+        yourApproach: "Idiomatic patterns you reached for.",
+        yourApproachLineRef: "n/a",
+        referenceApproach: "Idiomatic patterns the reference reaches for.",
+        tradeoff:
+          "Language idioms can differ across teams; when in doubt, following the codebase's dominant style is usually safer than optimizing purely for personal preference.",
+      },
+    ],
+    keyTakeaway:
+      "The automated walkthrough was unavailable — retry to get a real per-dimension comparison.",
+  };
+}
+
+// ============================================================================
 // Curriculum · check-in fallback.
 // ============================================================================
 /**

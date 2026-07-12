@@ -358,6 +358,99 @@ export const codeReviewSchema = z
   });
 
 /**
+ * codeWalkthroughSchema — AI-narrated per-dimension comparison between a
+ * learner's submitted lab code and the reference solution. Emitted by the
+ * CODE_WALKTHROUGH validator, dispatched fire-and-forget from
+ * `revealReference` after the codeReview has already produced a verdict.
+ *
+ * DELIBERATELY NOT a re-grade. The `overall` verdict MUST mirror the
+ * paired codeReview.codeReviewVerdict — this is validated via
+ * `.superRefine` at schema-parse and re-checked by Rule 23 in
+ * validateCodeWalkthrough. The walkthrough teaches tradeoffs so both
+ * approaches (learner's + reference's) remain valid options in the
+ * learner's toolkit — it does NOT re-score.
+ *
+ * Design commitments from 4-role review (2026-07-11):
+ *  - Top-3 dims picked by AI, up to 6 max. Six side-by-side compares =
+ *    scroll fatigue. `dimensions.length in [3, 6]`.
+ *  - Each dim must come from the six code-review axes (no new dims
+ *    invented at the walkthrough layer — Rule 23-a).
+ *  - `dim` unique across the array (no duplicates via .superRefine).
+ *  - `lineRef*` optional strings — Rule 23 requires ≥2 lineRefs in
+ *    yourApproach + ≥1 in referenceApproach across the array (enforced
+ *    at validateCodeWalkthrough, not schema — same reasoning as Rule 20
+ *    for codeReview).
+ */
+const WALKTHROUGH_DIMS = [
+  "correctness",
+  "conceptApplication",
+  "designQuality",
+  "idiomaticStyle",
+  "robustness",
+  "testing",
+];
+
+export const codeWalkthroughSchema = z
+  .object({
+    overall: z.enum(["STRONG", "ADEQUATE", "WEAK"]),
+    approachSummary: z.string().min(1),
+    dimensions: z
+      .array(
+        z
+          .object({
+            dim: z.enum([
+              "correctness",
+              "conceptApplication",
+              "designQuality",
+              "idiomaticStyle",
+              "robustness",
+              "testing",
+            ]),
+            yourApproach: z.string().min(1),
+            yourApproachLineRef: z.string().nullable().optional(),
+            referenceApproach: z.string().min(1),
+            referenceApproachLineRef: z.string().nullable().optional(),
+            tradeoff: z.string().min(1),
+            whenReferenceIsBetter: z.string().nullable().optional(),
+            whenYoursIsBetter: z.string().nullable().optional(),
+          })
+          .strict(),
+      )
+      .min(3)
+      .max(6),
+    keyTakeaway: z.string().min(1),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    // Rule 23-a at schema layer: no duplicate dims across the array. A
+    // walkthrough that repeats "correctness" twice is a shape bug.
+    const seen = new Set();
+    data.dimensions.forEach((d, i) => {
+      if (seen.has(d.dim)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `duplicate dimension "${d.dim}"`,
+          path: ["dimensions", i, "dim"],
+        });
+      }
+      seen.add(d.dim);
+    });
+    // Rule 23-b at schema layer: every dim string must be one of the six
+    // known axes. Zod enum handles new-dim rejection at the item level,
+    // but sanity-check with a set membership too (guards a future refactor
+    // that widens the enum accidentally).
+    for (const d of data.dimensions) {
+      if (!WALKTHROUGH_DIMS.includes(d.dim)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `unknown dim "${d.dim}"`,
+          path: ["dimensions"],
+        });
+      }
+    }
+  });
+
+/**
  * checkInSchema — verdict emitted by the check-in AI validator.
  *
  * Learner-triggered, CONCEPT-level 3-question gate (recall / apply / build).
