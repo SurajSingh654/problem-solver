@@ -1,6 +1,7 @@
 // ============================================================================
 // ProbSolver v3.0 — Problem Card
 // ============================================================================
+import { forwardRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Badge } from '@components/ui/Badge'
@@ -14,7 +15,15 @@ const DIFF_VARIANT = {
   HARD: 'hard',
 }
 
-export function ProblemCard({ problem, index = 0 }) {
+// forwardRef required — the parent (ProblemsPage) renders these inside
+// <AnimatePresence mode="popLayout">, which measures the child's DOM node
+// on exit to animate layout shifts. Without a forwarded ref, React warns
+// ("Function components cannot be given refs") and popLayout exit animations
+// silently degrade to snap-out.
+export const ProblemCard = forwardRef(function ProblemCard(
+  { problem, index = 0 },
+  ref,
+) {
   const navigate = useNavigate()
 
   const {
@@ -34,6 +43,7 @@ export function ProblemCard({ problem, index = 0 }) {
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: index * 0.04 }}
@@ -138,4 +148,4 @@ export function ProblemCard({ problem, index = 0 }) {
       </div>
     </motion.div>
   )
-}
+})
