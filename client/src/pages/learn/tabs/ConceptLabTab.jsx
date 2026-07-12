@@ -34,7 +34,7 @@
 // getAttempt endpoint returns `attempt.code`; concept.latestAttempt does
 // NOT include it, so `useAttempt` is the only source of truth here.
 // ============================================================================
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { X, ArrowRight, RotateCcw, Columns, Rows } from 'lucide-react'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
@@ -403,6 +403,32 @@ export default function ConceptLabTab({ concept, onGoToCheckIn }) {
     const submit = useSubmitAttempt(labId)
     const attemptQuery = useAttempt(labId, attemptIdForPolling)
     const polledAttempt = attemptQuery.data ?? null
+
+    // Restore-on-refresh (2026-07-12): after submit, `clearDraft(labId)`
+    // wipes the localStorage draft to avoid duplicate-submit ambiguity.
+    // That means a page refresh lands with an empty editor even though
+    // the submitted code exists on the server via `polledAttempt.code`.
+    // Rehydrate the editor once per attempt id — fires exactly when the
+    // polled attempt first loads for a given id. Guards:
+    //   - Populate ONLY if the local draft is also empty. A non-empty
+    //     draft means the user was mid-edit before refresh; we let their
+    //     unsaved work win over the stale submitted snapshot.
+    //   - Populate ONLY if the current editor state is empty. Prevents
+    //     clobbering edits the user has already made post-restore.
+    //   - Track the last populated id in a ref so a later user edit doesn't
+    //     re-trigger population on the next poll tick.
+    const populatedForAttemptRef = useRef(null)
+    useEffect(() => {
+        if (!polledAttempt?.id || !polledAttempt?.code) return
+        if (populatedForAttemptRef.current === polledAttempt.id) return
+        populatedForAttemptRef.current = polledAttempt.id
+        const draftKey = `curriculum:lab:draft:${labId}`
+        const hasDraft =
+            typeof window !== 'undefined' &&
+            Boolean(window.localStorage.getItem(draftKey))
+        if (hasDraft) return
+        setCode((prev) => (prev ? prev : polledAttempt.code))
+    }, [polledAttempt?.id, polledAttempt?.code, labId])
 
     // Subscribe to curriculum:review_ready ONLY while we have a non-
     // terminal attempt in flight. The hook internally no-ops on a null

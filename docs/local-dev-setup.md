@@ -8,11 +8,11 @@ Not needed for Railway prod / staging — those environments have no Zscaler in 
 
 ## Part 0 — When to use each environment
 
-| Environment | Use for | Zscaler? | Cert refactor needed? |
-|---|---|---|---|
-| Local (this machine) | Fast iteration, UI polish, smoke test | On (mandated) | **Yes** (Option A below) |
-| Railway staging | End-to-end walkthrough, real AI calls, feature-flag flips before prod | Not in path | No |
-| Railway prod | Production traffic | Not in path | No |
+| Environment          | Use for                                                               | Zscaler?      | Cert refactor needed?    |
+| -------------------- | --------------------------------------------------------------------- | ------------- | ------------------------ |
+| Local (this machine) | Fast iteration, UI polish, smoke test                                 | On (mandated) | **Yes** (Option A below) |
+| Railway staging      | End-to-end walkthrough, real AI calls, feature-flag flips before prod | Not in path   | No                       |
+| Railway prod         | Production traffic                                                    | Not in path   | No                       |
 
 **Rule of thumb.** Anything that needs to hit `api.openai.com` or `mainline.proxy.rlwy.net` from a local Node process requires the Option A cert refactor. Anything covered by CI + integration tests + Railway staging does not.
 
@@ -69,7 +69,7 @@ The one-time workstation fix that makes Node trust Zscaler's MITM root, so outbo
 
 ### Why it's needed
 
-Zscaler intercepts every corporate outbound HTTPS and presents its own cert. Node's TLS won't validate that cert unless the Zscaler root CA is in Node's trust store — set via `NODE_EXTRA_CA_CERTS`. On this workstation the env var is typically set in `~/.zshrc` and points to `~/Downloads/zscaler-cert.pem`. macOS TCC (Transparency, Consent and Control) protects `~/Downloads`, so the Node process fails to *read* the cert file with `EPERM`, silently skips it (log warning: `Ignoring extra certs from … Operation not permitted`), and every OpenAI / Railway call fails at TLS handshake. OpenAI SDK reports "Connection error"; Prisma reports "Can't reach database server".
+Zscaler intercepts every corporate outbound HTTPS and presents its own cert. Node's TLS won't validate that cert unless the Zscaler root CA is in Node's trust store — set via `NODE_EXTRA_CA_CERTS`. On this workstation the env var is typically set in `~/.zshrc` and points to `~/Downloads/zscaler-cert.pem`. macOS TCC (Transparency, Consent and Control) protects `~/Downloads`, so the Node process fails to _read_ the cert file with `EPERM`, silently skips it (log warning: `Ignoring extra certs from … Operation not permitted`), and every OpenAI / Railway call fails at TLS handshake. OpenAI SDK reports "Connection error"; Prisma reports "Can't reach database server".
 
 The fix moves the cert to `~/certs/` (unrestricted by TCC) and updates the env var.
 
@@ -147,19 +147,19 @@ Client must be restarted after `VITE_*` changes (Vite bakes them at dev-server s
 
 Symptom → root cause → fix.
 
-| Symptom | Root cause | Fix |
-|---|---|---|
-| `Ignoring extra certs from … Operation not permitted` at server boot | macOS TCC blocking Node from reading a cert under `~/Downloads` | Part 3 above. Cert must live in `~/certs/` (or another TCC-unrestricted path). |
-| `[contentReview:CODE_REVIEW] validation failed, falling back: Connection error` | Node TLS to `api.openai.com` failing because Zscaler cert not loaded | Part 3 above — same root cause as the "Ignoring extra certs" symptom. |
-| Learner sees "AI reviewer wasn't available" banner in the Lab tab | Fallback fired due to AI call failure. Server-side `LabAttempt.usedFallback = true` | Check server log for `Connection error`; if present, Part 3 above. If AI reached but returned garbage, check `contentReview:CODE_REVIEW` log for the Zod / rule failure reason. |
-| Prisma `P1001: Can't reach database server` on every request | Zscaler intercepting Prisma's long-lived TLS connections | Part 3 above (same cert fix), OR add pool-tuning params to `DATABASE_URL`: `?connection_limit=5&pool_timeout=60&connect_timeout=30&socket_timeout=60`. Cert fix is the real solution; pool params only mitigate. |
-| Server nodemon crashes on `prisma.$connect()` at startup | Transient Railway proxy blip OR Zscaler cert issue | Retry once. If persistent, verify `nc -zv mainline.proxy.rlwy.net 39128` succeeds. If `nc` works but Node fails, it's Zscaler + cert (Part 3). |
-| `claude doctor` returns "Token is expired. Run 'aws sso login'" | Okta SSO session lapsed | Run `aws sso login` with the corresponding profile. Unrelated to this repo. |
-| `claude doctor` returns AWS auth errors | `CLAUDE_CODE_USE_BEDROCK` env var still set from an old install | `unset CLAUDE_CODE_USE_BEDROCK`; remove from shell rc. Per org doc. |
-| `head: <path>: Operation not permitted` on a file you can `ls -la` | macOS TCC on a protected dir (`~/Downloads`, `~/Documents`, `~/Desktop`) | Move the file to an unrestricted dir (`~/certs/`, `~/.config/`), OR grant Terminal.app "Full Disk Access" in System Settings → Privacy & Security. Prefer the first — narrower blast radius. |
-| Client env var change (`VITE_FEATURE_*`) not reflected in UI | Vite bakes `VITE_*` at dev-server start — HMR does NOT pick them up | Kill the client dev server (Ctrl+C), start again. Hard-refresh the browser. First diagnostic in prod: grep the deployed bundle for the flag name. |
-| New Zod / server-body field silently persisted as null | `validate()` middleware strips unknown keys. Zod schema missing the field | Log `Object.keys(req.body)` in the controller; add the field to the strict schema. See `CLAUDE.md § New request-body field` for the 5-touchpoint rule. |
-| Pre-push `test:integration` flakes with DB unreachable | Railway proxy blip during test setup | Wait 30s and retry the push. If persistent, verify `nc -zv mainline.proxy.rlwy.net 39128`. |
+| Symptom                                                                         | Root cause                                                                          | Fix                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Ignoring extra certs from … Operation not permitted` at server boot            | macOS TCC blocking Node from reading a cert under `~/Downloads`                     | Part 3 above. Cert must live in `~/certs/` (or another TCC-unrestricted path).                                                                                                                                   |
+| `[contentReview:CODE_REVIEW] validation failed, falling back: Connection error` | Node TLS to `api.openai.com` failing because Zscaler cert not loaded                | Part 3 above — same root cause as the "Ignoring extra certs" symptom.                                                                                                                                            |
+| Learner sees "AI reviewer wasn't available" banner in the Lab tab               | Fallback fired due to AI call failure. Server-side `LabAttempt.usedFallback = true` | Check server log for `Connection error`; if present, Part 3 above. If AI reached but returned garbage, check `contentReview:CODE_REVIEW` log for the Zod / rule failure reason.                                  |
+| Prisma `P1001: Can't reach database server` on every request                    | Zscaler intercepting Prisma's long-lived TLS connections                            | Part 3 above (same cert fix), OR add pool-tuning params to `DATABASE_URL`: `?connection_limit=5&pool_timeout=60&connect_timeout=30&socket_timeout=60`. Cert fix is the real solution; pool params only mitigate. |
+| Server nodemon crashes on `prisma.$connect()` at startup                        | Transient Railway proxy blip OR Zscaler cert issue                                  | Retry once. If persistent, verify `nc -zv mainline.proxy.rlwy.net 39128` succeeds. If `nc` works but Node fails, it's Zscaler + cert (Part 3).                                                                   |
+| `claude doctor` returns "Token is expired. Run 'aws sso login'"                 | Okta SSO session lapsed                                                             | Run `aws sso login` with the corresponding profile. Unrelated to this repo.                                                                                                                                      |
+| `claude doctor` returns AWS auth errors                                         | `CLAUDE_CODE_USE_BEDROCK` env var still set from an old install                     | `unset CLAUDE_CODE_USE_BEDROCK`; remove from shell rc. Per org doc.                                                                                                                                              |
+| `head: <path>: Operation not permitted` on a file you can `ls -la`              | macOS TCC on a protected dir (`~/Downloads`, `~/Documents`, `~/Desktop`)            | Move the file to an unrestricted dir (`~/certs/`, `~/.config/`), OR grant Terminal.app "Full Disk Access" in System Settings → Privacy & Security. Prefer the first — narrower blast radius.                     |
+| Client env var change (`VITE_FEATURE_*`) not reflected in UI                    | Vite bakes `VITE_*` at dev-server start — HMR does NOT pick them up                 | Kill the client dev server (Ctrl+C), start again. Hard-refresh the browser. First diagnostic in prod: grep the deployed bundle for the flag name.                                                                |
+| New Zod / server-body field silently persisted as null                          | `validate()` middleware strips unknown keys. Zod schema missing the field           | Log `Object.keys(req.body)` in the controller; add the field to the strict schema. See `CLAUDE.md § New request-body field` for the 5-touchpoint rule.                                                           |
+| Pre-push `test:integration` flakes with DB unreachable                          | Railway proxy blip during test setup                                                | Wait 30s and retry the push. If persistent, verify `nc -zv mainline.proxy.rlwy.net 39128`.                                                                                                                       |
 
 ---
 
@@ -192,14 +192,14 @@ rmdir ~/certs 2>/dev/null || true
 
 Confirmed against the org's Claude Code setup (2026-07-12):
 
-| Layer | Uses `NODE_EXTRA_CA_CERTS`? | Affected by Part 3? |
-|---|---|---|
-| Claude Code binary | No — separate auth stack (Okta / Bedrock / AWS SSO) | No |
-| Claude Code's cert trust | Its own bundled roots + system keychain | No |
-| Zscaler network path | Still active — required for Claude Code LLM access | No |
-| Local Node dev servers (server + Prisma + OpenAI SDK) | Yes — reads env var at process start | **Fixed** |
+| Layer                                                 | Uses `NODE_EXTRA_CA_CERTS`?                         | Affected by Part 3? |
+| ----------------------------------------------------- | --------------------------------------------------- | ------------------- |
+| Claude Code binary                                    | No — separate auth stack (Okta / Bedrock / AWS SSO) | No                  |
+| Claude Code's cert trust                              | Its own bundled roots + system keychain             | No                  |
+| Zscaler network path                                  | Still active — required for Claude Code LLM access  | No                  |
+| Local Node dev servers (server + Prisma + OpenAI SDK) | Yes — reads env var at process start                | **Fixed**           |
 
-Zscaler itself stays ON throughout. Part 3 does NOT reduce corporate network security posture — Node still validates every outbound TLS handshake against the Zscaler MITM root; we only make sure Node can actually *load* that root.
+Zscaler itself stays ON throughout. Part 3 does NOT reduce corporate network security posture — Node still validates every outbound TLS handshake against the Zscaler MITM root; we only make sure Node can actually _load_ that root.
 
 The `claude doctor` check between every step is defense in depth: if any change unexpectedly affects Claude Code auth, we catch it immediately and roll back per Part 6.
 

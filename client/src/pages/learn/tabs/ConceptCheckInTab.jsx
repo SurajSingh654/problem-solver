@@ -22,12 +22,78 @@
 // use as a fallback on tab remount so the user isn't staring at a blank form
 // after a page refresh.
 // ============================================================================
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@components/ui/Button'
 import { VerdictBadge } from '@components/curriculum'
 import { useSubmitCheckIn } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
+
+// ── Check-in draft persistence ─────────────────────────────────────
+// Parallel to MonacoLabEditor.jsx's `loadDraft` / `clearDraft` for the
+// Lab tab. The Check-in form has four fields (recall / apply / build
+// answers + preConfidence) that were previously lost on page refresh —
+// user types 3 answers, refreshes accidentally, work is gone. Now we
+// autosave on every change to localStorage, hydrate on mount, clear on
+// successful submit, and clear-all on logout (shared-workstation
+// defense — same pattern as lab drafts).
+//
+// Shape v1: `{ recallAnswer, applyAnswer, buildAnswer, preConfidence }`.
+// Key: `curriculum:checkin:draft:${slug}`.
+const CHECKIN_DRAFT_KEY_PREFIX = 'curriculum:checkin:draft:'
+const draftKeyFor = (slug) => `${CHECKIN_DRAFT_KEY_PREFIX}${slug}`
+
+function loadCheckInDraft(slug) {
+    if (typeof window === 'undefined' || !slug) return null
+    try {
+        const raw = window.localStorage.getItem(draftKeyFor(slug))
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        // Defensive shape check — a partial write or a schema change
+        // would land here as a malformed blob. Return null so mount
+        // falls back to defaults rather than crashing.
+        if (!parsed || typeof parsed !== 'object') return null
+        return parsed
+    } catch {
+        return null
+    }
+}
+
+function saveCheckInDraft(slug, draft) {
+    if (typeof window === 'undefined' || !slug) return
+    try {
+        window.localStorage.setItem(draftKeyFor(slug), JSON.stringify(draft))
+    } catch {
+        // Storage quota — silent drop, drafts are not source of truth.
+    }
+}
+
+function clearCheckInDraft(slug) {
+    if (typeof window === 'undefined' || !slug) return
+    try {
+        window.localStorage.removeItem(draftKeyFor(slug))
+    } catch {
+        /* no-op */
+    }
+}
+
+// Called from useAuthStore's logout handler. Prevents a
+// shared-workstation draft leak where the next user opens the same
+// concept URL and sees the prior user's in-progress check-in answers.
+// eslint-disable-next-line react-refresh/only-export-components
+export function clearAllCheckInDrafts() {
+    if (typeof window === 'undefined') return
+    try {
+        const doomed = []
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+            const key = window.localStorage.key(i)
+            if (key?.startsWith(CHECKIN_DRAFT_KEY_PREFIX)) doomed.push(key)
+        }
+        doomed.forEach((k) => window.localStorage.removeItem(k))
+    } catch {
+        /* no-op */
+    }
+}
 
 // Eligibility mirrors submitCheckIn's server-side gate. Client rejects
 // early so the user doesn't type 3 answers only to see a 403 toast.
@@ -191,11 +257,47 @@ export default function ConceptCheckInTab({ concept, onGoToLab }) {
     const displayPerQuestion = freshResult?.checkIn?.aiFeedback?.perQuestion ?? null
     const displayEncouragement = freshResult?.checkIn?.aiFeedback?.encouragement ?? null
 
-    // Form state.
-    const [recallAnswer, setRecallAnswer] = useState('')
-    const [applyAnswer,  setApplyAnswer]  = useState('')
-    const [buildAnswer,  setBuildAnswer]  = useState('')
-    const [preConfidence, setPreConfidence] = useState(3)
+    // Form state — hydrated from localStorage on mount so a page refresh
+    // mid-answer doesn't wipe the user's work. See draft helpers above.
+    // Initializer function keeps this a single mount-time read; the
+    // effect below picks up subsequent slug changes (rare — route-level
+    // remount typically re-mounts the whole component).
+    const conceptSlug = concept.slug
+    const [recallAnswer, setRecallAnswer] = useState(
+        () => loadCheckInDraft(conceptSlug)?.recallAnswer ?? '',
+    )
+    const [applyAnswer,  setApplyAnswer]  = useState(
+        () => loadCheckInDraft(conceptSlug)?.applyAnswer ?? '',
+    )
+    const [buildAnswer,  setBuildAnswer]  = useState(
+        () => loadCheckInDraft(conceptSlug)?.buildAnswer ?? '',
+    )
+    const [preConfidence, setPreConfidence] = useState(
+        () => loadCheckInDraft(conceptSlug)?.preConfidence ?? 3,
+    )
+
+    // If the caller navigates between concepts without a full remount
+    // (e.g. via TopicDetailPage links), reload the draft for the new
+    // slug. Idempotent when conceptSlug is stable.
+    useEffect(() => {
+        const draft = loadCheckInDraft(conceptSlug)
+        setRecallAnswer(draft?.recallAnswer ?? '')
+        setApplyAnswer(draft?.applyAnswer ?? '')
+        setBuildAnswer(draft?.buildAnswer ?? '')
+        setPreConfidence(draft?.preConfidence ?? 3)
+    }, [conceptSlug])
+
+    // Autosave on every change. No debounce — the fields are small and
+    // low-frequency (user typing prose, not code); a single localStorage
+    // write per keystroke is cheap. Cleared on successful submit below.
+    useEffect(() => {
+        saveCheckInDraft(conceptSlug, {
+            recallAnswer,
+            applyAnswer,
+            buildAnswer,
+            preConfidence,
+        })
+    }, [conceptSlug, recallAnswer, applyAnswer, buildAnswer, preConfidence])
 
     const canSubmit =
         eligible &&
@@ -221,6 +323,10 @@ export default function ConceptCheckInTab({ concept, onGoToLab }) {
             setApplyAnswer('')
             setBuildAnswer('')
             setPreConfidence(3)
+            // Wipe the localStorage draft so a refresh after submit doesn't
+            // repopulate the fields — the just-cleared form is the intended
+            // post-submit state.
+            clearCheckInDraft(conceptSlug)
         } catch {
             // useToastingMutation surfaces the error with the server message.
         }
