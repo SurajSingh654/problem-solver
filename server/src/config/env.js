@@ -425,8 +425,24 @@ export const FEATURE_CURRICULUM = optional('FEATURE_CURRICULUM', 'false') === 't
 // startup by assertCurriculumDependencies(). Client mirror:
 // VITE_FEATURE_CURRICULUM_WALKTHROUGH (also declare ARG/ENV in
 // client/Dockerfile).
+//
+// Cached constant (startup snapshot) preserved for documentation + parity
+// with FEATURE_CURRICULUM. Runtime code should call
+// `isCurriculumWalkthroughEnabled()` which reads process.env at request
+// time — matches the pattern used by `requireFeatureCurriculum` middleware
+// so integration tests can flip the flag mid-session without a module
+// re-import.
 export const FEATURE_CURRICULUM_WALKTHROUGH =
   optional('FEATURE_CURRICULUM_WALKTHROUGH', 'false') === 'true'
+
+/**
+ * Runtime check for FEATURE_CURRICULUM_WALKTHROUGH. Reads process.env on
+ * every call so tests can flip the flag without re-importing modules.
+ * Prefer this over the constant above in HTTP handlers + task dispatchers.
+ */
+export function isCurriculumWalkthroughEnabled() {
+  return process.env.FEATURE_CURRICULUM_WALKTHROUGH === 'true'
+}
 
 /**
  * Startup dependency check for the Curriculum feature.
