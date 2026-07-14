@@ -116,8 +116,9 @@ CODING correctness analysis:
 - Would it pass with: empty input, single element, duplicates, negative numbers, large inputs?
 - Is the logic correct or are there off-by-one errors, infinite loops, wrong conditions?
 - Is the code complete (has a return statement, all branches handled)?
-- Detect language mismatch: if selected language is X but code is clearly language Y, flag it
-- Detect incomplete solutions: pseudocode, TODO comments, missing critical sections`,
+- Detect language mismatch: if code is idiomatic in a real programming language DIFFERENT from the selected \`<language>\`, flag it. \`detectedLanguage\` MUST be a language OTHER than the selected one — never the same.
+- Detect incomplete solutions: pseudocode, TODO comments, missing critical sections
+- **Pseudocode routing rule**: code written in a language-agnostic pseudocode style (UPPERCASE keywords like \`FUNCTION\`/\`END FUNCTION\`/\`IF\`/\`THEN\`, or unbraced/unindented control flow without valid syntax for the selected language) is INCOMPLETE, NOT a language mismatch. Set \`incompleteSubmission=true\` and \`languageMismatch=false\`. Pseudocode is legitimate whiteboard thinking — never claim it is a different real language.`,
     },
     SYSTEM_DESIGN: {
       focus:
@@ -503,10 +504,11 @@ SCORING DIMENSIONS — score each 1-10 INDEPENDENTLY:
    1-3 = Severely miscalibrated
 
 CROSS-VALIDATION RULES:
-- If code is in a different language than selected: set languageMismatch=true, set detectedLanguage.
-- If code is incomplete/pseudocode (TODOs, placeholders, doesn't compile): set incompleteSubmission=true.
+- If code is idiomatic in a real language OTHER than the selected one: set languageMismatch=true, set detectedLanguage to that OTHER language. \`detectedLanguage\` MUST NOT equal the selected language — that's a self-contradiction.
+- If code is incomplete/pseudocode (TODOs, placeholders, UPPERCASE pseudocode keywords like FUNCTION/END/IF/THEN, doesn't compile): set incompleteSubmission=true, and set languageMismatch=false. Pseudocode is INCOMPLETE, never a language mismatch.
 - A brute-force-only solution that compiles and solves the problem is NOT incomplete — do not auto-flag.
 - If pattern is wrong: set wrongPattern=true, set correctPattern to the right one.
+- NEVER write prose claiming the code is in a language different from the selected one when \`languageMismatch=false\`. The prose fields (strengths/gaps/improvement) must not contradict the flags.
 
 PROGRESSION — when <progression> is present:
 - Treat it as positive evidence the candidate's thinking evolved from initial to final approach.
@@ -873,6 +875,16 @@ What was Challenging: ${data.realWorldConnection || "Not provided"}`;
     validate: (parsed) => {
       const check = validateReview(parsed, {
         followUpQuestionIds: data.followUpQuestionIds,
+        // Rule 24 (2026-07-14) — solution-review language coherence.
+        // Thread the caller-supplied `data.language` through the options
+        // bag so validateReview can detect self-contradictions:
+        //   (a) flags.languageMismatch=true with detectedLanguage equal
+        //       to the selected one (fabricated flag), and
+        //   (b) prose fields claiming the code is in a language other
+        //       than the selected one when flags.languageMismatch=false.
+        // Null-safe: validator short-circuits when selectedLanguage is
+        // falsy (Solution.language is nullable for non-CODING categories).
+        selectedLanguage: data.language ?? null,
       });
       // runAISurface expects { valid, data } on success and { valid:false, violations } on failure.
       // validateReview only returns { valid, violations }; pass `parsed` through as `data` when valid.

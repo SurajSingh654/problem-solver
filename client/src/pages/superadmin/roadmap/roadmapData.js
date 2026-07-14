@@ -879,6 +879,45 @@ export const ROADMAP_ITEMS = [
     // ── NEXT — 1-3 months ──────────────────────────────────────────────
 
     {
+        id: 'pseudocode-submission-third-state',
+        phase: 'NEXT',
+        theme: 'AI Reliability',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'AI review — dedicated `pseudocodeSubmission` flag + client card',
+        impact: 'Today pseudocode routes to `incompleteSubmission=true` (Rule 24, 2026-07-14). PO review flagged this as suboptimal UX — pseudocode is a deliberate whiteboard-thinking choice, not "incomplete." A dedicated `pseudocodeSubmission` flag would let the client show a distinct copy ("Pseudocode detected — translate to `<selectedLanguage>` for a full review") instead of the "incomplete" phrasing that implies the learner didn\'t finish.',
+        description: 'Add `flags.pseudocodeSubmission: boolean` to `solutionReviewSchema` (`ai.schemas.js`). Update the CODING routing rule in `ai.prompts.js:119` to distinguish pseudocode from incomplete: uppercase-keyword code → `pseudocodeSubmission=true` + `incompleteSubmission=false`; TODO/placeholder/truly-empty code → `incompleteSubmission=true`. Extend `validateReview` (Rule 24 addition) to reject rows where both flags are true simultaneously (nonsense). Client `AiReviewCard` gets a new orange badge + copy path for the pseudocode state. Zero migration — `flags` is JSON, additive.',
+        why: 'MVP fix (Rule 24 shipped 2026-07-14) uses `incompleteSubmission` because it was already in the schema. This item polishes the UX to match the learner\'s mental model. Deferred until we see how often pseudocode actually gets submitted — if the log rate is <1% of reviews, this stays parked.',
+        technicalNotes: 'server/src/services/ai.schemas.js `solutionReviewSchema` — add `pseudocodeSubmission: z.boolean()` to the flags shape. ai.prompts.js:119 + :507 — clarify the routing rule. ai.validators.js `validateReview` — add violation `flags.pseudocode-and-incomplete-both-true`. Client: locate the review-card component (grep `incompleteSubmission` under `client/src/pages/problems/` + `components/features/problems/`) — add branch for `pseudocodeSubmission`. Rough estimate: half a day including tests.',
+    },
+
+    {
+        id: 'ai-review-language-guard-targeted-strip',
+        phase: 'NEXT',
+        theme: 'AI Reliability',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'AI review — reason-aware targeted strip on Rule 24 violations',
+        impact: 'Today when Rule 24 fires (fabricated language claim in strengths/gaps prose), the entire AI review falls back to the deterministic `buildFallbackReview` stub — user loses correct scores + valid follow-up evaluations because ONE gaps[] item hallucinated a language mismatch. LeadEng review flagged this as a real regression: "nuking the whole review on a single bad gap item is out of scope for the initial fix."',
+        description: 'Instead of full-fallback, when `validateReview` returns only Rule-24 violations (`flags.languageMismatch-echoes-selected` and `flags.languageMismatch-contradicted-in-prose`), strip the offending array items and reset `flags.languageMismatch=false` + `flags.detectedLanguage=null` in-place, then re-validate. If the stripped review passes, use it. If it still fails, THEN fallback. Preserves the good parts of a mostly-correct review.',
+        why: 'MVP fix (Rule 24 shipped 2026-07-14) uses full-fallback because targeted strip needs its own design pass — deciding what to keep, what to drop, whether to log a "review was auto-repaired" event, etc. Ship after monitoring the Rule 24 violation rate in prod for a week — if <5% of reviews trip Rule 24, don\'t bother.',
+        technicalNotes: 'server/src/services/ai.validators.js `validateReview` — refactor to accept a `mode: "strict" | "repair"` option. In `repair` mode, when only Rule 24 violations present, mutate + retry. Call site: `ai.prompts.js:874` bundle closure passes `mode: "repair"`. Add `logger.info({ event: "validate:language-coherence-repaired", stripped })` for observability. Rough estimate: half a day.',
+    },
+
+    {
+        id: 'ai-review-auto-retry-on-contradiction',
+        phase: 'NEXT',
+        theme: 'AI Reliability',
+        priority: 'LOW',
+        effort: 'Small',
+        title: 'AI review — auto-retry once on Rule 24 contradiction before fallback',
+        impact: 'PO review of Rule 24 (2026-07-14) recommended one auto-retry with an amended system message before falling through to the generic "automated review failed" verdict. Rationale: the fallback punishes the learner for the AI\'s error; a retry gives the model a chance to correct its own contradiction. Aligns with existing retry-with-backoff in `ai.service.js`.',
+        description: 'When `validateReview` returns Rule 24 violations, `runAISurface` re-calls the AI once with an amended system prompt: "prior response contradicted its own languageMismatch flag — re-review honoring these rules". If the retry ALSO contradicts, fall through to the current fallback. Cap at ONE retry per solution review — no retry loop, no fanout.',
+        why: 'Adds AI cost (one extra call per contradicted review) but should be rare (<5% of reviews per the roadmap check for targeted-strip). Deferred until (a) Rule 24 violation rate is measured in prod, and (b) the targeted-strip item above lands — if strip alone is enough, retry is unnecessary. Sequence: measure → strip → retry, only if each step\'s value is proven.',
+        technicalNotes: 'server/src/services/aiSurface.js (locate the actual runAISurface implementation) — add retry-on-Rule-24 branch. Amended prompt suffix appended in the bundle closure (`ai.prompts.js:874`). Add per-review retry counter to prevent loops (`aiRetryCount` in the review options). Telemetry: `[validate:language-coherence-retried]` event with `retryOutcome: "resolved" | "still-contradicted"`. Rough estimate: 4-6 hours including tests.',
+    },
+
+    {
         id: 'curriculum-phase-1-flip-prod',
         phase: 'NEXT',
         theme: 'Learning Science',

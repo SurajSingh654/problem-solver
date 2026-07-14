@@ -21,6 +21,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { CANONICAL_PATTERN_LABELS } from "../utils/patternTaxonomy.js";
 import { dedupAndCapAlternatives } from "../utils/canonicalAltDedup.js";
+import { isAiReviewLanguageGuardEnabled } from "../config/env.js";
 
 // ── Vocabulary used by claim-hedging rules ──────────────────────────
 export const TENTATIVE_VOCAB = [
@@ -1655,7 +1656,113 @@ function isNonEmptyString(s) {
   return typeof s === "string" && s.trim().length > 0;
 }
 
-export function validateReview(review, { followUpQuestionIds = [] } = {}) {
+// ── Rule 24 — solution-review language coherence (2026-07-14) ───────
+//
+// Root cause: the review prompt tells the AI to "Detect language mismatch"
+// (`ai.prompts.js:119`, `:506`). Pseudocode with no valid syntax for the
+// selected language slips through as `languageMismatch=true` with an
+// arbitrary `detectedLanguage`, and the prose fields (strengths/gaps/
+// improvement) end up asserting things like "the code is in C++ instead
+// of JavaScript" even when the user picked JavaScript. Learners see the
+// hallucinated contradiction in the verdict and stop trusting the review.
+//
+// Rule 24 catches two coherence failures inside `validateReview`:
+//
+//   24-a — self-contradiction: `flags.languageMismatch=true` with
+//     `flags.detectedLanguage.toUpperCase() === selectedLanguage.toUpperCase()`.
+//     A "mismatch" with the same language is nonsense. Push violation
+//     `flags.languageMismatch-echoes-selected`.
+//
+//   24-b — prose contradiction: when `flags.languageMismatch=false`, no
+//     prose field may claim the code is in a language OTHER than the
+//     selected one. Regex is ANCHORED on the selected-language token to
+//     kill the false positive: "you used Python instead of a slower
+//     approach" (with selectedLanguage=PYTHON) does NOT trip because
+//     `PYTHON` sits BEFORE the phrase; only "…instead of PYTHON" trips.
+//     Push violation `flags.languageMismatch-contradicted-in-prose`.
+//
+// Both violations force the caller (aiReview.controller.js via
+// runAISurface) into the deterministic fallback path instead of surfacing
+// the hallucinated prose. Feature-flagged via
+// `isAiReviewLanguageGuardEnabled()`; default ON.
+//
+// Null-safety: when `selectedLanguage` is null/absent (Solution.language
+// is nullable for non-CODING categories), Rule 24 short-circuits — no
+// coherence check possible without a ground-truth language.
+
+function escapeRegex(str) {
+  // Escape all regex metacharacters. Language enum today is
+  // alphanumeric-only (PYTHON/JAVASCRIPT/…), but "OTHER" is free-form and
+  // "C++" contains regex-active `+`. Future-proofing per Security review.
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Build the anchored contradiction regex for a given selected language.
+// The phrase MUST come BEFORE the language token — catches "instead of
+// JavaScript" but not "Python instead of anything". Case-insensitive.
+//
+// Trailing anchor is `(?!\w)` — a negative lookahead — instead of `\b`.
+// Reason: `\b` requires a word/non-word transition, which FAILS for
+// tokens ending in a regex-active non-word char like "C++" ("+ " has
+// no word boundary between `+` and ` `, both non-word). `(?!\w)` works
+// for "C++" AND "JavaScript" AND "JavaScript," alike.
+function buildLanguageContradictionRegex(selectedLanguage) {
+  const langTok = escapeRegex(selectedLanguage);
+  // Anchoring pattern examples this catches:
+  //   "provided in C++ instead of JavaScript"
+  //   "written in Python rather than JavaScript"
+  //   "not the selected JavaScript"
+  //   "instead of C++ as selected"
+  // and does NOT catch:
+  //   "used Python instead of a slower approach"  (lang not after `instead of`)
+  //   "your JavaScript solution is idiomatic"     (no contradiction phrase)
+  return new RegExp(
+    `\\b(?:instead of|rather than|not\\s+the\\s+(?:selected|chosen))\\s+${langTok}(?!\\w)`,
+    "i",
+  );
+}
+
+function checkRule24(review, selectedLanguage, violations) {
+  if (!selectedLanguage || typeof selectedLanguage !== "string") return;
+  const flags = review?.flags;
+  if (!flags || typeof flags !== "object") return; // shape violation already logged
+
+  // 24-a — self-contradiction: languageMismatch=true with same language.
+  if (flags.languageMismatch === true && typeof flags.detectedLanguage === "string") {
+    const detected = flags.detectedLanguage.trim();
+    if (
+      detected.length > 0 &&
+      detected.toUpperCase() === selectedLanguage.toUpperCase()
+    ) {
+      violations.push("flags.languageMismatch-echoes-selected");
+    }
+  }
+
+  // 24-b — prose contradiction: languageMismatch=false but prose says otherwise.
+  if (flags.languageMismatch === false) {
+    const contradictionRegex = buildLanguageContradictionRegex(selectedLanguage);
+    const proseChunks = [];
+    if (Array.isArray(review.strengths)) {
+      for (const s of review.strengths) {
+        if (typeof s === "string") proseChunks.push(s);
+      }
+    }
+    if (Array.isArray(review.gaps)) {
+      for (const g of review.gaps) {
+        if (typeof g === "string") proseChunks.push(g);
+      }
+    }
+    if (typeof review.improvement === "string") proseChunks.push(review.improvement);
+    for (const chunk of proseChunks) {
+      if (contradictionRegex.test(chunk)) {
+        violations.push("flags.languageMismatch-contradicted-in-prose");
+        break; // one flag per review — no need to keep scanning
+      }
+    }
+  }
+}
+
+export function validateReview(review, { followUpQuestionIds = [], selectedLanguage = null } = {}) {
   const violations = [];
   if (!review || typeof review !== "object") {
     return { valid: false, violations: ["not-an-object"] };
@@ -1735,6 +1842,33 @@ export function validateReview(review, { followUpQuestionIds = [] } = {}) {
       refusalProbe.includes("i cannot review") ||
       refusalProbe.includes("i'm unable to review")) {
     violations.push("refusal-detected");
+  }
+
+  // ── Rule 24 — language coherence (2026-07-14) ──
+  // Feature-flagged with `isAiReviewLanguageGuardEnabled()`; default ON.
+  // Guard reads process.env at call time so tests can flip the flag
+  // without re-importing modules (matches the pattern set by
+  // isCurriculumWalkthroughEnabled).
+  if (isAiReviewLanguageGuardEnabled()) {
+    const before = violations.length;
+    checkRule24(review, selectedLanguage, violations);
+    // Structured log for post-ship monitoring (Security review 2026-07-14):
+    // cap detectedLanguage to 32 chars to prevent log-volume abuse via a
+    // malicious AI response. Only log when a Rule 24 violation fires to
+    // avoid spamming the log with every review.
+    if (violations.length > before) {
+      const detected = String(review?.flags?.detectedLanguage ?? "").slice(0, 32);
+      console.log(
+        JSON.stringify({
+          level: "info",
+          event: "validate:language-coherence",
+          ts: new Date().toISOString(),
+          selectedLanguage,
+          detectedLanguage: detected,
+          violations: violations.slice(before),
+        }),
+      );
+    }
   }
 
   return { valid: violations.length === 0, violations };

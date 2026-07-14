@@ -444,6 +444,27 @@ export function isCurriculumWalkthroughEnabled() {
   return process.env.FEATURE_CURRICULUM_WALKTHROUGH === 'true'
 }
 
+// Rule 24 — AI-review language-coherence guard (2026-07-14). When ON, the
+// /problems/:id solution-review validator rejects two failure modes:
+//   (a) flags.languageMismatch=true with detectedLanguage equal to the
+//       selected one (self-contradiction), and
+//   (b) prose fields claiming the code is in a language other than the
+//       selected one when flags.languageMismatch=false.
+// Both push violations → runAISurface falls back to the deterministic
+// buildFallbackReview verdict instead of showing the hallucinated prose
+// to the learner. Default ON — the guard prevents a user-visible bug and
+// costs nothing at review time. Kept as a flag so a fallback-rate spike
+// can be one-line-mitigated in prod without a revert. No client mirror
+// needed (server-only enforcement).
+export const FEATURE_AI_REVIEW_LANGUAGE_GUARD =
+  optional('FEATURE_AI_REVIEW_LANGUAGE_GUARD', 'true') === 'true'
+
+export function isAiReviewLanguageGuardEnabled() {
+  // Default TRUE — flag must be explicitly set to 'false' to disable.
+  // Matches the semantics of FEATURE_AI_REVIEW_LANGUAGE_GUARD above.
+  return process.env.FEATURE_AI_REVIEW_LANGUAGE_GUARD !== 'false'
+}
+
 /**
  * Startup dependency check for the Curriculum feature.
  *

@@ -1,7 +1,7 @@
 // Validator unit tests — golden cases pulled from the prompt's seven hard
 // rules. Each rule has at least one passing fixture and one failing fixture
 // so a future prompt edit can't silently weaken a check.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
     validateVerdict,
     validateReview,
@@ -4439,5 +4439,190 @@ describe('validateNoteFlashcards', () => {
             ],
         })
         expect(r.violations.some(v => v.endsWith('-not-kebab'))).toBe(true)
+    })
+})
+
+// ────────────────────────────────────────────────────────────────────
+// Rule 24 — solution-review language coherence (2026-07-14)
+// ────────────────────────────────────────────────────────────────────
+// Regression coverage for the "C++ instead of JavaScript" hallucination
+// on /problems/:id review flow. Root cause: prompt tells AI to detect
+// language mismatch; pseudocode-with-JS-selected produces a fabricated
+// mismatch flag or contradicting prose. Rule 24 rejects both.
+//
+// Feature-flagged via FEATURE_AI_REVIEW_LANGUAGE_GUARD (default ON).
+// Tests below force the flag ON via env manipulation so behavior is
+// deterministic regardless of the caller's environment.
+
+describe('validateReview — Rule 24 language coherence', () => {
+    let originalFlag
+
+    beforeAll(() => {
+        originalFlag = process.env.FEATURE_AI_REVIEW_LANGUAGE_GUARD
+        // Force ON so the tests exercise the guard even if the local dev
+        // env has explicitly disabled it.
+        process.env.FEATURE_AI_REVIEW_LANGUAGE_GUARD = 'true'
+    })
+    afterAll(() => {
+        if (originalFlag === undefined) {
+            delete process.env.FEATURE_AI_REVIEW_LANGUAGE_GUARD
+        } else {
+            process.env.FEATURE_AI_REVIEW_LANGUAGE_GUARD = originalFlag
+        }
+    })
+
+    it('accepts a well-behaved review when selectedLanguage matches (no violations)', () => {
+        // languageMismatch=false, no contradicting prose. Well-behaved.
+        const r = validateReview(
+            { ...VALID_REVIEW, followUpEvaluations: [] },
+            { selectedLanguage: 'JAVASCRIPT' },
+        )
+        expect(r.valid).toBe(true)
+    })
+
+    it('accepts a legitimate language mismatch (detected differs from selected)', () => {
+        // User selected JAVA, AI correctly identifies the code as PYTHON.
+        // This IS a real mismatch — Rule 24 should NOT trip.
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: {
+                    ...VALID_REVIEW.flags,
+                    languageMismatch: true,
+                    detectedLanguage: 'PYTHON',
+                },
+            },
+            { selectedLanguage: 'JAVA' },
+        )
+        expect(r.valid).toBe(true)
+    })
+
+    it('rejects self-contradiction: languageMismatch=true with detectedLanguage equal to selected (Rule 24-a)', () => {
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: {
+                    ...VALID_REVIEW.flags,
+                    languageMismatch: true,
+                    detectedLanguage: 'JAVASCRIPT',
+                },
+            },
+            { selectedLanguage: 'JAVASCRIPT' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('flags.languageMismatch-echoes-selected')
+    })
+
+    it('is case-insensitive on the language comparison (Rule 24-a)', () => {
+        // Lowercase-vs-uppercase should still trip the guard.
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: {
+                    ...VALID_REVIEW.flags,
+                    languageMismatch: true,
+                    detectedLanguage: 'javascript',
+                },
+            },
+            { selectedLanguage: 'JAVASCRIPT' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('flags.languageMismatch-echoes-selected')
+    })
+
+    it('rejects prose contradiction: languageMismatch=false but gaps claims otherwise (Rule 24-b)', () => {
+        // Exact reproduction of the hallucination we saw on 2026-07-14:
+        // "The code block is provided in C++ instead of JavaScript".
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: { ...VALID_REVIEW.flags, languageMismatch: false },
+                gaps: [
+                    'The code block is provided in C++ instead of JavaScript, which is indicated as the chosen language.',
+                ],
+            },
+            { selectedLanguage: 'JAVASCRIPT' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('flags.languageMismatch-contradicted-in-prose')
+    })
+
+    it('regex is ANCHORED on selectedLanguage — does NOT trip on Python-before-instead-of prose', () => {
+        // False-positive guard from the SecurityManager review. Sentence
+        // like "used Python instead of a slower approach" (with
+        // selectedLanguage=PYTHON) should PASS — the language token is
+        // BEFORE "instead of", not AFTER. The anchor rejects only
+        // "instead of PYTHON" patterns.
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: { ...VALID_REVIEW.flags, languageMismatch: false },
+                strengths: ['You used Python instead of a slower brute-force approach — good choice.'],
+            },
+            { selectedLanguage: 'PYTHON' },
+        )
+        expect(r.valid).toBe(true)
+    })
+
+    it('short-circuits when selectedLanguage is null (no coherence check possible)', () => {
+        // Solution.language is nullable for non-CODING categories. Rule 24
+        // must be a no-op in that case — never throw, never violate.
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: {
+                    ...VALID_REVIEW.flags,
+                    languageMismatch: true,
+                    detectedLanguage: 'PYTHON',
+                },
+            },
+            { selectedLanguage: null },
+        )
+        expect(r.valid).toBe(true)
+    })
+
+    it('regex escapes special characters in selectedLanguage (C++ future-proofing)', () => {
+        // "C++" contains regex-active `+`. escapeRegex must handle it so
+        // the guard still catches "instead of C++" prose. Future-proof
+        // per SecurityManager review — enum today is alphanumeric only,
+        // but display aliases + OTHER free-form are one PR away.
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: { ...VALID_REVIEW.flags, languageMismatch: false },
+                gaps: ['Written in Python instead of C++ as selected.'],
+            },
+            { selectedLanguage: 'C++' },
+        )
+        expect(r.valid).toBe(false)
+        expect(r.violations).toContain('flags.languageMismatch-contradicted-in-prose')
+    })
+
+    it('no-op when the feature flag is OFF', () => {
+        // Kill-switch verification. When flag=false, Rule 24 does not run
+        // and a self-contradiction passes through unchallenged (falls back
+        // to prior behavior).
+        process.env.FEATURE_AI_REVIEW_LANGUAGE_GUARD = 'false'
+        const r = validateReview(
+            {
+                ...VALID_REVIEW,
+                followUpEvaluations: [],
+                flags: {
+                    ...VALID_REVIEW.flags,
+                    languageMismatch: true,
+                    detectedLanguage: 'JAVASCRIPT',
+                },
+            },
+            { selectedLanguage: 'JAVASCRIPT' },
+        )
+        expect(r.valid).toBe(true)
+        process.env.FEATURE_AI_REVIEW_LANGUAGE_GUARD = 'true' // restore for other tests
     })
 })
