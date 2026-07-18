@@ -11,9 +11,10 @@ Personal study log of LeetCode problems with explanations. Each entry follows th
 
 | #   | Title            | Difficulty | Pattern                                   | File                                               |
 | --- | ---------------- | ---------- | ----------------------------------------- | -------------------------------------------------- |
-| 31  | Next Permutation | Medium     | Narayana Pandita / in-place rearrangement | [31-next-permutation.md](31-next-permutation.md)   |
-| 75  | Sort Colors      | Medium     | Dutch National Flag                       | [75-sort-colors.md](75-sort-colors.md)             |
-| 169 | Majority Element | Easy       | Boyer-Moore Voting                        | [169-majority-element.md](169-majority-element.md) |
+| 31  | Next Permutation                              | Medium     | Narayana Pandita / in-place rearrangement | [31-next-permutation.md](31-next-permutation.md)                                     |
+| 34  | Find First and Last Position in Sorted Array  | Medium     | Binary Search (left + right boundary)     | [34-find-first-and-last-position.md](34-find-first-and-last-position.md)             |
+| 75  | Sort Colors                                   | Medium     | Dutch National Flag                       | [75-sort-colors.md](75-sort-colors.md)                                               |
+| 169 | Majority Element                              | Easy       | Boyer-Moore Voting                        | [169-majority-element.md](169-majority-element.md)                                   |
 
 ---
 

@@ -582,6 +582,11 @@ RESPOND WITH EXACT JSON — no extra fields, no missing fields:
   const categorySpecific = data.categorySpecificData;
 
   let submissionSection;
+  // For CODING: resolvedLanguage = final tab's language (covers brute-force-only
+  // submissions where solution.language is null but bruteForceMeta.language is set).
+  // For non-CODING: falls back to data.language (the canonical column).
+  // Sliced to 64 chars — the field is user-controlled via JSON meta columns.
+  let resolvedLanguage = (data.language || "").slice(0, 64) || null;
 
   if (data.category === "SYSTEM_DESIGN" && categorySpecific) {
     submissionSection = `Functional Requirements:
@@ -760,6 +765,10 @@ ${dbSpecific?.noSQLConsideration || "Not provided"}`;
     // <progression> in the user prompt as positive evidence.
     const final = pickFinalTab(data);
     const finalLanguage = (final.language || data.language || "plaintext").toLowerCase();
+    // resolvedLanguage: use the final tab's language (e.g. brute-force tab's
+    // language when solution.language is null) so <candidate_meta> and Rule 24
+    // both see the correct language even for brute-force-only submissions.
+    resolvedLanguage = ((final.language || data.language || "").slice(0, 64)) || null;
     const finalCodeBlock = final.code
       ? final.code.substring(0, 2000)
       : "No code provided";
@@ -786,7 +795,7 @@ What was Challenging: ${data.realWorldConnection || "Not provided"}`;
     "</problem_header>",
     "",
     "<candidate_meta>",
-    `  <language>${xmlEscape(data.language || "Not specified")}</language>`,
+    `  <language>${xmlEscape(resolvedLanguage || "Not specified")}</language>`,
     `  <pattern_identified>${xmlEscape((data.patterns ?? []).join(", ") || "None")}</pattern_identified>`,
     `  <self_confidence>${Number(data.confidence) || 3}/5</self_confidence>`,
     `  <solve_method>${xmlEscape(solveMethodLabel)}</solve_method>`,
@@ -876,15 +885,12 @@ What was Challenging: ${data.realWorldConnection || "Not provided"}`;
       const check = validateReview(parsed, {
         followUpQuestionIds: data.followUpQuestionIds,
         // Rule 24 (2026-07-14) — solution-review language coherence.
-        // Thread the caller-supplied `data.language` through the options
-        // bag so validateReview can detect self-contradictions:
-        //   (a) flags.languageMismatch=true with detectedLanguage equal
-        //       to the selected one (fabricated flag), and
-        //   (b) prose fields claiming the code is in a language other
-        //       than the selected one when flags.languageMismatch=false.
-        // Null-safe: validator short-circuits when selectedLanguage is
-        // falsy (Solution.language is nullable for non-CODING categories).
-        selectedLanguage: data.language ?? null,
+        // Uses resolvedLanguage (= final tab's language for CODING, data.language
+        // for everything else) so Rule 24-a catches contradictions even when
+        // solution.language is null but bruteForceMeta.language is set.
+        // Null-safe: validator short-circuits when selectedLanguage is falsy
+        // (non-CODING categories, or genuinely language-less submissions).
+        selectedLanguage: resolvedLanguage ?? null,
       });
       // runAISurface expects { valid, data } on success and { valid:false, violations } on failure.
       // validateReview only returns { valid, violations }; pass `parsed` through as `data` when valid.

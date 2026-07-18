@@ -898,6 +898,10 @@ export default function SubmitSolutionPage() {
             const bestSol = optimized || solutionTabs[0]
             const tabsLanguage = bestSol?.language || 'PYTHON'
             if (bestSol?.code) localStorage.setItem('ps_last_language', tabsLanguage)
+            // language: use the language from whichever tab actually has code,
+            // mirroring the server's pickFinalTab priority (optimized > alt > brute).
+            // Fixes null language when user submits code only in the Brute Force tab.
+            const finalTabLang = [optimized, alt, brute].find(s => s?.code)?.language || null
             // Pack per-tab metadata. Null when the tab has nothing meaningful
             // beyond approach text — keeps the column null, not {}.
             const packMeta = (s) => (s && (s.code || s.timeComplexity || s.spaceComplexity)
@@ -912,7 +916,7 @@ export default function SubmitSolutionPage() {
                 ...base,
                 approach: optimized?.approach || bestSol?.approach || null,
                 code: bestSol?.code || null,
-                language: bestSol?.code ? tabsLanguage : null,
+                language: finalTabLang,
                 bruteForce: brute?.approach || null,
                 bruteForceMeta: packMeta(brute),
                 optimizedApproach: optimized?.approach || null,
