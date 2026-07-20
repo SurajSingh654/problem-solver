@@ -34,6 +34,12 @@ import {
   retryWalkthrough,
   submitCheckIn,
   markPrimerRead,
+  getTopicMembersProgress,
+  listConceptQuestions,
+  postConceptQuestion,
+  postConceptQuestionReply,
+  resolveConceptQuestion,
+  assistLab,
 } from "../controllers/curriculum.controller.js";
 
 const router = Router();
@@ -113,5 +119,32 @@ router.post(
 // No AI, small write, dedup'd 24h server-side. Parent apiLimiter is
 // sufficient — this endpoint is spammable-safe by design (dedup).
 router.post("/concepts/:slug/mark-primer-read", asyncHandler(markPrimerRead));
+
+// ── Team members progress (per-concept × per-member status) ────────
+// Plain DB read — parent apiLimiter is sufficient.
+router.get("/topics/:slug/members-progress", asyncHandler(getTopicMembersProgress));
+
+// ── Concept Q&A ─────────────────────────────────────────────────────
+// GET is a plain DB read; POST/PATCH are writes but not AI-backed so
+// parent apiLimiter is sufficient.
+router.get("/concepts/:slug/questions", asyncHandler(listConceptQuestions));
+router.post("/concepts/:slug/questions", asyncHandler(postConceptQuestion));
+router.post(
+  "/concepts/:slug/questions/:questionId/replies",
+  asyncHandler(postConceptQuestionReply),
+);
+router.patch(
+  "/concepts/:slug/questions/:questionId/resolve",
+  asyncHandler(resolveConceptQuestion),
+);
+
+// ── Lab Assistant (Socratic AI) ─────────────────────────────────────
+// AI-backed — chain aiLimiter + aiTeamLimiter.
+router.post(
+  "/labs/:id/assist",
+  aiLimiter,
+  aiTeamLimiter,
+  asyncHandler(assistLab),
+);
 
 export default router;

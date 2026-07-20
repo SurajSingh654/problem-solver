@@ -74,4 +74,22 @@ export const curriculumLearnApi = {
     // guarding.
     markPrimerRead: (slug) =>
         api.post(`${ROOT}/concepts/${slug}/mark-primer-read`),
+
+    // Team members progress — per-concept × per-member status grid.
+    getTopicMembersProgress: (slug) =>
+        api.get(`${ROOT}/topics/${slug}/members-progress`),
+
+    // Concept Q&A — questions + replies per concept.
+    listConceptQuestions: (slug) =>
+        api.get(`${ROOT}/concepts/${slug}/questions`),
+    postConceptQuestion: (slug, body) =>
+        api.post(`${ROOT}/concepts/${slug}/questions`, body),
+    postConceptQuestionReply: (slug, questionId, body) =>
+        api.post(`${ROOT}/concepts/${slug}/questions/${questionId}/replies`, body),
+    resolveConceptQuestion: (slug, questionId) =>
+        api.patch(`${ROOT}/concepts/${slug}/questions/${questionId}/resolve`),
+
+    // Lab Assistant — Socratic AI hint (never gives the answer).
+    assistLab: (labId, body) =>
+        api.post(`${ROOT}/labs/${labId}/assist`, body),
 };

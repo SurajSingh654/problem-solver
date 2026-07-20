@@ -34,6 +34,7 @@ import ConceptLabTab from './tabs/ConceptLabTab'
 import ConceptCheckInTab from './tabs/ConceptCheckInTab'
 import ConceptNotesTab from './tabs/ConceptNotesTab'
 import ConceptTeachTab from './tabs/ConceptTeachTab'
+import ConceptQATab from './tabs/ConceptQATab'
 
 const TABS = [
     { id: 'primer',  label: 'Primer'   },
@@ -41,6 +42,7 @@ const TABS = [
     { id: 'checkin', label: 'Check-in' },
     { id: 'notes',   label: 'Notes'    },
     { id: 'teach',   label: 'Teach'    },
+    { id: 'qa',      label: 'Q&A'      },
 ]
 
 const VALID_TAB_IDS = new Set(TABS.map((t) => t.id))
@@ -291,6 +293,7 @@ export default function ConceptPage() {
                 {activeTab === 'checkin' && <ConceptCheckInTab concept={concept} onGoToLab={() => setActiveTab('lab')} />}
                 {activeTab === 'notes'   && <ConceptNotesTab   concept={concept} />}
                 {activeTab === 'teach'   && <ConceptTeachTab   concept={concept} onGoToLab={() => setActiveTab('lab')} onGoToCheckIn={() => setActiveTab('checkin')} />}
+                {activeTab === 'qa'      && <ConceptQATab      concept={concept} />}
             </motion.div>
         </div>
     )

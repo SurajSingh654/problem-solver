@@ -25,8 +25,9 @@ import { Spinner } from '@components/ui/Spinner'
 import { Button } from '@components/ui/Button'
 import { CategoryBadge } from '@components/curriculum'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
-import { useTopicDetail, useEnrollInTopic } from '@hooks/useCurriculumLearn'
+import { useTopicDetail, useEnrollInTopic, useTopicMembersProgress } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
+import { Users, CheckCircle2, Circle, Clock3 } from 'lucide-react'
 
 // TargetOutcome enum lifted from the plan spec (matches the server-side
 // `TopicEnrollment.preferences.targetOutcome` values documented in the
@@ -170,6 +171,9 @@ export default function TopicDetailPage() {
                     </div>
                 )}
             </section>
+
+            {/* Team progress */}
+            {enrolled && <TeamProgressSection slug={slug} concepts={concepts} />}
 
             {/* Info footer */}
             <footer className="rounded-2xl border border-border-subtle bg-surface-1 p-4 flex items-center gap-4 flex-wrap text-xs text-text-tertiary">
@@ -460,5 +464,118 @@ function ConceptRow({ topicSlug, concept, index, enrolled }) {
                 </div>
             </RowWrapper>
         </motion.div>
+    )
+}
+
+// ────────────────────────────────────────────────────────────────
+// TeamProgressSection — per-concept × per-member status grid
+// ────────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG = {
+    completed:   { icon: CheckCircle2, color: 'text-success-fg',   label: 'Completed'   },
+    in_progress: { icon: Clock3,       color: 'text-warning-fg',   label: 'In progress' },
+    not_started: { icon: Circle,       color: 'text-text-tertiary', label: 'Not started' },
+}
+
+function StatusDot({ status }) {
+    const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.not_started
+    const Icon = cfg.icon
+    return (
+        <span title={cfg.label}>
+            <Icon className={cn('w-4 h-4', cfg.color)} />
+        </span>
+    )
+}
+
+function TeamProgressSection({ slug, concepts }) {
+    const progressQ = useTopicMembersProgress(slug)
+
+    if (progressQ.isLoading) {
+        return (
+            <section className="space-y-3">
+                <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4" /> Team Progress
+                </h2>
+                <div className="h-20 rounded-2xl border border-border-default bg-surface-2 animate-pulse" />
+            </section>
+        )
+    }
+
+    if (progressQ.isError || !progressQ.data) return null
+
+    const { members, progress } = progressQ.data
+    if (!members || members.length <= 1) return null
+
+    const memberProgress = {}
+    for (const row of progress ?? []) {
+        memberProgress[row.userId] = {}
+        for (const cp of row.concepts ?? []) {
+            memberProgress[row.userId][cp.conceptId] = cp.status
+        }
+    }
+
+    return (
+        <section className="space-y-3">
+            <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider flex items-center gap-2">
+                <Users className="w-4 h-4" /> Team Progress
+            </h2>
+            <div className="overflow-x-auto rounded-2xl border border-border-default bg-surface-2">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-border-default">
+                            <th className="text-left p-3 font-semibold text-text-primary min-w-[140px] sticky left-0 bg-surface-2">
+                                Member
+                            </th>
+                            {concepts.map((c) => (
+                                <th
+                                    key={c.id}
+                                    className="p-3 text-center font-medium text-text-secondary"
+                                    title={c.name}
+                                >
+                                    <span className="block truncate max-w-[90px] mx-auto">{c.name}</span>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {members.map((member, idx) => (
+                            <tr
+                                key={member.id}
+                                className={cn(
+                                    'border-b border-border-subtle last:border-0',
+                                    idx % 2 === 1 && 'bg-surface-1',
+                                )}
+                            >
+                                <td className="p-3 font-medium text-text-primary sticky left-0 bg-inherit">
+                                    <div className="flex items-center gap-2">
+                                        {member.avatarUrl ? (
+                                            <img
+                                                src={member.avatarUrl}
+                                                alt=""
+                                                className="w-6 h-6 rounded-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="w-6 h-6 rounded-full bg-brand-soft flex items-center justify-center text-[10px] font-bold text-brand-fg-soft">
+                                                {member.name?.[0]?.toUpperCase() ?? '?'}
+                                            </div>
+                                        )}
+                                        <span className="truncate max-w-[110px]">{member.name}</span>
+                                    </div>
+                                </td>
+                                {concepts.map((c) => (
+                                    <td key={c.id} className="p-3 text-center">
+                                        <div className="flex justify-center">
+                                            <StatusDot
+                                                status={memberProgress[member.id]?.[c.id] ?? 'not_started'}
+                                            />
+                                        </div>
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </section>
     )
 }

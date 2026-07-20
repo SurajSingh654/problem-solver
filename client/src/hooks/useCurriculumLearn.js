@@ -455,3 +455,90 @@ export function useCurriculumReviewReady(
         };
     }, [attemptId, labId, conceptSlug, qc]);
 }
+
+// ============================================================================
+// TEAM MEMBERS PROGRESS
+// ============================================================================
+
+export function useTopicMembersProgress(slug) {
+    return useQuery({
+        queryKey: ["curriculum", "learner", "members-progress", slug],
+        queryFn: () =>
+            unwrap(curriculumLearnApi.getTopicMembersProgress(slug)).then(
+                (d) => d,
+            ),
+        enabled: !!slug,
+    });
+}
+
+// ============================================================================
+// CONCEPT Q&A
+// ============================================================================
+
+export function useConceptQuestions(slug) {
+    return useQuery({
+        queryKey: ["curriculum", "learner", "questions", slug],
+        queryFn: () =>
+            unwrap(curriculumLearnApi.listConceptQuestions(slug)).then(
+                (d) => d.questions,
+            ),
+        enabled: !!slug,
+    });
+}
+
+export function usePostConceptQuestion(slug) {
+    const qc = useQueryClient();
+    return useToastingMutation({
+        mutationFn: (body) => curriculumLearnApi.postConceptQuestion(slug, body),
+        onSuccess: () => {
+            qc.invalidateQueries({
+                queryKey: ["curriculum", "learner", "questions", slug],
+            });
+        },
+        successMessage: "Question posted",
+        errorPrefix: "Failed to post question",
+    });
+}
+
+export function usePostConceptQuestionReply(slug) {
+    const qc = useQueryClient();
+    return useToastingMutation({
+        mutationFn: ({ questionId, body }) =>
+            curriculumLearnApi.postConceptQuestionReply(slug, questionId, { body }),
+        onSuccess: () => {
+            qc.invalidateQueries({
+                queryKey: ["curriculum", "learner", "questions", slug],
+            });
+        },
+        successMessage: "Reply posted",
+        errorPrefix: "Failed to post reply",
+    });
+}
+
+export function useResolveConceptQuestion(slug) {
+    const qc = useQueryClient();
+    return useToastingMutation({
+        mutationFn: (questionId) =>
+            curriculumLearnApi.resolveConceptQuestion(slug, questionId),
+        onSuccess: () => {
+            qc.invalidateQueries({
+                queryKey: ["curriculum", "learner", "questions", slug],
+            });
+        },
+        successMessage: "Question marked resolved",
+        errorPrefix: "Failed to resolve question",
+    });
+}
+
+// ============================================================================
+// LAB ASSISTANT (Socratic AI — no persistence)
+// ============================================================================
+
+export function useAssistLab(labId) {
+    return useMutation({
+        mutationFn: (body) =>
+            curriculumLearnApi
+                .assistLab(labId, body)
+                .then((r) => r.data.data.reply),
+    });
+}

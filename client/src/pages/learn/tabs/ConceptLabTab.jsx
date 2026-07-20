@@ -36,7 +36,7 @@
 // ============================================================================
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { X, ArrowRight, RotateCcw, Columns, Rows } from 'lucide-react'
+import { X, ArrowRight, RotateCcw, Columns, Rows, Bot, ChevronDown, Send, Trash2 } from 'lucide-react'
 import { MarkdownRenderer } from '@components/ui/MarkdownRenderer'
 import { Button } from '@components/ui/Button'
 import { EmptyState } from '@components/ui/EmptyState'
@@ -55,6 +55,7 @@ import {
     useRetryWalkthrough,
     useSubmitAttempt,
     useWalkthrough,
+    useAssistLab,
 } from '@hooks/useCurriculumLearn'
 import { cn } from '@utils/cn'
 
@@ -648,6 +649,9 @@ export default function ConceptLabTab({ concept, onGoToCheckIn }) {
                 </div>
             </section>
 
+            {/* Lab Assistant ──────────────────────────────────────── */}
+            <LabAssistant labId={labId} code={code} />
+
             {/* Attempt status / verdict — one section, three shapes:
                 – no attempt yet           → empty prompt
                 – PENDING / REVIEWING     → animated waiting card
@@ -829,6 +833,185 @@ export default function ConceptLabTab({ concept, onGoToCheckIn }) {
                         onWalkthroughRetry={() => retryWalkthrough.mutate()}
                         walkthroughRetrying={retryWalkthrough.isPending}
                     />
+                )}
+            </AnimatePresence>
+        </div>
+    )
+}
+
+// ============================================================================
+// LabAssistant — Socratic AI chat panel
+// ============================================================================
+// Collapsible panel below the editor. Sends user message + current code to
+// the server; AI responds with hints and questions — never the answer.
+// History is ephemeral (no DB), capped at the last 6 exchanges.
+
+const MAX_HISTORY = 12 // 6 user + 6 assistant turns
+
+function LabAssistant({ labId, code }) {
+    const [open, setOpen] = useState(false)
+    const [input, setInput] = useState('')
+    const [history, setHistory] = useState([]) // [{role, content}]
+    const bottomRef = useRef(null)
+    const assist = useAssistLab(labId)
+
+    useEffect(() => {
+        if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [history, open])
+
+    async function handleSend(e) {
+        e?.preventDefault()
+        const msg = input.trim()
+        if (!msg) return
+
+        const newHistory = [...history, { role: 'user', content: msg }]
+        setHistory(newHistory)
+        setInput('')
+
+        const historyForServer = newHistory.slice(-MAX_HISTORY)
+
+        try {
+            const reply = await assist.mutateAsync({
+                message: msg,
+                code,
+                history: historyForServer.slice(0, -1), // exclude the message we just added
+            })
+            setHistory((h) => [...h, { role: 'assistant', content: reply }])
+        } catch {
+            setHistory((h) => [
+                ...h,
+                { role: 'assistant', content: 'The assistant is temporarily unavailable. Try again shortly.' },
+            ])
+        }
+    }
+
+    return (
+        <div className={cn(
+            'rounded-2xl border transition-colors',
+            open ? 'border-brand-line bg-surface-2' : 'border-border-subtle bg-surface-1',
+        )}>
+            {/* Toggle header */}
+            <button
+                onClick={() => setOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-text-secondary hover:text-text-primary transition-colors"
+            >
+                <span className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-brand-500" />
+                    Lab Assistant
+                    <span className="text-xs font-normal text-text-tertiary">
+                        — stuck? ask for a hint
+                    </span>
+                </span>
+                <ChevronDown className={cn('w-4 h-4 transition-transform', open && 'rotate-180')} />
+            </button>
+
+            {/* Panel body */}
+            <AnimatePresence initial={false}>
+                {open && (
+                    <motion.div
+                        key="lab-assistant-body"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="px-4 pb-4 space-y-3">
+                            {/* Disclaimer */}
+                            {history.length === 0 && (
+                                <p className="text-xs text-text-tertiary border border-border-subtle rounded-lg p-3 bg-surface-1">
+                                    The assistant will ask guiding questions and point out what to think about —
+                                    it will <strong>never</strong> write code or reveal the answer. Productive struggle is the point.
+                                </p>
+                            )}
+
+                            {/* Message history */}
+                            {history.length > 0 && (
+                                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                                    {history.map((turn, i) => (
+                                        <div
+                                            key={i}
+                                            className={cn(
+                                                'flex gap-2 items-start',
+                                                turn.role === 'user' ? 'flex-row-reverse' : 'flex-row',
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                'text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 mt-1',
+                                                turn.role === 'user'
+                                                    ? 'bg-brand-soft text-brand-fg-soft'
+                                                    : 'bg-surface-3 text-text-tertiary',
+                                            )}>
+                                                {turn.role === 'user' ? 'You' : 'AI'}
+                                            </div>
+                                            <div className={cn(
+                                                'rounded-xl px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words',
+                                                turn.role === 'user'
+                                                    ? 'bg-brand-soft text-brand-fg-soft'
+                                                    : 'bg-surface-3 text-text-primary',
+                                            )}>
+                                                {turn.content}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {assist.isPending && (
+                                        <div className="flex gap-2 items-center">
+                                            <div className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-surface-3 text-text-tertiary">AI</div>
+                                            <div className="text-xs text-text-tertiary animate-pulse">Thinking…</div>
+                                        </div>
+                                    )}
+                                    <div ref={bottomRef} />
+                                </div>
+                            )}
+
+                            {/* Input */}
+                            <form onSubmit={handleSend} className="flex gap-2 items-end">
+                                <textarea
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault()
+                                            handleSend()
+                                        }
+                                    }}
+                                    placeholder="What are you stuck on? (Enter to send, Shift+Enter for newline)"
+                                    rows={2}
+                                    maxLength={2000}
+                                    disabled={assist.isPending}
+                                    className={cn(
+                                        'flex-1 resize-none rounded-lg border border-border-default bg-surface-1',
+                                        'px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary',
+                                        'focus:outline-none focus:ring-2 focus:ring-brand-500/40',
+                                        'disabled:opacity-50',
+                                    )}
+                                />
+                                <div className="flex flex-col gap-1">
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        size="sm"
+                                        disabled={!input.trim() || assist.isPending}
+                                        className="shrink-0"
+                                    >
+                                        <Send className="w-4 h-4" />
+                                    </Button>
+                                    {history.length > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setHistory([])}
+                                            title="Clear conversation"
+                                            className="shrink-0 text-text-tertiary"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
         </div>

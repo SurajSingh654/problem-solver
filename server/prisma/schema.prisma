@@ -346,6 +346,10 @@ model User {
   // where this user was the actor of an admin override.
   curriculumAudits CurriculumAdminAuditLog[] @relation("CurriculumAuditActor")
 
+  // Curriculum Q&A — questions + replies authored by this user.
+  conceptQuestions       ConceptQuestion[]
+  conceptQuestionReplies ConceptQuestionReply[]
+
   // ── Indexes ────────────────────────────────────────
   // Composite index for "all users in this team" — the most common query
   @@index([currentTeamId, activityStatus])
@@ -436,6 +440,10 @@ model Team {
   // team-level rate limiter for curriculum AI calls (Mentor, code review,
   // etc.). Rows are upserted on (teamId, date).
   aiUsage TeamAIUsage[] @relation("TeamAIUsage")
+
+  // Curriculum Q&A — questions + replies posted by members of this team.
+  conceptQuestions       ConceptQuestion[]
+  conceptQuestionReplies ConceptQuestionReply[]
 
   // ── Indexes ────────────────────────────────────────
   // For SUPER_ADMIN: list teams by status (pending approvals)
@@ -2635,6 +2643,7 @@ model Concept {
   flashcards       Flashcard[]         @relation("FlashcardConcepts")
   lab              Lab?
   checkIns         ConceptCheckIn[]
+  questions        ConceptQuestion[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -3112,4 +3121,57 @@ model TeamAIUsage {
 
   @@unique([teamId, date])
   @@map("team_ai_usage")
+}
+
+// ============================================================================
+// CURRICULUM Q&A — per-concept discussion threads
+// ============================================================================
+//
+// Team-scoped questions + replies. Any enrolled learner or admin can post
+// a question on a concept; any team member can reply. `teamId` is
+// denormalized on both models per the architecture invariant (never rely on
+// FK chain for tenant isolation). Both models cascade-delete when their
+// parent is removed.
+
+/// A question posted by a team member on a specific concept.
+model ConceptQuestion {
+  id        String  @id @default(cuid())
+  conceptId String
+  concept   Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  body       String  @db.Text
+  isResolved Boolean @default(false)
+
+  replies ConceptQuestionReply[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId, conceptId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("concept_questions")
+}
+
+/// A reply to a ConceptQuestion.
+model ConceptQuestionReply {
+  id         String          @id @default(cuid())
+  questionId String
+  question   ConceptQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  teamId     String
+  team       Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  body String @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId, questionId, createdAt(sort: Asc)])
+  @@index([userId])
+  @@map("concept_question_replies")
 }
